@@ -15,9 +15,9 @@ var requeueSlow = 30 * time.Second
 const userSwarmFinalizer = "crawbl.ai/userswarm-protection"
 
 const (
-	zeroClawRuntimeUID int64 = 65532
-	zeroClawRuntimeGID int64 = 65532
-	zeroClawConfigMode int32 = 0o440
+	zeroClawRuntimeUID    int64 = 65532
+	zeroClawRuntimeGID    int64 = 65532
+	zeroClawBootstrapMode int32 = 0o444
 )
 
 func desiredRuntimeNamespace(sw *crawblv1alpha1.UserSwarm) string {
@@ -62,6 +62,10 @@ func serviceName(sw *crawblv1alpha1.UserSwarm) string {
 
 func configMapName(sw *crawblv1alpha1.UserSwarm) string {
 	return fmt.Sprintf("%s-config", workloadName(sw))
+}
+
+func bootstrapConfigVolumeName() string {
+	return "bootstrap-config"
 }
 
 func secretName(sw *crawblv1alpha1.UserSwarm) string {

@@ -390,6 +390,36 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		}
+		obj.Spec.Template.Spec.InitContainers = []corev1.Container{{
+			Name:            "bootstrap-config",
+			Image:           "busybox:1.36.1",
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command: []string{
+				"sh",
+				"-c",
+				"set -eu; umask 077; mkdir -p /zeroclaw-data/.zeroclaw /zeroclaw-data/workspace; if [ ! -f /zeroclaw-data/.zeroclaw/config.toml ]; then cp /bootstrap/config.toml /zeroclaw-data/.zeroclaw/config.toml; fi",
+			},
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: ptrTo(false),
+				RunAsNonRoot:             ptrTo(true),
+				RunAsUser:                ptrTo(zeroClawRuntimeUID),
+				RunAsGroup:               ptrTo(zeroClawRuntimeGID),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "data",
+					MountPath: "/zeroclaw-data",
+				},
+				{
+					Name:      bootstrapConfigVolumeName(),
+					MountPath: "/bootstrap",
+					ReadOnly:  true,
+				},
+			},
+		}}
 		obj.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            "zeroclaw",
 			Image:           swarm.Spec.Runtime.Image,
@@ -421,12 +451,6 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 					Name:      "data",
 					MountPath: "/zeroclaw-data",
 				},
-				{
-					Name:      "config",
-					MountPath: "/zeroclaw-data/.zeroclaw/config.toml",
-					SubPath:   "config.toml",
-					ReadOnly:  true,
-				},
 			},
 			ReadinessProbe: healthProbe(),
 			LivenessProbe:  healthProbe(),
@@ -452,11 +476,11 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 				},
 			},
 			{
-				Name: "config",
+				Name: bootstrapConfigVolumeName(),
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{Name: configMapName(swarm)},
-						DefaultMode:          ptrTo(zeroClawConfigMode),
+						DefaultMode:          ptrTo(zeroClawBootstrapMode),
 					},
 				},
 			},
