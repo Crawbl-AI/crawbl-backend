@@ -9,7 +9,7 @@ This service sits between the Flutter app and each user's ZeroClaw swarm. It own
 ## Core Responsibilities
 
 - Authenticate users and issue/validate platform sessions
-- Provision per-user namespaces and ZeroClaw deployments
+- Provision `UserSwarm` resources and ZeroClaw deployments in shared runtime namespaces
 - Proxy chat/task requests to the correct user swarm
 - Route LLM requests across Ollama and cloud providers
 - Expose integration adapters for Gmail, Calendar, Asana, and future apps

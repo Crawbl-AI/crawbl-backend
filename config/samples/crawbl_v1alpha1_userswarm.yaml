@@ -1,0 +1,30 @@
+apiVersion: crawbl.ai/v1alpha1
+kind: UserSwarm
+metadata:
+  name: demo-user
+spec:
+  userId: "demo-user"
+  placement:
+    runtimeNamespace: swarms-dev
+  runtime:
+    image: registry.digitalocean.com/crawbl/zeroclaw@sha256:1023b99e1dfc01710cef8ddac51f7d3c3bf7006385117c6034644891f8e3570a
+    mode: daemon
+    port: 42617
+    imagePullSecretName: crawbl-docr
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  storage:
+    size: 2Gi
+    storageClassName: do-block-storage
+  exposure:
+    ingress:
+      enabled: false
+      className: nginx
+      host: zeroclaw-dev.example.com
+      path: /
+      pathType: Prefix
