@@ -379,6 +379,10 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 		obj.Spec.ServiceName = headlessServiceName(swarm)
 		obj.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabelsFor(swarm)}
 		obj.Spec.Template.ObjectMeta.Labels = labelsFor(swarm)
+		obj.Spec.Template.ObjectMeta.Annotations = map[string]string{
+			"crawbl.ai/config-checksum": checksumString(zeroclaw.BuildConfigTOML(swarm)),
+			"crawbl.ai/secret-checksum": checksumStringMap(swarm.Spec.Config.SecretData),
+		}
 		obj.Spec.Template.Spec.ServiceAccountName = serviceAccountName(swarm)
 		obj.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 			RunAsNonRoot:        ptrTo(true),
@@ -397,7 +401,15 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 			Command: []string{
 				"sh",
 				"-c",
-				"set -eu; umask 077; mkdir -p /zeroclaw-data/.zeroclaw /zeroclaw-data/workspace; if [ ! -f /zeroclaw-data/.zeroclaw/config.toml ]; then cp /bootstrap/config.toml /zeroclaw-data/.zeroclaw/config.toml; fi",
+				`set -eu
+umask 077
+mkdir -p /zeroclaw-data/.zeroclaw /zeroclaw-data/workspace
+
+config_path="/zeroclaw-data/.zeroclaw/config.toml"
+if [ ! -f "$config_path" ]; then
+  cp /bootstrap/config.toml "$config_path"
+fi
+`,
 			},
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: ptrTo(false),

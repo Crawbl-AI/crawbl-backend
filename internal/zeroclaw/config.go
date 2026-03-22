@@ -1,43 +1,83 @@
 package zeroclaw
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/BurntSushi/toml"
+
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
-// BuildConfigTOML generates a minimal ZeroClaw config that keeps the gateway reachable for shared-namespace testing.
+type BootstrapConfig struct {
+	APIKey             string        `toml:"api_key"`
+	DefaultProvider    string        `toml:"default_provider"`
+	DefaultModel       string        `toml:"default_model"`
+	DefaultTemperature float64       `toml:"default_temperature"`
+	Gateway            GatewayConfig `toml:"gateway"`
+}
+
+type GatewayConfig struct {
+	Port            int32  `toml:"port"`
+	Host            string `toml:"host"`
+	AllowPublicBind bool   `toml:"allow_public_bind"`
+}
+
+// BuildConfigTOML generates a minimal ZeroClaw bootstrap config for shared-namespace testing.
 func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) string {
-	lines := []string{
-		`api_key = ""`,
-		`default_provider = "openrouter"`,
-		`default_model = "anthropic/claude-sonnet-4-20250514"`,
-		`default_temperature = 0.7`,
-		"",
-		"[gateway]",
-		fmt.Sprintf("port = %d", runtimePort(sw)),
-		`host = "[::]"`,
-		`allow_public_bind = true`,
+	cfg := BootstrapConfig{
+		APIKey:             "",
+		DefaultProvider:    "openrouter",
+		DefaultModel:       "anthropic/claude-sonnet-4-20250514",
+		DefaultTemperature: 0.7,
+		Gateway: GatewayConfig{
+			Port:            runtimePort(sw),
+			Host:            "[::]",
+			AllowPublicBind: true,
+		},
 	}
 
-	if len(sw.Spec.Config.Data) == 0 {
-		return strings.Join(lines, "\n") + "\n"
+	applyOverrides(&cfg, sw.Spec.Config.Data)
+
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
+		panic(fmt.Sprintf("encode zeroclaw bootstrap config: %v", err))
+	}
+	return buf.String()
+}
+
+func applyOverrides(cfg *BootstrapConfig, overrides map[string]string) {
+	if len(overrides) == 0 {
+		return
 	}
 
-	keys := make([]string, 0, len(sw.Spec.Config.Data))
-	for key := range sw.Spec.Config.Data {
+	keys := make([]string, 0, len(overrides))
+	for key := range overrides {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 
-	lines = append(lines, "", "# Crawbl-managed overrides")
+	var doc strings.Builder
 	for _, key := range keys {
-		lines = append(lines, sw.Spec.Config.Data[key])
+		value := strings.TrimSpace(overrides[key])
+		if value == "" {
+			continue
+		}
+		doc.WriteString(value)
+		if !strings.HasSuffix(value, "\n") {
+			doc.WriteByte('\n')
+		}
 	}
 
-	return strings.Join(lines, "\n") + "\n"
+	if strings.TrimSpace(doc.String()) == "" {
+		return
+	}
+
+	if _, err := toml.Decode(doc.String(), cfg); err != nil {
+		panic(fmt.Sprintf("decode zeroclaw config overrides: %v", err))
+	}
 }
 
 func runtimePort(sw *crawblv1alpha1.UserSwarm) int32 {

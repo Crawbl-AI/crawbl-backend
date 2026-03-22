@@ -1,7 +1,11 @@
 package controller
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -138,4 +142,31 @@ func healthProbe() *corev1.Probe {
 
 func ptrTo[T any](value T) *T {
 	return &value
+}
+
+func checksumString(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func checksumStringMap(values map[string]string) string {
+	if len(values) == 0 {
+		return checksumString("")
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(values[key])
+		b.WriteByte('\n')
+	}
+
+	return checksumString(b.String())
 }

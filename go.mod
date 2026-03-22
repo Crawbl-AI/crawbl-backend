@@ -3,6 +3,7 @@ module github.com/Crawbl-AI/crawbl-backend
 go 1.24.5
 
 require (
+	github.com/BurntSushi/toml v1.5.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
