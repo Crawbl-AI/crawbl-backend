@@ -10,11 +10,13 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/userswarm-operator ./cmd/userswarm-operator
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/userswarm-bootstrap ./cmd/userswarm-bootstrap
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /
 COPY --from=builder /out/userswarm-operator /userswarm-operator
+COPY --from=builder /out/userswarm-bootstrap /userswarm-bootstrap
 
 EXPOSE 8080 8081
 

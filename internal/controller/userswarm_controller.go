@@ -25,17 +25,20 @@ const (
 	conditionTypeReady            = "Ready"
 	conditionTypeRuntimeNamespace = "RuntimeNamespaceReady"
 	conditionTypePullSecret       = "ImagePullSecretReady"
+	conditionTypeRuntimeSecret    = "RuntimeSecretReady"
 	conditionReasonReconciling    = "Reconciling"
 	conditionReasonReady          = "Ready"
 	conditionReasonDeleting       = "Deleting"
 	conditionReasonMissingNS      = "MissingRuntimeNamespace"
 	conditionReasonMissingSecret  = "MissingImagePullSecret"
+	conditionReasonMissingRuntime = "MissingRuntimeSecret"
 	conditionReasonReconcileError = "ReconcileError"
 )
 
 type UserSwarmReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme         *runtime.Scheme
+	BootstrapImage string
 }
 
 // Reconcile keeps one UserSwarm aligned with the shared-namespace runtime model:
@@ -64,6 +67,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.ensureRuntimeNamespaceExists(ctx, runtimeNamespace); err != nil {
 		r.setCondition(&swarm, conditionTypeRuntimeNamespace, metav1.ConditionFalse, conditionReasonMissingNS, err.Error())
 		r.setCondition(&swarm, conditionTypePullSecret, metav1.ConditionUnknown, conditionReasonReconciling, "runtime namespace is not ready yet")
+		r.setCondition(&swarm, conditionTypeRuntimeSecret, metav1.ConditionUnknown, conditionReasonReconciling, "runtime namespace is not ready yet")
 		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonMissingNS, err.Error())
 		swarm.Status.Phase = "Pending"
 		swarm.Status.RuntimeNamespace = runtimeNamespace
@@ -77,7 +81,23 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.ensureImagePullSecretExists(ctx, &swarm); err != nil {
 		r.setCondition(&swarm, conditionTypeRuntimeNamespace, metav1.ConditionTrue, conditionReasonReady, "runtime namespace is ready")
 		r.setCondition(&swarm, conditionTypePullSecret, metav1.ConditionFalse, conditionReasonMissingSecret, err.Error())
+		r.setCondition(&swarm, conditionTypeRuntimeSecret, metav1.ConditionUnknown, conditionReasonReconciling, "runtime secret is not checked yet")
 		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonMissingSecret, err.Error())
+		swarm.Status.Phase = "Pending"
+		swarm.Status.RuntimeNamespace = runtimeNamespace
+		swarm.Status.ServiceName = serviceName
+		swarm.Status.ImageRef = swarm.Spec.Runtime.Image
+		if updateErr := r.Status().Update(ctx, &swarm); updateErr != nil && !apierrors.IsConflict(updateErr) {
+			return ctrl.Result{}, updateErr
+		}
+		return ctrl.Result{RequeueAfter: requeueSlow}, nil
+	}
+
+	if err := r.ensureRuntimeSecretExists(ctx, &swarm); err != nil {
+		r.setCondition(&swarm, conditionTypeRuntimeNamespace, metav1.ConditionTrue, conditionReasonReady, "runtime namespace is ready")
+		r.setCondition(&swarm, conditionTypePullSecret, metav1.ConditionTrue, conditionReasonReady, "image pull secret is ready")
+		r.setCondition(&swarm, conditionTypeRuntimeSecret, metav1.ConditionFalse, conditionReasonMissingRuntime, err.Error())
+		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonMissingRuntime, err.Error())
 		swarm.Status.Phase = "Pending"
 		swarm.Status.RuntimeNamespace = runtimeNamespace
 		swarm.Status.ServiceName = serviceName
@@ -99,7 +119,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.reconcileConfigMap(ctx, &swarm); err != nil {
 		return r.reconcileError(ctx, &swarm, err)
 	}
-	if err := r.reconcileSecret(ctx, &swarm); err != nil {
+	if err := r.reconcileDeprecatedManagedSecret(ctx, &swarm); err != nil {
 		return r.reconcileError(ctx, &swarm, err)
 	}
 	if err := r.reconcilePVC(ctx, &swarm); err != nil {
@@ -135,6 +155,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	r.setCondition(&swarm, conditionTypeRuntimeNamespace, metav1.ConditionTrue, conditionReasonReady, "runtime namespace is ready")
 	r.setCondition(&swarm, conditionTypePullSecret, metav1.ConditionTrue, conditionReasonReady, "image pull secret is ready")
+	r.setCondition(&swarm, conditionTypeRuntimeSecret, metav1.ConditionTrue, conditionReasonReady, "runtime secret is ready")
 	if swarm.Status.Phase == "Ready" || swarm.Status.Phase == "Suspended" {
 		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionTrue, conditionReasonReady, "userswarm workload is ready")
 	} else {
@@ -186,7 +207,6 @@ func (r *UserSwarmReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&gatewayv1.HTTPRoute{}).
 		Complete(r)
@@ -210,6 +230,28 @@ func (r *UserSwarmReconciler) ensureImagePullSecretExists(ctx context.Context, s
 	}, &secret); err != nil {
 		if apierrors.IsNotFound(err) {
 			return fmt.Errorf("runtime namespace %q is missing image pull secret %q", desiredRuntimeNamespace(swarm), swarm.Spec.Runtime.ImagePullSecretName)
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *UserSwarmReconciler) ensureRuntimeSecretExists(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
+	name := envSecretName(swarm)
+	if name == "" && usesManagedEnvSecret(swarm) {
+		name = managedEnvSecretName(swarm)
+	}
+	if name == "" {
+		return nil
+	}
+
+	var secret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: desiredRuntimeNamespace(swarm),
+		Name:      name,
+	}, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("runtime namespace %q is missing env secret %q", desiredRuntimeNamespace(swarm), name)
 		}
 		return err
 	}
@@ -250,27 +292,20 @@ func (r *UserSwarmReconciler) reconcileConfigMap(ctx context.Context, swarm *cra
 		if err := controllerutil.SetControllerReference(swarm, obj, r.Scheme); err != nil {
 			return err
 		}
-		obj.Data = map[string]string{
-			"config.toml": zeroclaw.BuildConfigTOML(swarm),
-		}
+		obj.Data = zeroclaw.BuildBootstrapFiles(swarm)
 		return nil
 	})
 	return err
 }
 
-func (r *UserSwarmReconciler) reconcileSecret(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
-	if len(swarm.Spec.Config.SecretData) == 0 {
-		obj := &corev1.Secret{}
-		err := r.Get(ctx, types.NamespacedName{Namespace: desiredRuntimeNamespace(swarm), Name: secretName(swarm)}, obj)
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return err
+func (r *UserSwarmReconciler) reconcileDeprecatedManagedSecret(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
+	if !usesManagedEnvSecret(swarm) {
+		return nil
 	}
 
 	obj := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName(swarm),
+			Name:      managedEnvSecretName(swarm),
 			Namespace: desiredRuntimeNamespace(swarm),
 		},
 	}
@@ -382,10 +417,15 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 		obj.Spec.ServiceName = headlessServiceName(swarm)
 		obj.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabelsFor(swarm)}
 		obj.Spec.Template.ObjectMeta.Labels = labelsFor(swarm)
+		bootstrapFiles := zeroclaw.BuildBootstrapFiles(swarm)
+		envSecretRefName := envSecretName(swarm)
+		if envSecretRefName == "" && usesManagedEnvSecret(swarm) {
+			envSecretRefName = managedEnvSecretName(swarm)
+		}
 		// Roll the pod only when bootstrap inputs change; the live config itself stays on the PVC.
 		obj.Spec.Template.ObjectMeta.Annotations = map[string]string{
-			"crawbl.ai/config-checksum": checksumString(zeroclaw.BuildConfigTOML(swarm)),
-			"crawbl.ai/secret-checksum": checksumStringMap(swarm.Spec.Config.SecretData),
+			"crawbl.ai/config-checksum": checksumStringMap(bootstrapFiles),
+			"crawbl.ai/env-secret-ref":  checksumString(envSecretRefName),
 		}
 		obj.Spec.Template.Spec.ServiceAccountName = serviceAccountName(swarm)
 		obj.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
@@ -400,22 +440,15 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 		}
 		obj.Spec.Template.Spec.InitContainers = []corev1.Container{{
 			Name:            "bootstrap-config",
-			Image:           "busybox:1.36.1",
+			Image:           r.BootstrapImage,
 			ImagePullPolicy: corev1.PullIfNotPresent,
-			Command: []string{
-				"sh",
-				"-c",
-				`set -eu
-umask 077
-mkdir -p /zeroclaw-data/.zeroclaw /zeroclaw-data/workspace
-
-config_path="/zeroclaw-data/.zeroclaw/config.toml"
-if [ ! -f "$config_path" ]; then
-  cp /bootstrap/config.toml "$config_path"
-fi
-`,
+			Command:         []string{"/userswarm-bootstrap"},
+			Args: []string{
+				"--bootstrap-config=/bootstrap/config.toml",
+				"--live-config=/zeroclaw-data/.zeroclaw/config.toml",
+				"--workspace=/zeroclaw-data/workspace",
 			},
-			// Seed the PVC-backed runtime config once, then let ZeroClaw mutate its live state there.
+			// Merge only operator-managed config keys into the PVC-backed live config and preserve ZeroClaw state.
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: ptrTo(false),
 				RunAsNonRoot:             ptrTo(true),
@@ -437,6 +470,15 @@ fi
 				},
 			},
 		}}
+		if envSecretRefName != "" {
+			obj.Spec.Template.Spec.InitContainers[0].EnvFrom = []corev1.EnvFromSource{{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: envSecretRefName},
+				},
+			}}
+		} else {
+			obj.Spec.Template.Spec.InitContainers[0].EnvFrom = nil
+		}
 		obj.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            "zeroclaw",
 			Image:           swarm.Spec.Runtime.Image,
@@ -468,16 +510,28 @@ fi
 					Name:      "data",
 					MountPath: "/zeroclaw-data",
 				},
+				{
+					Name:      bootstrapConfigVolumeName(),
+					MountPath: "/zeroclaw-data/workspace/SOUL.md",
+					SubPath:   "SOUL.md",
+					ReadOnly:  true,
+				},
+				{
+					Name:      bootstrapConfigVolumeName(),
+					MountPath: "/zeroclaw-data/workspace/IDENTITY.md",
+					SubPath:   "IDENTITY.md",
+					ReadOnly:  true,
+				},
 			},
 			ReadinessProbe: healthProbe(),
 			LivenessProbe:  healthProbe(),
 		}}
 
-		if len(swarm.Spec.Config.SecretData) > 0 {
+		if envSecretRefName != "" {
 			// Keep provider credentials and other sensitive runtime env outside the bootstrap ConfigMap.
 			obj.Spec.Template.Spec.Containers[0].EnvFrom = []corev1.EnvFromSource{{
 				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: secretName(swarm)},
+					LocalObjectReference: corev1.LocalObjectReference{Name: envSecretRefName},
 				},
 			}}
 		} else {
@@ -590,9 +644,11 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: serviceName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: headlessServiceName(swarm), Namespace: runtimeNamespace}},
 		&corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: pvcName(swarm), Namespace: runtimeNamespace}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName(swarm), Namespace: runtimeNamespace}},
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName(swarm), Namespace: runtimeNamespace}},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: serviceAccountName(swarm), Namespace: runtimeNamespace}},
+	}
+	if usesManagedEnvSecret(swarm) {
+		objects = append(objects, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: managedEnvSecretName(swarm), Namespace: runtimeNamespace}})
 	}
 
 	// Delete explicitly so the finalizer can report progress even when child cleanup spans multiple reconciles.

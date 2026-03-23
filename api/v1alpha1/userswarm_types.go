@@ -45,8 +45,16 @@ type UserSwarmStorageSpec struct {
 }
 
 type UserSwarmConfigSpec struct {
-	Data       map[string]string `json:"data,omitempty"`
-	SecretData map[string]string `json:"secretData,omitempty"`
+	DefaultProvider    string              `json:"defaultProvider,omitempty"`
+	DefaultModel       string              `json:"defaultModel,omitempty"`
+	DefaultTemperature *float64            `json:"defaultTemperature,omitempty"`
+	TOMLOverrides      string              `json:"tomlOverrides,omitempty"`
+	SecretData         map[string]string   `json:"secretData,omitempty"`
+	EnvSecretRef       *UserSwarmSecretRef `json:"envSecretRef,omitempty"`
+}
+
+type UserSwarmSecretRef struct {
+	Name string `json:"name"`
 }
 
 type UserSwarmExposureSpec struct {
@@ -158,17 +166,18 @@ func (in *UserSwarmRuntimeSpec) DeepCopyInto(out *UserSwarmRuntimeSpec) {
 
 func (in *UserSwarmConfigSpec) DeepCopyInto(out *UserSwarmConfigSpec) {
 	*out = *in
-	if in.Data != nil {
-		out.Data = make(map[string]string, len(in.Data))
-		for key, val := range in.Data {
-			out.Data[key] = val
-		}
+	if in.DefaultTemperature != nil {
+		value := *in.DefaultTemperature
+		out.DefaultTemperature = &value
 	}
 	if in.SecretData != nil {
 		out.SecretData = make(map[string]string, len(in.SecretData))
 		for key, val := range in.SecretData {
 			out.SecretData[key] = val
 		}
+	}
+	if in.EnvSecretRef != nil {
+		out.EnvSecretRef = &UserSwarmSecretRef{Name: in.EnvSecretRef.Name}
 	}
 }
 

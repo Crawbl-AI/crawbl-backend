@@ -72,7 +72,18 @@ func bootstrapConfigVolumeName() string {
 	return "bootstrap-config"
 }
 
-func secretName(sw *crawblv1alpha1.UserSwarm) string {
+func envSecretName(sw *crawblv1alpha1.UserSwarm) string {
+	if sw.Spec.Config.EnvSecretRef == nil {
+		return ""
+	}
+	return sw.Spec.Config.EnvSecretRef.Name
+}
+
+func usesManagedEnvSecret(sw *crawblv1alpha1.UserSwarm) bool {
+	return len(sw.Spec.Config.SecretData) > 0
+}
+
+func managedEnvSecretName(sw *crawblv1alpha1.UserSwarm) string {
 	return fmt.Sprintf("%s-env", workloadName(sw))
 }
 

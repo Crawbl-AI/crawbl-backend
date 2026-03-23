@@ -22,11 +22,11 @@ spec:
     size: 2Gi
     storageClassName: do-block-storage
   config:
-    data:
-      default_provider = "openrouter"
-      default_model = "openrouter/auto"
-    secretData:
-      OPENROUTER_API_KEY: "replace-me-for-real-provider-calls"
+    defaultProvider: custom:https://api.edenai.run/v3/llm
+    defaultModel: "@edenai"
+    # The referenced Secret should expose API_KEY for Eden AI or another provider-specific key that the bootstrap helper understands.
+    envSecretRef:
+      name: demo-user-provider-env
   exposure:
     httpRoute:
       enabled: false

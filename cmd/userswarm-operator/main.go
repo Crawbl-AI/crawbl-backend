@@ -22,6 +22,10 @@ func main() {
 	var metricsAddr string
 	var probeAddr string
 	var enableLeaderElection bool
+	bootstrapImage := os.Getenv("USERSWARM_BOOTSTRAP_IMAGE")
+	if bootstrapImage == "" {
+		bootstrapImage = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator:dev"
+	}
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -58,8 +62,9 @@ func main() {
 	}
 
 	if err := (&controller.UserSwarmReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		BootstrapImage: bootstrapImage,
 	}).SetupWithManager(mgr); err != nil {
 		ctrl.Log.WithName("setup").Error(err, "unable to create controller", "controller", "UserSwarm")
 		os.Exit(1)

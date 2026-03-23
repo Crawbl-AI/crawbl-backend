@@ -76,39 +76,49 @@ spec:
                 config:
                   type: object
                   properties:
-                    data:
-                      type: object
-                      additionalProperties:
-                        type: string
+                    defaultProvider:
+                      type: string
+                    defaultModel:
+                      type: string
+                    defaultTemperature:
+                      type: number
+                      format: double
+                    tomlOverrides:
+                      type: string
                     secretData:
                       type: object
                       additionalProperties:
                         type: string
+                    envSecretRef:
+                      type: object
+                      required:
+                        - name
+                      properties:
+                        name:
+                          type: string
                 exposure:
                   type: object
                   properties:
-                    ingress:
+                    httpRoute:
                       type: object
                       properties:
                         enabled:
                           type: boolean
-                        className:
-                          type: string
                         host:
                           type: string
                         path:
                           type: string
-                        pathType:
+                        pathMatch:
                           type: string
                           enum:
-                            - Prefix
                             - Exact
-                            - ImplementationSpecific
-                        annotations:
-                          type: object
-                          additionalProperties:
-                            type: string
-                        tlsSecret:
+                            - PathPrefix
+                            - RegularExpression
+                        gatewayName:
+                          type: string
+                        gatewayNamespace:
+                          type: string
+                        parentSectionName:
                           type: string
                 suspend:
                   type: boolean
@@ -136,4 +146,3 @@ spec:
                   items:
                     x-kubernetes-preserve-unknown-fields: true
                     type: object
-

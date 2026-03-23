@@ -3,7 +3,6 @@ package zeroclaw
 import (
 	"bytes"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -17,6 +16,7 @@ type BootstrapConfig struct {
 	DefaultModel       string        `toml:"default_model"`
 	DefaultTemperature float64       `toml:"default_temperature"`
 	Gateway            GatewayConfig `toml:"gateway"`
+	Reliability        Reliability   `toml:"reliability"`
 }
 
 type GatewayConfig struct {
@@ -25,21 +25,50 @@ type GatewayConfig struct {
 	AllowPublicBind bool   `toml:"allow_public_bind"`
 }
 
+type Reliability struct {
+	ProviderRetries uint32              `toml:"provider_retries"`
+	ProviderBackoff uint64              `toml:"provider_backoff_ms"`
+	ModelFallbacks  map[string][]string `toml:"model_fallbacks"`
+}
+
+func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm) map[string]string {
+	return map[string]string{
+		"config.toml": BuildConfigTOML(sw),
+		"SOUL.md":     BuildSoulMarkdown(sw),
+		"IDENTITY.md": BuildIdentityMarkdown(sw),
+	}
+}
+
 // BuildConfigTOML generates a minimal ZeroClaw bootstrap config for shared-namespace testing.
 func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) string {
 	cfg := BootstrapConfig{
 		APIKey:             "",
-		DefaultProvider:    "openrouter",
-		DefaultModel:       "anthropic/claude-sonnet-4-20250514",
+		DefaultProvider:    "custom:https://api.edenai.run/v3/llm",
+		DefaultModel:       "@edenai",
 		DefaultTemperature: 0.7,
 		Gateway: GatewayConfig{
 			Port:            runtimePort(sw),
 			Host:            "[::]",
 			AllowPublicBind: true,
 		},
+		Reliability: Reliability{
+			ProviderRetries: 2,
+			ProviderBackoff: 500,
+			ModelFallbacks:  map[string][]string{},
+		},
 	}
 
-	applyOverrides(&cfg, sw.Spec.Config.Data)
+	if sw.Spec.Config.DefaultProvider != "" {
+		cfg.DefaultProvider = sw.Spec.Config.DefaultProvider
+	}
+	if sw.Spec.Config.DefaultModel != "" {
+		cfg.DefaultModel = sw.Spec.Config.DefaultModel
+	}
+	if sw.Spec.Config.DefaultTemperature != nil {
+		cfg.DefaultTemperature = *sw.Spec.Config.DefaultTemperature
+	}
+
+	applyOverrides(&cfg, sw.Spec.Config.TOMLOverrides)
 
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
@@ -48,34 +77,13 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) string {
 	return buf.String()
 }
 
-func applyOverrides(cfg *BootstrapConfig, overrides map[string]string) {
-	if len(overrides) == 0 {
+func applyOverrides(cfg *BootstrapConfig, overrides string) {
+	if strings.TrimSpace(overrides) == "" {
 		return
 	}
 
-	keys := make([]string, 0, len(overrides))
-	for key := range overrides {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	var doc strings.Builder
-	for _, key := range keys {
-		value := strings.TrimSpace(overrides[key])
-		if value == "" {
-			continue
-		}
-		doc.WriteString(value)
-		if !strings.HasSuffix(value, "\n") {
-			doc.WriteByte('\n')
-		}
-	}
-
-	if strings.TrimSpace(doc.String()) == "" {
-		return
-	}
-
-	if _, err := toml.Decode(doc.String(), cfg); err != nil {
+	doc := strings.TrimSpace(overrides)
+	if _, err := toml.Decode(doc, cfg); err != nil {
 		panic(fmt.Sprintf("decode zeroclaw config overrides: %v", err))
 	}
 }
@@ -85,4 +93,35 @@ func runtimePort(sw *crawblv1alpha1.UserSwarm) int32 {
 		return sw.Spec.Runtime.Port
 	}
 	return crawblv1alpha1.DefaultGatewayPort
+}
+
+func BuildSoulMarkdown(sw *crawblv1alpha1.UserSwarm) string {
+	return fmt.Sprintf(`# SOUL.md - Who You Are
+
+You are ZeroClaw, the private personal assistant for user %q inside Crawbl.
+
+## Core Principles
+- Speak naturally. Do not sound like a policy bot or a generic support script.
+- Start with the answer or useful action. Do not narrate internal processing.
+- Avoid phrases like "I will process that", "I will use the available tools", or "I will provide the result" unless the user asked about internals.
+- Be concise by default, but still sound human and grounded.
+- Use tools when needed, but keep tool use invisible in normal replies.
+- Be proactive and practical. Offer the next helpful step when it saves time.
+- If something is unclear, ask one short concrete question instead of padding the reply.
+- Do not invent facts, hidden actions, or completed work.
+`, sw.Spec.UserID)
+}
+
+func BuildIdentityMarkdown(sw *crawblv1alpha1.UserSwarm) string {
+	return fmt.Sprintf(`# IDENTITY.md - Who I Am
+
+I am ZeroClaw, %s's long-lived assistant in Crawbl.
+
+## Traits
+- Calm, direct, and useful
+- Conversational, not robotic
+- Opinionated when it helps the user decide faster
+- Respectful of the user's time; short answers are the default
+- Comfortable helping with planning, research, reminders, messages, and coordination
+`, sw.Spec.UserID)
 }
