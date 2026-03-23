@@ -7,9 +7,12 @@ import (
 )
 
 const (
-	DefaultRuntimeNamespace = "swarms-dev"
-	DefaultGatewayPort      = 42617
-	DefaultRuntimeMode      = "daemon"
+	DefaultRuntimeNamespace       = "swarms-dev"
+	DefaultGatewayPort            = 42617
+	DefaultRuntimeMode            = "daemon"
+	DefaultPublicGatewayName      = "public-edge"
+	DefaultPublicGatewayNamespace = "envoy-gateway-system"
+	DefaultPublicGatewaySection   = "https"
 )
 
 // UserSwarmSpec describes the desired state for a single user's ZeroClaw runtime.
@@ -47,17 +50,17 @@ type UserSwarmConfigSpec struct {
 }
 
 type UserSwarmExposureSpec struct {
-	Ingress UserSwarmIngressSpec `json:"ingress,omitempty"`
+	HTTPRoute UserSwarmHTTPRouteSpec `json:"httpRoute,omitempty"`
 }
 
-type UserSwarmIngressSpec struct {
-	Enabled     bool              `json:"enabled,omitempty"`
-	ClassName   string            `json:"className,omitempty"`
-	Host        string            `json:"host,omitempty"`
-	Path        string            `json:"path,omitempty"`
-	PathType    string            `json:"pathType,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	TLSSecret   string            `json:"tlsSecret,omitempty"`
+type UserSwarmHTTPRouteSpec struct {
+	Enabled           bool   `json:"enabled,omitempty"`
+	Host              string `json:"host,omitempty"`
+	Path              string `json:"path,omitempty"`
+	PathMatch         string `json:"pathMatch,omitempty"`
+	GatewayName       string `json:"gatewayName,omitempty"`
+	GatewayNamespace  string `json:"gatewayNamespace,omitempty"`
+	ParentSectionName string `json:"parentSectionName,omitempty"`
 }
 
 type UserSwarmStatus struct {
@@ -171,17 +174,7 @@ func (in *UserSwarmConfigSpec) DeepCopyInto(out *UserSwarmConfigSpec) {
 
 func (in *UserSwarmExposureSpec) DeepCopyInto(out *UserSwarmExposureSpec) {
 	*out = *in
-	in.Ingress.DeepCopyInto(&out.Ingress)
-}
-
-func (in *UserSwarmIngressSpec) DeepCopyInto(out *UserSwarmIngressSpec) {
-	*out = *in
-	if in.Annotations != nil {
-		out.Annotations = make(map[string]string, len(in.Annotations))
-		for key, val := range in.Annotations {
-			out.Annotations[key] = val
-		}
-	}
+	out.HTTPRoute = in.HTTPRoute
 }
 
 func (in *UserSwarmStatus) DeepCopyInto(out *UserSwarmStatus) {

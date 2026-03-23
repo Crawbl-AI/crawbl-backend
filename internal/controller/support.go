@@ -80,8 +80,8 @@ func pvcName(sw *crawblv1alpha1.UserSwarm) string {
 	return fmt.Sprintf("%s-data", workloadName(sw))
 }
 
-func ingressName(sw *crawblv1alpha1.UserSwarm) string {
-	return fmt.Sprintf("%s-ingress", workloadName(sw))
+func httpRouteName(sw *crawblv1alpha1.UserSwarm) string {
+	return fmt.Sprintf("%s-route", workloadName(sw))
 }
 
 func labelsFor(sw *crawblv1alpha1.UserSwarm) map[string]string {
@@ -108,18 +108,39 @@ func replicasFor(sw *crawblv1alpha1.UserSwarm) int32 {
 	return 1
 }
 
-func ingressPath(sw *crawblv1alpha1.UserSwarm) string {
-	if sw.Spec.Exposure.Ingress.Path != "" {
-		return sw.Spec.Exposure.Ingress.Path
+func routePath(sw *crawblv1alpha1.UserSwarm) string {
+	if sw.Spec.Exposure.HTTPRoute.Path != "" {
+		return sw.Spec.Exposure.HTTPRoute.Path
 	}
 	return "/"
 }
 
-func ingressURL(sw *crawblv1alpha1.UserSwarm) string {
-	if !sw.Spec.Exposure.Ingress.Enabled || sw.Spec.Exposure.Ingress.Host == "" {
+func routeURL(sw *crawblv1alpha1.UserSwarm) string {
+	if !sw.Spec.Exposure.HTTPRoute.Enabled || sw.Spec.Exposure.HTTPRoute.Host == "" {
 		return ""
 	}
-	return fmt.Sprintf("https://%s%s", sw.Spec.Exposure.Ingress.Host, ingressPath(sw))
+	return fmt.Sprintf("https://%s%s", sw.Spec.Exposure.HTTPRoute.Host, routePath(sw))
+}
+
+func routeGatewayName(sw *crawblv1alpha1.UserSwarm) string {
+	if sw.Spec.Exposure.HTTPRoute.GatewayName != "" {
+		return sw.Spec.Exposure.HTTPRoute.GatewayName
+	}
+	return crawblv1alpha1.DefaultPublicGatewayName
+}
+
+func routeGatewayNamespace(sw *crawblv1alpha1.UserSwarm) string {
+	if sw.Spec.Exposure.HTTPRoute.GatewayNamespace != "" {
+		return sw.Spec.Exposure.HTTPRoute.GatewayNamespace
+	}
+	return crawblv1alpha1.DefaultPublicGatewayNamespace
+}
+
+func routeSectionName(sw *crawblv1alpha1.UserSwarm) string {
+	if sw.Spec.Exposure.HTTPRoute.ParentSectionName != "" {
+		return sw.Spec.Exposure.HTTPRoute.ParentSectionName
+	}
+	return crawblv1alpha1.DefaultPublicGatewaySection
 }
 
 func resourceQuantity(raw string) (resource.Quantity, error) {
@@ -154,6 +175,7 @@ func checksumStringMap(values map[string]string) string {
 		return checksumString("")
 	}
 
+	// Sort keys first so pod-template checksums stay stable regardless of map iteration order.
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)

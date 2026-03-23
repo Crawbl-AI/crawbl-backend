@@ -28,9 +28,11 @@ spec:
     secretData:
       OPENROUTER_API_KEY: "replace-me-for-real-provider-calls"
   exposure:
-    ingress:
+    httpRoute:
       enabled: false
-      className: nginx
       host: zeroclaw-dev.example.com
       path: /
-      pathType: Prefix
+      pathMatch: PathPrefix
+      gatewayName: public-edge
+      gatewayNamespace: envoy-gateway-system
+      parentSectionName: https

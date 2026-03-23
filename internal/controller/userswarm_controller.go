@@ -6,7 +6,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	api_meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
@@ -38,6 +38,8 @@ type UserSwarmReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// Reconcile keeps one UserSwarm aligned with the shared-namespace runtime model:
+// validate shared prerequisites first, then reconcile the per-user runtime objects.
 func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var swarm crawblv1alpha1.UserSwarm
 	if err := r.Get(ctx, req.NamespacedName, &swarm); err != nil {
@@ -112,7 +114,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.reconcileStatefulSet(ctx, &swarm); err != nil {
 		return r.reconcileError(ctx, &swarm, err)
 	}
-	if err := r.reconcileIngress(ctx, &swarm); err != nil {
+	if err := r.reconcileHTTPRoute(ctx, &swarm); err != nil {
 		return r.reconcileError(ctx, &swarm, err)
 	}
 
@@ -138,7 +140,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	} else {
 		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonReconciling, "userswarm workload is still reconciling")
 	}
-	swarm.Status.URL = ingressURL(&swarm)
+	swarm.Status.URL = routeURL(&swarm)
 
 	if err := r.Status().Update(ctx, &swarm); err != nil {
 		return ctrl.Result{}, err
@@ -186,7 +188,7 @@ func (r *UserSwarmReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
-		Owns(&networkingv1.Ingress{}).
+		Owns(&gatewayv1.HTTPRoute{}).
 		Complete(r)
 }
 
@@ -200,6 +202,7 @@ func (r *UserSwarmReconciler) ensureImagePullSecretExists(ctx context.Context, s
 		return nil
 	}
 
+	// Shared pull secrets are expected to be provisioned ahead of time in the runtime namespace.
 	var secret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{
 		Namespace: desiredRuntimeNamespace(swarm),
@@ -379,6 +382,7 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 		obj.Spec.ServiceName = headlessServiceName(swarm)
 		obj.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabelsFor(swarm)}
 		obj.Spec.Template.ObjectMeta.Labels = labelsFor(swarm)
+		// Roll the pod only when bootstrap inputs change; the live config itself stays on the PVC.
 		obj.Spec.Template.ObjectMeta.Annotations = map[string]string{
 			"crawbl.ai/config-checksum": checksumString(zeroclaw.BuildConfigTOML(swarm)),
 			"crawbl.ai/secret-checksum": checksumStringMap(swarm.Spec.Config.SecretData),
@@ -411,6 +415,7 @@ if [ ! -f "$config_path" ]; then
 fi
 `,
 			},
+			// Seed the PVC-backed runtime config once, then let ZeroClaw mutate its live state there.
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: ptrTo(false),
 				RunAsNonRoot:             ptrTo(true),
@@ -469,6 +474,7 @@ fi
 		}}
 
 		if len(swarm.Spec.Config.SecretData) > 0 {
+			// Keep provider credentials and other sensitive runtime env outside the bootstrap ConfigMap.
 			obj.Spec.Template.Spec.Containers[0].EnvFrom = []corev1.EnvFromSource{{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: secretName(swarm)},
@@ -503,68 +509,65 @@ fi
 	return err
 }
 
-func (r *UserSwarmReconciler) reconcileIngress(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
-	if !swarm.Spec.Exposure.Ingress.Enabled || swarm.Spec.Exposure.Ingress.Host == "" {
-		obj := &networkingv1.Ingress{}
-		err := r.Get(ctx, types.NamespacedName{Namespace: desiredRuntimeNamespace(swarm), Name: ingressName(swarm)}, obj)
+func (r *UserSwarmReconciler) reconcileHTTPRoute(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
+	if !swarm.Spec.Exposure.HTTPRoute.Enabled || swarm.Spec.Exposure.HTTPRoute.Host == "" {
+		obj := &gatewayv1.HTTPRoute{}
+		err := r.Get(ctx, types.NamespacedName{Namespace: desiredRuntimeNamespace(swarm), Name: httpRouteName(swarm)}, obj)
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
 
-	pathType := networkingv1.PathTypeImplementationSpecific
-	if swarm.Spec.Exposure.Ingress.PathType == "Prefix" {
-		pathType = networkingv1.PathTypePrefix
+	pathMatchType := gatewayv1.PathMatchPathPrefix
+	if swarm.Spec.Exposure.HTTPRoute.PathMatch == "Exact" {
+		pathMatchType = gatewayv1.PathMatchExact
 	}
-	if swarm.Spec.Exposure.Ingress.PathType == "Exact" {
-		pathType = networkingv1.PathTypeExact
+	if swarm.Spec.Exposure.HTTPRoute.PathMatch == "RegularExpression" {
+		pathMatchType = gatewayv1.PathMatchRegularExpression
 	}
 
-	obj := &networkingv1.Ingress{
+	host := gatewayv1.Hostname(swarm.Spec.Exposure.HTTPRoute.Host)
+	path := routePath(swarm)
+	port := gatewayv1.PortNumber(runtimePort(swarm))
+	gatewayNamespace := gatewayv1.Namespace(routeGatewayNamespace(swarm))
+	sectionName := gatewayv1.SectionName(routeSectionName(swarm))
+
+	obj := &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ingressName(swarm),
+			Name:      httpRouteName(swarm),
 			Namespace: desiredRuntimeNamespace(swarm),
 		},
 	}
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, obj, func() error {
 		obj.Labels = labelsFor(swarm)
-		obj.Annotations = swarm.Spec.Exposure.Ingress.Annotations
 		if err := controllerutil.SetControllerReference(swarm, obj, r.Scheme); err != nil {
 			return err
 		}
 
-		if swarm.Spec.Exposure.Ingress.ClassName != "" {
-			className := swarm.Spec.Exposure.Ingress.ClassName
-			obj.Spec.IngressClassName = &className
-		}
-
-		obj.Spec.Rules = []networkingv1.IngressRule{{
-			Host: swarm.Spec.Exposure.Ingress.Host,
-			IngressRuleValue: networkingv1.IngressRuleValue{
-				HTTP: &networkingv1.HTTPIngressRuleValue{
-					Paths: []networkingv1.HTTPIngressPath{{
-						Path:     ingressPath(swarm),
-						PathType: &pathType,
-						Backend: networkingv1.IngressBackend{
-							Service: &networkingv1.IngressServiceBackend{
-								Name: serviceName(swarm),
-								Port: networkingv1.ServiceBackendPort{Number: runtimePort(swarm)},
-							},
-						},
-					}},
-				},
-			},
+		// Public exposure stays optional and attaches each runtime to the shared Gateway instead of a per-user LB.
+		obj.Spec.Hostnames = []gatewayv1.Hostname{host}
+		obj.Spec.ParentRefs = []gatewayv1.ParentReference{{
+			Name:        gatewayv1.ObjectName(routeGatewayName(swarm)),
+			Namespace:   &gatewayNamespace,
+			SectionName: &sectionName,
 		}}
-
-		if swarm.Spec.Exposure.Ingress.TLSSecret != "" {
-			obj.Spec.TLS = []networkingv1.IngressTLS{{
-				Hosts:      []string{swarm.Spec.Exposure.Ingress.Host},
-				SecretName: swarm.Spec.Exposure.Ingress.TLSSecret,
-			}}
-		} else {
-			obj.Spec.TLS = nil
-		}
+		obj.Spec.Rules = []gatewayv1.HTTPRouteRule{{
+			Matches: []gatewayv1.HTTPRouteMatch{{
+				Path: &gatewayv1.HTTPPathMatch{
+					Type:  &pathMatchType,
+					Value: &path,
+				},
+			}},
+			BackendRefs: []gatewayv1.HTTPBackendRef{{
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: gatewayv1.ObjectName(serviceName(swarm)),
+						Port: &port,
+					},
+				},
+			}},
+		}}
 		return nil
 	})
 	return err
@@ -582,7 +585,7 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 	}
 
 	objects := []client.Object{
-		&networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: ingressName(swarm), Namespace: runtimeNamespace}},
+		&gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: httpRouteName(swarm), Namespace: runtimeNamespace}},
 		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: workloadName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: serviceName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: headlessServiceName(swarm), Namespace: runtimeNamespace}},
@@ -592,6 +595,7 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: serviceAccountName(swarm), Namespace: runtimeNamespace}},
 	}
 
+	// Delete explicitly so the finalizer can report progress even when child cleanup spans multiple reconciles.
 	pending := false
 	for _, obj := range objects {
 		key := client.ObjectKeyFromObject(obj)
