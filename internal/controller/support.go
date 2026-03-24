@@ -172,6 +172,19 @@ func healthProbe() *corev1.Probe {
 	}
 }
 
+func startupProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"/usr/local/bin/zeroclaw", "status", "--format=exit-code"},
+			},
+		},
+		PeriodSeconds:    10,
+		TimeoutSeconds:   10,
+		FailureThreshold: 18,
+	}
+}
+
 func ptrTo[T any](value T) *T {
 	return &value
 }
@@ -202,4 +215,22 @@ func checksumStringMap(values map[string]string) string {
 	}
 
 	return checksumString(b.String())
+}
+
+func smokeTestJobName(sw *crawblv1alpha1.UserSwarm) string {
+	return fmt.Sprintf("%s-smoke", workloadName(sw))
+}
+
+func smokeTestURL(sw *crawblv1alpha1.UserSwarm) string {
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/health", serviceName(sw), desiredRuntimeNamespace(sw), runtimePort(sw))
+}
+
+func smokeTestSpecChecksum(sw *crawblv1alpha1.UserSwarm) string {
+	return checksumString(strings.Join([]string{
+		sw.Spec.Runtime.Image,
+		runtimeMode(sw),
+		smokeTestURL(sw),
+		routeURL(sw),
+		fmt.Sprintf("%d", sw.Generation),
+	}, "\n"))
 }

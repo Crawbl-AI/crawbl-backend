@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	api_meta "k8s.io/apimachinery/pkg/api/meta"
@@ -23,15 +24,24 @@ import (
 
 const (
 	conditionTypeReady            = "Ready"
+	conditionTypePodReady         = "PodReady"
+	conditionTypeServiceReady     = "ServiceReady"
+	conditionTypeRouteReady       = "RouteReady"
+	conditionTypeSmokeTestPassed  = "SmokeTestPassed"
+	conditionTypeVerified         = "Verified"
 	conditionTypeRuntimeNamespace = "RuntimeNamespaceReady"
 	conditionTypePullSecret       = "ImagePullSecretReady"
 	conditionTypeRuntimeSecret    = "RuntimeSecretReady"
 	conditionReasonReconciling    = "Reconciling"
 	conditionReasonReady          = "Ready"
 	conditionReasonDeleting       = "Deleting"
+	conditionReasonDisabled       = "Disabled"
+	conditionReasonPending        = "Pending"
 	conditionReasonMissingNS      = "MissingRuntimeNamespace"
 	conditionReasonMissingSecret  = "MissingImagePullSecret"
 	conditionReasonMissingRuntime = "MissingRuntimeSecret"
+	conditionReasonSmokeFailed    = "SmokeTestFailed"
+	conditionReasonSmokePending   = "SmokeTestPending"
 	conditionReasonReconcileError = "ReconcileError"
 )
 
@@ -145,21 +155,70 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	desiredReplicas := replicasFor(&swarm)
 	swarm.Status.ReadyReplicas = workload.Status.ReadyReplicas
-	if desiredReplicas == 0 {
-		swarm.Status.Phase = "Suspended"
-	} else if workload.Status.ReadyReplicas >= desiredReplicas {
-		swarm.Status.Phase = "Ready"
-	} else {
-		swarm.Status.Phase = "Progressing"
-	}
 
 	r.setCondition(&swarm, conditionTypeRuntimeNamespace, metav1.ConditionTrue, conditionReasonReady, "runtime namespace is ready")
 	r.setCondition(&swarm, conditionTypePullSecret, metav1.ConditionTrue, conditionReasonReady, "image pull secret is ready")
 	r.setCondition(&swarm, conditionTypeRuntimeSecret, metav1.ConditionTrue, conditionReasonReady, "runtime secret is ready")
-	if swarm.Status.Phase == "Ready" || swarm.Status.Phase == "Suspended" {
-		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionTrue, conditionReasonReady, "userswarm workload is ready")
+
+	podReady := desiredReplicas == 0 || (workload.Status.ReadyReplicas >= desiredReplicas &&
+		workload.Status.UpdatedReplicas >= desiredReplicas &&
+		workload.Status.CurrentRevision == workload.Status.UpdateRevision &&
+		workload.Status.ObservedGeneration >= workload.Generation)
+	if podReady {
+		r.setCondition(&swarm, conditionTypePodReady, metav1.ConditionTrue, conditionReasonReady, "userswarm pod is ready")
 	} else {
+		r.setCondition(&swarm, conditionTypePodReady, metav1.ConditionFalse, conditionReasonPending, "userswarm pod revision is still becoming ready")
+	}
+
+	var runtimeService corev1.Service
+	if err := r.Get(ctx, types.NamespacedName{Namespace: runtimeNamespace, Name: serviceName}, &runtimeService); err != nil {
+		return r.reconcileError(ctx, &swarm, err)
+	}
+	r.setCondition(&swarm, conditionTypeServiceReady, metav1.ConditionTrue, conditionReasonReady, "userswarm service is ready")
+
+	routeStatus, routeReason, routeMessage, err := r.routeConditionStatus(ctx, &swarm)
+	if err != nil {
+		return r.reconcileError(ctx, &swarm, err)
+	}
+	r.setCondition(&swarm, conditionTypeRouteReady, routeStatus, routeReason, routeMessage)
+
+	smokeStatus := metav1.ConditionUnknown
+	smokeReason := conditionReasonSmokePending
+	smokeMessage := "waiting for pod, service, and route readiness before running smoke test"
+	if desiredReplicas == 0 {
+		smokeStatus = metav1.ConditionFalse
+		smokeReason = conditionReasonDisabled
+		smokeMessage = "userswarm is suspended"
+	} else if podReady && routeStatus != metav1.ConditionFalse {
+		smokeStatus, smokeReason, smokeMessage, err = r.reconcileSmokeTestJob(ctx, &swarm)
+		if err != nil {
+			return r.reconcileError(ctx, &swarm, err)
+		}
+	}
+	r.setCondition(&swarm, conditionTypeSmokeTestPassed, smokeStatus, smokeReason, smokeMessage)
+
+	verified := desiredReplicas > 0 &&
+		podReady &&
+		api_meta.IsStatusConditionTrue(swarm.Status.Conditions, conditionTypeServiceReady) &&
+		api_meta.IsStatusConditionTrue(swarm.Status.Conditions, conditionTypeSmokeTestPassed) &&
+		(routeStatus == metav1.ConditionTrue || !swarm.Spec.Exposure.HTTPRoute.Enabled)
+
+	if verified {
+		r.setCondition(&swarm, conditionTypeVerified, metav1.ConditionTrue, conditionReasonReady, "userswarm service path is verified")
+		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionTrue, conditionReasonReady, "userswarm workload is ready and verified")
+		swarm.Status.Phase = "Ready"
+	} else if desiredReplicas == 0 {
+		r.setCondition(&swarm, conditionTypeVerified, metav1.ConditionFalse, conditionReasonDisabled, "userswarm is suspended")
+		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonDisabled, "userswarm is suspended")
+		swarm.Status.Phase = "Suspended"
+	} else if smokeStatus == metav1.ConditionFalse {
+		r.setCondition(&swarm, conditionTypeVerified, metav1.ConditionFalse, conditionReasonSmokeFailed, smokeMessage)
+		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonReconciling, "userswarm pod is ready but verification failed")
+		swarm.Status.Phase = "Error"
+	} else {
+		r.setCondition(&swarm, conditionTypeVerified, metav1.ConditionFalse, conditionReasonReconciling, "userswarm verification is still in progress")
 		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonReconciling, "userswarm workload is still reconciling")
+		swarm.Status.Phase = "Progressing"
 	}
 	swarm.Status.URL = routeURL(&swarm)
 
@@ -204,6 +263,7 @@ func (r *UserSwarmReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&crawblv1alpha1.UserSwarm{}).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&batchv1.Job{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&corev1.ConfigMap{}).
@@ -525,6 +585,7 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 			},
 			ReadinessProbe: healthProbe(),
 			LivenessProbe:  healthProbe(),
+			StartupProbe:   startupProbe(),
 		}}
 
 		if envSecretRefName != "" {
@@ -640,6 +701,7 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 
 	objects := []client.Object{
 		&gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: httpRouteName(swarm), Namespace: runtimeNamespace}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: smokeTestJobName(swarm), Namespace: runtimeNamespace}},
 		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: workloadName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: serviceName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: headlessServiceName(swarm), Namespace: runtimeNamespace}},
@@ -675,6 +737,7 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 
 func (r *UserSwarmReconciler) reconcileError(ctx context.Context, swarm *crawblv1alpha1.UserSwarm, err error) (ctrl.Result, error) {
 	r.setCondition(swarm, conditionTypeReady, metav1.ConditionFalse, conditionReasonReconcileError, err.Error())
+	r.setCondition(swarm, conditionTypeVerified, metav1.ConditionFalse, conditionReasonReconcileError, err.Error())
 	swarm.Status.Phase = "Error"
 	swarm.Status.RuntimeNamespace = desiredRuntimeNamespace(swarm)
 	swarm.Status.ImageRef = swarm.Spec.Runtime.Image
@@ -692,4 +755,115 @@ func (r *UserSwarmReconciler) setCondition(swarm *crawblv1alpha1.UserSwarm, cond
 		Message:            message,
 		ObservedGeneration: swarm.Generation,
 	})
+}
+
+func (r *UserSwarmReconciler) routeConditionStatus(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) (metav1.ConditionStatus, string, string, error) {
+	if !swarm.Spec.Exposure.HTTPRoute.Enabled {
+		return metav1.ConditionTrue, conditionReasonDisabled, "public routing is disabled", nil
+	}
+
+	var route gatewayv1.HTTPRoute
+	if err := r.Get(ctx, types.NamespacedName{Namespace: desiredRuntimeNamespace(swarm), Name: httpRouteName(swarm)}, &route); err != nil {
+		if apierrors.IsNotFound(err) {
+			return metav1.ConditionFalse, conditionReasonPending, "httproute is not ready yet", nil
+		}
+		return metav1.ConditionFalse, conditionReasonReconcileError, "failed to load httproute", err
+	}
+
+	for _, parent := range route.Status.Parents {
+		accepted := false
+		resolved := false
+		for _, cond := range parent.Conditions {
+			switch cond.Type {
+			case string(gatewayv1.RouteConditionAccepted):
+				accepted = cond.Status == metav1.ConditionTrue
+			case string(gatewayv1.RouteConditionResolvedRefs):
+				resolved = cond.Status == metav1.ConditionTrue
+			}
+		}
+		if accepted && resolved {
+			return metav1.ConditionTrue, conditionReasonReady, "public route is attached to the shared gateway", nil
+		}
+	}
+
+	return metav1.ConditionFalse, conditionReasonPending, "public route exists but is not yet accepted by the gateway", nil
+}
+
+func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) (metav1.ConditionStatus, string, string, error) {
+	jobName := smokeTestJobName(swarm)
+	runtimeNamespace := desiredRuntimeNamespace(swarm)
+	checksum := smokeTestSpecChecksum(swarm)
+
+	var job batchv1.Job
+	err := r.Get(ctx, types.NamespacedName{Namespace: runtimeNamespace, Name: jobName}, &job)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return metav1.ConditionFalse, conditionReasonReconcileError, "failed to load smoke test job", err
+	}
+	if err == nil && (job.Annotations["crawbl.ai/smoke-checksum"] != checksum || job.Annotations["crawbl.ai/bootstrap-image"] != r.BootstrapImage) {
+		if job.DeletionTimestamp.IsZero() {
+			if deleteErr := r.Delete(ctx, &job); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+				return metav1.ConditionFalse, conditionReasonReconcileError, "failed to refresh smoke test job", deleteErr
+			}
+		}
+		return metav1.ConditionUnknown, conditionReasonSmokePending, "recreating smoke test job for the updated runtime spec", nil
+	}
+
+	if apierrors.IsNotFound(err) {
+		job = batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jobName,
+				Namespace: runtimeNamespace,
+				Labels:    labelsFor(swarm),
+				Annotations: map[string]string{
+					"crawbl.ai/smoke-checksum":  checksum,
+					"crawbl.ai/bootstrap-image": r.BootstrapImage,
+				},
+			},
+		}
+		if err := controllerutil.SetControllerReference(swarm, &job, r.Scheme); err != nil {
+			return metav1.ConditionFalse, conditionReasonReconcileError, "failed to set smoke test job owner reference", err
+		}
+
+		job.Spec.BackoffLimit = ptrTo[int32](0)
+		job.Spec.TTLSecondsAfterFinished = ptrTo[int32](300)
+		job.Spec.Template.ObjectMeta.Labels = labelsFor(swarm)
+		job.Spec.Template.ObjectMeta.Annotations = map[string]string{
+			"crawbl.ai/smoke-checksum":  checksum,
+			"crawbl.ai/bootstrap-image": r.BootstrapImage,
+		}
+		job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
+		job.Spec.Template.Spec.ServiceAccountName = serviceAccountName(swarm)
+		job.Spec.Template.Spec.Containers = []corev1.Container{{
+			Name:            "smoke-test",
+			Image:           r.BootstrapImage,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command:         []string{"/userswarm-smoketest"},
+			Args: []string{
+				fmt.Sprintf("--url=%s", smokeTestURL(swarm)),
+				"--timeout=15s",
+			},
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: ptrTo(false),
+				RunAsNonRoot:             ptrTo(true),
+				RunAsUser:                ptrTo(zeroClawRuntimeUID),
+				RunAsGroup:               ptrTo(zeroClawRuntimeGID),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
+		}}
+		if err := r.Create(ctx, &job); err != nil && !apierrors.IsAlreadyExists(err) {
+			return metav1.ConditionFalse, conditionReasonReconcileError, "failed to create smoke test job", err
+		}
+		return metav1.ConditionUnknown, conditionReasonSmokePending, "smoke test job created", nil
+	}
+
+	if job.Status.Succeeded > 0 {
+		return metav1.ConditionTrue, conditionReasonReady, "smoke test passed through the userswarm service path", nil
+	}
+	if job.Status.Failed > 0 {
+		return metav1.ConditionFalse, conditionReasonSmokeFailed, "smoke test failed through the userswarm service path", nil
+	}
+
+	return metav1.ConditionUnknown, conditionReasonSmokePending, "smoke test job is still running", nil
 }
