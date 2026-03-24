@@ -11,18 +11,55 @@ import (
 )
 
 type BootstrapConfig struct {
-	APIKey             string        `toml:"api_key"`
-	DefaultProvider    string        `toml:"default_provider"`
-	DefaultModel       string        `toml:"default_model"`
-	DefaultTemperature float64       `toml:"default_temperature"`
-	Gateway            GatewayConfig `toml:"gateway"`
-	Reliability        Reliability   `toml:"reliability"`
+	APIKey             string            `toml:"api_key"`
+	DefaultProvider    string            `toml:"default_provider"`
+	DefaultModel       string            `toml:"default_model"`
+	DefaultTemperature float64           `toml:"default_temperature"`
+	Autonomy           AutonomyConfig    `toml:"autonomy"`
+	HTTPRequest        HTTPRequestConfig `toml:"http_request"`
+	WebFetch           WebFetchConfig    `toml:"web_fetch"`
+	WebSearch          WebSearchConfig   `toml:"web_search"`
+	Gateway            GatewayConfig     `toml:"gateway"`
+	Reliability        Reliability       `toml:"reliability"`
+}
+
+type AutonomyConfig struct {
+	Level           string   `toml:"level"`
+	WorkspaceOnly   bool     `toml:"workspace_only"`
+	AllowedCommands []string `toml:"allowed_commands"`
+	ForbiddenPaths  []string `toml:"forbidden_paths"`
+	AutoApprove     []string `toml:"auto_approve"`
+	AlwaysAsk       []string `toml:"always_ask"`
 }
 
 type GatewayConfig struct {
 	Port            int32  `toml:"port"`
 	Host            string `toml:"host"`
 	AllowPublicBind bool   `toml:"allow_public_bind"`
+}
+
+type HTTPRequestConfig struct {
+	Enabled           bool     `toml:"enabled"`
+	AllowedDomains    []string `toml:"allowed_domains"`
+	MaxResponseSize   int      `toml:"max_response_size"`
+	TimeoutSecs       int      `toml:"timeout_secs"`
+	AllowPrivateHosts bool     `toml:"allow_private_hosts"`
+}
+
+type WebFetchConfig struct {
+	Enabled         bool     `toml:"enabled"`
+	AllowedDomains  []string `toml:"allowed_domains"`
+	BlockedDomains  []string `toml:"blocked_domains"`
+	MaxResponseSize int      `toml:"max_response_size"`
+	TimeoutSecs     int      `toml:"timeout_secs"`
+}
+
+type WebSearchConfig struct {
+	Enabled            bool   `toml:"enabled"`
+	Provider           string `toml:"provider"`
+	MaxResults         int    `toml:"max_results"`
+	TimeoutSecs        int    `toml:"timeout_secs"`
+	SearxngInstanceURL string `toml:"searxng_instance_url,omitempty"`
 }
 
 type Reliability struct {
@@ -43,9 +80,77 @@ func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm) map[string]string {
 func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) string {
 	cfg := BootstrapConfig{
 		APIKey:             "",
-		DefaultProvider:    "custom:https://api.edenai.run/v3/llm",
-		DefaultModel:       "@edenai",
+		DefaultProvider:    "openai",
+		DefaultModel:       "gpt-5.4",
 		DefaultTemperature: 0.7,
+		Autonomy: AutonomyConfig{
+			Level:         "supervised",
+			WorkspaceOnly: true,
+			AllowedCommands: []string{
+				"git",
+				"ls",
+				"cat",
+				"grep",
+				"find",
+				"pwd",
+				"wc",
+				"head",
+				"tail",
+				"date",
+				"sed",
+			},
+			ForbiddenPaths: []string{
+				"/etc",
+				"/root",
+				"/usr",
+				"/bin",
+				"/sbin",
+				"/lib",
+				"/opt",
+				"/boot",
+				"/dev",
+				"/proc",
+				"/sys",
+				"/var",
+				"/tmp",
+				"~/.ssh",
+				"~/.gnupg",
+				"~/.aws",
+				"~/.config",
+			},
+			AutoApprove: []string{
+				"file_read",
+				"memory_recall",
+				"web_search_tool",
+				"web_fetch",
+				"calculator",
+				"glob_search",
+				"content_search",
+				"image_info",
+				"weather",
+			},
+			AlwaysAsk: []string{},
+		},
+		HTTPRequest: HTTPRequestConfig{
+			Enabled:           true,
+			AllowedDomains:    []string{"*"},
+			MaxResponseSize:   1_000_000,
+			TimeoutSecs:       30,
+			AllowPrivateHosts: false,
+		},
+		WebFetch: WebFetchConfig{
+			Enabled:         true,
+			AllowedDomains:  []string{"*"},
+			BlockedDomains:  []string{},
+			MaxResponseSize: 500_000,
+			TimeoutSecs:     30,
+		},
+		WebSearch: WebSearchConfig{
+			Enabled:     true,
+			Provider:    "duckduckgo",
+			MaxResults:  5,
+			TimeoutSecs: 15,
+		},
 		Gateway: GatewayConfig{
 			Port:            runtimePort(sw),
 			Host:            "[::]",

@@ -7,7 +7,7 @@ spec:
   placement:
     runtimeNamespace: swarms-dev
   runtime:
-    image: registry.digitalocean.com/crawbl/zeroclaw@sha256:1023b99e1dfc01710cef8ddac51f7d3c3bf7006385117c6034644891f8e3570a
+    image: registry.digitalocean.com/crawbl/zeroclaw@sha256:07f4695739c0caa9d052818ce0f3fb183bef1fff94b328178a1f8fcc5c4bf1a8
     mode: daemon
     port: 42617
     imagePullSecretName: crawbl-docr
@@ -22,9 +22,9 @@ spec:
     size: 2Gi
     storageClassName: do-block-storage
   config:
-    defaultProvider: custom:https://api.edenai.run/v3/llm
-    defaultModel: "@edenai"
-    # The referenced Secret should expose API_KEY for Eden AI or another provider-specific key that the bootstrap helper understands.
+    defaultProvider: openai
+    defaultModel: gpt-5.4
+    # The referenced Secret should expose OPENAI_API_KEY for the native OpenAI provider.
     envSecretRef:
       name: demo-user-provider-env
   exposure:

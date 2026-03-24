@@ -16,6 +16,40 @@ var managedRootKeys = []string{
 	"default_temperature",
 }
 
+var managedAutonomyKeys = []string{
+	"level",
+	"workspace_only",
+	"allowed_commands",
+	"forbidden_paths",
+	"auto_approve",
+	"always_ask",
+}
+
+var managedHTTPRequestKeys = []string{
+	"enabled",
+	"allowed_domains",
+	"max_response_size",
+	"timeout_secs",
+	"allow_private_hosts",
+}
+
+var managedWebFetchKeys = []string{
+	"enabled",
+	"allowed_domains",
+	"blocked_domains",
+	"max_response_size",
+	"timeout_secs",
+}
+
+var managedWebSearchKeys = []string{
+	"enabled",
+	"provider",
+	"brave_api_key",
+	"searxng_instance_url",
+	"max_results",
+	"timeout_secs",
+}
+
 var managedGatewayKeys = []string{
 	"port",
 	"host",
@@ -74,6 +108,60 @@ func mergeManagedConfig(liveDoc, bootstrapDoc map[string]any) {
 		}
 	}
 
+	bootstrapAutonomy, ok := bootstrapDoc["autonomy"].(map[string]any)
+	if ok {
+		liveAutonomy, ok := liveDoc["autonomy"].(map[string]any)
+		if !ok {
+			liveAutonomy = map[string]any{}
+			liveDoc["autonomy"] = liveAutonomy
+		}
+
+		for _, key := range managedAutonomyKeys {
+			if value, ok := bootstrapAutonomy[key]; ok {
+				liveAutonomy[key] = value
+			}
+		}
+	}
+
+	if bootstrapHTTP, ok := bootstrapDoc["http_request"].(map[string]any); ok {
+		liveHTTP, ok := liveDoc["http_request"].(map[string]any)
+		if !ok {
+			liveHTTP = map[string]any{}
+			liveDoc["http_request"] = liveHTTP
+		}
+		for _, key := range managedHTTPRequestKeys {
+			if value, ok := bootstrapHTTP[key]; ok {
+				liveHTTP[key] = value
+			}
+		}
+	}
+
+	if bootstrapWebFetch, ok := bootstrapDoc["web_fetch"].(map[string]any); ok {
+		liveWebFetch, ok := liveDoc["web_fetch"].(map[string]any)
+		if !ok {
+			liveWebFetch = map[string]any{}
+			liveDoc["web_fetch"] = liveWebFetch
+		}
+		for _, key := range managedWebFetchKeys {
+			if value, ok := bootstrapWebFetch[key]; ok {
+				liveWebFetch[key] = value
+			}
+		}
+	}
+
+	if bootstrapWebSearch, ok := bootstrapDoc["web_search"].(map[string]any); ok {
+		liveWebSearch, ok := liveDoc["web_search"].(map[string]any)
+		if !ok {
+			liveWebSearch = map[string]any{}
+			liveDoc["web_search"] = liveWebSearch
+		}
+		for _, key := range managedWebSearchKeys {
+			if value, ok := bootstrapWebSearch[key]; ok {
+				liveWebSearch[key] = value
+			}
+		}
+	}
+
 	bootstrapGateway, ok := bootstrapDoc["gateway"].(map[string]any)
 	if !ok {
 		return
@@ -125,12 +213,11 @@ func writeConfigFile(path string, raw []byte) error {
 
 func mergeManagedAPIKey(liveDoc map[string]any) {
 	for _, envName := range []string{
+		"OPENAI_API_KEY",
 		"USERSWARM_API_KEY",
 		"ZEROCLAW_API_KEY",
 		"API_KEY",
-		"EDENAI_API_KEY",
 		"OPENROUTER_API_KEY",
-		"OPENAI_API_KEY",
 		"ANTHROPIC_API_KEY",
 		"GEMINI_API_KEY",
 	} {
