@@ -12,10 +12,10 @@ type workspaceResponse struct {
 	Name string `json:"name"`
 
 	// CreatedAt is the timestamp when the workspace was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the workspace was last modified.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Runtime contains the swarm runtime status if the workspace has been provisioned.
 	// May be nil if the runtime has not yet been created.

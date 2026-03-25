@@ -16,7 +16,7 @@ type authDeleteRequest struct {
 // The token is used to send push notifications to the user's device.
 type savePushTokenRequest struct {
 	// PushToken is the Firebase Cloud Messaging device token for push notifications.
-	PushToken string `json:"pushToken"`
+	PushToken string `json:"push_token"`
 }
 
 // savePushTokenResponse indicates the result of saving a push token.
@@ -29,13 +29,13 @@ type savePushTokenResponse struct {
 // These control platform appearance and behavior for the user.
 type userPreferencesResponse struct {
 	// PlatformTheme is the user's preferred UI theme (e.g., "light", "dark", "auto").
-	PlatformTheme string `json:"platformTheme"`
+	PlatformTheme string `json:"platform_theme"`
 
 	// PlatformLanguage is the user's preferred language code (e.g., "en", "es").
-	PlatformLanguage string `json:"platformLanguage"`
+	PlatformLanguage string `json:"platform_language"`
 
 	// CurrencyCode is the user's preferred currency for displaying prices (e.g., "USD").
-	CurrencyCode string `json:"currencyCode"`
+	CurrencyCode string `json:"currency_code"`
 }
 
 // userSubscriptionResponse represents subscription details in user profile responses.
@@ -48,7 +48,7 @@ type userSubscriptionResponse struct {
 	Code string `json:"code"`
 
 	// ExpiresAt is the subscription expiration time, nil for non-expiring or free tiers.
-	ExpiresAt *time.Time `json:"expiresAt"`
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 // userProfileResponse contains the complete user profile for API responses.
@@ -58,7 +58,7 @@ type userProfileResponse struct {
 	Email string `json:"email"`
 
 	// FirebaseUID is the Firebase Authentication user identifier.
-	FirebaseUID string `json:"firebaseUid"`
+	FirebaseUID string `json:"firebase_uid"`
 
 	// Nickname is the user's display name in the platform.
 	Nickname string `json:"nickname"`
@@ -70,28 +70,28 @@ type userProfileResponse struct {
 	Surname string `json:"surname"`
 
 	// AvatarURL is the URL to the user's profile picture.
-	AvatarURL string `json:"avatarUrl"`
+	AvatarURL string `json:"avatar_url"`
 
 	// CountryCode is the user's country of residence (ISO 3166-1 alpha-2).
-	CountryCode string `json:"countryCode"`
+	CountryCode string `json:"country_code"`
 
 	// DateOfBirth is the user's birth date, if provided.
-	DateOfBirth *time.Time `json:"dateOfBirth"`
+	DateOfBirth *time.Time `json:"date_of_birth"`
 
 	// CreatedAt is the timestamp when the account was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// IsDeleted indicates whether the account has been soft-deleted.
-	IsDeleted bool `json:"isDeleted"`
+	IsDeleted bool `json:"is_deleted"`
 
 	// IsBanned indicates whether the account has been banned from the platform.
-	IsBanned bool `json:"isBanned"`
+	IsBanned bool `json:"is_banned"`
 
 	// HasAgreedWithTerms indicates acceptance of the current terms of service.
-	HasAgreedWithTerms bool `json:"hasAgreedWithTerms"`
+	HasAgreedWithTerms bool `json:"has_agreed_with_terms"`
 
 	// HasAgreedWithPrivacyPolicy indicates acceptance of the current privacy policy.
-	HasAgreedWithPrivacyPolicy bool `json:"hasAgreedWithPrivacyPolicy"`
+	HasAgreedWithPrivacyPolicy bool `json:"has_agreed_with_privacy_policy"`
 
 	// Preferences contains user customization settings.
 	Preferences userPreferencesResponse `json:"preferences"`
@@ -104,13 +104,13 @@ type userProfileResponse struct {
 // All fields are optional; only provided fields will be updated.
 type userUpdatePreferencesRequest struct {
 	// PlatformTheme is the new preferred UI theme.
-	PlatformTheme *string `json:"platformTheme"`
+	PlatformTheme *string `json:"platform_theme"`
 
 	// PlatformLanguage is the new preferred language code.
-	PlatformLanguage *string `json:"platformLanguage"`
+	PlatformLanguage *string `json:"platform_language"`
 
 	// CurrencyCode is the new preferred currency code.
-	CurrencyCode *string `json:"currencyCode"`
+	CurrencyCode *string `json:"currency_code"`
 }
 
 // userUpdateRequest represents the request body for updating user profile.
@@ -126,10 +126,10 @@ type userUpdateRequest struct {
 	Surname *string `json:"surname"`
 
 	// CountryCode is the new country of residence.
-	CountryCode *string `json:"countryCode"`
+	CountryCode *string `json:"country_code"`
 
 	// DateOfBirth is the new birth date.
-	DateOfBirth *dateTime `json:"dateOfBirth"`
+	DateOfBirth *dateTime `json:"date_of_birth"`
 
 	// Preferences contains updatable preference settings.
 	Preferences *userUpdatePreferencesRequest `json:"preferences"`
@@ -139,30 +139,30 @@ type userUpdateRequest struct {
 // Used to display legal documents and show which ones the user has agreed to.
 type userLegalResponse struct {
 	// TermsOfService is the full text of the terms of service.
-	TermsOfService string `json:"termsOfService"`
+	TermsOfService string `json:"terms_of_service"`
 
 	// PrivacyPolicy is the full text of the privacy policy.
-	PrivacyPolicy string `json:"privacyPolicy"`
+	PrivacyPolicy string `json:"privacy_policy"`
 
 	// TermsOfServiceVersion is the current version identifier for terms of service.
-	TermsOfServiceVersion string `json:"termsOfServiceVersion"`
+	TermsOfServiceVersion string `json:"terms_of_service_version"`
 
 	// PrivacyPolicyVersion is the current version identifier for privacy policy.
-	PrivacyPolicyVersion string `json:"privacyPolicyVersion"`
+	PrivacyPolicyVersion string `json:"privacy_policy_version"`
 
 	// HasAgreedWithTerms indicates whether the user accepted the current terms version.
-	HasAgreedWithTerms bool `json:"hasAgreedWithTerms"`
+	HasAgreedWithTerms bool `json:"has_agreed_with_terms"`
 
 	// HasAgreedWithPrivacyPolicy indicates whether the user accepted the current policy version.
-	HasAgreedWithPrivacyPolicy bool `json:"hasAgreedWithPrivacyPolicy"`
+	HasAgreedWithPrivacyPolicy bool `json:"has_agreed_with_privacy_policy"`
 }
 
 // userLegalAcceptRequest represents the request body for accepting legal documents.
 // Users must specify which versions they are accepting.
 type userLegalAcceptRequest struct {
 	// TermsOfServiceVersion is the version of terms of service being accepted.
-	TermsOfServiceVersion *string `json:"termsOfServiceVersion"`
+	TermsOfServiceVersion *string `json:"terms_of_service_version"`
 
 	// PrivacyPolicyVersion is the version of privacy policy being accepted.
-	PrivacyPolicyVersion *string `json:"privacyPolicyVersion"`
+	PrivacyPolicyVersion *string `json:"privacy_policy_version"`
 }

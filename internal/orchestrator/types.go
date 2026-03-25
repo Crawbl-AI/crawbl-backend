@@ -337,7 +337,7 @@ type Agent struct {
 	ID string `json:"id"`
 
 	// WorkspaceID is the workspace this agent belongs to.
-	WorkspaceID string `json:"workspaceId"`
+	WorkspaceID string `json:"workspace_id"`
 
 	// Name is the display name of the agent.
 	Name string `json:"name"`
@@ -352,13 +352,13 @@ type Agent struct {
 	Status AgentStatus `json:"status"`
 
 	// HasUpdate indicates whether the agent has pending updates.
-	HasUpdate bool `json:"hasUpdate"`
+	HasUpdate bool `json:"has_update"`
 
 	// CreatedAt is the timestamp when the agent was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the agent was last modified.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Conversation represents a chat conversation between a user and agents.
@@ -368,7 +368,7 @@ type Conversation struct {
 	ID string `json:"id"`
 
 	// WorkspaceID is the workspace this conversation belongs to.
-	WorkspaceID string `json:"workspaceId"`
+	WorkspaceID string `json:"workspace_id"`
 
 	// AgentID is the agent ID for single-agent conversations (nil for swarm conversations).
 	AgentID *string `json:"-"`
@@ -380,19 +380,19 @@ type Conversation struct {
 	Title string `json:"title"`
 
 	// CreatedAt is the timestamp when the conversation was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the conversation was last modified.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// UnreadCount is the number of unread messages for the current user.
-	UnreadCount int `json:"unreadCount"`
+	UnreadCount int `json:"unread_count"`
 
 	// Agent is the associated agent for single-agent conversations.
 	Agent *Agent `json:"agent,omitempty"`
 
 	// LastMessage is the most recent message in the conversation.
-	LastMessage *Message `json:"lastMessage,omitempty"`
+	LastMessage *Message `json:"last_message,omitempty"`
 }
 
 // Message represents a single message within a conversation.
@@ -402,7 +402,7 @@ type Message struct {
 	ID string `json:"id"`
 
 	// ConversationID is the conversation this message belongs to.
-	ConversationID string `json:"conversationId"`
+	ConversationID string `json:"conversation_id"`
 
 	// Role indicates who sent the message.
 	Role MessageRole `json:"role"`
@@ -414,13 +414,13 @@ type Message struct {
 	Status MessageStatus `json:"status"`
 
 	// CreatedAt is the timestamp when the message was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the message was last modified.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// LocalID is a client-generated ID for optimistic updates.
-	LocalID *string `json:"localId,omitempty"`
+	LocalID *string `json:"local_id,omitempty"`
 
 	// AgentID is the agent ID for agent messages.
 	AgentID *string `json:"-"`
@@ -450,7 +450,7 @@ type MessageContent struct {
 	Actions []ActionItem `json:"actions,omitempty"`
 
 	// SelectedActionID is the ID of the user-selected action.
-	SelectedActionID *string `json:"selectedActionId,omitempty"`
+	SelectedActionID *string `json:"selected_action_id,omitempty"`
 
 	// Tool is the tool name for tool status content.
 	Tool string `json:"tool,omitempty"`
@@ -489,7 +489,7 @@ type Attachment struct {
 	Size int64 `json:"size"`
 
 	// MIMEType is the MIME type of the file.
-	MIMEType string `json:"mimeType,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
 
 	// Duration is the playback duration for audio/video in seconds.
 	Duration *int `json:"duration,omitempty"`

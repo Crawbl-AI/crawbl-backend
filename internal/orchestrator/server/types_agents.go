@@ -20,5 +20,5 @@ type agentResponse struct {
 
 	// HasUpdate indicates whether the agent has new content or status changes
 	// that the user hasn't seen yet.
-	HasUpdate bool `json:"hasUpdate"`
+	HasUpdate bool `json:"has_update"`
 }

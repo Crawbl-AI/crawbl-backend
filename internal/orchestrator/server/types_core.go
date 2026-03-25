@@ -10,16 +10,16 @@ const minJSONQuotedStringLen = 2
 // This is used before user registration to display terms of service and privacy policy.
 type legalResponse struct {
 	// TermsOfService is the full text of the terms of service document.
-	TermsOfService string `json:"termsOfService"`
+	TermsOfService string `json:"terms_of_service"`
 
 	// PrivacyPolicy is the full text of the privacy policy document.
-	PrivacyPolicy string `json:"privacyPolicy"`
+	PrivacyPolicy string `json:"privacy_policy"`
 
 	// TermsOfServiceVersion is the version identifier for the current terms of service.
-	TermsOfServiceVersion string `json:"termsOfServiceVersion"`
+	TermsOfServiceVersion string `json:"terms_of_service_version"`
 
 	// PrivacyPolicyVersion is the version identifier for the current privacy policy.
-	PrivacyPolicyVersion string `json:"privacyPolicyVersion"`
+	PrivacyPolicyVersion string `json:"privacy_policy_version"`
 }
 
 // dateTime is a custom time type that handles multiple date format parsing in JSON.

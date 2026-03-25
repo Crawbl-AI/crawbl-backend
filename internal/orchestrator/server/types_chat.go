@@ -15,19 +15,19 @@ type conversationResponse struct {
 	Title string `json:"title"`
 
 	// CreatedAt is the timestamp when the conversation was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the conversation was last modified.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// UnreadCount is the number of messages the user has not yet read.
-	UnreadCount int `json:"unreadCount"`
+	UnreadCount int `json:"unread_count"`
 
 	// Agent is the agent participating in this conversation, if applicable.
 	Agent *agentResponse `json:"agent,omitempty"`
 
 	// LastMessage is the most recent message in the conversation, for preview.
-	LastMessage *messageResponse `json:"lastMessage,omitempty"`
+	LastMessage *messageResponse `json:"last_message,omitempty"`
 }
 
 // actionItemResponse represents a clickable action button in a message.
@@ -62,7 +62,7 @@ type attachmentResponse struct {
 	Size int64 `json:"size"`
 
 	// MIMEType is the MIME type of the file content (e.g., "image/png").
-	MIMEType string `json:"mimeType,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
 
 	// Duration is the duration in seconds for audio/video attachments.
 	Duration *int `json:"duration,omitempty"`
@@ -87,7 +87,7 @@ type messageContentPayload struct {
 	Actions []actionItemResponse `json:"actions,omitempty"`
 
 	// SelectedActionID is the ID of the action selected by the user, if applicable.
-	SelectedActionID *string `json:"selectedActionId,omitempty"`
+	SelectedActionID *string `json:"selected_action_id,omitempty"`
 
 	// Tool is the name of the tool associated with this content, for tool invocations.
 	Tool string `json:"tool,omitempty"`
@@ -103,7 +103,7 @@ type messageResponse struct {
 	ID string `json:"id"`
 
 	// ConversationID is the ID of the conversation containing this message.
-	ConversationID string `json:"conversationId"`
+	ConversationID string `json:"conversation_id"`
 
 	// Role indicates who sent the message (e.g., "user", "assistant", "system").
 	Role string `json:"role"`
@@ -115,13 +115,13 @@ type messageResponse struct {
 	Status string `json:"status"`
 
 	// CreatedAt is the timestamp when the message was created.
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the message was last modified.
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// LocalID is the client-provided ID for optimistic UI updates.
-	LocalID *string `json:"localId,omitempty"`
+	LocalID *string `json:"local_id,omitempty"`
 
 	// Agent is the agent that sent this message, for non-user messages.
 	Agent *agentResponse `json:"agent,omitempty"`
@@ -134,16 +134,16 @@ type messageResponse struct {
 // This allows efficient bidirectional scrolling through conversation history.
 type messagesPaginationResponse struct {
 	// NextScrollID is the cursor for fetching the next page of older messages.
-	NextScrollID string `json:"nextScrollId"`
+	NextScrollID string `json:"next_scroll_id"`
 
 	// PrevScrollID is the cursor for fetching the previous page of newer messages.
-	PrevScrollID string `json:"prevScrollId"`
+	PrevScrollID string `json:"prev_scroll_id"`
 
 	// HasNext indicates whether more older messages exist.
-	HasNext bool `json:"hasNext"`
+	HasNext bool `json:"has_next"`
 
 	// HasPrev indicates whether more newer messages exist.
-	HasPrev bool `json:"hasPrev"`
+	HasPrev bool `json:"has_prev"`
 }
 
 // messagesListResponse is the paginated response for listing messages.
@@ -160,7 +160,7 @@ type messagesListResponse struct {
 // Supports text content and file attachments.
 type sendMessageRequest struct {
 	// LocalID is a client-generated ID for optimistic updates and deduplication.
-	LocalID string `json:"localId"`
+	LocalID string `json:"local_id"`
 
 	// Content is the message body containing text and optional structured data.
 	Content messageContentPayload `json:"content"`
