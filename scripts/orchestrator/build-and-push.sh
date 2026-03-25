@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-registry.digitalocean.com/crawbl/crawbl-userswarm-operator}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-registry.digitalocean.com/crawbl/crawbl-orchestrator}"
 IMAGE_TAG="${IMAGE_TAG:-dev}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 PUSH="${PUSH:-0}"
@@ -20,7 +20,7 @@ for tool_name in "${required_tools[@]}"; do
 done
 
 IMAGE_REF="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
-METADATA_DIR="$ROOT_DIR/.artifacts/userswarm-operator"
+METADATA_DIR="$ROOT_DIR/.artifacts/orchestrator"
 METADATA_FILE="$METADATA_DIR/${IMAGE_TAG}.metadata.json"
 mkdir -p "$METADATA_DIR"
 
@@ -28,7 +28,7 @@ build_args=(
   buildx build
   --platform "$PLATFORM"
   --metadata-file "$METADATA_FILE"
-  -f "$ROOT_DIR/dockerfiles/userswarm-operator.dockerfile"
+  -f "$ROOT_DIR/dockerfiles/service.dockerfile"
   -t "$IMAGE_REF"
 )
 

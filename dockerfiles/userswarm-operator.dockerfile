@@ -1,0 +1,22 @@
+FROM golang:1.24.5 AS builder
+
+WORKDIR /workspace
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY api api
+COPY cmd cmd
+COPY internal internal
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/userswarm-operator ./cmd/userswarm-operator
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+WORKDIR /
+
+COPY --from=builder /out/userswarm-operator /userswarm-operator
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/userswarm-operator"]

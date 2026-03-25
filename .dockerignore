@@ -1,0 +1,8 @@
+.git
+.cache
+.artifacts
+.env
+.DS_Store
+e2e
+bin
+firebase-dev.json
