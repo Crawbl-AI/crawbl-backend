@@ -136,7 +136,7 @@ func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.Sessi
 		Pair("id", row.ID).
 		Pair("workspace_id", row.WorkspaceID).
 		Pair("agent_id", row.AgentID).
-		Pair("types", row.Type).
+		Pair("type", row.Type).
 		Pair("title", row.Title).
 		Pair("unread_count", row.UnreadCount).
 		Pair("created_at", row.CreatedAt).
