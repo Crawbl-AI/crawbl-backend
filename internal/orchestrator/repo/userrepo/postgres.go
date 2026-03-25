@@ -153,7 +153,7 @@ func (r *userRepo) CreateUser(ctx context.Context, opts *orchestratorrepo.Create
 	return nil
 }
 
-// IsUserDeleted checks if a user exists in the deleted users table.
+// IsUserDeleted checks if a soft-deleted user exists with the given subject or email.
 // This is used to prevent re-registration of previously deleted accounts.
 // Returns ErrInvalidInput if sess is nil and both subject and email are empty.
 func (r *userRepo) IsUserDeleted(ctx context.Context, sess orchestratorrepo.SessionRunner, subject, email string) (bool, *merrors.Error) {
@@ -163,8 +163,8 @@ func (r *userRepo) IsUserDeleted(ctx context.Context, sess orchestratorrepo.Sess
 
 	var count int
 	err := sess.Select("COUNT(*)").
-		From("deleted_users").
-		Where("subject = ? OR email = ?", subject, email).
+		From("users").
+		Where("deleted_at IS NOT NULL AND (subject = ? OR email = ?)", subject, email).
 		LoadOneContext(ctx, &count)
 	if err != nil {
 		return false, merrors.WrapStdServerError(err, "check if user is deleted")
