@@ -1,0 +1,104 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - .cache
+    - .artifacts
+
+linters:
+  default: standard
+  enable:
+    # Additional linters beyond the standard set
+    - bodyclose
+    - cyclop
+    - durationcheck
+    - gocognit
+    - gocritic
+    - gocyclo
+    - intrange
+    - misspell
+    - mnd
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - reassign
+    - rowserrcheck
+    - sqlclosecheck
+    - tparallel
+    - unconvert
+    - unparam
+    - wastedassign
+    - whitespace
+
+linters-settings:
+  cyclop:
+    max-complexity: 15
+    package-average: 10
+
+  gocognit:
+    min-complexity: 20
+
+  gocyclo:
+    min-complexity: 15
+
+  mnd:
+    checks:
+      - argument
+      - case
+      - condition
+      - operation
+      - return
+      - assign
+    ignored-numbers:
+      - '0'
+      - '1'
+      - '2'
+      - '3'
+      - '10'
+      - '60'
+      - '100'
+      - '1000'
+
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - diagnostic
+    disabled-checks:
+      - paramTypeCombine
+      - hugeParam
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow
+      - fieldalignment
+
+  staticcheck:
+    checks:
+      - all
+
+  unused:
+    field-uses: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+    goimports:
+      local-prefixes:
+        - github.com/Crawbl-AI/crawbl-backend

@@ -6,6 +6,18 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
+// WithTransaction executes the provided function within a database transaction.
+// It handles transaction lifecycle management including begin, commit, and rollback.
+// If the function returns an error, the transaction is rolled back automatically.
+// The operation parameter is used in error messages for debugging and logging.
+//
+// Type parameter T allows the function to return a typed result along with any error.
+//
+// Returns:
+//   - The result of the operation function on success.
+//   - merrors.ErrInvalidInput if the session is nil.
+//   - A wrapped server error if begin or commit fails.
+//   - Any error returned by the operation function.
 func WithTransaction[T any](sess *dbr.Session, operation string, fn func(tx *dbr.Tx) (T, *merrors.Error)) (T, *merrors.Error) {
 	var zero T
 
@@ -31,6 +43,17 @@ func WithTransaction[T any](sess *dbr.Session, operation string, fn func(tx *dbr
 	return result, nil
 }
 
+// WithTransactionNoResult executes the provided function within a database transaction
+// without returning a result. It handles transaction lifecycle management including
+// begin, commit, and rollback. If the function returns an error, the transaction
+// is rolled back automatically.
+// The operation parameter is used in error messages for debugging and logging.
+//
+// Returns:
+//   - merrors.ErrInvalidInput if the session is nil.
+//   - A wrapped server error if begin or commit fails.
+//   - Any error returned by the operation function.
+//   - nil on successful completion.
 func WithTransactionNoResult(sess *dbr.Session, operation string, fn func(tx *dbr.Tx) *merrors.Error) *merrors.Error {
 	if sess == nil {
 		return merrors.ErrInvalidInput

@@ -1,3 +1,4 @@
+// Package controller provides Kubernetes controller logic.
 package main
 
 import (
@@ -8,6 +9,9 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
 )
+
+// Directory permission for workspace directories (owner rwx only).
+const workspaceDirPerm = 0o700
 
 func newBootstrapCommand() *cobra.Command {
 	var (
@@ -20,13 +24,19 @@ func newBootstrapCommand() *cobra.Command {
 		Use:   "bootstrap",
 		Short: "Bootstrap the live UserSwarm ZeroClaw config on the PVC",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := os.MkdirAll(filepath.Dir(liveConfigPath), 0o700); err != nil {
+			if err := os.MkdirAll(filepath.Dir(liveConfigPath), workspaceDirPerm); err != nil {
 				return err
 			}
-			if err := os.MkdirAll(workspacePath, 0o700); err != nil {
+			if err := os.MkdirAll(workspacePath, workspaceDirPerm); err != nil {
 				return err
 			}
-			return zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath)
+
+			vaultConfig := &zeroclaw.RuntimeVaultConfig{
+				Enabled:  envBool("VAULT_ENABLED", false),
+				FileName: envString("VAULT_FILE_NAME", "openai-api-key"),
+			}
+
+			return zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath, vaultConfig)
 		},
 	}
 

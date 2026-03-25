@@ -1,3 +1,4 @@
+// Package controller provides Kubernetes controller logic.
 package controller
 
 import (
@@ -13,6 +14,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+)
+
+// Probe configuration constants (in seconds).
+const (
+	healthProbeInitialDelay     = 10
+	healthProbePeriod           = 30
+	healthProbeTimeout          = 10
+	healthProbeFailureThreshold = 3
+
+	startupProbePeriod           = 10
+	startupProbeTimeout          = 10
+	startupProbeFailureThreshold = 18
 )
 
 var requeueSlow = 30 * time.Second
@@ -222,10 +235,10 @@ func healthProbe() *corev1.Probe {
 				Command: []string{"/usr/local/bin/zeroclaw", "status", "--format=exit-code"},
 			},
 		},
-		InitialDelaySeconds: 10,
-		PeriodSeconds:       30,
-		TimeoutSeconds:      10,
-		FailureThreshold:    3,
+		InitialDelaySeconds: healthProbeInitialDelay,
+		PeriodSeconds:       healthProbePeriod,
+		TimeoutSeconds:      healthProbeTimeout,
+		FailureThreshold:    healthProbeFailureThreshold,
 	}
 }
 
@@ -236,9 +249,9 @@ func startupProbe() *corev1.Probe {
 				Command: []string{"/usr/local/bin/zeroclaw", "status", "--format=exit-code"},
 			},
 		},
-		PeriodSeconds:    10,
-		TimeoutSeconds:   10,
-		FailureThreshold: 18,
+		PeriodSeconds:    startupProbePeriod,
+		TimeoutSeconds:   startupProbeTimeout,
+		FailureThreshold: startupProbeFailureThreshold,
 	}
 }
 

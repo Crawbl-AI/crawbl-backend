@@ -10,12 +10,20 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// conversationRepo is the PostgreSQL implementation of the ConversationRepo interface.
+// It handles conversation data persistence and retrieval operations.
 type conversationRepo struct{}
 
+// New creates a new ConversationRepo instance backed by PostgreSQL.
+// The returned repository uses the database session runner pattern for transaction support.
 func New() *conversationRepo {
 	return &conversationRepo{}
 }
 
+// ListByWorkspaceID retrieves all conversations within a specific workspace.
+// Results are ordered by updated_at descending (most recently updated first),
+// then by created_at descending as a secondary sort.
+// Returns ErrInvalidInput if sess is nil or workspaceID is empty.
 func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -40,6 +48,10 @@ func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestra
 	return conversations, nil
 }
 
+// GetByID retrieves a specific conversation by its ID, verifying workspace membership.
+// Returns ErrConversationNotFound if the conversation does not exist or does not belong
+// to the specified workspace.
+// Returns ErrInvalidInput if sess is nil, workspaceID is empty, or conversationID is empty.
 func (r *conversationRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) (*orchestrator.Conversation, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -60,6 +72,11 @@ func (r *conversationRepo) GetByID(ctx context.Context, sess orchestratorrepo.Se
 	return row.ToDomain(), nil
 }
 
+// FindDefaultSwarm retrieves the default swarm conversation for a workspace.
+// A swarm conversation is the primary conversation type where all agents in a workspace
+// collaborate together. The default swarm is the first (oldest) swarm conversation created.
+// Returns ErrConversationNotFound if no swarm conversation exists for the workspace.
+// Returns ErrInvalidInput if sess is nil or workspaceID is empty.
 func (r *conversationRepo) FindDefaultSwarm(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) (*orchestrator.Conversation, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -81,6 +98,10 @@ func (r *conversationRepo) FindDefaultSwarm(ctx context.Context, sess orchestrat
 	return row.ToDomain(), nil
 }
 
+// Save persists conversation data to the database.
+// It handles both creating new conversations and updating existing ones by checking
+// if a conversation with the same ID exists first.
+// Returns ErrInvalidInput if sess is nil or conversation is nil.
 func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error {
 	if sess == nil || conversation == nil {
 		return merrors.ErrInvalidInput
@@ -115,7 +136,7 @@ func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.Sessi
 		Pair("id", row.ID).
 		Pair("workspace_id", row.WorkspaceID).
 		Pair("agent_id", row.AgentID).
-		Pair("type", row.Type).
+		Pair("types", row.Type).
 		Pair("title", row.Title).
 		Pair("unread_count", row.UnreadCount).
 		Pair("created_at", row.CreatedAt).

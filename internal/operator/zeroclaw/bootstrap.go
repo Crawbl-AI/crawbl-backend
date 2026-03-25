@@ -5,10 +5,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
+
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 )
+
+// File permissions for bootstrap config (owner read/write only).
+const configFilePerm = 0o600
+
+// RuntimeVaultConfig holds Vault configuration for secret injection.
+// Duplicated from controller package to avoid import cycles.
+type RuntimeVaultConfig struct {
+	Enabled  bool
+	FileName string
+}
 
 var managedRootKeys = []string{
 	"default_provider",
@@ -57,7 +69,7 @@ var managedGatewayKeys = []string{
 	"require_pairing",
 }
 
-func EnsureManagedConfig(bootstrapPath, livePath string) error {
+func EnsureManagedConfig(bootstrapPath, livePath string, vaultConfig *RuntimeVaultConfig) error {
 	bootstrapBytes, err := os.ReadFile(bootstrapPath)
 	if err != nil {
 		return fmt.Errorf("read bootstrap config: %w", err)
@@ -84,7 +96,7 @@ func EnsureManagedConfig(bootstrapPath, livePath string) error {
 	}
 
 	mergeManagedConfig(liveDoc, bootstrapDoc)
-	mergeManagedAPIKey(liveDoc)
+	mergeManagedAPIKey(liveDoc, vaultConfig)
 
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(liveDoc); err != nil {
@@ -102,6 +114,7 @@ func decodeTOMLDocument(raw []byte) (map[string]any, error) {
 	return doc, nil
 }
 
+//nolint:cyclop,gocognit
 func mergeManagedConfig(liveDoc, bootstrapDoc map[string]any) {
 	for _, key := range managedRootKeys {
 		if value, ok := bootstrapDoc[key]; ok {
@@ -201,7 +214,7 @@ func writeConfigFile(path string, raw []byte) error {
 		cleanup()
 		return fmt.Errorf("close temp config: %w", err)
 	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
+	if err := os.Chmod(tmpPath, configFilePerm); err != nil {
 		cleanup()
 		return fmt.Errorf("chmod temp config: %w", err)
 	}
@@ -212,7 +225,42 @@ func writeConfigFile(path string, raw []byte) error {
 	return nil
 }
 
-func mergeManagedAPIKey(liveDoc map[string]any) {
+// readVaultSecret reads the API key from a Vault-injected file.
+// Returns empty string if Vault is disabled or file cannot be read.
+func readVaultSecret(vaultConfig *RuntimeVaultConfig) string {
+	if vaultConfig == nil || !vaultConfig.Enabled {
+		return ""
+	}
+
+	// Vault Agent injects secrets to /vault/secrets/<FileName>
+	vaultPath := filepath.Join("/vault/secrets", vaultConfig.FileName)
+	raw, err := os.ReadFile(vaultPath)
+	if err != nil {
+		// Log for debugging: file may not exist if Vault agent failed
+		fmt.Fprintf(os.Stderr, "Vault secret file not found at %s: %v\n", vaultPath, err)
+		return ""
+	}
+
+	value := strings.TrimSpace(string(raw))
+	if value == "" {
+		return ""
+	}
+
+	return value
+}
+
+// mergeManagedAPIKey sets the api_key in the live config from Vault or environment variables.
+// Vault-injected files take precedence when Vault is enabled.
+// Falls back to environment variables for dev/test compatibility.
+func mergeManagedAPIKey(liveDoc map[string]any, vaultConfig *RuntimeVaultConfig) {
+	// Try Vault first if enabled
+	if vaultSecret := readVaultSecret(vaultConfig); vaultSecret != "" {
+		fmt.Fprintln(os.Stderr, "Using API key from Vault-injected file")
+		liveDoc["api_key"] = vaultSecret
+		return
+	}
+
+	// Fallback to environment variables
 	for _, envName := range []string{
 		"OPENAI_API_KEY",
 		"USERSWARM_API_KEY",
@@ -226,6 +274,7 @@ func mergeManagedAPIKey(liveDoc map[string]any) {
 		if value == "" {
 			continue
 		}
+		fmt.Fprintf(os.Stderr, "Using API key from environment variable %s (Vault not enabled or file read failed)\n", envName)
 		liveDoc["api_key"] = value
 		return
 	}

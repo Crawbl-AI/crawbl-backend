@@ -13,6 +13,9 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
+// handleWorkspaceAgentsList retrieves all agents available in a workspace.
+// Agents represent individual swarm members that users can interact with
+// through conversations.
 func (s *Server) handleWorkspaceAgentsList(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -38,6 +41,8 @@ func (s *Server) handleWorkspaceAgentsList(w http.ResponseWriter, r *http.Reques
 	httpserver.WriteSuccessResponse(w, http.StatusOK, response)
 }
 
+// handleConversationsList retrieves all conversations for a workspace.
+// Each conversation includes its associated agent and last message for preview.
 func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -63,6 +68,8 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	httpserver.WriteSuccessResponse(w, http.StatusOK, response)
 }
 
+// handleConversationGet retrieves a single conversation by ID within a workspace.
+// The conversation must belong to a workspace owned by the authenticated user.
 func (s *Server) handleConversationGet(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -84,6 +91,9 @@ func (s *Server) handleConversationGet(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteSuccessResponse(w, http.StatusOK, toConversationResponse(conversation))
 }
 
+// handleMessagesList retrieves messages for a conversation with cursor-based pagination.
+// Supports bidirectional scrolling via scrollId and direction parameters.
+// The limit parameter controls the page size for responses.
 func (s *Server) handleMessagesList(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -121,6 +131,9 @@ func (s *Server) handleMessagesList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleMessagesSend creates a new message in a conversation.
+// The message is sent to the ZeroClaw swarm for processing.
+// Supports text content and file attachments via the request body.
 func (s *Server) handleMessagesSend(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -157,6 +170,8 @@ func (s *Server) handleMessagesSend(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteSuccessResponse(w, http.StatusOK, toMessageResponse(message))
 }
 
+// toAgentResponse converts a domain Agent to the API response format.
+// Returns an empty response if the agent pointer is nil.
 func toAgentResponse(agent *orchestrator.Agent) agentResponse {
 	if agent == nil {
 		return agentResponse{}
@@ -172,6 +187,8 @@ func toAgentResponse(agent *orchestrator.Agent) agentResponse {
 	}
 }
 
+// toConversationResponse converts a domain Conversation to the API response format.
+// Includes nested agent and last message information for conversation previews.
 func toConversationResponse(conversation *orchestrator.Conversation) conversationResponse {
 	response := conversationResponse{
 		ID:          conversation.ID,
@@ -192,6 +209,8 @@ func toConversationResponse(conversation *orchestrator.Conversation) conversatio
 	return response
 }
 
+// toMessageResponse converts a domain Message to the API response format.
+// Includes the associated agent if present, and transforms content and attachments.
 func toMessageResponse(message *orchestrator.Message) messageResponse {
 	response := messageResponse{
 		ID:             message.ID,
@@ -211,6 +230,8 @@ func toMessageResponse(message *orchestrator.Message) messageResponse {
 	return response
 }
 
+// messageContentFromDomain converts domain MessageContent to the API response format.
+// Handles the transformation of content types, actions, and tool state.
 func messageContentFromDomain(content orchestrator.MessageContent) messageContentPayload {
 	response := messageContentPayload{
 		Type:        string(content.Type),
@@ -236,6 +257,9 @@ func messageContentFromDomain(content orchestrator.MessageContent) messageConten
 	return response
 }
 
+// toDomain converts the API message content payload to domain MessageContent.
+// Validates that the content type is supported (currently only text is allowed)
+// and that text content is present for text messages.
 func (payload messageContentPayload) toDomain() (orchestrator.MessageContent, *merrors.Error) {
 	contentType := orchestrator.MessageContentType(strings.TrimSpace(payload.Type))
 	if contentType == "" {
@@ -272,6 +296,8 @@ func (payload messageContentPayload) toDomain() (orchestrator.MessageContent, *m
 	return content, nil
 }
 
+// attachmentsFromDomain converts domain Attachments to the API response format.
+// Returns an empty slice if no attachments are present.
 func attachmentsFromDomain(attachments []orchestrator.Attachment) []attachmentResponse {
 	if len(attachments) == 0 {
 		return []attachmentResponse{}
@@ -292,6 +318,8 @@ func attachmentsFromDomain(attachments []orchestrator.Attachment) []attachmentRe
 	return response
 }
 
+// attachmentsToDomain converts API attachment responses to domain Attachments.
+// Returns an empty slice if no attachments are provided.
 func attachmentsToDomain(attachments []attachmentResponse) []orchestrator.Attachment {
 	if len(attachments) == 0 {
 		return []orchestrator.Attachment{}
@@ -312,6 +340,8 @@ func attachmentsToDomain(attachments []attachmentResponse) []orchestrator.Attach
 	return response
 }
 
+// intQueryParam extracts an integer value from a query parameter.
+// Returns 0 if the parameter is missing or cannot be parsed as an integer.
 func intQueryParam(r *http.Request, key string) int {
 	raw := strings.TrimSpace(r.URL.Query().Get(key))
 	if raw == "" {

@@ -1,5 +1,10 @@
+// Package userrepo provides PostgreSQL-based implementation of the UserRepo interface.
+// It handles all database operations related to user entities including user data,
+// preferences, and push notification tokens.
 package userrepo
 
+// userColumns defines the column names used in SELECT queries for the users table.
+// These columns map directly to the UserRow struct fields.
 var userColumns = []string{
 	"id",
 	"subject",
@@ -18,6 +23,8 @@ var userColumns = []string{
 	"deleted_at",
 }
 
+// userPreferencesColumns defines the column names used in SELECT queries for the user_preferences table.
+// These columns map directly to the UserPreferencesRow struct fields.
 var userPreferencesColumns = []string{
 	"user_id",
 	"platform_theme",

@@ -16,6 +16,12 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// New creates a new ChatService instance with the provided dependencies.
+// All repository and client parameters must be non-nil; the function will panic
+// if any required dependency is nil.
+//
+// The returned service handles workspace bootstrapping, default agent provisioning,
+// conversation management, and message operations for the chat subsystem.
 func New(
 	workspaceRepo workspaceRepo,
 	agentRepo agentRepo,
@@ -49,6 +55,12 @@ func New(
 	}
 }
 
+// ListAgents retrieves all agents for a workspace after ensuring the workspace
+// is properly bootstrapped with default agents. Each agent's status is updated
+// based on the current runtime state.
+//
+// Returns an error if the session is nil, the workspace cannot be found,
+// or runtime state cannot be retrieved.
 func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -76,6 +88,12 @@ func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.List
 	return agents, nil
 }
 
+// ListConversations retrieves all conversations for a workspace after ensuring
+// the workspace is bootstrapped. Each conversation is enriched with agent
+// information and the latest message.
+//
+// Returns an error if the session is nil, the workspace cannot be found,
+// or the conversations cannot be retrieved.
 func (s *service) ListConversations(ctx context.Context, opts *orchestratorservice.ListConversationsOpts) ([]*orchestrator.Conversation, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -94,6 +112,12 @@ func (s *service) ListConversations(ctx context.Context, opts *orchestratorservi
 	return conversations, nil
 }
 
+// GetConversation retrieves a specific conversation by ID after ensuring the
+// workspace is bootstrapped. The conversation is enriched with agent information
+// and the latest message.
+//
+// Returns an error if the session is nil, the workspace or conversation
+// cannot be found, or the conversation ID is invalid.
 func (s *service) GetConversation(ctx context.Context, opts *orchestratorservice.GetConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -113,6 +137,11 @@ func (s *service) GetConversation(ctx context.Context, opts *orchestratorservice
 	return conversation, nil
 }
 
+// ListMessages retrieves a paginated list of messages for a specific conversation.
+// Messages are enriched with agent information where applicable.
+//
+// Returns an error if the session is nil, the workspace or conversation
+// cannot be found, or the messages cannot be retrieved.
 func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -146,6 +175,16 @@ func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.Li
 	return page, nil
 }
 
+// SendMessage sends a user message to a conversation and returns the agent's reply.
+// The function ensures the workspace is bootstrapped, verifies the runtime is ready,
+// sends the message to the swarm runtime, and persists both the user message
+// and agent reply to storage.
+//
+// Currently, only text messages without attachments are supported.
+// Returns an error if the message type is unsupported, the workspace or
+// conversation cannot be found, the runtime is not ready, or persistence fails.
+//
+//nolint:cyclop
 func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) (*orchestrator.Message, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -240,6 +279,12 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	return replyMessage, nil
 }
 
+// ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
+// with default agents and conversations. It returns the workspace, all agents,
+// and all conversations after ensuring everything is properly initialized.
+//
+// This is an internal helper method called by the public service methods
+// to guarantee consistent workspace state before performing operations.
 func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Session, userID, workspaceID string) (*orchestrator.Workspace, []*orchestrator.Agent, []*orchestrator.Conversation, *merrors.Error) {
 	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
 	if mErr != nil {
@@ -259,6 +304,14 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 	return workspace, agents, conversations, nil
 }
 
+// ensureDefaultAgents ensures that all default agents defined in the defaultAgents
+// blueprint exist for the given workspace. It creates any missing agents and
+// updates existing agents to match the current blueprint definitions.
+//
+// The function uses a transaction to ensure atomic updates and returns all
+// agents for the workspace after synchronization.
+//
+//nolint:cyclop
 func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Agent, *merrors.Error) {
 	agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
 	if mErr != nil {
@@ -331,6 +384,12 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 	return createdAgents, nil
 }
 
+// ensureDefaultConversations ensures that a default swarm conversation exists
+// for the given workspace. If no swarm conversation exists, it creates one
+// with the default title.
+//
+// The function uses a transaction to ensure atomic creation and returns all
+// conversations for the workspace after ensuring the default exists.
 func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Conversation, *merrors.Error) {
 	conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
 	if mErr != nil {
@@ -372,6 +431,11 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 	return createdConversations, nil
 }
 
+// attachConversationData enriches a conversation with related data including
+// agent information (if the conversation has an agent ID) and the latest message.
+// This is a helper method to populate conversation details for API responses.
+//
+// If the conversation is nil, the function returns immediately without error.
 func (s *service) attachConversationData(ctx context.Context, sess *dbr.Session, conversation *orchestrator.Conversation, agentByID map[string]*orchestrator.Agent) {
 	if conversation == nil {
 		return
@@ -388,6 +452,8 @@ func (s *service) attachConversationData(ctx context.Context, sess *dbr.Session,
 	}
 }
 
+// mapAgentsByID creates a lookup map from agent IDs to agent objects.
+// This is a utility function for efficient agent lookup by ID.
 func mapAgentsByID(agents []*orchestrator.Agent) map[string]*orchestrator.Agent {
 	indexed := make(map[string]*orchestrator.Agent, len(agents))
 	for _, agent := range agents {
@@ -398,6 +464,8 @@ func mapAgentsByID(agents []*orchestrator.Agent) map[string]*orchestrator.Agent 
 	return indexed
 }
 
+// defaultResponderAgent returns the first agent in the list as the default
+// responder for messages. Returns nil if the agent list is empty.
 func defaultResponderAgent(agents []*orchestrator.Agent) *orchestrator.Agent {
 	if len(agents) == 0 {
 		return nil
@@ -405,6 +473,10 @@ func defaultResponderAgent(agents []*orchestrator.Agent) *orchestrator.Agent {
 	return agents[0]
 }
 
+// statusForRuntime maps a runtime status to an agent status.
+// Online status indicates the runtime is verified and ready.
+// Busy status indicates the runtime is starting or progressing.
+// Offline status indicates the runtime is not available or has failed.
 func statusForRuntime(runtimeState *orchestrator.RuntimeStatus) orchestrator.AgentStatus {
 	if runtimeState == nil {
 		return orchestrator.AgentStatusOffline
@@ -420,6 +492,9 @@ func statusForRuntime(runtimeState *orchestrator.RuntimeStatus) orchestrator.Age
 	}
 }
 
+// stringPtr returns a pointer to the trimmed string value, or nil if the
+// trimmed value is empty. This is a utility function for handling optional
+// string pointer fields.
 func stringPtr(value string) *string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {

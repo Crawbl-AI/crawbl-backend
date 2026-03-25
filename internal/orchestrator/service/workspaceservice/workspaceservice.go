@@ -1,3 +1,9 @@
+// Package workspaceservice provides the core implementation of WorkspaceService
+// for managing user workspaces and their associated runtime status.
+//
+// This package handles workspace lifecycle operations including creation,
+// retrieval, and listing of workspaces. It also integrates with the runtime
+// client to attach runtime status information to workspace responses.
 package workspaceservice
 
 import (
@@ -14,6 +20,18 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// New creates a new WorkspaceService instance with the provided dependencies.
+//
+// The service requires a non-nil workspace repository for persistence operations,
+// a non-nil runtime client for runtime status queries, and a non-nil logger
+// for diagnostic output. If any dependency is nil, this function panics.
+//
+// Parameters:
+//   - workspaceRepo: Repository interface for workspace CRUD operations.
+//   - runtimeClient: Client interface for managing and querying swarm runtimes.
+//   - logger: Structured logger for diagnostic and error logging.
+//
+// Returns an orchestratorservice.WorkspaceService implementation.
 func New(workspaceRepo workspaceRepo, runtimeClient runtimeclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
 	if workspaceRepo == nil {
 		panic("workspace service repo cannot be nil")
@@ -32,6 +50,18 @@ func New(workspaceRepo workspaceRepo, runtimeClient runtimeclient.Client, logger
 	}
 }
 
+// EnsureDefaultWorkspace ensures that a user has at least one workspace.
+//
+// This method is idempotent and checks if the user already has workspaces
+// before creating a new one. If the user has no workspaces, it creates
+// a default workspace with the standard name defined in the orchestrator package.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - opts: Options containing session, user ID, and other required fields.
+//
+// Returns a merrors.Error if the input is invalid or if the repository
+// operation fails. Returns nil on success or if a workspace already exists.
 func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestratorservice.EnsureDefaultWorkspaceOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || strings.TrimSpace(opts.UserID) == "" {
 		return merrors.ErrInvalidInput
@@ -55,6 +85,19 @@ func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 	})
 }
 
+// ListByUserID retrieves all workspaces for a given user with runtime status attached.
+//
+// This method fetches workspaces from the repository and enriches each workspace
+// with its current runtime status by querying the runtime client. The runtime
+// status includes information about the swarm phase, verification state, and
+// any errors.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - opts: Options containing session and user ID for the query.
+//
+// Returns a slice of workspace pointers on success, or a merrors.Error
+// if the input is invalid or the repository operation fails.
 func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
@@ -71,6 +114,18 @@ func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.Li
 	return workspaces, nil
 }
 
+// GetByID retrieves a single workspace by its ID with runtime status attached.
+//
+// This method fetches a specific workspace from the repository and enriches
+// it with the current runtime status. The workspace must belong to the
+// specified user.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - opts: Options containing session, user ID, and workspace ID.
+//
+// Returns the workspace pointer on success, or a merrors.Error if the input
+// is invalid, the workspace is not found, or the repository operation fails.
 func (s *service) GetByID(ctx context.Context, opts *orchestratorservice.GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
@@ -84,6 +139,19 @@ func (s *service) GetByID(ctx context.Context, opts *orchestratorservice.GetWork
 	return workspace, nil
 }
 
+// attachRuntimeStatus queries the runtime client for workspace runtime status
+// and attaches it to the workspace.
+//
+// This method calls EnsureRuntime without waiting for verification to get
+// the current runtime state. On success, it populates the workspace's Runtime
+// field with phase, verification status, and resolved state. On failure,
+// it sets the runtime status to an error state with the error message.
+//
+// If the workspace is nil, this method returns immediately without side effects.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - workspace: Pointer to the workspace to enrich with runtime status.
 func (s *service) attachRuntimeStatus(ctx context.Context, workspace *orchestrator.Workspace) {
 	if workspace == nil {
 		return

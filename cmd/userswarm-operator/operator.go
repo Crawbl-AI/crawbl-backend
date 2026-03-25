@@ -41,13 +41,6 @@ func newOperatorCommand() *cobra.Command {
 	return cmd
 }
 
-func runOperator(cmd *cobra.Command) error {
-	metricsAddr, _ := cmd.Flags().GetString("metrics-bind-address")
-	probeAddr, _ := cmd.Flags().GetString("health-probe-bind-address")
-	enableLeaderElection, _ := cmd.Flags().GetBool("leader-elect")
-	return runOperatorWithOptions(metricsAddr, probeAddr, enableLeaderElection)
-}
-
 func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection bool) error {
 	bootstrapImage := os.Getenv("USERSWARM_BOOTSTRAP_IMAGE")
 	if bootstrapImage == "" {

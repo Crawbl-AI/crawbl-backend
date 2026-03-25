@@ -32,10 +32,16 @@ import (
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 )
 
-const (
-	shutdownTimeout = 10 * time.Second
-)
+// shutdownTimeout defines the maximum duration to wait for graceful
+// server shutdown when a termination signal is received.
+const shutdownTimeout = 10 * time.Second
 
+// defaultVerifierCapacity is the initial capacity for the verifiers slice.
+const defaultVerifierCapacity = 2
+
+// newServerCommand creates the "server" subcommand for starting the HTTP API.
+// This command initializes and runs the orchestrator HTTP server with all
+// configured services, repositories, and middleware.
 func newServerCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "server",
@@ -46,8 +52,25 @@ func newServerCommand() *cobra.Command {
 	}
 }
 
+// runServer initializes and starts the orchestrator HTTP server.
+// It performs the following steps:
+//   - Configures structured logging based on LOG_LEVEL environment variable
+//   - Builds database connections and repository instances
+//   - Creates the runtime client for UserSwarm communication
+//   - Initializes authentication, workspace, and chat services
+//   - Configures HTTP middleware including identity verification
+//   - Starts the server with graceful shutdown handling
 func runServer() error {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logLevel := slog.LevelInfo
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn", "warning":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
 	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
 	defer cleanup()
@@ -78,6 +101,8 @@ func runServer() error {
 	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)
 }
 
+// envOrDefault retrieves an environment variable value or returns a fallback
+// if the variable is not set or empty.
 func envOrDefault(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -86,6 +111,10 @@ func envOrDefault(key, fallback string) string {
 	return value
 }
 
+// boolFromEnv parses a boolean value from an environment variable.
+// Accepts common boolean representations: "1", "true", "yes", "y", "on" for true
+// and "0", "false", "no", "n", "off" for false.
+// Returns the fallback value if the variable is unset or has an unrecognized format.
 func boolFromEnv(key string, fallback bool) bool {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -102,6 +131,10 @@ func boolFromEnv(key string, fallback bool) bool {
 	}
 }
 
+// buildHTTPMiddleware constructs the HTTP middleware configuration including
+// environment settings and identity verification.
+// It creates identity verifiers based on the environment (Firebase for production,
+// dev tokens for local/test environments).
 func buildHTTPMiddleware(logger *slog.Logger) (*httpserver.MiddlewareConfig, error) {
 	environment := envOrDefault("CRAWBL_ENVIRONMENT", httpserver.EnvironmentLocal)
 	verifier, err := buildIdentityVerifier(context.Background(), logger, environment)
@@ -116,8 +149,14 @@ func buildHTTPMiddleware(logger *slog.Logger) (*httpserver.MiddlewareConfig, err
 	}, nil
 }
 
+// buildIdentityVerifier creates the appropriate identity verifier(s) based on
+// the environment and configuration.
+// In non-production environments or when CRAWBL_AUTH_ALLOW_DEV_TOKENS is true,
+// a development token verifier is added.
+// If Firebase credentials are configured, a Firebase token verifier is added.
+// Returns an error if no verifier can be configured.
 func buildIdentityVerifier(ctx context.Context, logger *slog.Logger, environment string) (orchestrator.IdentityVerifier, error) {
-	verifiers := make([]orchestrator.IdentityVerifier, 0, 2)
+	verifiers := make([]orchestrator.IdentityVerifier, 0, defaultVerifierCapacity)
 	if isNonProductionEnvironment(environment) || boolFromEnv("CRAWBL_AUTH_ALLOW_DEV_TOKENS", false) {
 		verifiers = append(verifiers, orchestrator.NewDevTokenVerifier(envOrDefault("AUTH_DEV_TOKEN_PREFIX", server.DefaultDevTokenPrefix)))
 	}
@@ -142,6 +181,9 @@ func buildIdentityVerifier(ctx context.Context, logger *slog.Logger, environment
 	return orchestrator.NewChainIdentityVerifier(verifiers...), nil
 }
 
+// isNonProductionEnvironment returns true if the environment is a local
+// development or test environment where development token authentication
+// should be permitted.
 func isNonProductionEnvironment(environment string) bool {
 	switch strings.ToLower(strings.TrimSpace(environment)) {
 	case httpserver.EnvironmentLocal, "test":
@@ -151,6 +193,11 @@ func isNonProductionEnvironment(environment string) bool {
 	}
 }
 
+// mustBuildRepos initializes the database connection and all repository instances
+// required by the orchestrator server. It ensures the database schema exists
+// and returns repositories for users, workspaces, agents, conversations, and messages.
+// The returned cleanup function should be called to close the database connection.
+// This function logs fatal errors and exits if initialization fails.
 func mustBuildRepos(logger *slog.Logger) (
 	*dbr.Connection,
 	orchestratorrepo.UserRepo,
@@ -172,10 +219,17 @@ func mustBuildRepos(logger *slog.Logger) (
 	}
 
 	return db, userrepo.New(), workspacerepo.New(), agentrepo.New(), conversationrepo.New(), messagerepo.New(), func() {
-		_ = db.DB.Close()
+		_ = db.Close()
 	}
 }
 
+// buildRuntimeClient creates the runtime client for communicating with UserSwarm
+// instances. The client type is determined by the CRAWBL_RUNTIME_DRIVER environment
+// variable:
+//   - "fake" or empty: Creates a fake client for local development/testing
+//   - "userswarm": Creates a Kubernetes-based client for production cluster deployment
+//
+// Returns an error if an unsupported driver is specified.
 func buildRuntimeClient(logger *slog.Logger) (runtimeclient.Client, error) {
 	cfg := runtimeclient.Config{
 		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", runtimeclient.DriverFake),
@@ -212,6 +266,8 @@ func buildRuntimeClient(logger *slog.Logger) (runtimeclient.Client, error) {
 	}
 }
 
+// legalDocumentsFromEnv constructs the legal documents configuration from
+// environment variables. Returns default Crawbl URLs if not explicitly configured.
 func legalDocumentsFromEnv() *orchestrator.LegalDocuments {
 	return &orchestrator.LegalDocuments{
 		TermsOfService:        envOrDefault("CRAWBL_LEGAL_TERMS_OF_SERVICE", "https://crawbl.com/terms"),
@@ -221,6 +277,9 @@ func legalDocumentsFromEnv() *orchestrator.LegalDocuments {
 	}
 }
 
+// durationFromEnv parses a duration value from an environment variable.
+// Accepts Go duration format (e.g., "30s", "5m", "1h").
+// Returns the fallback value if the variable is unset or has an invalid format.
 func durationFromEnv(key string, fallback time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -234,6 +293,8 @@ func durationFromEnv(key string, fallback time.Duration) time.Duration {
 	return parsed
 }
 
+// int32FromEnv parses an int32 value from an environment variable.
+// Returns the fallback value if the variable is unset or has an invalid format.
 func int32FromEnv(key string, fallback int32) int32 {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {

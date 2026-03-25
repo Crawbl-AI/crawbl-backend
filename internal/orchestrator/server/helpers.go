@@ -2,7 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -14,18 +17,61 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
+// PanicRecoverer is middleware that recovers from panics and logs them with full context.
+// It returns a 500 Internal Server Error to the client.
+// Unlike chimiddleware.Recoverer, this logs the panic with stack trace for debugging.
+func PanicRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rvr := recover(); rvr != nil {
+					// Get request ID from chi middleware if available
+					requestID := chimiddleware.GetReqID(r.Context())
+
+					logger.Error("panic recovered",
+						"method", r.Method,
+						"path", r.URL.Path,
+						"request_id", requestID,
+						"panic", fmt.Sprintf("%v", rvr),
+						"stack", string(debug.Stack()),
+					)
+
+					// Return generic error to client
+					httpserver.WriteErrorResponse(w, http.StatusInternalServerError, "internal server error")
+				}
+			}()
+
+			// Log incoming request at info level
+			logger.Info("request started",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"request_id", chimiddleware.GetReqID(r.Context()),
+			)
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// registerRoutes creates the HTTP router with all endpoints and middleware.
+// It configures panic recovery, request ID, real IP, and authentication.
 func registerRoutes(s *Server) http.Handler {
 	router := chi.NewRouter()
+
+	// Middleware stack (order matters):
+	// 1. RequestID - generates unique ID for each request
+	// 2. RealIP - extracts real client IP from headers
+	// 3. PanicRecoverer - catches panics and logs them
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
-	router.Use(chimiddleware.Recoverer)
+	router.Use(PanicRecoverer(s.logger))
 
 	router.Route("/v1", func(r chi.Router) {
 		r.Get("/health", s.handleHealthCheck)
 		r.Get("/legal", s.handleLegal)
 
 		r.Group(func(r chi.Router) {
-			r.Use(httpserver.AuthMiddleware(s.httpMiddleware))
+			r.Use(httpserver.AuthMiddleware(s.httpMiddleware, s.logger))
 			r.Post("/fcm-token", s.handleSaveFCMToken)
 			r.Post("/auth/sign-in", s.handleAuthSignIn)
 			r.Post("/auth/sign-up", s.handleAuthSignUp)
@@ -47,14 +93,18 @@ func registerRoutes(s *Server) http.Handler {
 	return router
 }
 
+// decodeJSON reads JSON from the request body into the target.
+// It safely closes the request body after reading.
 func decodeJSON(r *http.Request, target any) error {
 	if target == nil {
 		return nil
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	return json.NewDecoder(r.Body).Decode(target)
 }
 
+// principalFromRequest extracts the authenticated principal from the request context.
+// Returns ErrUnauthorized if no principal is found.
 func principalFromRequest(r *http.Request) (*orchestrator.Principal, error) {
 	principal, ok := httpserver.PrincipalFromContext(r.Context())
 	if !ok || principal == nil {
@@ -63,6 +113,8 @@ func principalFromRequest(r *http.Request) (*orchestrator.Principal, error) {
 	return principal, nil
 }
 
+// currentUserFromRequest retrieves the current user from the database using the principal from context.
+// Returns ErrUnauthorized if no principal is found, or the appropriate error if the user lookup fails.
 func (s *Server) currentUserFromRequest(r *http.Request) (*orchestrator.User, *merrors.Error) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -75,10 +127,13 @@ func (s *Server) currentUserFromRequest(r *http.Request) (*orchestrator.User, *m
 	})
 }
 
+// newSession creates a new database session for the current request.
 func (s *Server) newSession() *dbr.Session {
 	return s.db.NewSession(nil)
 }
 
+// httpStatusForError converts a domain error to the appropriate HTTP status code.
+// Business errors map to 4xx codes, server errors map to 5xx.
 func httpStatusForError(err *merrors.Error) int {
 	switch {
 	case err == nil:

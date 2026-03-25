@@ -1,4 +1,4 @@
-.PHONY: help deps-venom fmt tidy test verify setup stop clean run run-clean migrate test-e2e test-e2e-one run-server run-operator docr-login userswarm-operator-image-build userswarm-operator-image-push orchestrator-image-build orchestrator-image-push
+.PHONY: help deps-venom deps-lint fmt tidy test verify setup stop clean run run-clean migrate test-e2e test-e2e-one run-server run-operator docr-login userswarm-operator-image-build userswarm-operator-image-push orchestrator-image-build orchestrator-image-push lint lint-fix
 
 GOCACHE ?= $(CURDIR)/.cache/go-build
 GOMODCACHE ?= $(CURDIR)/.cache/go-mod
@@ -23,6 +23,14 @@ export ENV_FILE
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-32s\033[0m %s\n", $$1, $$2}'
 
+deps-lint: ## Install golangci-lint locally if it is missing
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		echo "golangci-lint already installed: $$(golangci-lint version 2>/dev/null || echo unknown)"; \
+	else \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+	fi
+
 deps-venom: ## Install ovh/venom locally if it is missing
 	@if command -v venom >/dev/null 2>&1; then \
 		echo "venom already installed: $$(venom version 2>/dev/null || echo unknown)"; \
@@ -41,13 +49,19 @@ deps-venom: ## Install ovh/venom locally if it is missing
 fmt: ## Format Go source files
 	gofmt -w ./api ./cmd ./internal
 
+lint: deps-lint ## Run golangci-lint
+	golangci-lint run ./...
+
+lint-fix: deps-lint ## Run golangci-lint with auto-fix
+	golangci-lint run ./... --fix
+
 tidy: ## Sync go.mod and go.sum
 	go mod tidy
 
 test: ## Run the Go test suite
 	go test ./...
 
-verify: fmt test ## Run formatting and tests together
+verify: fmt lint test ## Run formatting, linting, and tests together
 
 setup: .env ## Start Postgres and run local migrations
 	@docker compose --profile database up -d

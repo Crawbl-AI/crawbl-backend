@@ -10,12 +10,19 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// agentRepo is the PostgreSQL implementation of the AgentRepo interface.
+// It handles agent data persistence and retrieval operations.
 type agentRepo struct{}
 
+// New creates a new AgentRepo instance backed by PostgreSQL.
+// The returned repository uses the database session runner pattern for transaction support.
 func New() *agentRepo {
 	return &agentRepo{}
 }
 
+// ListByWorkspaceID retrieves all agents within a specific workspace.
+// Results are ordered by sort order first, then by creation date for agents with the same sort order.
+// Returns ErrInvalidInput if sess is nil or workspaceID is empty.
 func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -40,6 +47,9 @@ func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo
 	return agents, nil
 }
 
+// GetByID retrieves a specific agent by its ID, verifying workspace membership.
+// Returns ErrAgentNotFound if the agent does not exist or does not belong to the specified workspace.
+// Returns ErrInvalidInput if sess is nil, workspaceID is empty, or agentID is empty.
 func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, agentID string) (*orchestrator.Agent, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -60,6 +70,11 @@ func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRu
 	return row.ToDomain(), nil
 }
 
+// Save persists agent data to the database with a specified sort order.
+// It handles both creating new agents and updating existing ones by checking
+// if an agent with the same ID exists first.
+// The sort order determines the display position of the agent within its workspace.
+// Returns ErrInvalidInput if sess is nil or agent is nil.
 func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, agent *orchestrator.Agent, sortOrder int) *merrors.Error {
 	if sess == nil || agent == nil {
 		return merrors.ErrInvalidInput

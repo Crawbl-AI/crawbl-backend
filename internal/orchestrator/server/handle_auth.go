@@ -11,13 +11,19 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
+// handleHealthCheck returns the server health status and version.
+// This endpoint is unauthenticated and used by load balancers and monitoring
+// systems to verify the server is responsive.
 func (s *Server) handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
 	httpserver.WriteSuccessResponse(w, http.StatusOK, &healthCheckResponse{
 		Online:  true,
-		Version: "dev",
+		Version: "1.0.0",
 	})
 }
 
+// handleLegal returns the current terms of service and privacy policy documents.
+// This endpoint is unauthenticated and provides legal documents for display
+// in the mobile app before user authentication.
 func (s *Server) handleLegal(w http.ResponseWriter, r *http.Request) {
 	legalDocuments, mErr := s.authService.GetLegalDocuments(r.Context())
 	if mErr != nil {
@@ -33,6 +39,9 @@ func (s *Server) handleLegal(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleSaveFCMToken stores a Firebase Cloud Messaging push token for the authenticated user.
+// This token is used to send push notifications to the user's device.
+// The request body must contain a valid pushToken field.
 func (s *Server) handleSaveFCMToken(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -58,6 +67,9 @@ func (s *Server) handleSaveFCMToken(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteJSONResponse(w, http.StatusOK, &savePushTokenResponse{Success: true})
 }
 
+// handleAuthSignIn authenticates an existing user via Firebase token.
+// If the user exists in the system, it seeds their workspace runtime for the session.
+// Returns 204 No Content on success, indicating the user is now authenticated.
 func (s *Server) handleAuthSignIn(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -65,19 +77,27 @@ func (s *Server) handleAuthSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Info("handleAuthSignIn: starting sign in", "subject", principal.Subject)
+
 	user, mErr := s.authService.SignIn(r.Context(), &orchestratorservice.SignInOpts{
 		Sess:      s.newSession(),
 		Principal: principal,
 	})
 	if mErr != nil {
+		s.logger.Error("handleAuthSignIn: sign in failed", "error", mErr.Error())
 		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
 		return
 	}
+
+	s.logger.Info("handleAuthSignIn: sign in succeeded", "user_id", user.ID)
 
 	s.seedWorkspaceRuntime(r.Context(), user.ID, "sign_in")
 	httpserver.WriteNoContent(w)
 }
 
+// handleAuthSignUp creates a new user account from the Firebase authentication token.
+// After successful registration, it seeds the user's default workspace runtime.
+// Returns 204 No Content on success.
 func (s *Server) handleAuthSignUp(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -98,6 +118,9 @@ func (s *Server) handleAuthSignUp(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteNoContent(w)
 }
 
+// handleAuthDelete permanently deletes the authenticated user's account.
+// The request body must contain a reason and optional description for the deletion.
+// This action is irreversible and removes all user data.
 func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -124,6 +147,8 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteNoContent(w)
 }
 
+// handleUsersProfile retrieves the authenticated user's profile information.
+// Returns user details including preferences, subscription status, and account state.
 func (s *Server) handleUsersProfile(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -134,6 +159,9 @@ func (s *Server) handleUsersProfile(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteSuccessResponse(w, http.StatusOK, toUserProfileResponse(user))
 }
 
+// handleUsersUpdate modifies the authenticated user's profile information.
+// Supports updating nickname, name, surname, country code, date of birth, and preferences.
+// Only provided fields are updated; omitted fields retain their current values.
 func (s *Server) handleUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -157,8 +185,8 @@ func (s *Server) handleUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dateOfBirth *time.Time
-	if reqBody.DateOfBirth != nil && !reqBody.DateOfBirth.Time.IsZero() {
-		value := reqBody.DateOfBirth.Time.UTC()
+	if reqBody.DateOfBirth != nil && !reqBody.DateOfBirth.IsZero() {
+		value := reqBody.DateOfBirth.UTC()
 		dateOfBirth = &value
 	}
 
@@ -179,6 +207,9 @@ func (s *Server) handleUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteNoContent(w)
 }
 
+// handleUsersLegal retrieves the legal documents along with the user's acceptance status.
+// Returns terms of service and privacy policy content and versions, plus whether
+// the user has agreed to each document.
 func (s *Server) handleUsersLegal(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -202,6 +233,9 @@ func (s *Server) handleUsersLegal(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleUsersLegalAccept records the user's acceptance of the specified legal document versions.
+// The user must accept both terms of service and privacy policy versions to proceed.
+// This updates the user's legal acceptance status in the database.
 func (s *Server) handleUsersLegalAccept(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -228,6 +262,9 @@ func (s *Server) handleUsersLegalAccept(w http.ResponseWriter, r *http.Request) 
 	httpserver.WriteNoContent(w)
 }
 
+// toUserProfileResponse converts a domain User to the API response format.
+// It handles nil pointer fields and provides default values for subscription
+// when the user has no active subscription (defaults to "Freemium").
 func toUserProfileResponse(user *orchestrator.User) *userProfileResponse {
 	subscriptionName := user.Subscription.Name
 	if subscriptionName == "" {
@@ -265,6 +302,14 @@ func toUserProfileResponse(user *orchestrator.User) *userProfileResponse {
 	}
 }
 
+// seedWorkspaceRuntime triggers the workspace list operation to ensure the user's
+// workspace runtime is initialized. This is called after sign-in and sign-up
+// to warm up the workspace state for the user session.
+//
+// Parameters:
+//   - ctx: Request context for cancellation and tracing
+//   - userID: The user's unique identifier
+//   - trigger: Description of the operation that triggered seeding (for logging)
 func (s *Server) seedWorkspaceRuntime(ctx context.Context, userID, trigger string) {
 	_, mErr := s.workspaceService.ListByUserID(ctx, &orchestratorservice.ListWorkspacesOpts{
 		Sess:   s.newSession(),
@@ -279,6 +324,9 @@ func (s *Server) seedWorkspaceRuntime(ctx context.Context, userID, trigger strin
 	}
 }
 
+// stringOrEmpty safely dereferences a string pointer, returning an empty string
+// if the pointer is nil. This prevents nil pointer dereference panics when
+// converting optional string fields for API responses.
 func stringOrEmpty(value *string) string {
 	if value == nil {
 		return ""

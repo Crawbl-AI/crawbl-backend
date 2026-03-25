@@ -56,6 +56,8 @@ type UserSwarmReconciler struct {
 
 // Reconcile keeps one UserSwarm aligned with the shared-namespace runtime model:
 // validate shared prerequisites first, then reconcile the per-user runtime objects.
+//
+//nolint:cyclop,gocognit,gocyclo
 func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var swarm crawblv1alpha1.UserSwarm
 	if err := r.Get(ctx, req.NamespacedName, &swarm); err != nil {
@@ -217,6 +219,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		api_meta.IsStatusConditionTrue(swarm.Status.Conditions, conditionTypeSmokeTestPassed) &&
 		(routeStatus == metav1.ConditionTrue || !swarm.Spec.Exposure.HTTPRoute.Enabled)
 
+	//nolint:gocritic
 	if verified {
 		r.setCondition(&swarm, conditionTypeVerified, metav1.ConditionTrue, conditionReasonReady, "userswarm service path is verified")
 		r.setCondition(&swarm, conditionTypeReady, metav1.ConditionTrue, conditionReasonReady, "userswarm workload is ready and verified")
@@ -521,6 +524,7 @@ func (r *UserSwarmReconciler) reconcileNetworkPolicy(ctx context.Context, swarm 
 	return err
 }
 
+//nolint:cyclop
 func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
 	obj := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -538,7 +542,7 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 		obj.Spec.Replicas = &replicas
 		obj.Spec.ServiceName = headlessServiceName(swarm)
 		obj.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabelsFor(swarm)}
-		obj.Spec.Template.ObjectMeta.Labels = labelsFor(swarm)
+		obj.Spec.Template.Labels = labelsFor(swarm)
 		bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm)
 		if err != nil {
 			return err
@@ -548,12 +552,12 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 			envSecretRefName = managedEnvSecretName(swarm)
 		}
 		// Roll the pod only when bootstrap inputs change; the live config itself stays on the PVC.
-		obj.Spec.Template.ObjectMeta.Annotations = map[string]string{
+		obj.Spec.Template.Annotations = map[string]string{
 			"crawbl.ai/config-checksum": checksumStringMap(bootstrapFiles),
 			"crawbl.ai/env-secret-ref":  checksumString(envSecretRefName),
 		}
 		for key, value := range r.runtimeVaultAnnotations() {
-			obj.Spec.Template.ObjectMeta.Annotations[key] = value
+			obj.Spec.Template.Annotations[key] = value
 		}
 		obj.Spec.Template.Spec.ServiceAccountName = serviceAccountName(swarm)
 		obj.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
@@ -599,10 +603,20 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 			},
 		}}
 		if r.runtimeVaultEnabled() {
-			obj.Spec.Template.Spec.InitContainers[0].Env = append(obj.Spec.Template.Spec.InitContainers[0].Env, corev1.EnvVar{
-				Name:  "OPENAI_API_KEY_FILE",
-				Value: r.runtimeVaultSecretFilePath(),
-			})
+			obj.Spec.Template.Spec.InitContainers[0].Env = append(obj.Spec.Template.Spec.InitContainers[0].Env,
+				corev1.EnvVar{
+					Name:  "VAULT_ENABLED",
+					Value: "true",
+				},
+				corev1.EnvVar{
+					Name:  "VAULT_FILE_NAME",
+					Value: r.RuntimeVault.FileName,
+				},
+				corev1.EnvVar{
+					Name:  "OPENAI_API_KEY_FILE",
+					Value: r.runtimeVaultSecretFilePath(),
+				},
+			)
 		}
 		if !r.runtimeVaultEnabled() && envSecretRefName != "" {
 			obj.Spec.Template.Spec.InitContainers[0].EnvFrom = []corev1.EnvFromSource{{
@@ -901,6 +915,7 @@ func (r *UserSwarmReconciler) routeConditionStatus(ctx context.Context, swarm *c
 	return metav1.ConditionFalse, conditionReasonPending, "public route exists but is not yet accepted by the gateway", nil
 }
 
+//nolint:cyclop
 func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) (metav1.ConditionStatus, string, string, error) {
 	jobName := smokeTestJobName(swarm)
 	runtimeNamespace := desiredRuntimeNamespace(swarm)
@@ -937,9 +952,10 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 		}
 
 		job.Spec.BackoffLimit = ptrTo[int32](0)
-		job.Spec.TTLSecondsAfterFinished = ptrTo[int32](300)
-		job.Spec.Template.ObjectMeta.Labels = labelsFor(swarm)
-		job.Spec.Template.ObjectMeta.Annotations = map[string]string{
+		const jobTTLSeconds = 300
+		job.Spec.TTLSecondsAfterFinished = ptrTo[int32](jobTTLSeconds)
+		job.Spec.Template.Labels = labelsFor(swarm)
+		job.Spec.Template.Annotations = map[string]string{
 			"crawbl.ai/smoke-checksum":  checksum,
 			"crawbl.ai/bootstrap-image": r.BootstrapImage,
 		}

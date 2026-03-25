@@ -1,3 +1,5 @@
+// Package zeroclaw provides configuration management for ZeroClaw.
+// Config values are intentional literals for default settings.
 package zeroclaw
 
 import (
@@ -8,6 +10,18 @@ import (
 	"github.com/BurntSushi/toml"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+)
+
+// Default configuration values for ZeroClaw bootstrap.
+const (
+	DefaultTemperature          = 0.7
+	DefaultMaxResponseSize      = 1_000_000
+	DefaultTimeoutSecs          = 30
+	DefaultMaxResponseSizeSmall = 500_000
+	DefaultMaxResults           = 5
+	DefaultTimeoutSecsShort     = 15
+	DefaultProviderRetries      = 2
+	DefaultProviderBackoffMs    = 500
 )
 
 type BootstrapConfig struct {
@@ -88,7 +102,7 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) (string, error) {
 		APIKey:             "",
 		DefaultProvider:    "openai",
 		DefaultModel:       "gpt-5.4",
-		DefaultTemperature: 0.7,
+		DefaultTemperature: DefaultTemperature,
 		Autonomy: AutonomyConfig{
 			Level:         "supervised",
 			WorkspaceOnly: true,
@@ -140,22 +154,22 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) (string, error) {
 		HTTPRequest: HTTPRequestConfig{
 			Enabled:           true,
 			AllowedDomains:    []string{"*"},
-			MaxResponseSize:   1_000_000,
-			TimeoutSecs:       30,
+			MaxResponseSize:   DefaultMaxResponseSize,
+			TimeoutSecs:       DefaultTimeoutSecs,
 			AllowPrivateHosts: false,
 		},
 		WebFetch: WebFetchConfig{
 			Enabled:         true,
 			AllowedDomains:  []string{"*"},
 			BlockedDomains:  []string{},
-			MaxResponseSize: 500_000,
-			TimeoutSecs:     30,
+			MaxResponseSize: DefaultMaxResponseSizeSmall,
+			TimeoutSecs:     DefaultTimeoutSecs,
 		},
 		WebSearch: WebSearchConfig{
 			Enabled:     true,
 			Provider:    "duckduckgo",
-			MaxResults:  5,
-			TimeoutSecs: 15,
+			MaxResults:  DefaultMaxResults,
+			TimeoutSecs: DefaultTimeoutSecsShort,
 		},
 		Gateway: GatewayConfig{
 			Port: runtimePort(sw),
@@ -167,8 +181,8 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) (string, error) {
 			RequirePairing:  true,
 		},
 		Reliability: Reliability{
-			ProviderRetries: 2,
-			ProviderBackoff: 500,
+			ProviderRetries: DefaultProviderRetries,
+			ProviderBackoff: DefaultProviderBackoffMs,
 			ModelFallbacks:  map[string][]string{},
 		},
 	}

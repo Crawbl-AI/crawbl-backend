@@ -11,6 +11,9 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
+// handleWorkspacesList retrieves all workspaces owned by the authenticated user.
+// Each workspace includes its runtime status if available, allowing the mobile client
+// to display workspace state and poll for readiness during initial provisioning.
 func (s *Server) handleWorkspacesList(w http.ResponseWriter, r *http.Request) {
 	principal, err := principalFromRequest(r)
 	if err != nil {
@@ -44,6 +47,9 @@ func (s *Server) handleWorkspacesList(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteSuccessResponse(w, http.StatusOK, response)
 }
 
+// handleWorkspaceGet retrieves a single workspace by its ID.
+// The workspace must be owned by the authenticated user.
+// Returns workspace details including runtime status and verification state.
 func (s *Server) handleWorkspaceGet(w http.ResponseWriter, r *http.Request) {
 	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
@@ -65,6 +71,9 @@ func (s *Server) handleWorkspaceGet(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteSuccessResponse(w, http.StatusOK, toWorkspaceResponse(workspace))
 }
 
+// toWorkspaceResponse converts a domain Workspace to the API response format.
+// It includes the workspace runtime information if available, which indicates
+// the swarm deployment status and verification state.
 func toWorkspaceResponse(workspace *orchestrator.Workspace) workspaceResponse {
 	response := workspaceResponse{
 		ID:        workspace.ID,

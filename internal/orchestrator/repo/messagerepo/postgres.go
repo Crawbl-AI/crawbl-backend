@@ -11,12 +11,24 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// messageRepo is the PostgreSQL implementation of the MessageRepo interface.
+// It handles message data persistence and retrieval operations.
 type messageRepo struct{}
 
+// New creates a new MessageRepo instance backed by PostgreSQL.
+// The returned repository uses the database session runner pattern for transaction support.
 func New() *messageRepo {
 	return &messageRepo{}
 }
 
+// ListByConversationID retrieves messages from a conversation with cursor-based pagination.
+// Messages are returned in descending order by creation time (newest first).
+// The cursor-based pagination uses a scroll ID to enable efficient navigation through
+// large message histories without offset-based queries.
+// Returns an empty page if the scroll ID references a non-existent message.
+// Returns ErrInvalidInput if sess is nil, opts is nil, or conversation ID is empty.
+//
+//nolint:cyclop
 func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, opts *orchestratorrepo.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
 	if sess == nil || opts == nil || strings.TrimSpace(opts.ConversationID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -93,6 +105,10 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 	}, nil
 }
 
+// GetLatestByConversationID retrieves the most recent message in a conversation.
+// Messages are ordered by creation time descending, so this returns the newest message.
+// Returns ErrMessageNotFound if no messages exist in the conversation.
+// Returns ErrInvalidInput if sess is nil or conversationID is empty.
 func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(conversationID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -120,6 +136,11 @@ func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orches
 	return message, nil
 }
 
+// Save persists message data to the database.
+// It handles both creating new messages and updating existing ones by checking
+// if a message with the same ID exists first.
+// The content and attachments are stored as JSON in the database.
+// Returns ErrInvalidInput if sess is nil or message is nil.
 func (r *messageRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error {
 	if sess == nil || message == nil {
 		return merrors.ErrInvalidInput

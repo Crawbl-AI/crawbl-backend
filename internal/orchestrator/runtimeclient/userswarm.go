@@ -1,3 +1,4 @@
+// Package runtimeclient provides HTTP client for user swarm runtime.
 package runtimeclient
 
 import (
@@ -11,15 +12,19 @@ import (
 	"strings"
 	"time"
 
-	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
+
+// Default HTTP client timeout for runtime API calls.
+const defaultHTTPTimeout = 90 * time.Second
 
 const verifiedConditionType = "Verified"
 
@@ -71,10 +76,11 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 	return &userSwarmClient{
 		client:     k8sClient,
 		config:     userswarmCfg,
-		httpClient: &http.Client{Timeout: 90 * time.Second},
+		httpClient: &http.Client{Timeout: defaultHTTPTimeout},
 	}, nil
 }
 
+//nolint:cyclop
 func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error) {
 	if opts == nil || strings.TrimSpace(opts.UserID) == "" || strings.TrimSpace(opts.WorkspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -128,6 +134,7 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 	}
 }
 
+//nolint:cyclop
 func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (string, *merrors.Error) {
 	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
 		return "", merrors.ErrInvalidInput
@@ -155,7 +162,7 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (str
 	if err != nil {
 		return "", merrors.WrapStdServerError(err, "send runtime webhook request")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

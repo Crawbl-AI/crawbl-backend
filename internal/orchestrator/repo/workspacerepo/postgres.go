@@ -10,12 +10,19 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// workspaceRepo is the PostgreSQL implementation of the WorkspaceRepo interface.
+// It handles workspace data persistence and retrieval operations.
 type workspaceRepo struct{}
 
+// New creates a new WorkspaceRepo instance backed by PostgreSQL.
+// The returned repository uses the database session runner pattern for transaction support.
 func New() *workspaceRepo {
 	return &workspaceRepo{}
 }
 
+// ListByUserID retrieves all workspaces owned by a specific user.
+// Results are ordered by creation date in ascending order.
+// Returns ErrInvalidInput if sess is nil or userID is empty.
 func (r *workspaceRepo) ListByUserID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) ([]*orchestrator.Workspace, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(userID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -39,6 +46,9 @@ func (r *workspaceRepo) ListByUserID(ctx context.Context, sess orchestratorrepo.
 	return workspaces, nil
 }
 
+// GetByID retrieves a specific workspace by its ID, verifying ownership by userID.
+// Returns ErrWorkspaceNotFound if the workspace does not exist or does not belong to the user.
+// Returns ErrInvalidInput if sess is nil, userID is empty, or workspaceID is empty.
 func (r *workspaceRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error) {
 	if sess == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -59,6 +69,11 @@ func (r *workspaceRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessi
 	return row.ToDomain(), nil
 }
 
+// Save persists workspace data to the database.
+// It handles both creating new workspaces and updating existing ones by checking
+// if a workspace with the same ID exists first.
+// The operation is idempotent and handles concurrent creation attempts.
+// Returns ErrInvalidInput if sess is nil or workspace is nil.
 func (r *workspaceRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, workspace *orchestrator.Workspace) *merrors.Error {
 	if sess == nil || workspace == nil {
 		return merrors.ErrInvalidInput
@@ -67,6 +82,10 @@ func (r *workspaceRepo) Save(ctx context.Context, sess orchestratorrepo.SessionR
 	return r.saveWorkspaceRow(ctx, sess, orchestratorrepo.NewWorkspaceRow(workspace))
 }
 
+// saveWorkspaceRow inserts or updates a workspace record in the database.
+// It first attempts to find an existing workspace by ID, then either updates
+// the existing record or inserts a new one.
+// Handles race conditions by retrying with an update if insert fails due to duplicate key.
 func (r *workspaceRepo) saveWorkspaceRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.WorkspaceRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput

@@ -1,24 +1,48 @@
+// Package server provides HTTP handlers and types.
 package server
 
 import "time"
 
+// minJSONQuotedStringLen is the minimum length for a JSON quoted string (must contain at least "").
+const minJSONQuotedStringLen = 2
+
+// legalResponse contains the platform's legal documents for unauthenticated access.
+// This is used before user registration to display terms of service and privacy policy.
 type legalResponse struct {
-	TermsOfService        string `json:"termsOfService"`
-	PrivacyPolicy         string `json:"privacyPolicy"`
+	// TermsOfService is the full text of the terms of service document.
+	TermsOfService string `json:"termsOfService"`
+
+	// PrivacyPolicy is the full text of the privacy policy document.
+	PrivacyPolicy string `json:"privacyPolicy"`
+
+	// TermsOfServiceVersion is the version identifier for the current terms of service.
 	TermsOfServiceVersion string `json:"termsOfServiceVersion"`
-	PrivacyPolicyVersion  string `json:"privacyPolicyVersion"`
+
+	// PrivacyPolicyVersion is the version identifier for the current privacy policy.
+	PrivacyPolicyVersion string `json:"privacyPolicyVersion"`
 }
 
+// dateTime is a custom time type that handles multiple date format parsing in JSON.
+// It supports RFC3339 format and a custom milliseconds format for compatibility
+// with various client date/time representations.
 type dateTime struct {
+	// Time is the underlying time value after successful parsing.
 	time.Time
 }
 
+// UnmarshalJSON implements custom JSON unmarshaling for dateTime.
+// It handles three cases:
+//   - JSON null value: returns without error, leaving time as zero value
+//   - Empty or short strings: returns without error, leaving time as zero value
+//   - Valid date strings: parses using RFC3339 or custom milliseconds format
+//
+// This flexible parsing supports clients that may send dates in different formats.
 func (d *dateTime) UnmarshalJSON(value []byte) error {
 	raw := string(value)
 	if raw == "null" {
 		return nil
 	}
-	if len(raw) < 2 {
+	if len(raw) < minJSONQuotedStringLen {
 		return nil
 	}
 	raw = raw[1 : len(raw)-1]

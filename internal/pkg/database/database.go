@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,13 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
-	"github.com/lib/pq"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"   //nolint:staticcheck // Named import needed for pq.Error type
+	_ "github.com/lib/pq" // Required for driver registration
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 )
 
+// ConfigFromEnv creates a Config from environment variables using the given prefix.
+// Environment variables are expected in the format: {PREFIX}_DATABASE_{FIELD}.
+// For example, with prefix "APP_", it looks for APP_DATABASE_HOST, APP_DATABASE_PORT, etc.
+// Secret values (User, Password) are retrieved using configenv.SecretString for secure handling.
+// If environment variables are not set, default values from types.go are used.
 func ConfigFromEnv(prefix string) Config {
 	return Config{
 		Host:               envOrDefault(prefix+"DATABASE_HOST", DefaultHost),
@@ -33,15 +40,39 @@ func ConfigFromEnv(prefix string) Config {
 	}
 }
 
+// SessionRunner defines the interface for database session operations.
+// It mirrors the dbr.Session interface methods needed for building queries.
+// This interface allows repository code to work with either a session or a transaction,
+// enabling clean transaction handling patterns.
 type SessionRunner interface {
-	Select(column ...interface{}) *dbr.SelectStmt
-	SelectBySql(query string, value ...interface{}) *dbr.SelectStmt
+	// Select creates a SELECT statement for the given columns.
+	Select(column ...any) *dbr.SelectStmt
+
+	// SelectBySql creates a SELECT statement from raw SQL with optional parameters.
+	SelectBySql(query string, value ...any) *dbr.SelectStmt
+
+	// InsertInto creates an INSERT statement for the given table.
 	InsertInto(table string) *dbr.InsertStmt
-	InsertBySql(query string, value ...interface{}) *dbr.InsertStmt
+
+	// InsertBySql creates an INSERT statement from raw SQL with optional parameters.
+	InsertBySql(query string, value ...any) *dbr.InsertStmt
+
+	// Update creates an UPDATE statement for the given table.
 	Update(table string) *dbr.UpdateStmt
+
+	// DeleteFrom creates a DELETE statement for the given table.
 	DeleteFrom(table string) *dbr.DeleteStmt
 }
 
+// New creates a new database connection using the provided configuration.
+// It opens a PostgreSQL connection, configures the connection pool settings,
+// and verifies connectivity with retry logic before returning the connection.
+//
+// The connection is wrapped with dbr for query building and uses the PostgreSQL dialect.
+//
+// Returns:
+//   - A dbr.Connection ready for use with the PostgreSQL dialect.
+//   - An error if the connection cannot be established or pinged.
 func New(config Config) (*dbr.Connection, error) {
 	db, err := sql.Open("postgres", buildDriverDSN(config, true))
 	if err != nil {
@@ -52,7 +83,7 @@ func New(config Config) (*dbr.Connection, error) {
 	db.SetMaxIdleConns(config.MaxIdleConnections)
 	db.SetConnMaxLifetime(config.ConnMaxLifetime)
 
-	if err := pingWithRetry(db, DefaultPingAttempts, DefaultPingDelay); err != nil {
+	if err := pingWithRetry(context.Background(), db, DefaultPingAttempts, DefaultPingDelay); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
@@ -64,6 +95,14 @@ func New(config Config) (*dbr.Connection, error) {
 	}, nil
 }
 
+// EnsureSchema creates the configured schema if it does not already exist.
+// This is useful for bootstrapping new database instances where the schema
+// needs to be created before migrations run.
+// If the schema configuration is empty or whitespace, this function returns immediately.
+//
+// Returns:
+//   - An error if the connection fails or the schema creation fails.
+//   - nil if the schema already exists or was created successfully.
 func EnsureSchema(config Config) error {
 	if strings.TrimSpace(config.Schema) == "" {
 		return nil
@@ -73,16 +112,23 @@ func EnsureSchema(config Config) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
-	if err := pingWithRetry(db, DefaultPingAttempts, DefaultPingDelay); err != nil {
+	if err := pingWithRetry(context.Background(), db, DefaultPingAttempts, DefaultPingDelay); err != nil {
 		return fmt.Errorf("ping db for schema bootstrap: %w", err)
 	}
 
-	_, err = db.Exec(`CREATE SCHEMA IF NOT EXISTS "` + config.Schema + `"`)
+	_, err = db.ExecContext(context.Background(), `CREATE SCHEMA IF NOT EXISTS "`+config.Schema+`"`)
 	return err
 }
 
+// BuildDSN constructs a PostgreSQL connection string (DSN) in URL format.
+// The DSN includes host, port, credentials, database name, and SSL mode.
+// When includeSchema is true and a schema is configured, it adds search_path
+// to set the default schema for the connection.
+//
+// This format is suitable for logging and debugging, but use buildDriverDSN
+// for actual driver connections as some drivers prefer the space-separated format.
 func BuildDSN(config Config, includeSchema bool) string {
 	dsnURL := &url.URL{
 		Scheme: "postgres",
@@ -101,6 +147,13 @@ func BuildDSN(config Config, includeSchema bool) string {
 	return dsnURL.String()
 }
 
+// IsRecordExistsError checks if the given error indicates a unique constraint violation
+// (PostgreSQL error code 23505). This is returned when attempting to insert a record
+// that would violate a unique constraint or primary key constraint.
+//
+// Returns:
+//   - true if the error is a PostgreSQL unique violation error.
+//   - false if the error is nil or a different type of error.
 func IsRecordExistsError(err error) bool {
 	if err == nil {
 		return false
@@ -110,6 +163,13 @@ func IsRecordExistsError(err error) bool {
 	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }
 
+// IsRecordNotFoundError checks if the given error indicates that no record was found.
+// This includes dbr.ErrNotFound and sql.ErrNoRows, which are returned when a query
+// expected to return rows returns none.
+//
+// Returns:
+//   - true if the error indicates no records were found.
+//   - false if the error is nil or indicates a different condition.
 func IsRecordNotFoundError(err error) bool {
 	if err == nil {
 		return false
@@ -118,11 +178,18 @@ func IsRecordNotFoundError(err error) bool {
 	return errors.Is(err, dbr.ErrNotFound) || errors.Is(err, sql.ErrNoRows) || err == dbr.ErrNotFound
 }
 
-func pingWithRetry(db *sql.DB, attempts int, delay time.Duration) error {
+// pingWithRetry attempts to ping the database multiple times with a delay between attempts.
+// This is useful during startup when the database may not be immediately available,
+// such as in containerized environments where services start concurrently.
+//
+// Returns:
+//   - nil on successful ping.
+//   - The last error encountered if all attempts fail.
+func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Duration) error {
 	var lastErr error
 
 	for range attempts {
-		if err := db.Ping(); err == nil {
+		if err := db.PingContext(ctx); err == nil {
 			return nil
 		} else {
 			lastErr = err
@@ -134,6 +201,12 @@ func pingWithRetry(db *sql.DB, attempts int, delay time.Duration) error {
 	return lastErr
 }
 
+// buildDriverDSN constructs a PostgreSQL connection string in the space-separated
+// key=value format preferred by the lib/pq driver. This format includes host, port,
+// credentials, database name, SSL mode, and optionally the schema search path.
+//
+// Unlike BuildDSN which returns a URL format, this returns the driver-specific format
+// required by sql.Open for PostgreSQL connections.
 func buildDriverDSN(config Config, includeSchema bool) string {
 	parts := []string{
 		fmt.Sprintf("host=%s", config.Host),
@@ -149,6 +222,8 @@ func buildDriverDSN(config Config, includeSchema bool) string {
 	return strings.Join(parts, " ")
 }
 
+// envOrDefault retrieves an environment variable value or returns the fallback
+// if the variable is not set or is empty.
 func envOrDefault(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -157,6 +232,8 @@ func envOrDefault(key, fallback string) string {
 	return value
 }
 
+// intFromEnv retrieves an integer environment variable value or returns the fallback
+// if the variable is not set or cannot be parsed as an integer.
 func intFromEnv(key string, fallback int) int {
 	value := os.Getenv(key)
 	if value == "" {
@@ -170,6 +247,9 @@ func intFromEnv(key string, fallback int) int {
 	return parsed
 }
 
+// durationFromEnv retrieves a duration environment variable value or returns the fallback
+// if the variable is not set or cannot be parsed as a duration.
+// The duration format follows time.ParseDuration conventions (e.g., "5m", "1h30m").
 func durationFromEnv(key string, fallback time.Duration) time.Duration {
 	value := os.Getenv(key)
 	if value == "" {

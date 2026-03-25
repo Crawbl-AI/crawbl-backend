@@ -9,8 +9,16 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
+// defaultServiceName is the default migration service name used when
+// no --svc flag is provided. It corresponds to the "orchestrator" migrations
+// directory under ./migrations/.
 const defaultServiceName = "orchestrator"
 
+// newMigrateCommand creates the "migrate" subcommand for running database migrations.
+// The command supports a --svc flag to specify which service's migrations to run,
+// defaulting to "orchestrator". Migration files are loaded from ./migrations/{service}/.
+// The command applies all pending migrations and succeeds silently if no changes
+// are needed (ErrNoChange).
 func newMigrateCommand() *cobra.Command {
 	var serviceName string
 
