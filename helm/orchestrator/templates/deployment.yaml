@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orchestrator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "orchestrator.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "orchestrator.selectorLabels" . | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "orchestrator.selectorLabels" . | indent 8 }}
+{{- with .Values.podLabels }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+{{- with .Values.podAnnotations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "orchestrator.serviceAccountName" . }}
+{{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{- range .Values.imagePullSecrets }}
+        - name: {{ .name }}
+{{- end }}
+{{- end }}
+{{- if .Values.firebaseSecret.enabled }}
+      volumes:
+        - name: firebase-credentials
+          secret:
+            secretName: {{ .Values.firebaseSecret.name }}
+{{- end }}
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /app/orchestrator
+          args:
+            - server
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | default "info" | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "orchestrator.fullname" . }}-config
+            - secretRef:
+                name: {{ required "secretEnv.existingSecretName is required" .Values.secretEnv.existingSecretName }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+          startupProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+{{- if .Values.firebaseSecret.enabled }}
+          volumeMounts:
+            - name: firebase-credentials
+              mountPath: {{ .Values.firebaseSecret.mountPath }}
+              readOnly: true
+{{- end }}
+{{- with .Values.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+{{- end }}

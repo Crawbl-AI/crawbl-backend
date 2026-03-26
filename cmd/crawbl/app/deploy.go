@@ -1,5 +1,5 @@
-// Package deploy provides the deploy subcommand for Crawbl CLI.
-package deploy
+// Package app provides the app subcommand for Crawbl CLI.
+package app
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewDeployCommand creates the deploy subcommand.
-func NewDeployCommand() *cobra.Command {
+// newDeployCommand creates the deploy subcommand under app.
+func newDeployCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy [component]",
 		Short: "Deploy Crawbl component",

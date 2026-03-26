@@ -1,5 +1,5 @@
-// Package build provides the build subcommand for Crawbl CLI.
-package build
+// Package app provides the app subcommand for Crawbl CLI.
+package app
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	operatorImageRepo  = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator"
-	operatorDockerfile = "dockerfiles/userswarm-operator.dockerfile"
+	buildOperatorImageRepo  = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator"
+	buildOperatorDockerfile = "dockerfiles/userswarm-operator.dockerfile"
 )
 
 // newBuildOperatorCommand creates the build operator subcommand.
@@ -24,9 +24,9 @@ func newBuildOperatorCommand() *cobra.Command {
 		Use:   "operator",
 		Short: "Build userswarm-operator image",
 		Long:  "Build the userswarm-operator Docker image using docker buildx.",
-		Example: `  crawbl build operator --tag v1.0.0
-  crawbl build operator --tag latest --platform linux/amd64 --push
-  crawbl build operator --tag dev`,
+		Example: `  crawbl app build operator --tag v1.0.0
+  crawbl app build operator --tag latest --platform linux/amd64 --push
+  crawbl app build operator --tag dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tag == "" {
 				return fmt.Errorf("--tag is required")
@@ -37,12 +37,12 @@ func newBuildOperatorCommand() *cobra.Command {
 				return fmt.Errorf("failed to get root directory: %w", err)
 			}
 
-			imageRef := fmt.Sprintf("%s:%s", operatorImageRepo, tag)
+			imageRef := fmt.Sprintf("%s:%s", buildOperatorImageRepo, tag)
 
 			buildArgs := []string{
 				"buildx", "build",
 				"--platform", platform,
-				"-f", fmt.Sprintf("%s/%s", rootDir, operatorDockerfile),
+				"-f", fmt.Sprintf("%s/%s", rootDir, buildOperatorDockerfile),
 				"-t", imageRef,
 			}
 

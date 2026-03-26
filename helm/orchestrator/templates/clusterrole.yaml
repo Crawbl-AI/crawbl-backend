@@ -1,0 +1,20 @@
+{{- if eq .Values.config.runtime.driver "userswarm" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "orchestrator.fullname" . }}-userswarm
+  labels:
+{{ include "orchestrator.labels" . | indent 4 }}
+rules:
+  - apiGroups:
+      - crawbl.ai
+    resources:
+      - userswarms
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+{{- end }}

@@ -1,16 +1,22 @@
-FROM golang:1.24.5 AS builder
+# ---------- BUILD STAGE ----------
+FROM golang:1.25.8 AS builder
 
-WORKDIR /workspace
+ARG GOARCH=amd64
+
+WORKDIR /build
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go env -w GOPROXY=direct && go mod download
 
-COPY api api
-COPY cmd cmd
-COPY internal internal
+COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/userswarm-operator ./cmd/userswarm-operator
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/userswarm-operator ./cmd/userswarm-operator
 
+# ---------- RUNTIME STAGE ----------
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /

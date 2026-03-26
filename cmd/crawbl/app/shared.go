@@ -1,5 +1,5 @@
-// Package deploy provides shared utilities for deploy subcommands.
-package deploy
+// Package app provides shared utilities for app subcommands.
+package app
 
 import (
 	"context"
@@ -13,12 +13,12 @@ import (
 
 const rolloutTimeout = 120
 
-// deployOptions holds common deployment options
+// deployOptions holds common deployment options.
 type deployOptions struct {
-	tag       string
-	namespace string
+	tag         string
+	namespace   string
 	helmRelease string
-	infraDir  string
+	infraDir    string
 }
 
 // getRootDir returns the git repository root directory.
@@ -77,7 +77,7 @@ func verifyImageTagExists(repoName, tag string) error {
 	return fmt.Errorf("image tag %s not found in registry", tag)
 }
 
-// helmUpgradeOptions holds options for Helm upgrade
+// helmUpgradeOptions holds options for Helm upgrade.
 type helmUpgradeOptions struct {
 	Release     string
 	Namespace   string

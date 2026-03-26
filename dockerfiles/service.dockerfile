@@ -1,7 +1,6 @@
 # ---------- BUILD STAGE ----------
-FROM golang:1.24.5 AS builder
+FROM golang:1.25.8 AS builder
 
-ARG SERVICE=server
 ARG GOARCH=amd64
 ARG CGO=0
 ARG LDFLAGS=""
@@ -21,7 +20,7 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=linux CGO_ENABLED=${CGO} GOARCH=${GOARCH} \
-    go build -ldflags="${LDFLAGS}" -o /out/orchestrator ./cmd/orchestrator
+    go build -trimpath -ldflags="-s -w ${LDFLAGS}" -o /out/orchestrator ./cmd/orchestrator
 
 # ---------- RUNTIME STAGE ----------
 FROM debian:bullseye-slim AS runtime

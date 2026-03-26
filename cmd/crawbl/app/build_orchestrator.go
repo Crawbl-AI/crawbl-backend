@@ -1,5 +1,5 @@
-// Package build provides the build subcommand for Crawbl CLI.
-package build
+// Package app provides the app subcommand for Crawbl CLI.
+package app
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	orchestratorImageRepo  = "registry.digitalocean.com/crawbl/crawbl-orchestrator"
-	orchestratorDockerfile = "dockerfiles/service.dockerfile"
+	buildOrchestratorImageRepo  = "registry.digitalocean.com/crawbl/crawbl-orchestrator"
+	buildOrchestratorDockerfile = "dockerfiles/service.dockerfile"
 )
 
 // newBuildOrchestratorCommand creates the build orchestrator subcommand.
@@ -24,9 +24,9 @@ func newBuildOrchestratorCommand() *cobra.Command {
 		Use:   "orchestrator",
 		Short: "Build orchestrator image",
 		Long:  "Build the orchestrator Docker image using docker buildx.",
-		Example: `  crawbl build orchestrator --tag v1.0.0
-  crawbl build orchestrator --tag latest --platform linux/amd64 --push
-  crawbl build orchestrator --tag dev`,
+		Example: `  crawbl app build orchestrator --tag v1.0.0
+  crawbl app build orchestrator --tag latest --platform linux/amd64 --push
+  crawbl app build orchestrator --tag dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tag == "" {
 				return fmt.Errorf("--tag is required")
@@ -37,12 +37,12 @@ func newBuildOrchestratorCommand() *cobra.Command {
 				return fmt.Errorf("failed to get root directory: %w", err)
 			}
 
-			imageRef := fmt.Sprintf("%s:%s", orchestratorImageRepo, tag)
+			imageRef := fmt.Sprintf("%s:%s", buildOrchestratorImageRepo, tag)
 
 			buildArgs := []string{
 				"buildx", "build",
 				"--platform", platform,
-				"-f", fmt.Sprintf("%s/%s", rootDir, orchestratorDockerfile),
+				"-f", fmt.Sprintf("%s/%s", rootDir, buildOrchestratorDockerfile),
 				"-t", imageRef,
 			}
 

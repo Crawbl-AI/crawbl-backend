@@ -1,5 +1,5 @@
-// Package deploy provides the deploy subcommand for Crawbl CLI.
-package deploy
+// Package app provides the app subcommand for Crawbl CLI.
+package app
 
 import (
 	"context"
@@ -9,23 +9,23 @@ import (
 )
 
 const (
-	operatorImageRepo = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator"
-	operatorHelmChart = "helm/operator"
-	operatorNamespace = "swarms-system"
-	operatorRelease   = "userswarm-operator"
+	deployOrchestratorImageRepo = "registry.digitalocean.com/crawbl/crawbl-orchestrator"
+	deployOrchestratorHelmChart = "helm/orchestrator"
+	deployOrchestratorNamespace = "backend"
+	deployOrchestratorRelease   = "orchestrator"
 )
 
-// newDeployOperatorCommand creates the deploy operator subcommand.
-func newDeployOperatorCommand() *cobra.Command {
+// newDeployOrchestratorCommand creates the deploy orchestrator subcommand.
+func newDeployOrchestratorCommand() *cobra.Command {
 	opts := &deployOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "operator",
-		Short: "Deploy userswarm-operator to Kubernetes",
-		Long:  "Deploy the userswarm-operator to Kubernetes using Helm.",
-		Example: `  crawbl deploy operator --tag v1.0.0 --infra-dir ./crawbl-infra
-  crawbl deploy operator --tag latest --namespace swarms-system
-  crawbl deploy operator --tag dev`,
+		Use:   "orchestrator",
+		Short: "Deploy orchestrator to Kubernetes",
+		Long:  "Deploy the orchestrator to Kubernetes using Helm.",
+		Example: `  crawbl app deploy orchestrator --tag v1.0.0 --infra-dir ./crawbl-infra
+  crawbl app deploy orchestrator --tag latest --namespace backend
+  crawbl app deploy orchestrator --tag dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rootDir, err := getRootDir()
 			if err != nil {
@@ -33,7 +33,7 @@ func newDeployOperatorCommand() *cobra.Command {
 			}
 
 			infraDir := getInfraDir(rootDir, opts.infraDir)
-			helmChartPath := fmt.Sprintf("%s/%s", infraDir, operatorHelmChart)
+			helmChartPath := fmt.Sprintf("%s/%s", infraDir, deployOrchestratorHelmChart)
 
 			ctx := context.Background()
 
@@ -43,8 +43,8 @@ func newDeployOperatorCommand() *cobra.Command {
 			}
 			fmt.Println("✓ Prerequisites met")
 
-			fmt.Printf("Verifying image %s:%s...\n", operatorImageRepo, opts.tag)
-			if err := verifyImageTagExists("crawbl-userswarm-operator", opts.tag); err != nil {
+			fmt.Printf("Verifying image %s:%s...\n", deployOrchestratorImageRepo, opts.tag)
+			if err := verifyImageTagExists("crawbl-orchestrator", opts.tag); err != nil {
 				return fmt.Errorf("image verification failed: %w", err)
 			}
 			fmt.Println("✓ Image found in registry")
@@ -55,7 +55,7 @@ func newDeployOperatorCommand() *cobra.Command {
 				Namespace:   opts.namespace,
 				ImageTag:    opts.tag,
 				ChartPath:   helmChartPath,
-				ExtraValues: map[string]string{"vault.enabled": "true", "chartRevision": opts.tag},
+				ExtraValues: map[string]string{"vault.enabled": "true"},
 			}); err != nil {
 				return fmt.Errorf("helm upgrade failed: %w", err)
 			}
@@ -67,17 +67,23 @@ func newDeployOperatorCommand() *cobra.Command {
 			}
 			fmt.Println("✓ Deployment rolled out")
 
+			fmt.Println("Checking health endpoint...")
+			if err := checkDeploymentHealth(ctx, opts.namespace, opts.helmRelease); err != nil {
+				return fmt.Errorf("health check failed: %w", err)
+			}
+			fmt.Println("✓ Health check passed")
+
 			fmt.Println()
 			fmt.Println("Deploy complete!")
 			fmt.Printf("  Helm Release: %s\n", opts.helmRelease)
 			fmt.Printf("  Namespace: %s\n", opts.namespace)
-			fmt.Printf("  Image: %s:%s\n", operatorImageRepo, opts.tag)
+			fmt.Printf("  Image: %s:%s\n", deployOrchestratorImageRepo, opts.tag)
 
 			return nil
 		},
 	}
 
-	addDeployFlags(cmd, opts, operatorNamespace, operatorRelease)
+	addDeployFlags(cmd, opts, deployOrchestratorNamespace, deployOrchestratorRelease)
 
 	return cmd
 }

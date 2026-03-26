@@ -1,5 +1,5 @@
-// Package build provides the build subcommand for Crawbl CLI.
-package build
+// Package app provides the app subcommand for Crawbl CLI.
+package app
 
 import (
 	"encoding/json"
@@ -41,9 +41,9 @@ func newBuildZeroclawCommand() *cobra.Command {
 		Use:   "zeroclaw",
 		Short: "Build ZeroClaw runtime image",
 		Long:  "Build the ZeroClaw runtime Docker image using docker buildx. Clones the upstream ZeroClaw repository at a pinned ref and builds with OCI labels.",
-		Example: `  crawbl build zeroclaw --tag v0.5.9
-  crawbl build zeroclaw --tag latest --platform linux/amd64,linux/arm64 --push
-  crawbl build zeroclaw --tag dev`,
+		Example: `  crawbl app build zeroclaw --tag v0.5.9
+  crawbl app build zeroclaw --tag latest --platform linux/amd64,linux/arm64 --push
+  crawbl app build zeroclaw --tag dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validation
 			if tag == "" {

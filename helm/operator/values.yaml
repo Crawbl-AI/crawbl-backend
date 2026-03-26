@@ -1,0 +1,24 @@
+image:
+  repository: registry.digitalocean.com/crawbl/crawbl-userswarm-operator
+  tag: dev
+  pullPolicy: Always
+
+chartRevision: "dev"
+
+imagePullSecrets:
+  - name: crawbl-docr
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: ""
+
+podLabels: {}
+
+resources: {}
+
+watchNamespace: ""
+
+vault:
+  enabled: false

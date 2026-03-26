@@ -1,0 +1,3 @@
+name: crawbl
+description: Crawbl infrastructure - DigitalOcean Kubernetes cluster and platform services
+runtime: go

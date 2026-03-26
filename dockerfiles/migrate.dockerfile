@@ -1,5 +1,7 @@
 # ---------- BUILD STAGE ----------
-FROM golang:1.24.5 AS builder
+FROM golang:1.25.8 AS builder
+
+ARG GOARCH=amd64
 
 WORKDIR /build
 
@@ -11,8 +13,8 @@ COPY . .
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=linux CGO_ENABLED=0 GOARCH=amd64 \
-    go build -o /out/orchestrator ./cmd/orchestrator
+    GOOS=linux CGO_ENABLED=0 GOARCH=${GOARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/orchestrator ./cmd/orchestrator
 
 # ---------- RUNTIME STAGE ----------
 FROM debian:bullseye-slim AS runtime
