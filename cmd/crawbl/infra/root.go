@@ -3,6 +3,7 @@
 package infra
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -12,23 +13,38 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/edge"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
 )
 
-// buildConfig creates the full infra.Config from environment and CLI flags.
-func buildConfig(env, region string) infra.Config {
-	// Resolve HelmChartsDir: env var or ./helm relative to working directory
-	helmChartsDir := os.Getenv("CRAWBL_HELM_CHARTS_DIR")
-	if helmChartsDir == "" {
-		if wd, err := os.Getwd(); err == nil {
-			helmChartsDir = filepath.Join(wd, "helm")
-		}
+// loadStackSection reads a section from Pulumi.<env>.yaml into target.
+func loadStackSection(env, key string, target interface{}) {
+	if err := yamlvalues.LoadStackConfig(env, key, target); err != nil {
+		panic(fmt.Sprintf("load %s from Pulumi.%s.yaml: %v", key, env, err))
 	}
+}
 
-	clusterConfig := cluster.DefaultClusterConfig(env, region)
-	edgeConfig := edge.DefaultEdgeConfig()
+// envOrDefault returns the environment variable value or a fallback.
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// buildConfig creates the full infra.Config from Pulumi stack config and environment variables.
+func buildConfig(env, region string) infra.Config {
+	// Load config sections from Pulumi.<env>.yaml
+	var clusterCfg cluster.StackClusterConfig
+	var edgeCfg edge.StackEdgeConfig
+	loadStackSection(env, "crawbl:cluster", &clusterCfg)
+	loadStackSection(env, "crawbl:edge", &edgeCfg)
+
+	clusterConfig := cluster.ConfigFromStack(env, region, clusterCfg)
+	edgeConfig := edge.ConfigFromStack(edgeCfg)
+	helmChartsDir := envOrDefault("CRAWBL_HELM_CHARTS_DIR", filepath.Join(must(os.Getwd()), "helm"))
 	platformConfig := platform.DefaultPlatformConfig(helmChartsDir)
 
-	// Cluster overrides
+	// Environment variable overrides (secrets and runtime values not stored in YAML)
 	if vpcID := os.Getenv("DIGITALOCEAN_VPC_ID"); vpcID != "" {
 		clusterConfig.ManageVPC = false
 		clusterConfig.ExistingVPCID = vpcID
@@ -37,27 +53,10 @@ func buildConfig(env, region string) infra.Config {
 		clusterConfig.ProjectName = projectName
 	}
 
-	// Edge overrides
-	if zoneName := os.Getenv("CLOUDFLARE_ZONE_NAME"); zoneName != "" {
-		edgeConfig.CloudflareZoneName = zoneName
-	}
-	if dnsRecord := os.Getenv("DNS_RECORD_NAME"); dnsRecord != "" {
-		edgeConfig.DNSRecordName = dnsRecord
-	}
-	if acmeEmail := os.Getenv("ACME_EMAIL"); acmeEmail != "" {
-		edgeConfig.ACMEMail = acmeEmail
-	}
-
-	// ESC environment name defaults to "crawbl/<env>"
-	escEnv := os.Getenv("CRAWBL_ESC_ENV")
-	if escEnv == "" {
-		escEnv = "crawbl/" + env
-	}
-
 	return infra.Config{
 		Environment:        env,
 		Region:             region,
-		ESCEnvironment:     escEnv,
+		ESCEnvironment:     envOrDefault("CRAWBL_ESC_ENV", "crawbl/"+env),
 		DigitalOceanToken:  os.Getenv("DIGITALOCEAN_TOKEN"),
 		CloudflareAPIToken: os.Getenv("CLOUDFLARE_API_TOKEN"),
 		OpenAIAPIKey:       os.Getenv("OPENAI_API_KEY"),
@@ -67,6 +66,13 @@ func buildConfig(env, region string) infra.Config {
 		PlatformConfig:     platformConfig,
 		EdgeConfig:         edgeConfig,
 	}
+}
+
+func must(s string, err error) string {
+	if err != nil {
+		return "."
+	}
+	return s
 }
 
 // NewInfraCommand creates the infra subcommand.

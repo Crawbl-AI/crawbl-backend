@@ -330,7 +330,7 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 	}
 
 	redisCfg := redisclient.ConfigFromEnv("CRAWBL_")
-	redisClient, err := redisclient.New(redisCfg)
+	rc, err := redisclient.New(redisCfg)
 	if err != nil {
 		logger.Error("failed to connect to Redis, falling back to no realtime", "error", err)
 		return realtime.NopBroadcaster{}, nil, func() {}
@@ -340,7 +340,7 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 	io := server.NewSocketIOServer(&server.SocketIOConfig{
 		Logger:           logger,
 		IdentityVerifier: middleware.IdentityVerifier,
-		RedisClient:      redisClient,
+		RedisClient:      redisclient.Unwrap(rc),
 	})
 
 	broadcaster := server.NewSocketIOBroadcaster(io, logger)
@@ -348,7 +348,7 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 
 	cleanup := func() {
 		io.Close(nil)
-		_ = redisClient.Close()
+		_ = rc.Close()
 	}
 
 	logger.Info("realtime enabled: socket.io + redis")

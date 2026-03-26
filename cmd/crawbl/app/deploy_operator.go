@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,7 @@ func newDeployOperatorCommand() *cobra.Command {
 		Use:   "operator",
 		Short: "Deploy userswarm-operator to Kubernetes",
 		Long:  "Deploy the userswarm-operator to Kubernetes using Helm.",
-		Example: `  crawbl app deploy operator --tag v1.0.0 --infra-dir ./crawbl-infra
+		Example: `  crawbl app deploy operator --tag v1.0.0
   crawbl app deploy operator --tag latest --namespace swarms-system
   crawbl app deploy operator --tag dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,8 +33,7 @@ func newDeployOperatorCommand() *cobra.Command {
 				return fmt.Errorf("failed to get root directory: %w", err)
 			}
 
-			infraDir := getInfraDir(rootDir, opts.infraDir)
-			helmChartPath := fmt.Sprintf("%s/%s", infraDir, deployOperatorHelmChart)
+			helmChartPath := filepath.Join(rootDir, deployOperatorHelmChart)
 
 			ctx := context.Background()
 

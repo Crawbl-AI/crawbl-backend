@@ -1,4 +1,4 @@
-// Package yamlvalues loads Helm chart values from YAML files.
+// Package yamlvalues loads YAML configuration and Helm chart values files.
 package yamlvalues
 
 import (
@@ -8,6 +8,42 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// stackConfigFile represents the structure of Pulumi.<env>.yaml.
+type stackConfigFile struct {
+	Config map[string]interface{} `yaml:"config"`
+}
+
+// LoadStackConfig reads a key from a Pulumi stack config file (Pulumi.<env>.yaml)
+// and unmarshals it into the provided target struct.
+func LoadStackConfig(env, key string, target interface{}) error {
+	filename := fmt.Sprintf("Pulumi.%s.yaml", env)
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", filename, err)
+	}
+
+	var file stackConfigFile
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return fmt.Errorf("parse %s: %w", filename, err)
+	}
+
+	raw, ok := file.Config[key]
+	if !ok {
+		return fmt.Errorf("missing %s in %s", key, filename)
+	}
+
+	rawBytes, err := yaml.Marshal(raw)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", key, err)
+	}
+
+	if err := yaml.Unmarshal(rawBytes, target); err != nil {
+		return fmt.Errorf("parse %s: %w", key, err)
+	}
+
+	return nil
+}
 
 // Load reads a YAML values file from the given directory and returns it as map[string]interface{}.
 func Load(dir, name string) (map[string]interface{}, error) {
