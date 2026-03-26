@@ -77,17 +77,8 @@ func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.List
 		return nil, mErr
 	}
 
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &runtimeclient.EnsureRuntimeOpts{
-		UserID:          workspace.UserID,
-		WorkspaceID:     workspace.ID,
-		WaitForVerified: false,
-	})
-	if mErr != nil {
-		return nil, mErr
-	}
-
+	s.enrichAgentStatus(ctx, workspace, agents)
 	for _, agent := range agents {
-		agent.Status = statusForRuntime(runtimeState)
 		agent.HasUpdate = false
 	}
 
@@ -105,10 +96,12 @@ func (s *service) ListConversations(ctx context.Context, opts *orchestratorservi
 		return nil, merrors.ErrInvalidInput
 	}
 
-	_, agents, conversations, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, conversations, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
+
+	s.enrichAgentStatus(ctx, workspace, agents)
 
 	agentByID := mapAgentsByID(agents)
 	for _, conversation := range conversations {
@@ -129,10 +122,12 @@ func (s *service) GetConversation(ctx context.Context, opts *orchestratorservice
 		return nil, merrors.ErrInvalidInput
 	}
 
-	_, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
+
+	s.enrichAgentStatus(ctx, workspace, agents)
 
 	conversation, mErr := s.conversationRepo.GetByID(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
 	if mErr != nil {
@@ -153,10 +148,12 @@ func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.Li
 		return nil, merrors.ErrInvalidInput
 	}
 
-	_, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
+
+	s.enrichAgentStatus(ctx, workspace, agents)
 
 	if _, mErr := s.conversationRepo.GetByID(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID); mErr != nil {
 		return nil, mErr
@@ -216,6 +213,10 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	})
 	if mErr != nil {
 		return nil, mErr
+	}
+
+	for _, agent := range agents {
+		agent.Status = statusForRuntime(runtimeState)
 	}
 
 	// Emit typing indicator before the runtime call so the mobile client shows feedback.
@@ -500,6 +501,26 @@ func defaultResponderAgent(agents []*orchestrator.Agent) *orchestrator.Agent {
 		return nil
 	}
 	return agents[0]
+}
+
+// enrichAgentStatus queries the workspace runtime and sets each agent's status
+// based on the current runtime phase. If the runtime state cannot be retrieved,
+// agents default to offline status.
+func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &runtimeclient.EnsureRuntimeOpts{
+		UserID:          workspace.UserID,
+		WorkspaceID:     workspace.ID,
+		WaitForVerified: false,
+	})
+	if mErr != nil {
+		for _, agent := range agents {
+			agent.Status = orchestrator.AgentStatusOffline
+		}
+		return
+	}
+	for _, agent := range agents {
+		agent.Status = statusForRuntime(runtimeState)
+	}
 }
 
 // statusForRuntime maps a runtime status to an agent status.
