@@ -18,7 +18,6 @@ type deployOptions struct {
 	tag         string
 	namespace   string
 	helmRelease string
-	infraDir    string
 }
 
 // getRootDir returns the git repository root directory.
@@ -155,15 +154,5 @@ func addDeployFlags(cmd *cobra.Command, opts *deployOptions, defaultNamespace, d
 	cmd.Flags().StringVarP(&opts.tag, "tag", "t", "", "Image tag (required)")
 	cmd.Flags().StringVarP(&opts.namespace, "namespace", "n", defaultNamespace, "Kubernetes namespace")
 	cmd.Flags().StringVar(&opts.helmRelease, "helm-release", defaultRelease, "Helm release name")
-	cmd.Flags().StringVar(&opts.infraDir, "infra-dir", "", "Path to crawbl-infra directory (default: ./crawbl-infra from repo root)")
-
 	_ = cmd.MarkFlagRequired("tag")
-}
-
-// getInfraDir returns the infra directory, defaulting to <repo-root>/crawbl-infra if not set.
-func getInfraDir(rootDir, infraDir string) string {
-	if infraDir == "" {
-		return fmt.Sprintf("%s/crawbl-infra", rootDir)
-	}
-	return infraDir
 }

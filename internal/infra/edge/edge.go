@@ -37,21 +37,43 @@ type Config struct {
 	CloudflareSecretKey     string
 }
 
-// DefaultEdgeConfig returns default edge configuration.
-func DefaultEdgeConfig() Config {
+// StackEdgeConfig is the YAML-serializable edge config read from Pulumi stack config.
+type StackEdgeConfig struct {
+	CloudflareZoneName   string `yaml:"cloudflareZoneName"`
+	DNSRecordName        string `yaml:"dnsRecordName"`
+	ACMEEmail            string `yaml:"acmeEmail"`
+	GatewayName          string `yaml:"gatewayName"`
+	GatewayNamespace     string `yaml:"gatewayNamespace"`
+	GatewayClassName     string `yaml:"gatewayClassName"`
+	GatewayListenerName  string `yaml:"gatewayListenerName"`
+	ClusterIssuerName    string `yaml:"clusterIssuerName"`
+	ACMEServer           string `yaml:"acmeServer"`
+	GatewayTLSSecretName string `yaml:"gatewayTLSSecretName"`
+	DNSRecordTTL         int    `yaml:"dnsRecordTTL"`
+	DNSRecordProxied     bool   `yaml:"dnsRecordProxied"`
+	CertManagerNamespace string `yaml:"certManagerNamespace"`
+	CloudflareSecretName string `yaml:"cloudflareSecretName"`
+	CloudflareSecretKey  string `yaml:"cloudflareSecretKey"`
+}
+
+// ConfigFromStack builds an edge Config from stack config.
+func ConfigFromStack(sc StackEdgeConfig) Config {
 	return Config{
-		GatewayName:          "public-edge",
-		GatewayNamespace:     "envoy-gateway-system",
-		GatewayClassName:     "envoy-gateway-class",
-		GatewayListenerName:  "https",
-		ClusterIssuerName:    "letsencrypt-cloudflare",
-		ACMEServer:           "https://acme-v02.api.letsencrypt.org/directory",
-		GatewayTLSSecretName: "public-edge-tls",
-		DNSRecordTTL:         120,
-		DNSRecordProxied:     false,
-		CertManagerNamespace: "cert-manager",
-		CloudflareSecretName: "cloudflare-api-token",
-		CloudflareSecretKey:  "api-token",
+		CloudflareZoneName:   sc.CloudflareZoneName,
+		DNSRecordName:        sc.DNSRecordName,
+		ACMEMail:             sc.ACMEEmail,
+		GatewayName:          sc.GatewayName,
+		GatewayNamespace:     sc.GatewayNamespace,
+		GatewayClassName:     sc.GatewayClassName,
+		GatewayListenerName:  sc.GatewayListenerName,
+		ClusterIssuerName:    sc.ClusterIssuerName,
+		ACMEServer:           sc.ACMEServer,
+		GatewayTLSSecretName: sc.GatewayTLSSecretName,
+		DNSRecordTTL:         sc.DNSRecordTTL,
+		DNSRecordProxied:     sc.DNSRecordProxied,
+		CertManagerNamespace: sc.CertManagerNamespace,
+		CloudflareSecretName: sc.CloudflareSecretName,
+		CloudflareSecretKey:  sc.CloudflareSecretKey,
 	}
 }
 

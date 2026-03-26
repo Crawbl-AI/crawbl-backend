@@ -31,7 +31,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 - Read actions may auto-execute after consent; write actions require approval by default
 - Adapters expose narrow capabilities, not raw unrestricted API passthrough
 - Cross-user A2A must go through backend mediation, never direct cross-namespace pod access
-- Always check and synchronize contract crawbl-docs/internal/network/api-contract.md file when making changes on orchestrator frontend/backend API.
+- Always check and synchronize contract crawbl-docs/ops/api-contract.md file when making changes on orchestrator frontend/backend API.
 - Shared runtime namespaces are the current model; do not reintroduce namespace-per-user assumptions.
 - The orchestrator uses Postgres only for persistence; do not add in-memory repository fallbacks back into the main API path.
 - Mobile auth follows the Soulheim-style transport: `X-Token` plus device/security headers. `Authorization: Bearer` is only a compatibility path for tooling/dev, not the primary mobile contract.
@@ -58,9 +58,9 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
   - `internal/pkg/` for shared database, error, runtime, and HTTP helpers
 - Keep `types.go` files for request/response types, constants, vars, and interfaces instead of scattering them through handler files
 - Follow the Soulheim/Skatts style: one `dbr.Session` per request, pass typed opts through service methods, and let repos work with a `SessionRunner`
-- Add new API surface in small vertical slices, starting from `crawbl-docs/internal/network/api-contract.md`
+- Add new API surface in small vertical slices, starting from `crawbl-docs/ops/api-contract.md`
 - Local backend development should use the Postgres-backed path with `docker-compose.yaml`, `dockerfiles/`, SQL migrations, and `make setup/run`
-- Cluster deployment should use the `crawbl-infra/helm/orchestrator` chart and a separate migration Job, not ad hoc kubectl commands
+- Cluster deployment should use the `helm/orchestrator` chart and a separate migration Job, not ad hoc kubectl commands
 - The current dev cluster uses a temporary single-node Bitnami PostgreSQL release in the `backend` namespace; later environments should move to a stronger database posture
 - Reuse patterns from `Skatts/monobackend` where they fit: `internal/pkg/database`, `cmd/migrate`, service Dockerfile, and compose-driven local setup
 - Use the local Docker stack for Venom-based minimal workflow verification; avoid reintroducing manual curl-only verification as the primary path

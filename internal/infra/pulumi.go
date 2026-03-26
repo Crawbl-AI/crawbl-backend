@@ -4,9 +4,11 @@ package infra
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
@@ -53,10 +55,10 @@ func NewStack(ctx context.Context, config Config) (*Stack, error) {
 }
 
 // buildProgram creates the Pulumi program.
-func buildProgram(config Config) pulumi.RunFunc {
+func buildProgram(infraCfg Config) pulumi.RunFunc {
 	return func(ctx *pulumi.Context) error {
 		// Phase 1: Create cluster
-		clusterResult, err := createCluster(ctx, config)
+		clusterResult, err := createCluster(ctx, infraCfg)
 		if err != nil {
 			return err
 		}
@@ -68,12 +70,12 @@ func buildProgram(config Config) pulumi.RunFunc {
 		}
 
 		// Phase 3: Create platform services
-		if err := createPlatform(ctx, config, k8sProvider); err != nil {
+		if err := createPlatform(ctx, infraCfg, k8sProvider); err != nil {
 			return err
 		}
 
 		// Phase 4: Create edge infrastructure
-		if err := createEdge(ctx, config, k8sProvider); err != nil {
+		if err := createEdge(ctx, infraCfg, k8sProvider); err != nil {
 			return err
 		}
 
@@ -84,15 +86,8 @@ func buildProgram(config Config) pulumi.RunFunc {
 }
 
 // createCluster provisions the DOKS cluster.
-func createCluster(ctx *pulumi.Context, config Config) (*cluster.Cluster, error) {
-	// Apply VPC configuration
-	clusterConfig := config.ClusterConfig
-	if config.ExistingVPCID != "" {
-		clusterConfig.ManageVPC = false
-		clusterConfig.ExistingVPCID = config.ExistingVPCID
-	}
-
-	result, err := cluster.NewCluster(ctx, "crawbl-"+config.Environment, clusterConfig)
+func createCluster(ctx *pulumi.Context, cfg Config) (*cluster.Cluster, error) {
+	result, err := cluster.NewCluster(ctx, cfg.ClusterConfig.Name, cfg.ClusterConfig)
 	if err != nil {
 		return nil, fmt.Errorf("create cluster: %w", err)
 	}
@@ -159,7 +154,7 @@ type PreviewResult struct {
 
 // Preview runs a Pulumi preview.
 func (s *Stack) Preview(ctx context.Context) (*PreviewResult, error) {
-	result, err := s.stack.Preview(ctx)
+	result, err := s.stack.Preview(ctx, optpreview.ProgressStreams(os.Stdout))
 	if err != nil {
 		return nil, fmt.Errorf("preview failed: %w", err)
 	}

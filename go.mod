@@ -12,8 +12,10 @@ require (
 	github.com/lib/pq v1.12.0
 	github.com/pkg/errors v0.9.1
 	github.com/pulumi/pulumi-cloudflare/sdk/v6 v6.13.0
+	github.com/pulumi/pulumi-command/sdk v1.2.1
 	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.63.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.28.0
+	github.com/pulumi/pulumi-random/sdk/v4 v4.19.1
 	github.com/pulumi/pulumi/sdk/v3 v3.228.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/spf13/cobra v1.10.2
@@ -21,6 +23,7 @@ require (
 	github.com/zishang520/socket.io-go-redis v1.3.0
 	github.com/zishang520/socket.io/v2 v2.5.0
 	google.golang.org/api v0.247.0
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
@@ -144,8 +147,6 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/pulumi/appdash v0.0.0-20231130102222-75f619a67231 // indirect
 	github.com/pulumi/esc v0.17.0 // indirect
-	github.com/pulumi/pulumi-command/sdk v1.2.1 // indirect
-	github.com/pulumi/pulumi-random/sdk/v4 v4.19.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.53.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -153,6 +154,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.0.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
+	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
@@ -209,7 +211,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.34.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect

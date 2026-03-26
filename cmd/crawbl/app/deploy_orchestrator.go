@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,7 @@ func newDeployOrchestratorCommand() *cobra.Command {
 		Use:   "orchestrator",
 		Short: "Deploy orchestrator to Kubernetes",
 		Long:  "Deploy the orchestrator to Kubernetes using Helm.",
-		Example: `  crawbl app deploy orchestrator --tag v1.0.0 --infra-dir ./crawbl-infra
+		Example: `  crawbl app deploy orchestrator --tag v1.0.0
   crawbl app deploy orchestrator --tag latest --namespace backend
   crawbl app deploy orchestrator --tag dev`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,8 +33,7 @@ func newDeployOrchestratorCommand() *cobra.Command {
 				return fmt.Errorf("failed to get root directory: %w", err)
 			}
 
-			infraDir := getInfraDir(rootDir, opts.infraDir)
-			helmChartPath := fmt.Sprintf("%s/%s", infraDir, deployOrchestratorHelmChart)
+			helmChartPath := filepath.Join(rootDir, deployOrchestratorHelmChart)
 
 			ctx := context.Background()
 
