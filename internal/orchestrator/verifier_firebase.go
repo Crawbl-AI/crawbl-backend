@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	backendfirebase "github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // FirebaseTokenVerifier verifies Firebase ID tokens and extracts user claims.
@@ -47,14 +48,14 @@ func (v *FirebaseTokenVerifier) Verify(ctx context.Context, token string) (princ
 
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return nil, ErrInvalidToken
+		return nil, merrors.ErrInvalidToken
 	}
 
 	// In local/test environments, allow UID-based tokens for development
 	if isLocalEnvironment(v.Environment) && !looksLikeJWT(token) {
 		claims, err := v.App.GetUser(ctx, token)
 		if err != nil {
-			return nil, ErrInvalidToken
+			return nil, merrors.ErrInvalidToken
 		}
 
 		principal := &Principal{
@@ -71,7 +72,7 @@ func (v *FirebaseTokenVerifier) Verify(ctx context.Context, token string) (princ
 	// Production: verify JWT token
 	claims, err := v.App.VerifyToken(ctx, token)
 	if err != nil {
-		return nil, ErrInvalidToken
+		return nil, merrors.ErrInvalidToken
 	}
 
 	principal := &Principal{

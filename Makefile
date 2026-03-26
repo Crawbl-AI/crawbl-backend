@@ -7,7 +7,6 @@ ORCHESTRATOR_IMAGE_REPOSITORY ?= registry.digitalocean.com/$(DOCR_REGISTRY)/craw
 IMAGE_REPOSITORY ?= registry.digitalocean.com/$(DOCR_REGISTRY)/crawbl-userswarm-operator
 IMAGE_TAG ?= dev
 ORCHESTRATOR_IMAGE_TAG ?= $(IMAGE_TAG)
-ORCHESTRATOR_BUILD_SCRIPT ?= ./scripts/orchestrator/build-and-push.sh
 PLATFORM ?= linux/amd64
 ENV_FILE ?= .env
 E2E_DIR ?= $(CURDIR)/e2e
@@ -121,15 +120,3 @@ run-operator: ## Run the userswarm operator locally
 
 docr-login: ## Log Docker into the DigitalOcean Container Registry
 	doctl registries login $(DOCR_REGISTRY)
-
-userswarm-operator-image-build: ## Build the userswarm operator image locally
-	IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) PLATFORM=$(PLATFORM) PUSH=0 bash ./scripts/userswarm-operator/build-and-push.sh
-
-userswarm-operator-image-push: docr-login ## Build and push the userswarm operator image to DOCR
-	IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) IMAGE_TAG=$(IMAGE_TAG) PLATFORM=$(PLATFORM) PUSH=1 bash ./scripts/userswarm-operator/build-and-push.sh
-
-orchestrator-image-build: ## Build the orchestrator image locally
-	IMAGE_REPOSITORY=$(ORCHESTRATOR_IMAGE_REPOSITORY) IMAGE_TAG=$(ORCHESTRATOR_IMAGE_TAG) PLATFORM=$(PLATFORM) PUSH=0 bash $(ORCHESTRATOR_BUILD_SCRIPT)
-
-orchestrator-image-push: docr-login ## Build and push the orchestrator image to DOCR
-	IMAGE_REPOSITORY=$(ORCHESTRATOR_IMAGE_REPOSITORY) IMAGE_TAG=$(ORCHESTRATOR_IMAGE_TAG) PLATFORM=$(PLATFORM) PUSH=1 bash $(ORCHESTRATOR_BUILD_SCRIPT)

@@ -60,7 +60,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 - Follow the Soulheim/Skatts style: one `dbr.Session` per request, pass typed opts through service methods, and let repos work with a `SessionRunner`
 - Add new API surface in small vertical slices, starting from `crawbl-docs/internal/network/api-contract.md`
 - Local backend development should use the Postgres-backed path with `docker-compose.yaml`, `dockerfiles/`, SQL migrations, and `make setup/run`
-- Cluster deployment should use the `crawbl-infra/helm/backend` chart and a separate migration Job, not ad hoc kubectl commands
+- Cluster deployment should use the `crawbl-infra/helm/orchestrator` chart and a separate migration Job, not ad hoc kubectl commands
 - The current dev cluster uses a temporary single-node Bitnami PostgreSQL release in the `backend` namespace; later environments should move to a stronger database posture
 - Reuse patterns from `Skatts/monobackend` where they fit: `internal/pkg/database`, `cmd/migrate`, service Dockerfile, and compose-driven local setup
 - Use the local Docker stack for Venom-based minimal workflow verification; avoid reintroducing manual curl-only verification as the primary path

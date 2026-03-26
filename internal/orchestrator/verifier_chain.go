@@ -5,6 +5,8 @@ package orchestrator
 import (
 	"context"
 	"errors"
+
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // ChainIdentityVerifier implements the IdentityVerifier interface by trying
@@ -70,6 +72,14 @@ func (v *ChainIdentityVerifier) Verify(ctx context.Context, token string) (*Prin
 		if errors.Is(err, ErrInvalidToken) || errors.Is(err, ErrUnauthorized) {
 			lastErr = err
 			continue
+		}
+
+		// Also check for merrors business errors with auth codes
+		if merr, ok := err.(*merrors.Error); ok {
+			if merrors.IsCode(merr, merrors.ErrCodeInvalidToken) || merrors.IsCode(merr, merrors.ErrCodeUnauthorized) {
+				lastErr = err
+				continue
+			}
 		}
 
 		// System errors: fail immediately
