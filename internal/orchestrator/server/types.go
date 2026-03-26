@@ -10,6 +10,7 @@ import (
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // Server configuration constants defining default values for the orchestrator HTTP server.
@@ -53,11 +54,20 @@ type NewServerOpts struct {
 
 	// HTTPMiddleware contains authentication and request middleware configuration.
 	HTTPMiddleware *httpserver.MiddlewareConfig
+
+	// Broadcaster emits real-time events to connected WebSocket clients.
+	// If nil, a NopBroadcaster is used (no real-time events).
+	Broadcaster realtime.Broadcaster
+
+	// SocketIOHandler is the HTTP handler for the Socket.IO server.
+	// If nil, Socket.IO is not mounted and the server is HTTP-only.
+	SocketIOHandler http.Handler
 }
 
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.
-// It provides authentication, workspace management, and chat functionality while
-// acting as the control plane between mobile clients and ZeroClaw swarms.
+// It provides authentication, workspace management, chat functionality, and
+// real-time WebSocket communication via Socket.IO while acting as the control
+// plane between mobile clients and ZeroClaw swarms.
 type Server struct {
 	// httpServer is the underlying HTTP server instance.
 	httpServer *http.Server
@@ -79,6 +89,9 @@ type Server struct {
 
 	// httpMiddleware contains authentication and request processing middleware.
 	httpMiddleware *httpserver.MiddlewareConfig
+
+	// broadcaster emits real-time events to connected WebSocket clients.
+	broadcaster realtime.Broadcaster
 }
 
 // healthCheckResponse represents the server health status returned by the health endpoint.

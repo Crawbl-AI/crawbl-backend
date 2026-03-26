@@ -11,6 +11,7 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/runtimeclient"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // service implements the orchestratorservice.ChatService interface.
@@ -27,6 +28,8 @@ type service struct {
 	messageRepo messageRepo
 	// runtimeClient communicates with the user swarm runtime for chat operations.
 	runtimeClient runtimeclient.Client
+	// broadcaster emits real-time events to connected WebSocket clients.
+	broadcaster realtime.Broadcaster
 	// defaultAgents contains the blueprint definitions for default agents
 	// that are automatically provisioned for each workspace.
 	defaultAgents []orchestrator.DefaultAgentBlueprint

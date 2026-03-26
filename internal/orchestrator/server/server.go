@@ -20,6 +20,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // NewServer creates a new orchestrator Server instance with the provided configuration and options.
@@ -34,6 +36,11 @@ import (
 func NewServer(config *Config, opts *NewServerOpts) *Server {
 	validateNewServer(config, opts)
 
+	broadcaster := opts.Broadcaster
+	if broadcaster == nil {
+		broadcaster = realtime.NopBroadcaster{}
+	}
+
 	srv := &Server{
 		db:               opts.DB,
 		logger:           opts.Logger,
@@ -41,11 +48,24 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		workspaceService: opts.WorkspaceService,
 		chatService:      opts.ChatService,
 		httpMiddleware:   opts.HTTPMiddleware,
+		broadcaster:      broadcaster,
+	}
+
+	// Build the combined handler: Socket.IO (if provided) + chi REST router.
+	// Socket.IO handles its own path matching via Engine.IO, so we use a
+	// ServeMux to let Socket.IO intercept /socket.io/ requests while chi
+	// handles everything else.
+	handler := registerRoutes(srv)
+	if opts.SocketIOHandler != nil {
+		mux := http.NewServeMux()
+		mux.Handle("/socket.io/", opts.SocketIOHandler)
+		mux.Handle("/", handler)
+		handler = mux
 	}
 
 	srv.httpServer = &http.Server{
 		Addr:              ":" + config.Port,
-		Handler:           registerRoutes(srv),
+		Handler:           handler,
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
 	}
 

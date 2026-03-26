@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +30,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	backendfirebase "github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 )
 
@@ -79,13 +82,18 @@ func runServer() error {
 	if err != nil {
 		return err
 	}
-	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
-	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
-	chatService := chatservice.New(workspaceRepo, agentRepo, conversationRepo, messageRepo, runtimeClient)
 	httpMiddleware, err := buildHTTPMiddleware(logger)
 	if err != nil {
 		return err
 	}
+
+	// Build the real-time layer: Redis → Socket.IO → Broadcaster.
+	broadcaster, socketIOHandler, cleanupRT := buildRealtime(logger, httpMiddleware)
+	defer cleanupRT()
+
+	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
+	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
+	chatService := chatservice.New(workspaceRepo, agentRepo, conversationRepo, messageRepo, runtimeClient, broadcaster)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -96,6 +104,8 @@ func runServer() error {
 		WorkspaceService: workspaceService,
 		ChatService:      chatService,
 		HTTPMiddleware:   httpMiddleware,
+		Broadcaster:      broadcaster,
+		SocketIOHandler:  socketIOHandler,
 	})
 
 	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)
@@ -306,4 +316,41 @@ func int32FromEnv(key string, fallback int32) int32 {
 		return fallback
 	}
 	return int32(parsed)
+}
+
+// buildRealtime creates the Redis client, Socket.IO server with Redis adapter,
+// and the broadcaster that emits real-time events to connected mobile clients.
+// Returns a NopBroadcaster and nil handler if Redis is not configured (CRAWBL_REDIS_ADDR empty).
+// The returned cleanup function closes the Redis connection.
+func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig) (realtime.Broadcaster, http.Handler, func()) {
+	addr := strings.TrimSpace(os.Getenv("CRAWBL_REDIS_ADDR"))
+	if addr == "" {
+		logger.Info("realtime disabled: CRAWBL_REDIS_ADDR not set")
+		return realtime.NopBroadcaster{}, nil, func() {}
+	}
+
+	redisCfg := redisclient.ConfigFromEnv("CRAWBL_")
+	redisClient, err := redisclient.New(redisCfg)
+	if err != nil {
+		logger.Error("failed to connect to Redis, falling back to no realtime", "error", err)
+		return realtime.NopBroadcaster{}, nil, func() {}
+	}
+	logger.Info("redis connected", slog.String("addr", redisCfg.Addr))
+
+	io := server.NewSocketIOServer(&server.SocketIOConfig{
+		Logger:           logger,
+		IdentityVerifier: middleware.IdentityVerifier,
+		RedisClient:      redisClient,
+	})
+
+	broadcaster := server.NewSocketIOBroadcaster(io, logger)
+	handler := server.SocketIOHandler(io)
+
+	cleanup := func() {
+		io.Close(nil)
+		_ = redisClient.Close()
+	}
+
+	logger.Info("realtime enabled: socket.io + redis")
+	return broadcaster, handler, cleanup
 }

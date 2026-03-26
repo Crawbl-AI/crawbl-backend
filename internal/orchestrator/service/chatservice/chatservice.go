@@ -14,6 +14,7 @@ import (
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // New creates a new ChatService instance with the provided dependencies.
@@ -28,6 +29,7 @@ func New(
 	conversationRepo conversationRepo,
 	messageRepo messageRepo,
 	runtimeClient runtimeclient.Client,
+	broadcaster realtime.Broadcaster,
 ) orchestratorservice.ChatService {
 	if workspaceRepo == nil {
 		panic("chat service workspace repo cannot be nil")
@@ -44,6 +46,9 @@ func New(
 	if runtimeClient == nil {
 		panic("chat service runtime client cannot be nil")
 	}
+	if broadcaster == nil {
+		broadcaster = realtime.NopBroadcaster{}
+	}
 
 	return &service{
 		workspaceRepo:    workspaceRepo,
@@ -51,6 +56,7 @@ func New(
 		conversationRepo: conversationRepo,
 		messageRepo:      messageRepo,
 		runtimeClient:    runtimeClient,
+		broadcaster:      broadcaster,
 		defaultAgents:    append([]orchestrator.DefaultAgentBlueprint(nil), orchestrator.DefaultAgents...),
 	}
 }
@@ -212,11 +218,26 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		return nil, mErr
 	}
 
+	// Emit typing indicator before the runtime call so the mobile client shows feedback.
+	var typingAgentID string
+	if responder := defaultResponderAgent(agents); responder != nil {
+		typingAgentID = responder.ID
+	}
+	if typingAgentID != "" {
+		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, typingAgentID, true)
+	}
+
 	replyText, mErr := s.runtimeClient.SendText(ctx, &runtimeclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   opts.Content.Text,
 		SessionID: conversation.ID,
 	})
+
+	// Stop typing indicator regardless of success or failure.
+	if typingAgentID != "" {
+		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, typingAgentID, false)
+	}
+
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -275,6 +296,14 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	if replyAgentID != nil {
 		replyMessage.Agent = mapAgentsByID(agents)[*replyAgentID]
 	}
+
+	// Emit real-time events after successful persistence so connected clients see updates.
+	// Attach agent to user message if it has one, for consistent event payloads.
+	if userMessage.AgentID != nil {
+		userMessage.Agent = mapAgentsByID(agents)[*userMessage.AgentID]
+	}
+	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMessage)
+	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, replyMessage)
 
 	return replyMessage, nil
 }
