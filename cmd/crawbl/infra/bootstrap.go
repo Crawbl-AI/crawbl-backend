@@ -31,10 +31,9 @@ func newBootstrapCommand() *cobra.Command {
 This command automates the entire cluster bootstrap process:
   1. Run infra apply (creates DOKS cluster + ArgoCD via Pulumi)
   2. Save kubeconfig via doctl
-  3. Add container registry to cluster via doctl
+  3. Ensure DOCR registry integration (safety net)
   4. Wait for ArgoCD application-controller to be ready
-  5. Wait for all ArgoCD applications to sync (with timeout)
-  6. Print status summary`,
+  5. Wait for all ArgoCD applications to sync (with timeout)`,
 		Example: `  crawbl infra bootstrap                        # Bootstrap with confirmation
   crawbl infra bootstrap --auto-approve        # Bootstrap without confirmation
   crawbl infra bootstrap --cluster crawbl-prod # Use a different cluster name
@@ -82,10 +81,11 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 	}
 	fmt.Println("  ok")
 
-	// Step 3: Add container registry to cluster
-	fmt.Println("\n[3/5] Adding container registry to cluster...")
+	// Step 3: Ensure DOCR registry integration (Pulumi sets registryIntegration=true
+	// on the cluster, but doctl registry add is a safety net in case of state drift).
+	fmt.Println("\n[3/5] Ensuring DOCR registry integration...")
 	if err := runCommand("doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
-		return fmt.Errorf("registry add failed: %w", err)
+		fmt.Printf("  warning: registry add failed (may already be integrated): %v\n", err)
 	}
 	fmt.Println("  ok")
 
