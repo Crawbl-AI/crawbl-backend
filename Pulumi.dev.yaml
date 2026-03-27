@@ -7,12 +7,12 @@
 # The Pulumi program (internal/infra/) uses these to provision:
 #   - A DOKS (DigitalOcean Kubernetes Service) cluster
 #   - ArgoCD installation (via the Helm values in config/helm/argocd.yaml)
-#   - The sops-age-key Secret for SOPS decryption
+#   - The aws-credentials Secret for External Secrets Operator
 #
 # After Pulumi bootstrap, ArgoCD takes over and manages everything else
 # via the crawbl-argocd-apps repository.
 config:
-  # -- Environment name. Used in Vault paths (kvv2/crawbl/dev/...) and
+  # -- Environment name. Used in AWS Secrets Manager paths (crawbl/dev/...) and
   # resource naming throughout the platform.
   crawbl:environment: dev
 

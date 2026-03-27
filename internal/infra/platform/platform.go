@@ -60,9 +60,9 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 		return nil, fmt.Errorf("create argocd namespace: %w", err)
 	}
 
-	// 2. Create AWS credentials secret in external-secrets namespace
-	if cfg.AWSAccessKeyID != "" || cfg.AWSSecretAccessKey != "" {
-		if err := createAWSCredentialsSecret(ctx, name, cfg, opts...); err != nil {
+	// 2. Create AWS credentials secret in argocd namespace (for ESO ClusterSecretStore)
+	if cfg.AWSAccessKeyID != "" && cfg.AWSSecretAccessKey != "" {
+		if err := createAWSCredentialsSecret(ctx, name, cfg, []pulumi.Resource{argocdNs}, opts...); err != nil {
 			return nil, fmt.Errorf("create aws credentials secret: %w", err)
 		}
 	}
