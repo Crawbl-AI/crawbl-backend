@@ -10,6 +10,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -18,6 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
@@ -44,10 +47,23 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 		return false, err
 	}
 
+	// Run a final backup before deleting the PVC, if backup is configured.
+	if r.BackupBucket != "" {
+		finalPending, finalErr := r.reconcileFinalBackup(ctx, swarm, runtimeNamespace)
+		if finalErr != nil {
+			return false, finalErr
+		}
+		if finalPending {
+			return true, nil
+		}
+	}
+
 	// List every resource type we create, in rough reverse-dependency order.
 	objects := []client.Object{
 		&gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: httpRouteName(swarm), Namespace: runtimeNamespace}},
 		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: smokeTestJobName(swarm), Namespace: runtimeNamespace}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: backupJobName(swarm), Namespace: runtimeNamespace}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: finalBackupJobName(swarm), Namespace: runtimeNamespace}},
 		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: workloadName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: serviceName(swarm), Namespace: runtimeNamespace}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: headlessServiceName(swarm), Namespace: runtimeNamespace}},
@@ -82,4 +98,56 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 	}
 
 	return pending, nil
+}
+
+// reconcileFinalBackup ensures a final backup Job runs before PVC deletion.
+// Returns (pending=true) if the backup is still in progress and the caller
+// should wait before proceeding with resource cleanup.
+func (r *UserSwarmReconciler) reconcileFinalBackup(ctx context.Context, swarm *crawblv1alpha1.UserSwarm, runtimeNamespace string) (bool, error) {
+	log := log.FromContext(ctx)
+	jobName := finalBackupJobName(swarm)
+
+	// Check if the PVC still exists — no point backing up if it's already gone.
+	var pvc corev1.PersistentVolumeClaim
+	pvcErr := r.Get(ctx, types.NamespacedName{Namespace: runtimeNamespace, Name: pvcName(swarm)}, &pvc)
+	if apierrors.IsNotFound(pvcErr) {
+		return false, nil
+	}
+	if pvcErr != nil {
+		return false, fmt.Errorf("failed to check PVC for final backup: %w", pvcErr)
+	}
+
+	var job batchv1.Job
+	err := r.Get(ctx, types.NamespacedName{Namespace: runtimeNamespace, Name: jobName}, &job)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return false, fmt.Errorf("failed to load final backup job: %w", err)
+	}
+
+	// No Job exists yet — create one.
+	if apierrors.IsNotFound(err) {
+		backupJob := r.buildBackupJob(swarm, jobName, runtimeNamespace, "final")
+		if setErr := controllerutil.SetControllerReference(swarm, &backupJob, r.Scheme); setErr != nil {
+			return false, fmt.Errorf("failed to set final backup job owner reference: %w", setErr)
+		}
+		if createErr := r.Create(ctx, &backupJob); createErr != nil && !apierrors.IsAlreadyExists(createErr) {
+			return false, fmt.Errorf("failed to create final backup job: %w", createErr)
+		}
+		log.Info("created final backup job before deletion", "swarm", swarm.Name, "job", jobName)
+		return true, nil
+	}
+
+	// Job succeeded — continue with normal deletion.
+	if job.Status.Succeeded > 0 {
+		log.Info("final backup completed successfully", "swarm", swarm.Name)
+		return false, nil
+	}
+
+	// Job failed — log critical error but continue with deletion (don't block forever).
+	if job.Status.Failed > 0 {
+		log.Error(nil, "CRITICAL: final backup job failed, proceeding with deletion anyway", "swarm", swarm.Name)
+		return false, nil
+	}
+
+	// Job still running — wait for it to complete.
+	return true, nil
 }

@@ -39,6 +39,11 @@ const (
 	conditionReasonSmokeFailed    = "SmokeTestFailed"
 	conditionReasonSmokePending   = "SmokeTestPending"
 	conditionReasonReconcileError = "ReconcileError"
+
+	// Backup conditions — track periodic PVC backup status.
+	conditionTypeBackupReady       = "BackupReady"
+	conditionReasonBackupPending   = "BackupPending"
+	conditionReasonBackupFailed    = "BackupFailed"
 )
 
 // UserSwarmReconciler reconciles UserSwarm custom resources into running ZeroClaw pods.
@@ -55,4 +60,12 @@ type UserSwarmReconciler struct {
 	// ZeroClawConfig holds shared ZeroClaw settings (model providers, feature flags, etc.)
 	// that get baked into each runtime's bootstrap ConfigMap.
 	ZeroClawConfig *zeroclaw.ZeroClawConfig
+	// BackupImage is the container image used for backup Jobs (e.g. amazon/aws-cli:2.x).
+	BackupImage string
+	// BackupBucket is the S3 bucket for PVC backups (e.g. "crawbl-backups").
+	BackupBucket string
+	// BackupRegion is the AWS region for S3 (e.g. "eu-central-1").
+	BackupRegion string
+	// BackupSecretName is the K8s Secret with AWS credentials for backup (access-key-id, secret-access-key).
+	BackupSecretName string
 }

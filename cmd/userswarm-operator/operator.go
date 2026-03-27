@@ -78,11 +78,15 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 	}
 
 	if err := (&controller.UserSwarmReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		APIReader:      mgr.GetAPIReader(),
-		BootstrapImage: bootstrapImage,
-		ZeroClawConfig: zcConfig,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		APIReader:        mgr.GetAPIReader(),
+		BootstrapImage:   bootstrapImage,
+		ZeroClawConfig:   zcConfig,
+		BackupImage:      os.Getenv("USERSWARM_BACKUP_IMAGE"),
+		BackupBucket:     os.Getenv("USERSWARM_BACKUP_BUCKET"),
+		BackupRegion:     os.Getenv("USERSWARM_BACKUP_REGION"),
+		BackupSecretName: os.Getenv("USERSWARM_BACKUP_SECRET_NAME"),
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}

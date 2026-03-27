@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
@@ -205,6 +206,12 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 	r.setCondition(&swarm, conditionTypeSmokeTestPassed, smokeStatus, smokeReason, smokeMessage)
+
+	// --- Phase 4b: Periodic backup ---
+	if err := r.reconcileBackupJob(ctx, &swarm); err != nil {
+		log.FromContext(ctx).Error(err, "backup reconciliation failed")
+		// Don't fail the reconcile for backup errors — it's not critical path
+	}
 
 	// --- Phase 5: Compute final verified/ready status ---
 	// "Verified" is the ultimate gate — the orchestrator waits for this before routing

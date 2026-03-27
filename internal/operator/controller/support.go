@@ -310,6 +310,18 @@ func checksumStringMap(values map[string]string) string {
 	return checksumString(b.String())
 }
 
+// --- Backup helpers ---
+
+// backupJobName returns the name for the periodic backup K8s Job.
+func backupJobName(sw *crawblv1alpha1.UserSwarm) string {
+	return truncateKubernetesName(fmt.Sprintf("zeroclaw-%s-backup", sw.Name), kubernetesNameMaxLen)
+}
+
+// finalBackupJobName returns the name for the pre-deletion final backup K8s Job.
+func finalBackupJobName(sw *crawblv1alpha1.UserSwarm) string {
+	return truncateKubernetesName(fmt.Sprintf("zeroclaw-%s-final-backup", sw.Name), kubernetesNameMaxLen)
+}
+
 // --- Smoke test helpers ---
 
 // smokeTestJobName returns the name for the smoke test K8s Job.
