@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	awsinfra "github.com/Crawbl-AI/crawbl-backend/internal/infra/aws"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
@@ -62,12 +63,16 @@ func buildConfig(env, region string) infra.Config {
 	}
 
 	return infra.Config{
-		Environment:        env,
-		Region:             region,
+		Environment:    env,
+		Region:         region,
 		ESCEnvironment: envOrDefault("CRAWBL_ESC_ENV", "crawbl/"+env),
 		ExistingVPCID:  os.Getenv("DIGITALOCEAN_VPC_ID"),
 		ClusterConfig:  clusterConfig,
 		PlatformConfig: platformConfig,
+		AWSConfig: awsinfra.Config{
+			Region:      envOrDefault("AWS_REGION", "eu-central-1"),
+			Environment: env,
+		},
 	}
 }
 

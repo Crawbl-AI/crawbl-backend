@@ -11,6 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	awsinfra "github.com/Crawbl-AI/crawbl-backend/internal/infra/aws"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 )
@@ -23,6 +24,7 @@ type Config struct {
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
+	AWSConfig      awsinfra.Config
 }
 
 // Stack represents a Pulumi stack.
@@ -68,6 +70,11 @@ func buildProgram(infraCfg Config) pulumi.RunFunc {
 			return err
 		}
 
+		// Phase 4: Create AWS resources (S3 backup bucket, IAM, Secrets Manager)
+		if err := createAWSResources(ctx, infraCfg); err != nil {
+			return err
+		}
+
 		// Export outputs
 		exportOutputs(ctx, clusterResult)
 		return nil
@@ -102,6 +109,18 @@ func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.
 	_, err := platform.NewPlatform(ctx, "platform", platformConfig, pulumi.Provider(k8sProvider))
 	if err != nil {
 		return fmt.Errorf("create platform: %w", err)
+	}
+	return nil
+}
+
+// createAWSResources provisions AWS resources (S3 backup bucket, IAM, Secrets Manager).
+func createAWSResources(ctx *pulumi.Context, config Config) error {
+	if config.AWSConfig.Region == "" {
+		return nil // AWS not configured, skip
+	}
+	_, err := awsinfra.NewResources(ctx, config.AWSConfig)
+	if err != nil {
+		return fmt.Errorf("create AWS resources: %w", err)
 	}
 	return nil
 }
