@@ -37,14 +37,13 @@ type SocketIOConfig struct {
 	Logger *slog.Logger
 
 
-	// RedisClient is an optional Redis client for the pub/sub adapter.
-	// When nil, the server falls back to the default in-memory adapter.
+	// RedisClient is the Redis client for the pub/sub adapter.
+	// Required for cross-pod fan-out in clustered deployments.
 	RedisClient *redis.Client
 }
 
 // NewSocketIOServer creates and configures a Socket.IO server with authentication
-// middleware, workspace room management, and an optional Redis adapter for
-// cross-pod event fan-out.
+// middleware, workspace room management, and Redis adapter for cross-pod event fan-out.
 //
 // The returned server is ready to be mounted as an http.Handler via SocketIOHandler.
 func NewSocketIOServer(cfg *SocketIOConfig) *socket.Server {
