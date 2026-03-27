@@ -93,7 +93,7 @@ redis:
 ## ---------------------------------------------------------------------------
 
 ## ApplicationSet controller -- generates Applications from templates.
-## Not used; we define Applications explicitly in apps/templates/.
+## Not used; we define Applications explicitly in root/.
 applicationSet:
   enabled: false
 

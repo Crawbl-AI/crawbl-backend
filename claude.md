@@ -57,7 +57,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
   - `internal/orchestrator/server/` for HTTP handlers and request/response DTOs
   - `internal/pkg/` for shared database, error, runtime, and HTTP helpers
 - Pulumi (`internal/infra/`) bootstraps DOKS cluster and installs ArgoCD only — no edge package, no Helm chart management in this repo
-- All Helm charts live in `crawbl-argocd-apps/charts/`; ArgoCD manages all K8s resources after bootstrap
+- All Helm charts live in `crawbl-argocd-apps/components/*/chart/`; ArgoCD manages all K8s resources after bootstrap
 - Keep `types.go` files for request/response types, constants, vars, and interfaces instead of scattering them through handler files
 - Follow the Soulheim/Skatts style: one `dbr.Session` per request, pass typed opts through service methods, and let repos work with a `SessionRunner`
 - Add new API surface in small vertical slices, starting from `crawbl-docs/ops/api-contract.md`

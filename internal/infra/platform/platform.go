@@ -40,24 +40,17 @@ func DefaultPlatformConfig(helmValuesDir string) Config {
 type Platform struct{}
 
 // NewPlatform creates shared platform infrastructure.
-// It bootstraps: ArgoCD namespace, AWS credentials secret, ArgoCD + repo secret + root Application.
+// It bootstraps: ArgoCD namespace, ArgoCD Helm release, repo SSH secret, and root Application.
 func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) (*Platform, error) {
 	result := &Platform{}
 
-	// 1. Create argocd namespace (needed before ArgoCD Helm release exists)
+	// Create argocd namespace (needed before ArgoCD Helm release exists)
 	argocdNs, err := createArgoCDNamespace(ctx, name, cfg, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create argocd namespace: %w", err)
 	}
 
-	// 2. AWS credentials for ESO are created manually during bootstrap:
-	//    kubectl create secret generic aws-credentials -n argocd \
-	//      --from-literal=access-key=$AWS_ACCESS_KEY_ID \
-	//      --from-literal=secret-key=$AWS_SECRET_ACCESS_KEY
-	// This keeps AWS keys out of Pulumi state and git entirely.
-	// See: crawbl-docs/ops/argocd/security/secrets-management.md
-
-	// 3. Deploy ArgoCD + repo secret + root Application
+	// Deploy ArgoCD + repo secret + root Application
 	if cfg.InstallArgoCD {
 		argoCD, err := deployArgoCD(ctx, name, cfg, []pulumi.Resource{argocdNs}, opts...)
 		if err != nil {
