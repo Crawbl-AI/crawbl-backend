@@ -40,7 +40,7 @@ func DefaultPlatformConfig(helmValuesDir string) Config {
 type Platform struct{}
 
 // NewPlatform creates shared platform infrastructure.
-// It bootstraps: ArgoCD namespace, vault bootstrap secret, ArgoCD + repo secret + root Application.
+// It bootstraps: ArgoCD namespace, AWS credentials secret, ArgoCD + repo secret + root Application.
 func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) (*Platform, error) {
 	result := &Platform{}
 

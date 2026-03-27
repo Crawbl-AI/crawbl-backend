@@ -25,7 +25,7 @@ func newApplyCommand() *cobra.Command {
 
 Resources are deployed in dependency order:
   1. cluster  - DOKS cluster, VPC, container registry
-  2. platform - Namespaces, Helm releases (Vault, PostgreSQL, etc.)
+  2. platform - Namespaces, Helm releases (ArgoCD only)
   3. edge     - DNS records, Gateway, TLS certificates
 
 Pulumi automatically handles dependencies between resources.`,
