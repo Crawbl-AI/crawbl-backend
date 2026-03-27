@@ -188,8 +188,7 @@ func toAgentResponse(agent *orchestrator.Agent) agentResponse {
 		Name:      agent.Name,
 		Role:      agent.Role,
 		Avatar:    agent.AvatarURL,
-		Status:    string(agent.Status),
-		HasUpdate: agent.HasUpdate,
+		Status: string(agent.Status),
 	}
 }
 

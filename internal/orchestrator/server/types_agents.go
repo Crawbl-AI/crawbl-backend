@@ -17,8 +17,4 @@ type agentResponse struct {
 
 	// Status is the current availability status (e.g., "online", "offline", "busy").
 	Status string `json:"status"`
-
-	// HasUpdate indicates whether the agent has new content or status changes
-	// that the user hasn't seen yet.
-	HasUpdate bool `json:"has_update"`
 }

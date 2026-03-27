@@ -356,9 +356,6 @@ type Agent struct {
 	// SystemPrompt is the LLM system message for this agent's personality.
 	SystemPrompt string `json:"system_prompt,omitempty"`
 
-	// HasUpdate indicates whether the agent has pending updates.
-	HasUpdate bool `json:"has_update"`
-
 	// CreatedAt is the timestamp when the agent was created.
 	CreatedAt time.Time `json:"created_at"`
 

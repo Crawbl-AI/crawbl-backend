@@ -22,9 +22,6 @@ func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.List
 	}
 
 	s.enrichAgentStatus(ctx, workspace, agents)
-	for _, agent := range agents {
-		agent.HasUpdate = false
-	}
 
 	return agents, nil
 }
