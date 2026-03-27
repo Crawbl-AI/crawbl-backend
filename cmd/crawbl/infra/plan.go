@@ -78,5 +78,5 @@ func printPreviewSummary(result *infra.PreviewResult) {
 	if result.Same > 0 {
 		fmt.Printf("  = %d unchanged\n", result.Same)
 	}
-	fmt.Println("\nRun 'crawbl infra apply' to apply changes")
+	fmt.Println("\nRun 'crawbl infra update' to apply changes")
 }

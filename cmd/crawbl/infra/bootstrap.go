@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
 )
 
 // newBootstrapCommand creates the infra bootstrap subcommand.
@@ -29,7 +27,7 @@ func newBootstrapCommand() *cobra.Command {
 		Long: `Bootstrap the full cluster from scratch.
 
 This command automates the entire cluster bootstrap process:
-  1. Run infra apply (creates DOKS cluster + ArgoCD via Pulumi)
+  1. Run infra update (creates DOKS cluster + ArgoCD via Pulumi)
   2. Save kubeconfig via doctl
   3. Ensure DOCR registry integration (safety net)
   4. Wait for ArgoCD application-controller to be ready
@@ -61,16 +59,16 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 	fmt.Printf("Environment: %s | Region: %s | Cluster: %s\n\n", env, region, clusterName)
 
 	if !autoApprove {
-		if !confirmApply() {
+		if !confirmUpdate() {
 			fmt.Println("Bootstrap cancelled")
 			return nil
 		}
 	}
 
-	// Step 1: Run infra apply
+	// Step 1: Run Pulumi up
 	fmt.Println("\n[1/5] Applying infrastructure (Pulumi)...")
-	if err := runInfraApply(ctx, env, region); err != nil {
-		return fmt.Errorf("infra apply failed: %w", err)
+	if err := pulumiUp(ctx, env, region); err != nil {
+		return fmt.Errorf("pulumi up failed: %w", err)
 	}
 	fmt.Println("  ok")
 
@@ -106,24 +104,6 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 	// Print final status
 	fmt.Println("\n=== Bootstrap Complete ===")
 	printAppStatus()
-	return nil
-}
-
-// runInfraApply executes the Pulumi apply step.
-func runInfraApply(ctx context.Context, env, region string) error {
-	config := buildConfig(env, region)
-
-	stack, err := infra.NewStack(ctx, config)
-	if err != nil {
-		return fmt.Errorf("failed to create stack: %w", err)
-	}
-
-	result, err := stack.Up(ctx)
-	if err != nil {
-		return err
-	}
-
-	printOutputs(result)
 	return nil
 }
 

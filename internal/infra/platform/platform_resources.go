@@ -60,7 +60,7 @@ func createArgoCDRepoSecret(ctx *pulumi.Context, name string, cfg Config, deps [
 	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
 }
 
-// createArgoCDRootApp creates the root ArgoCD Application that points to the app-of-apps chart.
+// createArgoCDRootApp creates the root ArgoCD Application that points to the app-of-apps directory.
 func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*apiextensions.CustomResource, error) {
 	return apiextensions.NewCustomResource(ctx, name+"-argocd-root-app", &apiextensions.CustomResourceArgs{
 		ApiVersion: pulumi.String("argoproj.io/v1alpha1"),
@@ -78,7 +78,7 @@ func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pu
 				"source": pulumi.Map{
 					"repoURL":        pulumi.String(cfg.ArgoCDAppsRepoURL),
 					"targetRevision": pulumi.String(cfg.ArgoCDAppsTargetRevision),
-					"path":           pulumi.String("apps"),
+					"path":           pulumi.String("root"),
 				},
 				"destination": pulumi.Map{
 					"server":    pulumi.String("https://kubernetes.default.svc"),

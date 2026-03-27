@@ -80,10 +80,10 @@ func NewInfraCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "infra",
 		Short: "Manage infrastructure with Pulumi",
-		Long:  "Manage Crawbl infrastructure (Kubernetes cluster, platform services, edge routing) using Pulumi.",
+		Long:  "Manage Crawbl infrastructure (Kubernetes cluster, platform services, ArgoCD bootstrap) using Pulumi.",
 		Example: `  crawbl infra init        # Initialize Pulumi stack
   crawbl infra plan        # Preview infrastructure changes
-  crawbl infra apply       # Apply infrastructure changes
+  crawbl infra update       # Apply infrastructure changes
   crawbl infra destroy     # Destroy all infrastructure
   crawbl infra bootstrap   # Bootstrap cluster end-to-end`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -93,7 +93,7 @@ func NewInfraCommand() *cobra.Command {
 
 	cmd.AddCommand(newInitCommand())
 	cmd.AddCommand(newPlanCommand())
-	cmd.AddCommand(newApplyCommand())
+	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newDestroyCommand())
 	cmd.AddCommand(newBootstrapCommand())
 

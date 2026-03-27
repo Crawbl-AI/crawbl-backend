@@ -10,8 +10,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
 )
 
-// newApplyCommand creates the infra apply subcommand.
-func newApplyCommand() *cobra.Command {
+// newUpdateCommand creates the infra apply subcommand.
+func newUpdateCommand() *cobra.Command {
 	var (
 		env         string
 		region      string
@@ -19,9 +19,9 @@ func newApplyCommand() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Apply infrastructure changes",
-		Long: `Apply infrastructure changes using Pulumi.
+		Use:   "update",
+		Short: "Update existing infrastructure",
+		Long: `Update existing infrastructure using Pulumi.
 
 Use this for incremental updates to existing infrastructure (e.g., change
 node size, update ArgoCD values). For first-time cluster setup, use
@@ -32,10 +32,10 @@ Pulumi manages only:
   - ArgoCD namespace + Helm release + repo secret + root Application
 
 Everything else is managed by ArgoCD via the crawbl-argocd-apps repo.`,
-		Example: `  crawbl infra apply                    # Apply with confirmation
-  crawbl infra apply --auto-approve     # Apply without confirmation`,
+		Example: `  crawbl infra update                    # Apply with confirmation
+  crawbl infra update --auto-approve     # Apply without confirmation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApply(cmd.Context(), env, region, autoApprove)
+			return runUpdate(cmd.Context(), env, region, autoApprove)
 		},
 	}
 
@@ -46,20 +46,25 @@ Everything else is managed by ArgoCD via the crawbl-argocd-apps repo.`,
 	return cmd
 }
 
-func runApply(ctx context.Context, env, region string, autoApprove bool) error {
+func runUpdate(ctx context.Context, env, region string, autoApprove bool) error {
 	if err := validateEnvVars(); err != nil {
 		return err
 	}
 
-	fmt.Printf("Applying infrastructure for environment '%s' in region '%s'\n", env, region)
+	fmt.Printf("Updating infrastructure for environment '%s' in region '%s'\n", env, region)
 
 	if !autoApprove {
-		if !confirmApply() {
-			fmt.Println("Apply cancelled")
+		if !confirmUpdate() {
+			fmt.Println("Update cancelled")
 			return nil
 		}
 	}
 
+	return pulumiUp(ctx, env, region)
+}
+
+// pulumiUp is the shared Pulumi apply logic used by both 'update' and 'bootstrap'.
+func pulumiUp(ctx context.Context, env, region string) error {
 	config := buildConfig(env, region)
 
 	stack, err := infra.NewStack(ctx, config)
@@ -69,7 +74,7 @@ func runApply(ctx context.Context, env, region string, autoApprove bool) error {
 
 	result, err := stack.Up(ctx)
 	if err != nil {
-		return fmt.Errorf("apply failed: %w", err)
+		return fmt.Errorf("pulumi up failed: %w", err)
 	}
 
 	printOutputs(result)
@@ -84,7 +89,7 @@ func validateEnvVars() error {
 	return nil
 }
 
-func confirmApply() bool {
+func confirmUpdate() bool {
 	fmt.Print("Do you want to perform this action? (y/N): ")
 	var response string
 	fmt.Scanln(&response)
