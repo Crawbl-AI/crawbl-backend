@@ -4,10 +4,13 @@ package zeroclaw
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"gopkg.in/yaml.v3"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
@@ -23,6 +26,105 @@ const (
 	DefaultProviderRetries      = 2
 	DefaultProviderBackoffMs    = 500
 )
+
+// ZeroClawConfig holds the operator-side defaults loaded from config/zeroclaw.yaml.
+// It controls what values are baked into the ZeroClaw bootstrap config.toml at
+// provisioning time.
+type ZeroClawConfig struct {
+	Defaults    ZeroClawDefaults    `yaml:"defaults"`
+	HTTPRequest ZeroClawHTTPRequest `yaml:"httpRequest"`
+	WebFetch    ZeroClawWebFetch    `yaml:"webFetch"`
+	WebSearch   ZeroClawWebSearch   `yaml:"webSearch"`
+	Autonomy    ZeroClawAutonomy    `yaml:"autonomy"`
+}
+
+type ZeroClawDefaults struct {
+	Temperature       float64 `yaml:"temperature"`
+	Timeout           int     `yaml:"timeout"`
+	ShortTimeout      int     `yaml:"shortTimeout"`
+	ProviderRetries   uint32  `yaml:"providerRetries"`
+	ProviderBackoffMs uint64  `yaml:"providerBackoffMs"`
+}
+
+type ZeroClawHTTPRequest struct {
+	MaxResponseSize int      `yaml:"maxResponseSize"`
+	AllowedDomains  []string `yaml:"allowedDomains"`
+}
+
+type ZeroClawWebFetch struct {
+	MaxResponseSize int `yaml:"maxResponseSize"`
+}
+
+type ZeroClawWebSearch struct {
+	Provider   string `yaml:"provider"`
+	MaxResults int    `yaml:"maxResults"`
+}
+
+type ZeroClawAutonomy struct {
+	AllowedCommands []string `yaml:"allowedCommands"`
+	ForbiddenPaths  []string `yaml:"forbiddenPaths"`
+	AutoApprove     []string `yaml:"autoApprove"`
+}
+
+// DefaultConfig returns a ZeroClawConfig populated with built-in defaults.
+// It is used when no config file is provided or when the file cannot be read.
+func DefaultConfig() *ZeroClawConfig {
+	return &ZeroClawConfig{
+		Defaults: ZeroClawDefaults{
+			Temperature:       DefaultTemperature,
+			Timeout:           DefaultTimeoutSecs,
+			ShortTimeout:      DefaultTimeoutSecsShort,
+			ProviderRetries:   DefaultProviderRetries,
+			ProviderBackoffMs: DefaultProviderBackoffMs,
+		},
+		HTTPRequest: ZeroClawHTTPRequest{
+			MaxResponseSize: DefaultMaxResponseSize,
+			AllowedDomains:  []string{"*"},
+		},
+		WebFetch: ZeroClawWebFetch{
+			MaxResponseSize: DefaultMaxResponseSizeSmall,
+		},
+		WebSearch: ZeroClawWebSearch{
+			Provider:   "duckduckgo",
+			MaxResults: DefaultMaxResults,
+		},
+		Autonomy: ZeroClawAutonomy{
+			AllowedCommands: []string{
+				"git", "ls", "cat", "grep", "find",
+				"pwd", "wc", "head", "tail", "date", "sed",
+			},
+			ForbiddenPaths: []string{
+				"/etc", "/root", "/usr", "/bin", "/sbin",
+				"/lib", "/opt", "/boot", "/dev", "/proc",
+				"/sys", "/var", "/tmp",
+				"~/.ssh", "~/.gnupg", "~/.aws", "~/.config",
+			},
+			AutoApprove: []string{
+				"file_read", "memory_recall", "web_search_tool",
+				"web_fetch", "calculator", "glob_search",
+				"content_search", "image_info", "weather",
+			},
+		},
+	}
+}
+
+// LoadConfig reads a ZeroClawConfig from a YAML file at path.
+// If the file does not exist, DefaultConfig is returned with no error.
+func LoadConfig(path string) (*ZeroClawConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return DefaultConfig(), nil
+		}
+		return nil, fmt.Errorf("read zeroclaw config %s: %w", path, err)
+	}
+
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, fmt.Errorf("parse zeroclaw config %s: %w", path, err)
+	}
+	return cfg, nil
+}
 
 type BootstrapConfig struct {
 	APIKey             string            `toml:"api_key"`
@@ -83,8 +185,8 @@ type Reliability struct {
 	ModelFallbacks  map[string][]string `toml:"model_fallbacks"`
 }
 
-func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm) (map[string]string, error) {
-	configTOML, err := BuildConfigTOML(sw)
+func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (map[string]string, error) {
+	configTOML, err := BuildConfigTOML(sw, zc)
 	if err != nil {
 		return nil, err
 	}
@@ -97,79 +199,44 @@ func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm) (map[string]string, error
 }
 
 // BuildConfigTOML generates a minimal ZeroClaw bootstrap config for shared-namespace testing.
-func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) (string, error) {
+// If zc is nil, DefaultConfig() is used.
+func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (string, error) {
+	if zc == nil {
+		zc = DefaultConfig()
+	}
+
 	cfg := BootstrapConfig{
 		APIKey:             "",
 		DefaultProvider:    "openai",
 		DefaultModel:       "gpt-5.4",
-		DefaultTemperature: DefaultTemperature,
+		DefaultTemperature: zc.Defaults.Temperature,
 		Autonomy: AutonomyConfig{
-			Level:         "supervised",
-			WorkspaceOnly: true,
-			AllowedCommands: []string{
-				"git",
-				"ls",
-				"cat",
-				"grep",
-				"find",
-				"pwd",
-				"wc",
-				"head",
-				"tail",
-				"date",
-				"sed",
-			},
-			ForbiddenPaths: []string{
-				"/etc",
-				"/root",
-				"/usr",
-				"/bin",
-				"/sbin",
-				"/lib",
-				"/opt",
-				"/boot",
-				"/dev",
-				"/proc",
-				"/sys",
-				"/var",
-				"/tmp",
-				"~/.ssh",
-				"~/.gnupg",
-				"~/.aws",
-				"~/.config",
-			},
-			AutoApprove: []string{
-				"file_read",
-				"memory_recall",
-				"web_search_tool",
-				"web_fetch",
-				"calculator",
-				"glob_search",
-				"content_search",
-				"image_info",
-				"weather",
-			},
-			AlwaysAsk: []string{},
+			Level:           "supervised",
+			WorkspaceOnly:   true,
+			AllowedCommands: zc.Autonomy.AllowedCommands,
+			ForbiddenPaths:  zc.Autonomy.ForbiddenPaths,
+			AutoApprove:     zc.Autonomy.AutoApprove,
+			AlwaysAsk:       []string{},
 		},
 		HTTPRequest: HTTPRequestConfig{
 			Enabled:           true,
-			AllowedDomains:    []string{"*"},
-			MaxResponseSize:   DefaultMaxResponseSize,
-			TimeoutSecs:       DefaultTimeoutSecs,
+			AllowedDomains:    zc.HTTPRequest.AllowedDomains,
+			MaxResponseSize:   zc.HTTPRequest.MaxResponseSize,
+			TimeoutSecs:       zc.Defaults.Timeout,
 			AllowPrivateHosts: false,
 		},
 		WebFetch: WebFetchConfig{
 			Enabled:         true,
 			AllowedDomains:  []string{"*"},
 			BlockedDomains:  []string{},
-			MaxResponseSize: DefaultMaxResponseSizeSmall,
-			TimeoutSecs:     DefaultTimeoutSecs,
+			MaxResponseSize: zc.WebFetch.MaxResponseSize,
+			TimeoutSecs:     zc.Defaults.Timeout,
 		},
 		WebSearch: WebSearchConfig{
 			Enabled:     true,
-			Provider:    "duckduckgo",
-			MaxResults:  DefaultMaxResults,
-			TimeoutSecs: DefaultTimeoutSecsShort,
+			Provider:    zc.WebSearch.Provider,
+			MaxResults:  zc.WebSearch.MaxResults,
+			TimeoutSecs: zc.Defaults.ShortTimeout,
 		},
 		Gateway: GatewayConfig{
 			Port: runtimePort(sw),
@@ -181,8 +248,8 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm) (string, error) {
 			RequirePairing:  true,
 		},
 		Reliability: Reliability{
-			ProviderRetries: DefaultProviderRetries,
-			ProviderBackoff: DefaultProviderBackoffMs,
+			ProviderRetries: zc.Defaults.ProviderRetries,
+			ProviderBackoff: zc.Defaults.ProviderBackoffMs,
 			ModelFallbacks:  map[string][]string{},
 		},
 	}

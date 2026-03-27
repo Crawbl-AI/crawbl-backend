@@ -3,7 +3,6 @@ package platform
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
@@ -17,7 +16,7 @@ type Config struct {
 	Provider                     *kubernetes.Provider
 	SharedNamespaces             []string
 	NamespaceLabels              map[string]string
-	HelmChartsDir                string
+	HelmValuesDir                string
 	RegistryName                 string
 	RegistryPullSecretName       string
 	RegistryPullSecretNamespaces []string
@@ -29,63 +28,35 @@ type Config struct {
 	CloudflareAPIToken              string
 	OpenAIAPIKey                    string
 
-	// Backend database
-	InstallBackendPostgresql      bool
-	BackendNamespace              string
-	BackendDatabaseUser           string
-	BackendDatabaseName           string
-	BackendPostgresqlChartVersion string
-	BackendPostgresqlValues       map[string]interface{}
+	// Backend database (secrets stay in Pulumi, Helm release moves to ArgoCD)
+	BackendNamespace    string
+	BackendDatabaseUser string
+	BackendDatabaseName string
 
-	// Redis
-	InstallRedis      bool
-	RedisChartVersion string
-	RedisValues       map[string]interface{}
-
-	// Vault (bank-vaults operator)
+	// Vault (bank-vaults operator — stays in Pulumi)
 	InstallVault         bool
 	VaultNamespace       string
 	VaultOperatorVersion string
 	VaultOperatorValues  map[string]interface{}
 
-	// Vault Secrets Operator (HashiCorp VSO for K8s Secret sync)
-	InstallVaultSecretsOperator        bool
-	VaultSecretsOperatorNamespace      string
-	VaultSecretsOperatorChartVersion   string
-	VaultSecretsOperatorValues         map[string]interface{}
-
-	// Envoy Gateway
-	InstallEnvoyGateway        bool
-	EnvoyGatewayNamespace      string
-	EnvoyGatewayChartVersion   string
-	EnvoyGatewayChart          string
-	EnvoyGatewayValues         map[string]interface{}
-	EnvoyGatewayClassName      string
-	EnvoyGatewayControllerName string
-
-	// cert-manager
-	InstallCertManager      bool
-	CertManagerNamespace    string
-	CertManagerChartVersion string
-	CertManagerValues       map[string]interface{}
-
-	// UserSwarm Operator
-	InstallUserSwarmOperator   bool
-	UserSwarmOperatorNamespace string
-
-	// Backend Orchestrator
-	InstallBackendOrchestrator bool
+	// ArgoCD
+	InstallArgoCD            bool
+	ArgoCDChartVersion       string
+	ArgoCDValues             map[string]interface{}
+	ArgoCDAppsRepoURL        string
+	ArgoCDAppsTargetRevision string
+	ArgoCDRepoSSHPrivateKey  string // SSH private key for repo access
 }
 
 // DefaultPlatformConfig returns default platform configuration.
-// Upstream chart values are loaded from helm/values/. Custom charts use their own values.yaml.
-func DefaultPlatformConfig(helmChartsDir string) Config {
-	valuesDir := filepath.Join(helmChartsDir, "values")
+// helmValuesDir points to config/helm/ which contains Pulumi-managed Helm values.
+func DefaultPlatformConfig(helmValuesDir string) Config {
 	return Config{
 		SharedNamespaces: []string{
 			"backend", "swarms-system", "swarms-dev",
 			"cert-manager", "envoy-gateway-system",
 			"vault", "vault-secrets-operator-system", "argocd",
+			"external-dns",
 		},
 		NamespaceLabels: map[string]string{
 			"app.kubernetes.io/managed-by": "pulumi",
@@ -99,44 +70,20 @@ func DefaultPlatformConfig(helmChartsDir string) Config {
 		DOCRRefreshCronSchedule:         "0 3 * * 0", // Weekly at 3am Sunday
 		DOCRRefreshCronNamespace:        "backend",
 
-		InstallBackendPostgresql:      true,
-		BackendNamespace:              "backend",
-		BackendDatabaseUser:           "crawbl",
-		BackendDatabaseName:           "crawbl",
-		BackendPostgresqlChartVersion: "18.5.14",
-		BackendPostgresqlValues:       yamlvalues.MustLoad(valuesDir, "postgresql.yaml"),
-
-		InstallRedis:      false,
-		RedisChartVersion: "22.0.5",
-		RedisValues:       yamlvalues.MustLoad(valuesDir, "redis.yaml"),
+		BackendNamespace:    "backend",
+		BackendDatabaseUser: "crawbl",
+		BackendDatabaseName: "crawbl",
 
 		InstallVault:         true,
 		VaultNamespace:       "vault",
 		VaultOperatorVersion: "1.23.4",
-		VaultOperatorValues:  yamlvalues.MustLoad(valuesDir, "vault-operator.yaml"),
+		VaultOperatorValues:  yamlvalues.MustLoad(helmValuesDir, "vault-operator.yaml"),
 
-		InstallVaultSecretsOperator:      true,
-		VaultSecretsOperatorNamespace:    "vault-secrets-operator-system",
-		VaultSecretsOperatorChartVersion: "1.3.0",
-		VaultSecretsOperatorValues:       yamlvalues.MustLoad(valuesDir, "vault-secrets-operator.yaml"),
-
-		InstallEnvoyGateway:        true,
-		EnvoyGatewayNamespace:      "envoy-gateway-system",
-		EnvoyGatewayChartVersion:   "v1.7.0",
-		EnvoyGatewayChart:          "oci://docker.io/envoyproxy/gateway-helm",
-		EnvoyGatewayValues:         map[string]interface{}{},
-		EnvoyGatewayClassName:      "envoy-gateway-class",
-		EnvoyGatewayControllerName: "gateway.envoyproxy.io/gatewayclass-controller",
-
-		InstallCertManager:      true,
-		CertManagerNamespace:    "cert-manager",
-		CertManagerChartVersion: "v1.20.0",
-		CertManagerValues:       yamlvalues.MustLoad(valuesDir, "cert-manager.yaml"),
-
-		InstallUserSwarmOperator:   true,
-		UserSwarmOperatorNamespace: "swarms-system",
-
-		InstallBackendOrchestrator: true,
+		InstallArgoCD:      true,
+		ArgoCDChartVersion: "7.8.13",
+		ArgoCDValues:       yamlvalues.MustLoad(helmValuesDir, "argocd.yaml"),
+		ArgoCDAppsRepoURL:        "git@github.com:Crawbl-AI/crawbl-argocd-apps.git",
+		ArgoCDAppsTargetRevision: "main",
 	}
 }
 
@@ -168,13 +115,10 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 	nsDeps := toResourceSlice(namespaces)
 
 	// 2. Create registry pull secrets
-	var pullSecretDeps []pulumi.Resource
 	if cfg.ManageRegistryPullSecret {
-		pullSecrets, err := createRegistryPullSecrets(ctx, name, cfg, nsDeps, opts...)
-		if err != nil {
+		if _, err := createRegistryPullSecrets(ctx, name, cfg, nsDeps, opts...); err != nil {
 			return nil, fmt.Errorf("create registry pull secrets: %w", err)
 		}
-		pullSecretDeps = toResourceSlice(pullSecrets)
 	}
 
 	// 2b. DOCR credential refresh CronJob
@@ -185,52 +129,19 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 	}
 
 	// 3. Create random passwords
-	pgAdminPwd, pgUserPwd, redisPwd, hmacSecret, err := createRandomPasswords(ctx, name, cfg)
+	pgAdminPwd, pgUserPwd, hmacSecret, err := createRandomPasswords(ctx, name, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create random passwords: %w", err)
 	}
 
 	// 4. Create PostgreSQL auth secret
-	var pgAuthSecret *corev1.Secret
-	if cfg.InstallBackendPostgresql {
-		pgAuthSecret, err = createPostgresAuthSecret(ctx, name, cfg, pgAdminPwd, pgUserPwd, nsDeps, opts...)
-		if err != nil {
+	if pgAdminPwd != nil && pgUserPwd != nil {
+		if _, err = createPostgresAuthSecret(ctx, name, cfg, pgAdminPwd, pgUserPwd, nsDeps, opts...); err != nil {
 			return nil, fmt.Errorf("create postgres auth secret: %w", err)
 		}
 	}
 
-	// 5. Create Redis auth secret
-	var redisAuthSecret *corev1.Secret
-	if cfg.InstallRedis {
-		redisAuthSecret, err = createRedisAuthSecret(ctx, name, cfg, redisPwd, nsDeps, opts...)
-		if err != nil {
-			return nil, fmt.Errorf("create redis auth secret: %w", err)
-		}
-	}
-
-	// 6. Deploy cert-manager
-	if cfg.InstallCertManager {
-		if _, err := deployCertManager(ctx, name, cfg, nsDeps, opts...); err != nil {
-			return nil, fmt.Errorf("deploy cert-manager: %w", err)
-		}
-	}
-
-	// 7. Deploy Envoy Gateway + GatewayClass
-	var envoyGWDeps []pulumi.Resource
-	if cfg.InstallEnvoyGateway {
-		envoyGW, err := deployEnvoyGateway(ctx, name, cfg, nsDeps, opts...)
-		if err != nil {
-			return nil, fmt.Errorf("deploy envoy gateway: %w", err)
-		}
-		gwClass, err := createGatewayClass(ctx, name, cfg, []pulumi.Resource{envoyGW}, opts...)
-		if err != nil {
-			return nil, fmt.Errorf("create gateway class: %w", err)
-		}
-		envoyGWDeps = []pulumi.Resource{envoyGW, gwClass}
-	}
-
-	// 8. Deploy Vault (bank-vaults operator + Vault CR)
-	var vaultDeps []pulumi.Resource
+	// 5. Deploy Vault (bank-vaults operator + Vault CR)
 	if cfg.InstallVault {
 		vaultOp, err := deployVaultOperator(ctx, name, cfg, nsDeps, opts...)
 		if err != nil {
@@ -246,74 +157,41 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 			}
 		}
 
-		vaultCR, err := createVaultInstance(ctx, name, cfg, vaultSecrets, []pulumi.Resource{vaultOp}, opts...)
-		if err != nil {
+		if _, err := createVaultInstance(ctx, name, cfg, vaultSecrets, []pulumi.Resource{vaultOp}, opts...); err != nil {
 			return nil, fmt.Errorf("create vault instance: %w", err)
 		}
-		vaultDeps = []pulumi.Resource{vaultOp, vaultCR}
+	}
 
-		if cfg.InstallVaultSecretsOperator {
-			vso, err := deployVaultSecretsOperator(ctx, name, cfg, vaultDeps, opts...)
-			if err != nil {
-				return nil, fmt.Errorf("deploy vault secrets operator: %w", err)
-			}
+	// 6. Create Orchestrator ServiceAccount (needed by ArgoCD-managed VSO for Vault auth)
+	if _, err := createOrchestratorServiceAccount(ctx, name, cfg, nsDeps, opts...); err != nil {
+		return nil, fmt.Errorf("create orchestrator service account: %w", err)
+	}
 
-			// Create orchestrator SA before VSO (VSO uses it for Vault auth)
-			orchSA, err := createOrchestratorServiceAccount(ctx, name, cfg, nsDeps, opts...)
-			if err != nil {
-				return nil, fmt.Errorf("create orchestrator service account: %w", err)
-			}
-
-			// Create VSO CRs to sync Vault KV → K8s Secrets
-			vsoDeps := append(vaultDeps, vso, orchSA)
-			vsoResources, err := createVaultSecretsSync(ctx, name, cfg, vsoDeps, opts...)
-			if err != nil {
-				return nil, fmt.Errorf("create vault secrets sync: %w", err)
-			}
-			vaultDeps = append(vaultDeps, vsoResources...)
+	// 7. Create Cloudflare API token secrets (for cert-manager and external-dns)
+	if cfg.CloudflareAPIToken != "" {
+		if _, err := createCloudflareAPITokenSecrets(ctx, name, cfg, nsDeps, opts...); err != nil {
+			return nil, fmt.Errorf("create cloudflare api token secrets: %w", err)
 		}
 	}
 
-	// 9. Apply UserSwarm CRD + Operator
-	if cfg.InstallUserSwarmOperator {
-		crd, err := applyUserSwarmCRD(ctx, name, cfg, nsDeps, opts...)
+	// 8. Deploy ArgoCD + root Application
+	if cfg.InstallArgoCD {
+		argoCD, err := deployArgoCD(ctx, name, cfg, nsDeps, opts...)
 		if err != nil {
-			return nil, fmt.Errorf("apply userswarm crd: %w", err)
+			return nil, fmt.Errorf("deploy argocd: %w", err)
+		}
+		argoDeps := []pulumi.Resource{argoCD}
+
+		if cfg.ArgoCDRepoSSHPrivateKey != "" {
+			repoSecret, err := createArgoCDRepoSecret(ctx, name, cfg, argoDeps, opts...)
+			if err != nil {
+				return nil, fmt.Errorf("create argocd repo secret: %w", err)
+			}
+			argoDeps = append(argoDeps, repoSecret)
 		}
 
-		operatorDeps := []pulumi.Resource{crd}
-		operatorDeps = append(operatorDeps, pullSecretDeps...)
-		operatorDeps = append(operatorDeps, envoyGWDeps...)
-
-		if _, err := deployUserSwarmOperator(ctx, name, cfg, operatorDeps, opts...); err != nil {
-			return nil, fmt.Errorf("deploy userswarm operator: %w", err)
-		}
-	}
-
-	// 10. Deploy PostgreSQL
-	var pgDeps []pulumi.Resource
-	if cfg.InstallBackendPostgresql && pgAuthSecret != nil {
-		pg, err := deployPostgreSQL(ctx, name, cfg, pgAuthSecret, nsDeps, opts...)
-		if err != nil {
-			return nil, fmt.Errorf("deploy postgresql: %w", err)
-		}
-		pgDeps = []pulumi.Resource{pg}
-	}
-
-	// 11. Deploy Redis
-	if cfg.InstallRedis && redisAuthSecret != nil {
-		if _, err := deployRedis(ctx, name, cfg, redisAuthSecret, nsDeps, opts...); err != nil {
-			return nil, fmt.Errorf("deploy redis: %w", err)
-		}
-	}
-
-	// 12. Deploy Orchestrator
-	if cfg.InstallBackendOrchestrator && cfg.InstallBackendPostgresql {
-		orchDeps := append(pullSecretDeps, vaultDeps...)
-		orchDeps = append(orchDeps, pgDeps...)
-
-		if _, err := deployOrchestrator(ctx, name, cfg, orchDeps, opts...); err != nil {
-			return nil, fmt.Errorf("deploy orchestrator: %w", err)
+		if _, err := createArgoCDRootApp(ctx, name, cfg, argoDeps, opts...); err != nil {
+			return nil, fmt.Errorf("create argocd root app: %w", err)
 		}
 	}
 

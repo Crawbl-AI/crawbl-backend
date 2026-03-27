@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/operator/controller"
 	"github.com/Crawbl-AI/crawbl-backend/internal/operator/indexes"
+	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
 )
 
 func newOperatorCommand() *cobra.Command {
@@ -24,24 +26,31 @@ func newOperatorCommand() *cobra.Command {
 		metricsAddr          string
 		probeAddr            string
 		enableLeaderElection bool
+		zeroClawConfigPath   string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "operator",
 		Short: "Run the UserSwarm operator manager",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runOperatorWithOptions(metricsAddr, probeAddr, enableLeaderElection)
+			return runOperatorWithOptions(metricsAddr, probeAddr, enableLeaderElection, zeroClawConfigPath)
 		},
 	}
 
 	cmd.Flags().StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metrics endpoint binds to.")
 	cmd.Flags().StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	cmd.Flags().BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
+	cmd.Flags().StringVar(&zeroClawConfigPath, "zeroclaw-config", "config/zeroclaw.yaml", "Path to the ZeroClaw operator config YAML file.")
 
 	return cmd
 }
 
-func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection bool) error {
+func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection bool, zeroClawConfigPath string) error {
+	zcConfig, err := zeroclaw.LoadConfig(zeroClawConfigPath)
+	if err != nil {
+		return fmt.Errorf("load zeroclaw config: %w", err)
+	}
+
 	bootstrapImage := os.Getenv("USERSWARM_BOOTSTRAP_IMAGE")
 	if bootstrapImage == "" {
 		bootstrapImage = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator:dev"
@@ -88,6 +97,7 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 		APIReader:      mgr.GetAPIReader(),
 		BootstrapImage: bootstrapImage,
 		RuntimeVault:   runtimeVault,
+		ZeroClawConfig: zcConfig,
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}

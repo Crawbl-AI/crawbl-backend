@@ -48,10 +48,11 @@ const (
 
 type UserSwarmReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	APIReader      client.Reader
-	BootstrapImage string
-	RuntimeVault   RuntimeVaultConfig
+	Scheme          *runtime.Scheme
+	APIReader       client.Reader
+	BootstrapImage  string
+	RuntimeVault    RuntimeVaultConfig
+	ZeroClawConfig  *zeroclaw.ZeroClawConfig
 }
 
 // Reconcile keeps one UserSwarm aligned with the shared-namespace runtime model:
@@ -371,7 +372,7 @@ func (r *UserSwarmReconciler) reconcileConfigMap(ctx context.Context, swarm *cra
 		if err := controllerutil.SetControllerReference(swarm, obj, r.Scheme); err != nil {
 			return err
 		}
-		bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm)
+		bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm, r.ZeroClawConfig)
 		if err != nil {
 			return err
 		}
@@ -543,7 +544,7 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 		obj.Spec.ServiceName = headlessServiceName(swarm)
 		obj.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabelsFor(swarm)}
 		obj.Spec.Template.Labels = labelsFor(swarm)
-		bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm)
+		bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm, r.ZeroClawConfig)
 		if err != nil {
 			return err
 		}

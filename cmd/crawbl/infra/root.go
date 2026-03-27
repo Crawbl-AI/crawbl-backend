@@ -11,7 +11,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
-	"github.com/Crawbl-AI/crawbl-backend/internal/infra/edge"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
 )
@@ -35,14 +34,11 @@ func envOrDefault(key, fallback string) string {
 func buildConfig(env, region string) infra.Config {
 	// Load config sections from Pulumi.<env>.yaml
 	var clusterCfg cluster.StackClusterConfig
-	var edgeCfg edge.StackEdgeConfig
 	loadStackSection(env, "crawbl:cluster", &clusterCfg)
-	loadStackSection(env, "crawbl:edge", &edgeCfg)
 
 	clusterConfig := cluster.ConfigFromStack(env, region, clusterCfg)
-	edgeConfig := edge.ConfigFromStack(edgeCfg)
-	helmChartsDir := envOrDefault("CRAWBL_HELM_CHARTS_DIR", filepath.Join(must(os.Getwd()), "helm"))
-	platformConfig := platform.DefaultPlatformConfig(helmChartsDir)
+	helmValuesDir := filepath.Join(must(os.Getwd()), "config", "helm")
+	platformConfig := platform.DefaultPlatformConfig(helmValuesDir)
 
 	// Environment variable overrides (secrets and runtime values not stored in YAML)
 	if vpcID := os.Getenv("DIGITALOCEAN_VPC_ID"); vpcID != "" {
@@ -53,6 +49,12 @@ func buildConfig(env, region string) infra.Config {
 		clusterConfig.ProjectName = projectName
 	}
 
+	// Load ArgoCD SSH key from file (defaults to ~/.ssh/id_ed25519)
+	sshKeyPath := envOrDefault("ARGOCD_SSH_KEY_PATH", filepath.Join(os.Getenv("HOME"), ".ssh", "id_ed25519"))
+	if data, err := os.ReadFile(sshKeyPath); err == nil {
+		platformConfig.ArgoCDRepoSSHPrivateKey = string(data)
+	}
+
 	return infra.Config{
 		Environment:        env,
 		Region:             region,
@@ -61,10 +63,8 @@ func buildConfig(env, region string) infra.Config {
 		CloudflareAPIToken: os.Getenv("CLOUDFLARE_API_TOKEN"),
 		OpenAIAPIKey:       os.Getenv("OPENAI_API_KEY"),
 		ExistingVPCID:      os.Getenv("DIGITALOCEAN_VPC_ID"),
-		HelmChartsDir:      helmChartsDir,
-		ClusterConfig:      clusterConfig,
-		PlatformConfig:     platformConfig,
-		EdgeConfig:         edgeConfig,
+		ClusterConfig:  clusterConfig,
+		PlatformConfig: platformConfig,
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
-	"github.com/Crawbl-AI/crawbl-backend/internal/infra/edge"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 )
 
@@ -24,11 +23,9 @@ type Config struct {
 	DigitalOceanToken  string // Runtime use only (vault startupSecrets, DOCR)
 	CloudflareAPIToken string // Runtime use only (vault startupSecrets)
 	OpenAIAPIKey       string // Runtime use only (vault startupSecrets)
-	ExistingVPCID      string
-	HelmChartsDir      string
-	ClusterConfig      cluster.Config
-	PlatformConfig     platform.Config
-	EdgeConfig         edge.Config
+	ExistingVPCID  string
+	ClusterConfig  cluster.Config
+	PlatformConfig platform.Config
 }
 
 // Stack represents a Pulumi stack.
@@ -74,11 +71,6 @@ func buildProgram(infraCfg Config) pulumi.RunFunc {
 			return err
 		}
 
-		// Phase 4: Create edge infrastructure
-		if err := createEdge(ctx, infraCfg, k8sProvider); err != nil {
-			return err
-		}
-
 		// Export outputs
 		exportOutputs(ctx, clusterResult)
 		return nil
@@ -109,9 +101,6 @@ func createKubernetesProvider(ctx *pulumi.Context, clusterResult *cluster.Cluste
 func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.Provider) error {
 	platformConfig := config.PlatformConfig
 	platformConfig.Provider = k8sProvider
-	if config.HelmChartsDir != "" {
-		platformConfig.HelmChartsDir = config.HelmChartsDir
-	}
 	platformConfig.DigitalOceanToken = config.DigitalOceanToken
 	platformConfig.CloudflareAPIToken = config.CloudflareAPIToken
 	platformConfig.OpenAIAPIKey = config.OpenAIAPIKey
@@ -119,19 +108,6 @@ func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.
 	_, err := platform.NewPlatform(ctx, "platform", platformConfig, pulumi.Provider(k8sProvider))
 	if err != nil {
 		return fmt.Errorf("create platform: %w", err)
-	}
-	return nil
-}
-
-// createEdge provisions edge infrastructure (DNS, Gateway, TLS).
-func createEdge(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.Provider) error {
-	edgeConfig := config.EdgeConfig
-	edgeConfig.Provider = k8sProvider
-	edgeConfig.CloudflareAPIToken = config.CloudflareAPIToken
-
-	_, err := edge.NewEdge(ctx, "edge", edgeConfig, pulumi.Provider(k8sProvider))
-	if err != nil {
-		return fmt.Errorf("create edge: %w", err)
 	}
 	return nil
 }

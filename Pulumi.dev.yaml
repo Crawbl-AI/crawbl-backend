@@ -21,19 +21,3 @@ config:
     registryName: crawbl
     registrySubscriptionTier: starter
     createProject: false
-  crawbl:edge:
-    cloudflareZoneName: crawbl.com
-    dnsRecordName: dev.api.crawbl.com
-    acmeEmail: admin@crawbl.com
-    gatewayName: public-edge
-    gatewayNamespace: envoy-gateway-system
-    gatewayClassName: envoy-gateway-class
-    gatewayListenerName: https
-    clusterIssuerName: letsencrypt-cloudflare
-    acmeServer: "https://acme-v02.api.letsencrypt.org/directory"
-    gatewayTLSSecretName: public-edge-tls
-    dnsRecordTTL: 120
-    dnsRecordProxied: false
-    certManagerNamespace: cert-manager
-    cloudflareSecretName: cloudflare-api-token
-    cloudflareSecretKey: api-token

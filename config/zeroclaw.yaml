@@ -1,0 +1,60 @@
+defaults:
+  temperature: 0.7
+  timeout: 30
+  shortTimeout: 15
+  providerRetries: 2
+  providerBackoffMs: 500
+
+httpRequest:
+  maxResponseSize: 1000000
+  allowedDomains:
+    - "*"
+
+webFetch:
+  maxResponseSize: 500000
+
+webSearch:
+  provider: duckduckgo
+  maxResults: 5
+
+autonomy:
+  allowedCommands:
+    - git
+    - ls
+    - cat
+    - grep
+    - find
+    - pwd
+    - wc
+    - head
+    - tail
+    - date
+    - sed
+  forbiddenPaths:
+    - /etc
+    - /root
+    - /usr
+    - /bin
+    - /sbin
+    - /lib
+    - /opt
+    - /boot
+    - /dev
+    - /proc
+    - /sys
+    - /var
+    - /tmp
+    - ~/.ssh
+    - ~/.gnupg
+    - ~/.aws
+    - ~/.config
+  autoApprove:
+    - file_read
+    - memory_recall
+    - web_search_tool
+    - web_fetch
+    - calculator
+    - glob_search
+    - content_search
+    - image_info
+    - weather

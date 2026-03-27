@@ -20,7 +20,7 @@ func newRootCommand() *cobra.Command {
 		Use:   "userswarm-operator",
 		Short: "Crawbl UserSwarm operator command",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runOperatorWithOptions(":8080", ":8081", false)
+			return runOperatorWithOptions(":8080", ":8081", false, "config/zeroclaw.yaml")
 		},
 	}
 

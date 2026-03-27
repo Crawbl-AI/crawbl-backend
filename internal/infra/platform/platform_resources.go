@@ -2,7 +2,6 @@ package platform
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/pulumi/pulumi-digitalocean/sdk/v4/go/digitalocean"
@@ -12,7 +11,6 @@ import (
 	helmv3 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
 	rbacv1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/rbac/v1"
-	yamlv2 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/yaml/v2"
 	"github.com/pulumi/pulumi-random/sdk/v4/go/random"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -80,48 +78,34 @@ type VaultSecrets struct {
 	HmacSecret *random.RandomPassword
 }
 
-// createRandomPasswords creates random passwords for database, cache, and auth services.
-func createRandomPasswords(ctx *pulumi.Context, name string, cfg Config) (*random.RandomPassword, *random.RandomPassword, *random.RandomPassword, *random.RandomPassword, error) {
-	var pgAdmin, pgUser, redis, hmac *random.RandomPassword
-	var err error
-
-	if cfg.InstallBackendPostgresql {
-		pgAdmin, err = random.NewRandomPassword(ctx, name+"-pg-admin-pwd", &random.RandomPasswordArgs{
-			Length:  pulumi.Int(32),
-			Special: pulumi.Bool(true),
-		})
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("create pg admin password: %w", err)
-		}
-
-		pgUser, err = random.NewRandomPassword(ctx, name+"-pg-user-pwd", &random.RandomPasswordArgs{
-			Length:  pulumi.Int(32),
-			Special: pulumi.Bool(true),
-		})
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("create pg user password: %w", err)
-		}
-
-		hmac, err = random.NewRandomPassword(ctx, name+"-hmac-secret", &random.RandomPasswordArgs{
-			Length:  pulumi.Int(64),
-			Special: pulumi.Bool(false),
-		})
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("create hmac secret: %w", err)
-		}
+// createRandomPasswords creates random passwords for database and auth services.
+// These are always created because Vault CR startupSecrets references them.
+func createRandomPasswords(ctx *pulumi.Context, name string, cfg Config) (*random.RandomPassword, *random.RandomPassword, *random.RandomPassword, error) {
+	pgAdmin, err := random.NewRandomPassword(ctx, name+"-pg-admin-pwd", &random.RandomPasswordArgs{
+		Length:  pulumi.Int(32),
+		Special: pulumi.Bool(true),
+	})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create pg admin password: %w", err)
 	}
 
-	if cfg.InstallRedis {
-		redis, err = random.NewRandomPassword(ctx, name+"-redis-pwd", &random.RandomPasswordArgs{
-			Length:  pulumi.Int(32),
-			Special: pulumi.Bool(true),
-		})
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("create redis password: %w", err)
-		}
+	pgUser, err := random.NewRandomPassword(ctx, name+"-pg-user-pwd", &random.RandomPasswordArgs{
+		Length:  pulumi.Int(32),
+		Special: pulumi.Bool(true),
+	})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create pg user password: %w", err)
 	}
 
-	return pgAdmin, pgUser, redis, hmac, nil
+	hmac, err := random.NewRandomPassword(ctx, name+"-hmac-secret", &random.RandomPasswordArgs{
+		Length:  pulumi.Int(64),
+		Special: pulumi.Bool(false),
+	})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create hmac secret: %w", err)
+	}
+
+	return pgAdmin, pgUser, hmac, nil
 }
 
 // createPostgresAuthSecret creates the PostgreSQL auth secret.
@@ -145,84 +129,6 @@ func createPostgresAuthSecret(ctx *pulumi.Context, name string, cfg Config, admi
 	)...)
 }
 
-// createRedisAuthSecret creates the Redis auth secret.
-func createRedisAuthSecret(ctx *pulumi.Context, name string, cfg Config, redisPwd *random.RandomPassword, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*corev1.Secret, error) {
-	return corev1.NewSecret(ctx, name+"-redis-auth-secret", &corev1.SecretArgs{
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("backend-redis-auth"),
-			Namespace: pulumi.String(cfg.BackendNamespace),
-			Labels: pulumi.ToStringMap(map[string]string{
-				"app.kubernetes.io/managed-by": "pulumi",
-				"crawbl.io/secret-scope":       "backend-redis-auth",
-			}),
-		},
-		StringData: pulumi.StringMap{
-			"redis-password": redisPwd.Result,
-		},
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(append(deps, redisPwd)),
-	)...)
-}
-
-// deployCertManager deploys the cert-manager Helm chart.
-func deployCertManager(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	return helmv3.NewRelease(ctx, name+"-cert-manager", &helmv3.ReleaseArgs{
-		Name:      pulumi.String("cert-manager"),
-		Chart:     pulumi.String("cert-manager"),
-		Version:   pulumi.String(cfg.CertManagerChartVersion),
-		Namespace: pulumi.String(cfg.CertManagerNamespace),
-		RepositoryOpts: &helmv3.RepositoryOptsArgs{
-			Repo: pulumi.String("https://charts.jetstack.io"),
-		},
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(300),
-		Values:          pulumi.ToMap(cfg.CertManagerValues),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-}
-
-// deployEnvoyGateway deploys the Envoy Gateway Helm chart.
-func deployEnvoyGateway(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	return helmv3.NewRelease(ctx, name+"-envoy-gateway", &helmv3.ReleaseArgs{
-		Name:            pulumi.String("envoy-gateway"),
-		Chart:           pulumi.String(cfg.EnvoyGatewayChart),
-		Version:         pulumi.String(cfg.EnvoyGatewayChartVersion),
-		Namespace:       pulumi.String(cfg.EnvoyGatewayNamespace),
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(300),
-		Atomic:          pulumi.Bool(true),
-		Values:          pulumi.ToMap(cfg.EnvoyGatewayValues),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-}
-
-// createGatewayClass creates the Envoy Gateway GatewayClass.
-func createGatewayClass(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*apiextensions.CustomResource, error) {
-	return apiextensions.NewCustomResource(ctx, name+"-gateway-class", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("gateway.networking.k8s.io/v1"),
-		Kind:       pulumi.String("GatewayClass"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name: pulumi.String(cfg.EnvoyGatewayClassName),
-			Labels: pulumi.ToStringMap(map[string]string{
-				"app.kubernetes.io/managed-by": "pulumi",
-				"crawbl.io/scope":              "shared",
-			}),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": map[string]interface{}{
-				"controllerName": cfg.EnvoyGatewayControllerName,
-			},
-		},
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-}
 
 // deployVaultOperator deploys the bank-vaults vault-operator Helm chart from ghcr.io.
 func deployVaultOperator(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
@@ -512,27 +418,6 @@ func createVaultInstance(ctx *pulumi.Context, name string, cfg Config, secrets *
 	)...)
 }
 
-// deployVaultSecretsOperator deploys the HashiCorp Vault Secrets Operator Helm chart.
-func deployVaultSecretsOperator(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	return helmv3.NewRelease(ctx, name+"-vault-secrets-operator", &helmv3.ReleaseArgs{
-		Name:      pulumi.String("vault-secrets-operator"),
-		Chart:     pulumi.String("vault-secrets-operator"),
-		Version:   pulumi.String(cfg.VaultSecretsOperatorChartVersion),
-		Namespace: pulumi.String(cfg.VaultSecretsOperatorNamespace),
-		RepositoryOpts: &helmv3.RepositoryOptsArgs{
-			Repo: pulumi.String("https://helm.releases.hashicorp.com"),
-		},
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(600),
-		Atomic:          pulumi.Bool(true),
-		Values:          pulumi.ToMap(cfg.VaultSecretsOperatorValues),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-}
-
-
 // createOrchestratorServiceAccount creates the orchestrator SA before VSO and the Helm release.
 // VSO needs this SA to authenticate with Vault; the orchestrator chart reuses it via serviceAccount.create=false.
 func createOrchestratorServiceAccount(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*corev1.ServiceAccount, error) {
@@ -544,279 +429,106 @@ func createOrchestratorServiceAccount(ctx *pulumi.Context, name string, cfg Conf
 	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
 }
 
-// createVaultSecretsSync creates VSO CRs to sync Vault KV secrets to K8s Secrets.
-func createVaultSecretsSync(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) ([]pulumi.Resource, error) {
-	// VaultConnection in backend namespace
-	conn, err := apiextensions.NewCustomResource(ctx, name+"-vault-connection", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultConnection"),
+// deployArgoCD deploys the ArgoCD Helm chart.
+func deployArgoCD(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
+	return helmv3.NewRelease(ctx, name+"-argocd", &helmv3.ReleaseArgs{
+		Name:      pulumi.String("argocd"),
+		Chart:     pulumi.String("argo-cd"),
+		Version:   pulumi.String(cfg.ArgoCDChartVersion),
+		Namespace: pulumi.String("argocd"),
+		RepositoryOpts: &helmv3.RepositoryOptsArgs{
+			Repo: pulumi.String("https://argoproj.github.io/argo-helm"),
+		},
+		CreateNamespace: pulumi.Bool(false),
+		Timeout:         pulumi.Int(600),
+		Atomic:          pulumi.Bool(true),
+		Values:          pulumi.ToMap(cfg.ArgoCDValues),
+	}, append(opts,
+		pulumi.Provider(cfg.Provider),
+		pulumi.DependsOn(deps),
+	)...)
+}
+
+// createArgoCDRepoSecret creates a K8s Secret for ArgoCD to access the private argocd-apps repo via SSH.
+// ArgoCD discovers repo credentials via labeled secrets in its namespace.
+func createArgoCDRepoSecret(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*corev1.Secret, error) {
+	return corev1.NewSecret(ctx, name+"-argocd-repo-apps", &corev1.SecretArgs{
 		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("vault-connection"),
-			Namespace: pulumi.String(cfg.BackendNamespace),
+			Name:      pulumi.String("argocd-repo-apps"),
+			Namespace: pulumi.String("argocd"),
+			Labels: pulumi.ToStringMap(map[string]string{
+				"argocd.argoproj.io/secret-type": "repository",
+			}),
+		},
+		Type: pulumi.String("Opaque"),
+		StringData: pulumi.StringMap{
+			"type":          pulumi.String("git"),
+			"url":           pulumi.String(cfg.ArgoCDAppsRepoURL),
+			"sshPrivateKey": pulumi.String(cfg.ArgoCDRepoSSHPrivateKey),
+		},
+	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
+}
+
+// createArgoCDRootApp creates the root ArgoCD Application that points to the app-of-apps chart.
+func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*apiextensions.CustomResource, error) {
+	return apiextensions.NewCustomResource(ctx, name+"-argocd-root-app", &apiextensions.CustomResourceArgs{
+		ApiVersion: pulumi.String("argoproj.io/v1alpha1"),
+		Kind:       pulumi.String("Application"),
+		Metadata: &metav1.ObjectMetaArgs{
+			Name:      pulumi.String("crawbl-apps"),
+			Namespace: pulumi.String("argocd"),
+			Finalizers: pulumi.ToStringArray([]string{
+				"resources-finalizer.argocd.argoproj.io",
+			}),
 		},
 		OtherFields: map[string]interface{}{
 			"spec": pulumi.Map{
-				"address": pulumi.String(fmt.Sprintf("http://vault.%s:8200", cfg.VaultNamespace)),
+				"project": pulumi.String("default"),
+				"source": pulumi.Map{
+					"repoURL":        pulumi.String(cfg.ArgoCDAppsRepoURL),
+					"targetRevision": pulumi.String(cfg.ArgoCDAppsTargetRevision),
+					"path":           pulumi.String("apps"),
+				},
+				"destination": pulumi.Map{
+					"server":    pulumi.String("https://kubernetes.default.svc"),
+					"namespace": pulumi.String("argocd"),
+				},
+				"syncPolicy": pulumi.Map{
+					"automated": pulumi.Map{
+						"prune":    pulumi.Bool(true),
+						"selfHeal": pulumi.Bool(true),
+					},
+					"syncOptions": pulumi.ToStringArray([]string{
+						"CreateNamespace=false",
+					}),
+				},
 			},
 		},
 	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
-	if err != nil {
-		return nil, fmt.Errorf("create vault connection: %w", err)
-	}
-
-	// VaultAuth using kubernetes auth
-	auth, err := apiextensions.NewCustomResource(ctx, name+"-vault-auth-backend", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultAuth"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("vault-auth-backend"),
-			Namespace: pulumi.String(cfg.BackendNamespace),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": pulumi.Map{
-				"vaultConnectionRef": pulumi.String("vault-connection"),
-				"method":             pulumi.String("kubernetes"),
-				"mount":              pulumi.String("kubernetes"),
-				"kubernetes": pulumi.Map{
-					"role":           pulumi.String("crawbl-backend"),
-					"serviceAccount": pulumi.String("orchestrator"),
-					"audiences":      pulumi.ToStringArray([]string{"system:konnectivity-server"}),
-				},
-			},
-		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn([]pulumi.Resource{conn}))...)
-	if err != nil {
-		return nil, fmt.Errorf("create vault auth: %w", err)
-	}
-
-	// VaultStaticSecret for orchestrator secrets
-	orchSecret, err := apiextensions.NewCustomResource(ctx, name+"-vso-orchestrator-secrets", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultStaticSecret"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("orchestrator-secrets"),
-			Namespace: pulumi.String(cfg.BackendNamespace),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": pulumi.Map{
-				"vaultAuthRef":   pulumi.String("vault-auth-backend"),
-				"mount":          pulumi.String("kvv2"),
-				"type":           pulumi.String("kv-v2"),
-				"path":           pulumi.String("crawbl/dev/backend/orchestrator"),
-				"refreshAfter":   pulumi.String("60s"),
-				"destination": pulumi.Map{
-					"name":   pulumi.String("orchestrator-vault-secrets"),
-					"create": pulumi.Bool(true),
-				},
-			},
-		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn([]pulumi.Resource{auth}))...)
-	if err != nil {
-		return nil, fmt.Errorf("create orchestrator vault static secret: %w", err)
-	}
-
-	// VaultStaticSecret for PostgreSQL auth (used by existing pg-auth-secret pattern)
-	pgSecret, err := apiextensions.NewCustomResource(ctx, name+"-vso-pg-secrets", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultStaticSecret"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("postgresql-secrets"),
-			Namespace: pulumi.String(cfg.BackendNamespace),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": pulumi.Map{
-				"vaultAuthRef":   pulumi.String("vault-auth-backend"),
-				"mount":          pulumi.String("kvv2"),
-				"type":           pulumi.String("kv-v2"),
-				"path":           pulumi.String("crawbl/dev/backend/postgresql"),
-				"refreshAfter":   pulumi.String("60s"),
-				"destination": pulumi.Map{
-					"name":   pulumi.String("postgresql-vault-secrets"),
-					"create": pulumi.Bool(true),
-				},
-			},
-		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn([]pulumi.Resource{auth}))...)
-	if err != nil {
-		return nil, fmt.Errorf("create postgresql vault static secret: %w", err)
-	}
-
-	// --- swarms-dev namespace: VaultConnection + VaultAuth + runtime secrets ---
-
-	swarmsConn, err := apiextensions.NewCustomResource(ctx, name+"-vault-connection-swarms", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultConnection"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("vault-connection"),
-			Namespace: pulumi.String("swarms-dev"),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": pulumi.Map{
-				"address": pulumi.String(fmt.Sprintf("http://vault.%s:8200", cfg.VaultNamespace)),
-			},
-		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
-	if err != nil {
-		return nil, fmt.Errorf("create swarms vault connection: %w", err)
-	}
-
-	swarmsAuth, err := apiextensions.NewCustomResource(ctx, name+"-vault-auth-swarms", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultAuth"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("vault-auth-runtime"),
-			Namespace: pulumi.String("swarms-dev"),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": pulumi.Map{
-				"vaultConnectionRef": pulumi.String("vault-connection"),
-				"method":             pulumi.String("kubernetes"),
-				"mount":              pulumi.String("kubernetes"),
-				"kubernetes": pulumi.Map{
-					"role":           pulumi.String("crawbl-swarms-dev-runtime"),
-					"serviceAccount": pulumi.String("default"),
-					"audiences":      pulumi.ToStringArray([]string{"system:konnectivity-server"}),
-				},
-			},
-		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn([]pulumi.Resource{swarmsConn}))...)
-	if err != nil {
-		return nil, fmt.Errorf("create swarms vault auth: %w", err)
-	}
-
-	runtimeSecret, err := apiextensions.NewCustomResource(ctx, name+"-vso-runtime-openai", &apiextensions.CustomResourceArgs{
-		ApiVersion: pulumi.String("secrets.hashicorp.com/v1beta1"),
-		Kind:       pulumi.String("VaultStaticSecret"),
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("runtime-openai-secrets"),
-			Namespace: pulumi.String("swarms-dev"),
-		},
-		OtherFields: map[string]interface{}{
-			"spec": pulumi.Map{
-				"vaultAuthRef": pulumi.String("vault-auth-runtime"),
-				"mount":        pulumi.String("kvv2"),
-				"type":         pulumi.String("kv-v2"),
-				"path":         pulumi.String("crawbl/dev/runtime/openai"),
-				"refreshAfter": pulumi.String("60s"),
-				"destination": pulumi.Map{
-					"name":   pulumi.String("runtime-openai-secrets"),
-					"create": pulumi.Bool(true),
-				},
-			},
-		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn([]pulumi.Resource{swarmsAuth}))...)
-	if err != nil {
-		return nil, fmt.Errorf("create runtime openai vault static secret: %w", err)
-	}
-
-	return []pulumi.Resource{conn, auth, orchSecret, pgSecret, swarmsConn, swarmsAuth, runtimeSecret}, nil
 }
 
-// applyUserSwarmCRD applies the UserSwarm CRD from the existing YAML file in helm/operator/crds/.
-func applyUserSwarmCRD(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*yamlv2.ConfigFile, error) {
-	crdPath := filepath.Join(cfg.HelmChartsDir, "operator", "crds", "userswarms.crawbl.ai.yaml")
-	return yamlv2.NewConfigFile(ctx, name+"-userswarm-crd", &yamlv2.ConfigFileArgs{
-		File: pulumi.String(crdPath),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-}
-
-// deployUserSwarmOperator deploys the UserSwarm operator Helm chart.
-func deployUserSwarmOperator(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	chartPath := filepath.Join(cfg.HelmChartsDir, "operator")
-	return helmv3.NewRelease(ctx, name+"-userswarm-operator", &helmv3.ReleaseArgs{
-		Name:            pulumi.String("userswarm-operator"),
-		Chart:           pulumi.String(chartPath),
-		Namespace:       pulumi.String(cfg.UserSwarmOperatorNamespace),
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(300),
-		SkipCrds:        pulumi.Bool(true),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-}
-
-// deployPostgreSQL deploys the Bitnami PostgreSQL Helm chart.
-func deployPostgreSQL(ctx *pulumi.Context, name string, cfg Config, authSecret *corev1.Secret, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	vals := mergeValues(cfg.BackendPostgresqlValues, map[string]interface{}{
-		"fullnameOverride": "backend-postgresql",
-		"auth": map[string]interface{}{
-			"existingSecret": "backend-postgresql-auth",
-			"secretKeys": map[string]interface{}{
-				"adminPasswordKey": "postgres-password",
-				"userPasswordKey":  "password",
+// createCloudflareAPITokenSecrets creates the Cloudflare API token secret
+// in cert-manager and external-dns namespaces.
+func createCloudflareAPITokenSecrets(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) ([]pulumi.Resource, error) {
+	namespaces := []string{"cert-manager", "external-dns"}
+	var secrets []pulumi.Resource
+	for _, ns := range namespaces {
+		s, err := corev1.NewSecret(ctx, name+"-cloudflare-token-"+ns, &corev1.SecretArgs{
+			Metadata: &metav1.ObjectMetaArgs{
+				Name:      pulumi.String("cloudflare-api-token"),
+				Namespace: pulumi.String(ns),
 			},
-			"username": cfg.BackendDatabaseUser,
-			"database": cfg.BackendDatabaseName,
-		},
-	})
-
-	return helmv3.NewRelease(ctx, name+"-backend-postgresql", &helmv3.ReleaseArgs{
-		Name:      pulumi.String("backend-postgresql"),
-		Chart:     pulumi.String("postgresql"),
-		Version:   pulumi.String(cfg.BackendPostgresqlChartVersion),
-		Namespace: pulumi.String(cfg.BackendNamespace),
-		RepositoryOpts: &helmv3.RepositoryOptsArgs{
-			Repo: pulumi.String("https://charts.bitnami.com/bitnami"),
-		},
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(600),
-		Atomic:          pulumi.Bool(true),
-		Values:          pulumi.ToMap(vals),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(append(deps, authSecret)),
-	)...)
-}
-
-// deployRedis deploys the Bitnami Redis Helm chart.
-func deployRedis(ctx *pulumi.Context, name string, cfg Config, authSecret *corev1.Secret, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	vals := mergeValues(cfg.RedisValues, map[string]interface{}{
-		"fullnameOverride": "backend-redis",
-		"auth": map[string]interface{}{
-			"existingSecret":            "backend-redis-auth",
-			"existingSecretPasswordKey": "redis-password",
-		},
-	})
-
-	return helmv3.NewRelease(ctx, name+"-backend-redis", &helmv3.ReleaseArgs{
-		Name:      pulumi.String("backend-redis"),
-		Chart:     pulumi.String("redis"),
-		Version:   pulumi.String(cfg.RedisChartVersion),
-		Namespace: pulumi.String(cfg.BackendNamespace),
-		RepositoryOpts: &helmv3.RepositoryOptsArgs{
-			Repo: pulumi.String("https://charts.bitnami.com/bitnami"),
-		},
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(600),
-		Atomic:          pulumi.Bool(true),
-		Values:          pulumi.ToMap(vals),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(append(deps, authSecret)),
-	)...)
-}
-
-// deployOrchestrator deploys the Crawbl orchestrator Helm chart.
-func deployOrchestrator(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
-	chartPath := filepath.Join(cfg.HelmChartsDir, "orchestrator")
-	return helmv3.NewRelease(ctx, name+"-orchestrator", &helmv3.ReleaseArgs{
-		Name:            pulumi.String("orchestrator"),
-		Chart:           pulumi.String(chartPath),
-		Namespace:       pulumi.String(cfg.BackendNamespace),
-		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(600),
-		Atomic:          pulumi.Bool(true),
-		Values: pulumi.ToMap(map[string]interface{}{
-			"fullnameOverride": "orchestrator",
-		}),
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
+			Type: pulumi.String("Opaque"),
+			StringData: pulumi.StringMap{
+				"api-token": pulumi.String(cfg.CloudflareAPIToken),
+			},
+		}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
+		if err != nil {
+			return nil, fmt.Errorf("create cloudflare secret in %s: %w", ns, err)
+		}
+		secrets = append(secrets, s)
+	}
+	return secrets, nil
 }
 
 // createDOCRRefreshCronJob creates a CronJob that periodically refreshes DOCR pull secrets.
@@ -997,18 +709,6 @@ done
 	}
 
 	return nil
-}
-
-// mergeValues merges two value maps, with overrides taking precedence.
-func mergeValues(base, overrides map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-	for k, v := range base {
-		result[k] = v
-	}
-	for k, v := range overrides {
-		result[k] = v
-	}
-	return result
 }
 
 // toResourceSlice converts a slice of typed resources to a generic resource slice.
