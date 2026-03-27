@@ -906,14 +906,6 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 	}
 
 	if apierrors.IsNotFound(err) {
-		// If the smoke test already passed for this exact spec, don't recreate the Job.
-		// The previous Job was TTL-deleted after completion — that's expected.
-		passedChecksum := swarm.Annotations["crawbl.ai/smoke-passed-checksum"]
-		passedImage := swarm.Annotations["crawbl.ai/smoke-passed-image"]
-		if passedChecksum == checksum && passedImage == r.BootstrapImage {
-			return metav1.ConditionTrue, conditionReasonReady, "smoke test passed through the userswarm service path", nil
-		}
-
 		job = batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      jobName,
@@ -930,8 +922,6 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 		}
 
 		job.Spec.BackoffLimit = ptrTo[int32](0)
-		const jobTTLSeconds = 60
-		job.Spec.TTLSecondsAfterFinished = ptrTo[int32](jobTTLSeconds)
 		job.Spec.Template.Labels = labelsFor(swarm)
 		job.Spec.Template.Annotations = map[string]string{
 			"crawbl.ai/smoke-checksum":  checksum,
@@ -965,17 +955,6 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 	}
 
 	if job.Status.Succeeded > 0 {
-		// Stamp the passed checksum on the UserSwarm so we don't recreate the Job after TTL cleanup.
-		if swarm.Annotations == nil {
-			swarm.Annotations = make(map[string]string)
-		}
-		if swarm.Annotations["crawbl.ai/smoke-passed-checksum"] != checksum || swarm.Annotations["crawbl.ai/smoke-passed-image"] != r.BootstrapImage {
-			swarm.Annotations["crawbl.ai/smoke-passed-checksum"] = checksum
-			swarm.Annotations["crawbl.ai/smoke-passed-image"] = r.BootstrapImage
-			if updateErr := r.Update(ctx, swarm); updateErr != nil {
-				return metav1.ConditionFalse, conditionReasonReconcileError, "failed to stamp smoke checksum on userswarm", updateErr
-			}
-		}
 		return metav1.ConditionTrue, conditionReasonReady, "smoke test passed through the userswarm service path", nil
 	}
 	if job.Status.Failed > 0 {
