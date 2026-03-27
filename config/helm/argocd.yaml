@@ -67,8 +67,16 @@ repoServer:
           mkdir -p /custom-tools/plugin/viaduct.ai/v1/ksops
           cp /usr/local/bin/ksops /custom-tools/plugin/viaduct.ai/v1/ksops/ksops
           cp /usr/local/bin/kustomize /custom-tools/kustomize
-          cp /usr/local/bin/sops /custom-tools/sops
+          cp /usr/local/bin/kustomize-sops /custom-tools/kustomize-sops
           echo "Done."
+      volumeMounts:
+        - mountPath: /custom-tools
+          name: custom-tools
+    - name: install-sops
+      image: ghcr.io/getsops/sops:v3.9.4-alpine
+      command: ["/bin/sh", "-c"]
+      args:
+        - cp /usr/local/bin/sops /custom-tools/sops
       volumeMounts:
         - mountPath: /custom-tools
           name: custom-tools
