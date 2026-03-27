@@ -1,5 +1,9 @@
 package controller
 
+// This file handles the "config layer" of a UserSwarm runtime: service account,
+// bootstrap ConfigMap, and the deprecated managed env secret. These are all
+// lightweight resources that need to exist before the StatefulSet can reference them.
+
 import (
 	"context"
 
@@ -11,6 +15,9 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
 )
 
+// reconcileServiceAccount ensures the per-user service account exists.
+// It also wires up the image pull secret reference so pods automatically
+// get the right credentials when pulling from private registries.
 func (r *UserSwarmReconciler) reconcileServiceAccount(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
 	obj := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -33,6 +40,10 @@ func (r *UserSwarmReconciler) reconcileServiceAccount(ctx context.Context, swarm
 	return err
 }
 
+// reconcileConfigMap creates or updates the bootstrap ConfigMap that contains
+// ZeroClaw configuration files (config.toml, SOUL.md, IDENTITY.md, etc.).
+// The init container copies these into the PVC on first boot, and subsequent
+// reconciles only update operator-managed keys without clobbering ZeroClaw state.
 func (r *UserSwarmReconciler) reconcileConfigMap(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
 	obj := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -45,6 +56,7 @@ func (r *UserSwarmReconciler) reconcileConfigMap(ctx context.Context, swarm *cra
 		if err := controllerutil.SetControllerReference(swarm, obj, r.Scheme); err != nil {
 			return err
 		}
+		// Build the full set of bootstrap files from the CR spec + shared ZeroClaw config.
 		bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm, r.ZeroClawConfig)
 		if err != nil {
 			return err
@@ -55,6 +67,12 @@ func (r *UserSwarmReconciler) reconcileConfigMap(ctx context.Context, swarm *cra
 	return err
 }
 
+// reconcileDeprecatedManagedSecret handles the legacy path where secret env vars are
+// inlined directly in the CR's spec.config.secretData field. This creates a K8s Secret
+// that gets mounted into the runtime containers via envFrom.
+//
+// This is deprecated — the preferred path is spec.config.envSecretRef pointing to an
+// ESO-managed external secret. But we still support it for backward compatibility.
 func (r *UserSwarmReconciler) reconcileDeprecatedManagedSecret(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
 	if !usesManagedEnvSecret(swarm) {
 		return nil

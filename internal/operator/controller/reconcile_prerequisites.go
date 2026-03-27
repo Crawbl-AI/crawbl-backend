@@ -1,5 +1,11 @@
 package controller
 
+// This file validates shared prerequisites that must exist BEFORE we create any
+// per-user workload resources. These are things the operator doesn't own — the
+// runtime namespace, image pull secrets, and env secrets are provisioned externally
+// (by ArgoCD, ESO, or an admin). If any are missing, the reconcile loop bails
+// early and requeues slowly until someone fixes it.
+
 import (
 	"context"
 	"fmt"
@@ -11,11 +17,16 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
+// ensureRuntimeNamespaceExists checks that the shared runtime namespace already exists.
+// We don't create it — that's ArgoCD's job. If it's missing, we can't do anything.
 func (r *UserSwarmReconciler) ensureRuntimeNamespaceExists(ctx context.Context, name string) error {
 	var ns corev1.Namespace
 	return r.Get(ctx, types.NamespacedName{Name: name}, &ns)
 }
 
+// ensureImagePullSecretExists verifies the image pull secret is present in the runtime
+// namespace. This secret is needed for pulling the ZeroClaw container image from a
+// private registry. If no pull secret is configured on the CR, we skip the check.
 func (r *UserSwarmReconciler) ensureImagePullSecretExists(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
 	if swarm.Spec.Runtime.ImagePullSecretName == "" {
 		return nil
@@ -35,7 +46,12 @@ func (r *UserSwarmReconciler) ensureImagePullSecretExists(ctx context.Context, s
 	return nil
 }
 
+// ensureRuntimeSecretExists verifies the env secret (provider keys, credentials, etc.)
+// exists in the runtime namespace. This can come from either an explicit envSecretRef
+// on the CR, or from the deprecated inline secretData field which creates a managed secret.
+// If neither is configured, we skip the check — the runtime just won't have any secret env.
 func (r *UserSwarmReconciler) ensureRuntimeSecretExists(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
+	// Prefer the explicit external secret ref; fall back to the deprecated managed secret name.
 	name := envSecretName(swarm)
 	if name == "" && usesManagedEnvSecret(swarm) {
 		name = managedEnvSecretName(swarm)

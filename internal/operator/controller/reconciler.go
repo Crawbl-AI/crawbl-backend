@@ -19,20 +19,31 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
-// Reconcile keeps one UserSwarm aligned with the shared-namespace runtime model:
-// validate shared prerequisites first, then reconcile the per-user runtime objects.
+// Reconcile is the main entry point for the UserSwarm controller. It runs every time
+// a UserSwarm CR or any of its owned child resources change.
+//
+// The flow is: validate shared prerequisites (namespace, pull secret, runtime secret),
+// then reconcile each per-user resource in dependency order, then assess overall readiness.
+// If any prerequisite is missing we bail early with a slow requeue — no point creating
+// workloads if the namespace or secrets aren't there yet.
 //
 //nolint:cyclop,gocognit,gocyclo
 func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var swarm crawblv1alpha1.UserSwarm
 	if err := r.Get(ctx, req.NamespacedName, &swarm); err != nil {
+		// If the CR was deleted between the event and now, nothing to do.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// If the CR is being deleted, hand off to the cleanup path which removes
+	// all child resources before dropping the finalizer.
 	if !swarm.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &swarm)
 	}
 
+	// Add our finalizer on first sight so we get a chance to clean up child resources
+	// before the CR disappears. Without this, K8s would just delete the CR and orphan
+	// the StatefulSet, PVCs, etc.
 	if !controllerutil.ContainsFinalizer(&swarm, userSwarmFinalizer) {
 		controllerutil.AddFinalizer(&swarm, userSwarmFinalizer)
 		if err := r.Update(ctx, &swarm); err != nil {
@@ -43,6 +54,11 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	runtimeNamespace := desiredRuntimeNamespace(&swarm)
 	workloadName := workloadName(&swarm)
 	serviceName := serviceName(&swarm)
+
+	// --- Phase 1: Validate shared prerequisites ---
+	// These are resources we don't own (namespace, pull secret, runtime secret).
+	// If any are missing we set conditions and requeue slowly — an admin or ESO
+	// needs to fix these before we can proceed.
 
 	if err := r.ensureRuntimeNamespaceExists(ctx, runtimeNamespace); err != nil {
 		r.setCondition(&swarm, conditionTypeRuntimeNamespace, metav1.ConditionFalse, conditionReasonMissingNS, err.Error())
@@ -79,6 +95,10 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.updateStatus(ctx, &swarm, ctrl.Result{RequeueAfter: requeueSlow})
 	}
 
+	// --- Phase 2: Reconcile per-user runtime objects ---
+	// These are created in dependency order: service account and config first,
+	// then storage, then networking, then the workload, then the route.
+
 	swarm.Status.ObservedGeneration = swarm.Generation
 	swarm.Status.RuntimeNamespace = runtimeNamespace
 	swarm.Status.ServiceName = serviceName
@@ -112,10 +132,11 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.reconcileError(ctx, &swarm, err)
 	}
 
-	var workload appsv1.StatefulSet
+	// --- Phase 3: Assess readiness ---
 	// Read freshly reconciled objects through the uncached reader; otherwise a new
 	// StatefulSet can be created successfully and still look "not found" until the
 	// shared informer cache catches up on the next watch cycle.
+	var workload appsv1.StatefulSet
 	if err := r.readObject(ctx, types.NamespacedName{Namespace: runtimeNamespace, Name: workloadName}, &workload); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.setCondition(&swarm, conditionTypePodReady, metav1.ConditionFalse, conditionReasonPending, "userswarm pod is still materializing")
@@ -134,6 +155,8 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	r.setCondition(&swarm, conditionTypePullSecret, metav1.ConditionTrue, conditionReasonReady, "image pull secret is ready")
 	r.setCondition(&swarm, conditionTypeRuntimeSecret, metav1.ConditionTrue, conditionReasonReady, "runtime secret is ready")
 
+	// A pod is "ready" when the StatefulSet has rolled out the desired revision and
+	// all replicas report ready. We also check ObservedGeneration to avoid stale rollout status.
 	podReady := desiredReplicas == 0 || (workload.Status.ReadyReplicas >= desiredReplicas &&
 		workload.Status.UpdatedReplicas >= desiredReplicas &&
 		workload.Status.CurrentRevision == workload.Status.UpdateRevision &&
@@ -144,6 +167,7 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.setCondition(&swarm, conditionTypePodReady, metav1.ConditionFalse, conditionReasonPending, "userswarm pod revision is still becoming ready")
 	}
 
+	// Check that the ClusterIP service exists and is reachable.
 	var runtimeService corev1.Service
 	if err := r.readObject(ctx, types.NamespacedName{Namespace: runtimeNamespace, Name: serviceName}, &runtimeService); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -157,12 +181,16 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	r.setCondition(&swarm, conditionTypeServiceReady, metav1.ConditionTrue, conditionReasonReady, "userswarm service is ready")
 
+	// Check if the HTTPRoute (if enabled) has been accepted by the gateway controller.
 	routeStatus, routeReason, routeMessage, err := r.routeConditionStatus(ctx, &swarm)
 	if err != nil {
 		return r.reconcileError(ctx, &swarm, err)
 	}
 	r.setCondition(&swarm, conditionTypeRouteReady, routeStatus, routeReason, routeMessage)
 
+	// --- Phase 4: Smoke test ---
+	// Only run the smoke test once pod + service + route are all ready.
+	// For suspended swarms (replicas=0), skip entirely.
 	smokeStatus := metav1.ConditionUnknown
 	smokeReason := conditionReasonSmokePending
 	smokeMessage := "waiting for pod, service, and route readiness before running smoke test"
@@ -178,6 +206,9 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	r.setCondition(&swarm, conditionTypeSmokeTestPassed, smokeStatus, smokeReason, smokeMessage)
 
+	// --- Phase 5: Compute final verified/ready status ---
+	// "Verified" is the ultimate gate — the orchestrator waits for this before routing
+	// user traffic to the swarm. It requires pod + service + smoke test + route (if enabled).
 	verified := desiredReplicas > 0 &&
 		podReady &&
 		api_meta.IsStatusConditionTrue(swarm.Status.Conditions, conditionTypeServiceReady) &&
@@ -204,9 +235,13 @@ func (r *UserSwarmReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	swarm.Status.URL = routeURL(&swarm)
 
+	// Always requeue so we keep re-checking readiness until the swarm is stable.
 	return r.updateStatus(ctx, &swarm, ctrl.Result{Requeue: true})
 }
 
+// reconcileDelete handles the deletion flow. It cleans up all child resources we created
+// in the runtime namespace, then drops the finalizer so K8s can actually delete the CR.
+// If some resources are still terminating, we requeue and check again later.
 func (r *UserSwarmReconciler) reconcileDelete(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(swarm, userSwarmFinalizer) {
 		return ctrl.Result{}, nil
@@ -223,6 +258,8 @@ func (r *UserSwarmReconciler) reconcileDelete(ctx context.Context, swarm *crawbl
 		return result, err
 	}
 
+	// Actually delete all child resources. If any are still terminating, pending=true
+	// and we'll come back on the next requeue to check again.
 	pending, err := r.cleanupManagedResources(ctx, swarm)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -231,6 +268,7 @@ func (r *UserSwarmReconciler) reconcileDelete(ctx context.Context, swarm *crawbl
 		return ctrl.Result{RequeueAfter: requeueSlow}, nil
 	}
 
+	// Everything's gone — drop the finalizer so the CR itself can be deleted.
 	controllerutil.RemoveFinalizer(swarm, userSwarmFinalizer)
 	if err := r.Update(ctx, swarm); err != nil {
 		return ctrl.Result{}, err
@@ -238,7 +276,9 @@ func (r *UserSwarmReconciler) reconcileDelete(ctx context.Context, swarm *crawbl
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager registers the controller with the manager.
+// SetupWithManager registers the controller with the manager and declares which
+// child resource types we own. When any owned resource changes, controller-runtime
+// automatically triggers a reconcile for the parent UserSwarm.
 func (r *UserSwarmReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&crawblv1alpha1.UserSwarm{}).
