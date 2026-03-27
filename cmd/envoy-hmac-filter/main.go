@@ -77,9 +77,20 @@ func (p *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPlugi
 	}
 
 	var cfg pluginConfig
+	// Envoy Gateway may double-encode the config as a JSON string.
+	// Try direct unmarshal first, then unwrap the string if needed.
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		proxywasm.LogCriticalf("hmac-filter: failed to parse plugin configuration: %v", err)
-		return types.OnPluginStartStatusFailed
+		// Try unwrapping a JSON-encoded string
+		var raw string
+		if err2 := json.Unmarshal(data, &raw); err2 == nil {
+			if err3 := json.Unmarshal([]byte(raw), &cfg); err3 != nil {
+				proxywasm.LogCriticalf("hmac-filter: failed to parse plugin configuration: %v (unwrap: %v)", err, err3)
+				return types.OnPluginStartStatusFailed
+			}
+		} else {
+			proxywasm.LogCriticalf("hmac-filter: failed to parse plugin configuration: %v", err)
+			return types.OnPluginStartStatusFailed
+		}
 	}
 
 	if cfg.HMACSecret == "" {
