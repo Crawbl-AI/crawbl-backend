@@ -57,7 +57,11 @@ func createArgoCDRepoSecret(ctx *pulumi.Context, name string, cfg Config, deps [
 			"url":           pulumi.String(cfg.ArgoCDAppsRepoURL),
 			"sshPrivateKey": pulumi.String(cfg.ArgoCDRepoSSHPrivateKey),
 		},
-	}, append(opts, pulumi.Provider(cfg.Provider), pulumi.DependsOn(deps))...)
+	}, append(opts,
+		pulumi.Provider(cfg.Provider),
+		pulumi.DependsOn(deps),
+		pulumi.RetainOnDelete(true), // Never delete the repo secret — ArgoCD breaks without it
+	)...)
 }
 
 // createArgoCDRootApp creates the root ArgoCD Application that points to the app-of-apps directory.

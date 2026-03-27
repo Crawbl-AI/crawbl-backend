@@ -57,6 +57,9 @@ func buildConfig(env, region string) infra.Config {
 			platformConfig.ArgoCDRepoSSHPrivateKey = string(data)
 		}
 	}
+	if platformConfig.ArgoCDRepoSSHPrivateKey == "" {
+		fmt.Println("WARNING: ARGOCD_SSH_PRIVATE_KEY and ARGOCD_SSH_KEY_PATH are both unset — repo secret will not be managed by Pulumi")
+	}
 
 	return infra.Config{
 		Environment:        env,
