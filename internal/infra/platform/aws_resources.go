@@ -1,7 +1,6 @@
-// Package aws provides Pulumi resources for AWS services used by Crawbl.
-// Currently manages: S3 backup bucket, IAM backup user, and Secrets Manager entries.
+// AWS resources managed by Pulumi: S3 backup bucket, IAM backup user, Secrets Manager entries.
 // AWS is used alongside DigitalOcean — DO for compute, AWS for secrets and storage.
-package aws
+package platform
 
 import (
 	"fmt"
@@ -13,19 +12,19 @@ import (
 )
 
 // Config holds AWS infrastructure configuration.
-type Config struct {
+type AWSConfig struct {
 	Region      string // AWS region (e.g. "eu-central-1")
 	Environment string // Environment name (e.g. "dev")
 }
 
 // Resources holds references to created AWS resources.
-type Resources struct {
+type AWSResources struct {
 	BackupBucket *s3.BucketV2
 }
 
 // NewResources creates all AWS resources managed by Pulumi.
-func NewResources(ctx *pulumi.Context, cfg Config, opts ...pulumi.ResourceOption) (*Resources, error) {
-	result := &Resources{}
+func NewAWSResources(ctx *pulumi.Context, cfg AWSConfig, opts ...pulumi.ResourceOption) (*AWSResources, error) {
+	result := &AWSResources{}
 
 	// --- S3 backup bucket ---
 	// Stores PVC backups from ZeroClaw swarm pods. Path convention:
@@ -47,7 +46,7 @@ func NewResources(ctx *pulumi.Context, cfg Config, opts ...pulumi.ResourceOption
 }
 
 // createBackupBucket creates the S3 bucket for PVC backups with lifecycle rules.
-func createBackupBucket(ctx *pulumi.Context, cfg Config, opts ...pulumi.ResourceOption) (*s3.BucketV2, error) {
+func createBackupBucket(ctx *pulumi.Context, cfg AWSConfig, opts ...pulumi.ResourceOption) (*s3.BucketV2, error) {
 	bucket, err := s3.NewBucketV2(ctx, "crawbl-backups", &s3.BucketV2Args{
 		Bucket: pulumi.String("crawbl-backups"),
 	}, opts...)
@@ -95,7 +94,7 @@ func createBackupBucket(ctx *pulumi.Context, cfg Config, opts ...pulumi.Resource
 // createBackupIAMUser creates a dedicated IAM user for backup operations.
 // The user gets minimal permissions: only PutObject/GetObject/ListBucket on the backup bucket.
 // Access keys are created and stored in AWS Secrets Manager for ESO to sync to K8s.
-func createBackupIAMUser(ctx *pulumi.Context, cfg Config, bucket *s3.BucketV2, opts ...pulumi.ResourceOption) error {
+func createBackupIAMUser(ctx *pulumi.Context, cfg AWSConfig, bucket *s3.BucketV2, opts ...pulumi.ResourceOption) error {
 	user, err := iam.NewUser(ctx, "crawbl-backup-agent", &iam.UserArgs{
 		Name: pulumi.String("crawbl-backup-agent"),
 	}, opts...)

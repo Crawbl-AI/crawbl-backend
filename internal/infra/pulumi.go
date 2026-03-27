@@ -11,7 +11,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	awsinfra "github.com/Crawbl-AI/crawbl-backend/internal/infra/aws"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 )
@@ -24,7 +23,7 @@ type Config struct {
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
-	AWSConfig      awsinfra.Config
+	AWSConfig      platform.AWSConfig
 }
 
 // Stack represents a Pulumi stack.
@@ -118,7 +117,7 @@ func createAWSResources(ctx *pulumi.Context, config Config) error {
 	if config.AWSConfig.Region == "" {
 		return nil // AWS not configured, skip
 	}
-	_, err := awsinfra.NewResources(ctx, config.AWSConfig)
+	_, err := platform.NewAWSResources(ctx, config.AWSConfig)
 	if err != nil {
 		return fmt.Errorf("create AWS resources: %w", err)
 	}

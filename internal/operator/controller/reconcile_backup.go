@@ -116,18 +116,23 @@ func (r *UserSwarmReconciler) buildBackupJob(swarm *crawblv1alpha1.UserSwarm, jo
 	// Derive the environment name from the runtime namespace (e.g. "swarms-dev" -> "dev").
 	env := strings.TrimPrefix(runtimeNamespace, "swarms-")
 
+	// ZeroClaw stores data at /zeroclaw-data/workspace/:
+	//   workspace/sessions/sessions.db  — conversation history
+	//   workspace/memory/brain.db       — agent memory
+	//   workspace/state/                — runtime state
+	//   workspace/cron/                 — scheduled jobs
 	backupScript := `set -eu
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="s3://${BACKUP_BUCKET}/${ENV}/swarms/${USER_ID}/${SWARM_NAME}/` + s3Prefix + `/${TIMESTAMP}.tar.gz"
-DATA_DIR="/zeroclaw-data/data/agents"
-if [ ! -d "${DATA_DIR}" ]; then
-  echo "No agent data directory found, skipping backup"
+WS="/zeroclaw-data/workspace"
+if [ ! -d "${WS}" ]; then
+  echo "No workspace directory found, skipping backup"
   exit 0
 fi
 cd /zeroclaw-data
-find data/agents -type f \( -path "*/sessions/*" -o -path "*/memory/*" \) -size -50M > /tmp/backup-filelist.txt
+find workspace -type f \( -name "*.db" -o -name "*.db-wal" -o -name "*.md" -o -name "*.json" \) -size -50M > /tmp/backup-filelist.txt
 if [ ! -s /tmp/backup-filelist.txt ]; then
-  echo "No session/memory files found, skipping backup"
+  echo "No workspace files found, skipping backup"
   exit 0
 fi
 tar czf /tmp/backup.tar.gz -T /tmp/backup-filelist.txt
