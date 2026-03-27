@@ -68,6 +68,14 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 - The backend should expose workspace runtime readiness through the normal workspace endpoints before adding a dedicated provisioning endpoint.
 - Runtime pods are private because Kubernetes limits reachability, not because ZeroClaw binds localhost. Keep that distinction in mind when changing `tomlOverrides` or gateway env defaults.
 
+## Environment Variables and Secrets
+
+- Always source `.env` file for all environment variables, API keys, tokens, and secrets
+- Run infrastructure commands with: `set -a && source .env && set +a && <command>`
+- The `.env` file contains all temporary dev credentials (Pulumi, DigitalOcean, Cloudflare, etc.)
+- Never hardcode tokens or API keys in code — always use `.env` or environment variables
+- For ArgoCD deploy key: set `ARGOCD_SSH_KEY_PATH` pointing to the deploy key file
+
 ## Current Direction
 
 1. Build the orchestrator HTTP foundation first

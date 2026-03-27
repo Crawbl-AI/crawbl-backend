@@ -10,8 +10,8 @@ config:
     destroyAllAssociatedResources: false
     maintenanceDay: sunday
     maintenanceStartTime: "04:00"
-    nodePoolName: platform
-    nodeSize: s-2vcpu-4gb
+    nodePoolName: platform-8gb
+    nodeSize: s-4vcpu-8gb
     nodeCount: 1
     nodeLabels: {}
     tags:
