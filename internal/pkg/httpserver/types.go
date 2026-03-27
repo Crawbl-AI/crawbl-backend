@@ -1,6 +1,5 @@
 package httpserver
 
-import orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 
 // HTTP header constants used throughout the application.
 const (
@@ -8,6 +7,12 @@ const (
 	AuthorizationHeader = "Authorization"
 	// XTokenHeader is the custom X-Token header for mobile authentication.
 	XTokenHeader = "X-Token"
+	// XFirebaseUIDHeader is set by Envoy SecurityPolicy after JWT verification.
+	XFirebaseUIDHeader = "X-Firebase-UID"
+	// XFirebaseEmailHeader is set by Envoy SecurityPolicy after JWT verification.
+	XFirebaseEmailHeader = "X-Firebase-Email"
+	// XFirebaseNameHeader is set by Envoy SecurityPolicy after JWT verification.
+	XFirebaseNameHeader = "X-Firebase-Name"
 	// XDeviceInfoHeader contains device information.
 	XDeviceInfoHeader = "X-Device-Info"
 	// XDeviceIDHeader contains the unique device identifier.
@@ -57,8 +62,6 @@ func (s AuthTokenSource) String() string {
 type MiddlewareConfig struct {
 	// Environment is the current environment (local, dev, prod, etc.).
 	Environment string
-	// IdentityVerifier validates tokens and extracts principal information.
-	IdentityVerifier orchestrator.IdentityVerifier
 }
 
 // RequestMetadata contains metadata extracted from request headers.

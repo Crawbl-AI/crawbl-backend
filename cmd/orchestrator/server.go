@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -27,7 +26,6 @@ import (
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	backendfirebase "github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
@@ -38,8 +36,6 @@ import (
 // server shutdown when a termination signal is received.
 const shutdownTimeout = 10 * time.Second
 
-// defaultVerifierCapacity is the initial capacity for the verifiers slice.
-const defaultVerifierCapacity = 2
 
 // newServerCommand creates the "server" subcommand for starting the HTTP API.
 // This command initializes and runs the orchestrator HTTP server with all
@@ -81,10 +77,7 @@ func runServer() error {
 	if err != nil {
 		return err
 	}
-	httpMiddleware, err := buildHTTPMiddleware(logger)
-	if err != nil {
-		return err
-	}
+	httpMiddleware := buildHTTPMiddleware()
 
 	// Build the real-time layer: Redis → Socket.IO → Broadcaster.
 	broadcaster, socketIOHandler, cleanupRT := buildRealtime(logger, httpMiddleware)
@@ -120,86 +113,16 @@ func envOrDefault(key, fallback string) string {
 	return value
 }
 
-// boolFromEnv parses a boolean value from an environment variable.
-// Accepts common boolean representations: "1", "true", "yes", "y", "on" for true
-// and "0", "false", "no", "n", "off" for false.
-// Returns the fallback value if the variable is unset or has an unrecognized format.
-func boolFromEnv(key string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
 
-	switch strings.ToLower(value) {
-	case "1", "true", "yes", "y", "on":
-		return true
-	case "0", "false", "no", "n", "off":
-		return false
-	default:
-		return fallback
-	}
-}
-
-// buildHTTPMiddleware constructs the HTTP middleware configuration including
-// environment settings and identity verification.
-// It creates identity verifiers based on the environment (Firebase for production,
-// dev tokens for local/test environments).
-func buildHTTPMiddleware(logger *slog.Logger) (*httpserver.MiddlewareConfig, error) {
-	environment := envOrDefault("CRAWBL_ENVIRONMENT", httpserver.EnvironmentLocal)
-	verifier, err := buildIdentityVerifier(context.Background(), logger, environment)
-	if err != nil {
-		return nil, err
-	}
-
+// buildHTTPMiddleware constructs the HTTP middleware configuration.
+// JWT verification is handled by Envoy Gateway SecurityPolicy at the edge.
+func buildHTTPMiddleware() *httpserver.MiddlewareConfig {
 	return &httpserver.MiddlewareConfig{
-		Environment:      environment,
-		IdentityVerifier: verifier,
-	}, nil
-}
-
-// buildIdentityVerifier creates the appropriate identity verifier(s) based on
-// the environment and configuration.
-// In non-production environments or when CRAWBL_AUTH_ALLOW_DEV_TOKENS is true,
-// a development token verifier is added.
-// If Firebase credentials are configured, a Firebase token verifier is added.
-// Returns an error if no verifier can be configured.
-func buildIdentityVerifier(ctx context.Context, logger *slog.Logger, environment string) (orchestrator.IdentityVerifier, error) {
-	verifiers := make([]orchestrator.IdentityVerifier, 0, defaultVerifierCapacity)
-	if isNonProductionEnvironment(environment) || boolFromEnv("CRAWBL_AUTH_ALLOW_DEV_TOKENS", false) {
-		verifiers = append(verifiers, orchestrator.NewDevTokenVerifier(envOrDefault("AUTH_DEV_TOKEN_PREFIX", server.DefaultDevTokenPrefix)))
-	}
-
-	firebaseConfig := backendfirebase.Config{
-		CredentialsFile: strings.TrimSpace(os.Getenv("CRAWBL_FIREBASE_CREDENTIALS_FILE")),
-		CredentialsJSON: strings.TrimSpace(os.Getenv("CRAWBL_FIREBASE_CREDENTIALS_JSON")),
-	}
-	if firebaseConfig.Enabled() {
-		app, err := backendfirebase.New(ctx, firebaseConfig)
-		if err != nil {
-			return nil, err
-		}
-		verifiers = append(verifiers, orchestrator.NewFirebaseTokenVerifier(app, environment))
-		logger.Info("configured firebase identity verifier")
-	}
-
-	if len(verifiers) == 0 {
-		return nil, fmt.Errorf("no identity verifier configured; set Firebase credentials or enable local dev tokens")
-	}
-
-	return orchestrator.NewChainIdentityVerifier(verifiers...), nil
-}
-
-// isNonProductionEnvironment returns true if the environment is a local
-// development or test environment where development token authentication
-// should be permitted.
-func isNonProductionEnvironment(environment string) bool {
-	switch strings.ToLower(strings.TrimSpace(environment)) {
-	case httpserver.EnvironmentLocal, "test":
-		return true
-	default:
-		return false
+		Environment: envOrDefault("CRAWBL_ENVIRONMENT", httpserver.EnvironmentLocal),
 	}
 }
+
+
 
 // mustBuildRepos initializes the database connection and all repository instances
 // required by the orchestrator server. It ensures the database schema exists
@@ -336,9 +259,8 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 	logger.Info("redis connected", slog.String("addr", redisCfg.Addr))
 
 	io := server.NewSocketIOServer(&server.SocketIOConfig{
-		Logger:           logger,
-		IdentityVerifier: middleware.IdentityVerifier,
-		RedisClient:      redisclient.Unwrap(rc),
+		Logger:      logger,
+		RedisClient: redisclient.Unwrap(rc),
 	})
 
 	broadcaster := server.NewSocketIOBroadcaster(io, logger)

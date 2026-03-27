@@ -22,9 +22,6 @@ const (
 	// This prevents slowloris attacks by timing out slow clients.
 	DefaultReadHeaderTimeout = 5 * time.Second
 
-	// DefaultDevTokenPrefix is the prefix used to identify development-mode authentication tokens.
-	// Tokens starting with this prefix bypass normal Firebase authentication during development.
-	DefaultDevTokenPrefix = "dev"
 )
 
 // Config holds the configuration settings for the HTTP server.

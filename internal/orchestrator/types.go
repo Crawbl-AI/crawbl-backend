@@ -9,16 +9,12 @@
 package orchestrator
 
 import (
-	"context"
 	"errors"
 	"time"
 )
 
 // Default configuration constants for the orchestrator.
 const (
-	// DefaultDevTokenPrefix is the standard prefix for development tokens.
-	DefaultDevTokenPrefix = "dev"
-
 	// DefaultWorkspaceName is the default name assigned to new workspaces.
 	DefaultWorkspaceName = "My Swarm"
 
@@ -582,27 +578,3 @@ func ResolveRuntimeState(phase string, verified bool) RuntimeState {
 	}
 }
 
-// IdentityVerifier defines the interface for verifying bearer tokens
-// and extracting authenticated principals. Implementations may use
-// different token formats (JWT, development tokens, etc.).
-type IdentityVerifier interface {
-	// Verify validates the bearer token and returns the authenticated principal.
-	// Returns ErrInvalidToken or ErrUnauthorized for authentication failures.
-	// Other errors indicate system problems.
-	Verify(ctx context.Context, bearerToken string) (*Principal, error)
-}
-
-// ValidatePrincipal validates that a principal has the required fields.
-// Returns the principal if valid, or an appropriate error if validation fails.
-func ValidatePrincipal(principal *Principal) (*Principal, error) {
-	if principal == nil {
-		return nil, ErrNilPrincipal
-	}
-	if principal.Subject == "" {
-		return nil, ErrEmptySubject
-	}
-	if principal.Email == "" {
-		return nil, ErrEmptyEmail
-	}
-	return principal, nil
-}

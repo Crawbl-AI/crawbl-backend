@@ -128,7 +128,4 @@ func validateNewServer(config *Config, opts *NewServerOpts) {
 	if opts.HTTPMiddleware == nil {
 		panic("http middleware config is required")
 	}
-	if opts.HTTPMiddleware.IdentityVerifier == nil {
-		panic("identity verifier is required")
-	}
 }

@@ -2,7 +2,7 @@
 //
 // It handles:
 //   - Socket.IO server creation with optional Redis adapter for cross-pod fan-out
-//   - Authentication on connection using the same IdentityVerifier as REST endpoints
+//   - Authentication via Envoy-forwarded claim headers (X-Firebase-UID/Email/Name)
 //   - Workspace room join/leave on connect/disconnect
 //   - SocketIOBroadcaster that implements realtime.Broadcaster
 package server
@@ -21,6 +21,7 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
@@ -35,9 +36,6 @@ type SocketIOConfig struct {
 	// Logger provides structured logging for Socket.IO operations.
 	Logger *slog.Logger
 
-	// IdentityVerifier validates tokens and extracts principal information.
-	// This is the same verifier used by the REST auth middleware.
-	IdentityVerifier orchestrator.IdentityVerifier
 
 	// RedisClient is an optional Redis client for the pub/sub adapter.
 	// When nil, the server falls back to the default in-memory adapter.
@@ -56,9 +54,6 @@ func NewSocketIOServer(cfg *SocketIOConfig) *socket.Server {
 	if cfg.Logger == nil {
 		panic("socketio logger is required")
 	}
-	if cfg.IdentityVerifier == nil {
-		panic("socketio identity verifier is required")
-	}
 
 	opts := socket.DefaultServerOptions()
 	opts.SetCors(&types.Cors{
@@ -75,7 +70,7 @@ func NewSocketIOServer(cfg *SocketIOConfig) *socket.Server {
 
 	// Set up the /v1 namespace with auth middleware and connection handling.
 	nsp := io.Of(socketNamespace, nil)
-	registerAuthMiddleware(nsp, cfg.IdentityVerifier, cfg.Logger)
+	registerAuthMiddleware(nsp, cfg.Logger)
 	registerConnectionHandler(nsp, cfg.Logger)
 
 	return io
@@ -99,48 +94,47 @@ func configureRedisAdapter(io *socket.Server, redisClient *redis.Client, logger 
 	logger.Info("socketio: redis adapter configured for cross-pod fan-out")
 }
 
-// registerAuthMiddleware adds namespace-level middleware that authenticates every
-// incoming socket connection using the same IdentityVerifier as the REST endpoints.
+// registerAuthMiddleware adds namespace-level middleware that reads the
+// gateway-verified identity from forwarded headers. Envoy SecurityPolicy
+// verifies the Firebase JWT and sets X-Firebase-UID/Email/Name headers.
 //
-// Token extraction follows the mobile client contract:
-//  1. X-Token header (primary mobile path)
-//  2. Authorization: Bearer <token> (dev/tooling compatibility)
-//
-// On success the authenticated Principal is stored in socket.Data() so downstream
-// handlers can access it. On failure the connection is rejected.
-func registerAuthMiddleware(nsp socket.Namespace, verifier orchestrator.IdentityVerifier, logger *slog.Logger) {
+// On success the authenticated Principal is stored in socket.Data() so
+// downstream handlers can access it. On failure the connection is rejected.
+func registerAuthMiddleware(nsp socket.Namespace, logger *slog.Logger) {
 	nsp.Use(func(s *socket.Socket, next func(*socket.ExtendedError)) {
-		token, source := extractTokenFromHandshake(s.Handshake())
-		if token == "" {
-			logger.Warn("socketio auth: missing token",
+		h := s.Handshake()
+		uid := headerFromHandshake(h, httpserver.XFirebaseUIDHeader)
+		if uid == "" {
+			logger.Warn("socketio auth: missing X-Firebase-UID",
 				"socket_id", string(s.Id()),
 			)
-			next(socket.NewExtendedError("unauthorized", "missing authentication token"))
+			next(socket.NewExtendedError("unauthorized", "missing authentication"))
 			return
 		}
 
-		principal, err := verifier.Verify(context.Background(), token)
-		if err != nil {
-			logger.Warn("socketio auth: verification failed",
-				"socket_id", string(s.Id()),
-				"token_source", source,
-				"error", err.Error(),
-			)
-			next(socket.NewExtendedError("unauthorized", "invalid token"))
-			return
+		principal := &orchestrator.Principal{
+			Subject: uid,
+			Email:   headerFromHandshake(h, httpserver.XFirebaseEmailHeader),
+			Name:    headerFromHandshake(h, httpserver.XFirebaseNameHeader),
 		}
 
-		// Store the principal so the connection handler can read it.
 		s.SetData(principal)
 
 		logger.Info("socketio auth: authenticated",
 			"socket_id", string(s.Id()),
 			"subject", principal.Subject,
-			"token_source", source,
 		)
 
 		next(nil)
 	})
+}
+
+// headerFromHandshake extracts a trimmed header value from the Socket.IO handshake.
+func headerFromHandshake(h *socket.Handshake, key string) string {
+	if h == nil || h.Headers == nil {
+		return ""
+	}
+	return strings.TrimSpace(http.Header(h.Headers).Get(key))
 }
 
 // registerConnectionHandler sets up the "connection" event on the namespace.
