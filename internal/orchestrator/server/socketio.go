@@ -233,39 +233,31 @@ func (b *SocketIOBroadcaster) EmitToWorkspace(_ context.Context, workspaceID str
 // EmitMessageNew emits a message.new event for a newly created message.
 func (b *SocketIOBroadcaster) EmitMessageNew(ctx context.Context, workspaceID string, data any) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageNew, realtime.MessageEventPayload{
-		Event: realtime.EventMessageNew,
-		Data:  data,
+		Message: data,
 	})
 }
 
 // EmitMessageUpdated emits a message.updated event for a modified message.
 func (b *SocketIOBroadcaster) EmitMessageUpdated(ctx context.Context, workspaceID string, data any) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageUpdated, realtime.MessageEventPayload{
-		Event: realtime.EventMessageUpdated,
-		Data:  data,
+		Message: data,
 	})
 }
 
 // EmitAgentTyping emits an agent.typing event indicating whether an agent is typing.
 func (b *SocketIOBroadcaster) EmitAgentTyping(ctx context.Context, workspaceID string, conversationID, agentID string, isTyping bool) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentTyping, realtime.AgentTypingPayload{
-		Event: realtime.EventAgentTyping,
-		Data: realtime.AgentTypingData{
-			ConversationID: conversationID,
-			AgentID:        agentID,
-			IsTyping:       isTyping,
-		},
+		ConversationID: conversationID,
+		AgentID:        agentID,
+		IsTyping:       isTyping,
 	})
 }
 
 // EmitAgentStatus emits an agent.status event when an agent's availability changes.
 func (b *SocketIOBroadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentStatus, realtime.AgentStatusPayload{
-		Event: realtime.EventAgentStatus,
-		Data: realtime.AgentStatusData{
-			AgentID: agentID,
-			Status:  status,
-		},
+		AgentID: agentID,
+		Status:  status,
 	})
 }
 
