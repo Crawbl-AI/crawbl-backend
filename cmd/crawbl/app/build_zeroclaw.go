@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	zeroclawDefaultSource     = "https://github.com/zeroclaw-labs/zeroclaw.git"
-	zeroclawDefaultRef        = "v0.5.9"
+	zeroclawDefaultSource     = "https://github.com/Crawbl-AI/crawbl-zeroclaw.git"
+	zeroclawDefaultRef        = "v0.6.5-crawbl.1"
 	zeroclawDefaultTarget     = "release"
 	zeroclawDefaultPlatform   = "linux/amd64"
 	zeroclawDefaultTag        = "dev"
