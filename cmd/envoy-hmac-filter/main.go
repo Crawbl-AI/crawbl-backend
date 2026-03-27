@@ -134,6 +134,13 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 		return types.ActionContinue
 	}
 
+	// Skip HMAC for WebSocket upgrade requests.
+	// Socket.IO connections use JWT validation (SecurityPolicy) at the edge
+	// and the Socket.IO server's own auth middleware as backstop.
+	if upgrade, err := proxywasm.GetHttpRequestHeader("upgrade"); err == nil && strings.EqualFold(upgrade, "websocket") {
+		return types.ActionContinue
+	}
+
 	// Check for X-Token header (mobile auth path).
 	// If absent, this is a Bearer auth request — no HMAC needed.
 	// JWT SecurityPolicy handles Bearer validation separately.
