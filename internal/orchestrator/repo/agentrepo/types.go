@@ -10,6 +10,7 @@ var agentColumns = []string{
 	"name",
 	"role",
 	"avatar_url",
+	"system_prompt",
 	"sort_order",
 	"created_at",
 	"updated_at",

@@ -219,24 +219,39 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		agent.Status = statusForRuntime(runtimeState)
 	}
 
-	// Emit typing indicator before the runtime call so the mobile client shows feedback.
-	var typingAgentID string
-	if responder := defaultResponderAgent(agents); responder != nil {
-		typingAgentID = responder.ID
+	// Determine the responding agent — use conversation's agent if set, otherwise first agent.
+	var responder *orchestrator.Agent
+	if conversation.AgentID != nil {
+		for _, agent := range agents {
+			if agent.ID == *conversation.AgentID {
+				responder = agent
+				break
+			}
+		}
 	}
-	if typingAgentID != "" {
-		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, typingAgentID, true)
+	if responder == nil {
+		responder = defaultResponderAgent(agents)
 	}
 
-	replyText, mErr := s.runtimeClient.SendText(ctx, &runtimeclient.SendTextOpts{
+	// Emit typing indicator before the runtime call so the mobile client shows feedback.
+	if responder != nil {
+		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, responder.ID, true)
+	}
+
+	sendOpts := &runtimeclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   opts.Content.Text,
 		SessionID: conversation.ID,
-	})
+	}
+	if responder != nil {
+		sendOpts.AgentID = responder.Role
+		sendOpts.SystemPrompt = responder.SystemPrompt
+	}
+	replyText, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 
 	// Stop typing indicator regardless of success or failure.
-	if typingAgentID != "" {
-		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, typingAgentID, false)
+	if responder != nil {
+		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, responder.ID, false)
 	}
 
 	if mErr != nil {
@@ -246,7 +261,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	now := time.Now().UTC()
 	replyAt := now.Add(time.Millisecond)
 	var replyAgentID *string
-	if responder := defaultResponderAgent(agents); responder != nil {
+	if responder != nil {
 		replyAgentID = &responder.ID
 	}
 
@@ -380,17 +395,19 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 			agent := freshByRole[blueprint.Role]
 			if agent == nil {
 				agent = &orchestrator.Agent{
-					ID:          uuid.NewString(),
-					WorkspaceID: workspace.ID,
-					Name:        blueprint.Name,
-					Role:        blueprint.Role,
-					AvatarURL:   orchestrator.DefaultAgentAvatarURL,
-					CreatedAt:   now,
-					UpdatedAt:   now,
+					ID:           uuid.NewString(),
+					WorkspaceID:  workspace.ID,
+					Name:         blueprint.Name,
+					Role:         blueprint.Role,
+					SystemPrompt: blueprint.SystemPrompt,
+					AvatarURL:    orchestrator.DefaultAgentAvatarURL,
+					CreatedAt:    now,
+					UpdatedAt:    now,
 				}
 			} else {
 				agent.Name = blueprint.Name
 				agent.Role = blueprint.Role
+				agent.SystemPrompt = blueprint.SystemPrompt
 				agent.AvatarURL = orchestrator.DefaultAgentAvatarURL
 				agent.UpdatedAt = now
 			}

@@ -229,6 +229,8 @@ type AgentRow struct {
 	Role string `db:"role"`
 	// AvatarURL is the URL to the agent's avatar image.
 	AvatarURL string `db:"avatar_url"`
+	// SystemPrompt is the LLM system message for this agent's personality.
+	SystemPrompt string `db:"system_prompt"`
 	// SortOrder is the display order of the agent within its workspace.
 	SortOrder int `db:"sort_order"`
 	// CreatedAt is the timestamp when the agent was created.
@@ -246,27 +248,29 @@ func NewAgentRow(agent *orchestrator.Agent, sortOrder int) *AgentRow {
 	}
 
 	return &AgentRow{
-		ID:          agent.ID,
-		WorkspaceID: agent.WorkspaceID,
-		Name:        agent.Name,
-		Role:        agent.Role,
-		AvatarURL:   agent.AvatarURL,
-		SortOrder:   sortOrder,
-		CreatedAt:   agent.CreatedAt,
-		UpdatedAt:   agent.UpdatedAt,
+		ID:           agent.ID,
+		WorkspaceID:  agent.WorkspaceID,
+		Name:         agent.Name,
+		Role:         agent.Role,
+		AvatarURL:    agent.AvatarURL,
+		SystemPrompt: agent.SystemPrompt,
+		SortOrder:    sortOrder,
+		CreatedAt:    agent.CreatedAt,
+		UpdatedAt:    agent.UpdatedAt,
 	}
 }
 
 // ToDomain converts an AgentRow to its domain model representation.
 func (r *AgentRow) ToDomain() *orchestrator.Agent {
 	return &orchestrator.Agent{
-		ID:          r.ID,
-		WorkspaceID: r.WorkspaceID,
-		Name:        r.Name,
-		Role:        r.Role,
-		AvatarURL:   r.AvatarURL,
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
+		ID:           r.ID,
+		WorkspaceID:  r.WorkspaceID,
+		Name:         r.Name,
+		Role:         r.Role,
+		AvatarURL:    r.AvatarURL,
+		SystemPrompt: r.SystemPrompt,
+		CreatedAt:    r.CreatedAt,
+		UpdatedAt:    r.UpdatedAt,
 	}
 }
 

@@ -347,6 +347,9 @@ type Agent struct {
 	// Status indicates the current operational status of the agent.
 	Status AgentStatus `json:"status"`
 
+	// SystemPrompt is the LLM system message for this agent's personality.
+	SystemPrompt string `json:"system_prompt,omitempty"`
+
 	// HasUpdate indicates whether the agent has pending updates.
 	HasUpdate bool `json:"has_update"`
 
@@ -547,12 +550,23 @@ type DefaultAgentBlueprint struct {
 
 	// Role is the functional role of the agent.
 	Role string
+
+	// SystemPrompt is the LLM system message for this agent's personality.
+	SystemPrompt string
 }
 
 // DefaultAgents is the list of agents created by default in new workspaces.
 var DefaultAgents = []DefaultAgentBlueprint{
-	{Name: "Research", Role: "researcher"},
-	{Name: "Writer", Role: "writer"},
+	{
+		Name:         "Research",
+		Role:         "researcher",
+		SystemPrompt: "You are a Research agent in the Crawbl swarm. Your specialty is finding information, analyzing data, and providing well-sourced answers. Be thorough and cite your reasoning. When asked a question, break it down systematically, consider multiple perspectives, and deliver clear, evidence-based responses.",
+	},
+	{
+		Name:         "Writer",
+		Role:         "writer",
+		SystemPrompt: "You are a Writer agent in the Crawbl swarm. Your specialty is creating clear, engaging content — from emails to reports to creative writing. Focus on clarity, tone, and style. Adapt your writing voice to match the user's needs, whether formal, casual, technical, or creative.",
+	},
 }
 
 // ResolveRuntimeState determines the runtime state based on Kubernetes phase

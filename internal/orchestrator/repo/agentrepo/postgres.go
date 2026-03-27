@@ -93,6 +93,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 			Set("name", row.Name).
 			Set("role", row.Role).
 			Set("avatar_url", row.AvatarURL).
+			Set("system_prompt", row.SystemPrompt).
 			Set("sort_order", row.SortOrder).
 			Set("updated_at", row.UpdatedAt).
 			Where("id = ?", row.ID).
@@ -111,6 +112,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 		Pair("name", row.Name).
 		Pair("role", row.Role).
 		Pair("avatar_url", row.AvatarURL).
+		Pair("system_prompt", row.SystemPrompt).
 		Pair("sort_order", row.SortOrder).
 		Pair("created_at", row.CreatedAt).
 		Pair("updated_at", row.UpdatedAt).

@@ -48,9 +48,11 @@ type EnsureRuntimeOpts struct {
 }
 
 type SendTextOpts struct {
-	Runtime   *orchestrator.RuntimeStatus
-	Message   string
-	SessionID string
+	Runtime      *orchestrator.RuntimeStatus
+	Message      string
+	SessionID    string
+	AgentID      string
+	SystemPrompt string
 }
 
 type Client interface {

@@ -35,7 +35,9 @@ type userSwarmClient struct {
 }
 
 type webhookRequest struct {
-	Message string `json:"message"`
+	Message      string  `json:"message"`
+	AgentID      *string `json:"agent_id,omitempty"`
+	SystemPrompt *string `json:"system_prompt,omitempty"`
 }
 
 type webhookResponse struct {
@@ -143,22 +145,29 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (str
 		return "", merrors.ErrRuntimeNotReady
 	}
 
-	payload, err := json.Marshal(&webhookRequest{Message: opts.Message})
+	webhookReq := webhookRequest{Message: opts.Message}
+	if opts.AgentID != "" {
+		webhookReq.AgentID = &opts.AgentID
+	}
+	if opts.SystemPrompt != "" {
+		webhookReq.SystemPrompt = &opts.SystemPrompt
+	}
+	payload, err := json.Marshal(&webhookReq)
 	if err != nil {
 		return "", merrors.WrapStdServerError(err, "encode runtime webhook request")
 	}
 
 	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/webhook", opts.Runtime.ServiceName, opts.Runtime.RuntimeNamespace, c.config.Port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return "", merrors.WrapStdServerError(err, "build runtime webhook request")
 	}
-	req.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
 	if sessionID := strings.TrimSpace(opts.SessionID); sessionID != "" {
-		req.Header.Set("X-Session-Id", sessionID)
+		httpReq.Header.Set("X-Session-Id", sessionID)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return "", merrors.WrapStdServerError(err, "send runtime webhook request")
 	}
