@@ -1,0 +1,161 @@
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_zeroclaw:
+        description: Build and push ZeroClaw image
+        type: boolean
+        default: false
+      zeroclaw_ref:
+        description: ZeroClaw git ref to build
+        default: v0.5.9
+      zeroclaw_tag:
+        description: ZeroClaw image tag in DOCR
+        default: v0.5.9
+
+env:
+  IMAGE_TAG: v0.1.${{ github.run_number }}
+  DOCR_REGISTRY: registry.digitalocean.com/crawbl
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build and push orchestrator image
+  # ---------------------------------------------------------------------------
+  build-orchestrator:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1200
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/service.dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.DOCR_REGISTRY }}/crawbl-orchestrator:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=orchestrator
+          cache-to: type=gha,mode=max,scope=orchestrator
+
+  # ---------------------------------------------------------------------------
+  # Build and push userswarm-operator image
+  # ---------------------------------------------------------------------------
+  build-operator:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1200
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/userswarm-operator.dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.DOCR_REGISTRY }}/crawbl-userswarm-operator:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=operator
+          cache-to: type=gha,mode=max,scope=operator
+
+  # ---------------------------------------------------------------------------
+  # Build and push envoy HMAC filter WASM image
+  # ---------------------------------------------------------------------------
+  build-hmac-filter:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1200
+      - uses: docker/build-push-action@v6
+        with:
+          context: cmd/envoy-hmac-filter
+          file: dockerfiles/envoy-hmac-filter.dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.DOCR_REGISTRY }}/envoy-hmac-filter:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=hmac-filter
+          cache-to: type=gha,mode=max,scope=hmac-filter
+
+  # ---------------------------------------------------------------------------
+  # Build and push ZeroClaw image (manual trigger only)
+  # ---------------------------------------------------------------------------
+  build-zeroclaw:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_zeroclaw
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-buildx-action@v3
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1200
+      - name: Build crawbl CLI
+        run: go build -o crawbl ./cmd/crawbl
+      - name: Build and push ZeroClaw
+        env:
+          ZEROCLAW_TAG: ${{ inputs.zeroclaw_tag }}
+          ZEROCLAW_REF: ${{ inputs.zeroclaw_ref }}
+        run: |
+          ./crawbl app build zeroclaw \
+            --tag "$ZEROCLAW_TAG" \
+            --ref "$ZEROCLAW_REF" \
+            --platform linux/amd64 \
+            --push
+
+  # ---------------------------------------------------------------------------
+  # Update image tags in crawbl-argocd-apps so ArgoCD syncs the new images
+  # ---------------------------------------------------------------------------
+  update-argocd:
+    needs: [build-orchestrator, build-operator, build-hmac-filter]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update ArgoCD apps with new image tags
+        env:
+          GH_PAT: ${{ secrets.ARGOCD_APPS_TOKEN }}
+          IMAGE_TAG: v0.1.${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
+          cd /tmp/argocd-apps
+
+          echo "Updating orchestrator to ${IMAGE_TAG}"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
+
+          echo "Updating operator to ${IMAGE_TAG}"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' components/userswarm-operator/chart/values.yaml
+
+          echo "Updating hmac-filter to ${IMAGE_TAG}"
+          sed -i "s|registry.digitalocean.com/crawbl/envoy-hmac-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-hmac-filter:${IMAGE_TAG}|g" \
+            components/platform-resources/resources/envoy-extension-policy.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "deploy: update images to ${IMAGE_TAG}
+
+          Source: crawbl-backend@${COMMIT_SHA::7}
+          Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          git push
