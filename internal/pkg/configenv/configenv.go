@@ -34,7 +34,7 @@ func SecretString(key, fallback string) string {
 		}
 	}
 
-	// 3. Legacy KEY_FILE env var (Vault Agent Injector).
+	// 3. Legacy KEY_FILE env var (file-based secret injection).
 	filePath := strings.TrimSpace(os.Getenv(key + "_FILE"))
 	if filePath != "" {
 		if raw, err := os.ReadFile(filePath); err == nil {

@@ -108,7 +108,7 @@ Pulumi manages two layers:
 - **Cluster** - DigitalOcean Kubernetes (DOKS) with `registryIntegration=true`, VPC, container registry
 - **Platform** - ArgoCD Helm release only
 
-After `crawbl infra apply`, ArgoCD takes over and deploys all application resources (namespaces, Vault, PostgreSQL, Redis, cert-manager, Envoy Gateway, operators, external-dns) from `crawbl-argocd-apps`.
+After `crawbl infra apply`, ArgoCD takes over and deploys all application resources (namespaces, External Secrets Operator, PostgreSQL, Redis, cert-manager, Envoy Gateway, operators, external-dns) from `crawbl-argocd-apps`.
 
 Current environment: `dev` in DigitalOcean `fra1`.
 

@@ -25,7 +25,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 
 - Treat this service as the control plane, not a thin API wrapper
 - Long-term, keep LLM provider credentials in the backend, not in ZeroClaw pods
-- Current dev exception: a shared Vault-backed runtime secret may be referenced by new `UserSwarm` objects until provider brokering moves fully behind the orchestrator
+- Runtime secrets are injected via ESO-managed Kubernetes Secrets (envSecretRef); provider key brokering will move fully behind the orchestrator later
 - Default model access is platform-managed; add BYOK later for power users
 - Connected app credentials are per-user and must be revocable
 - Read actions may auto-execute after consent; write actions require approval by default
