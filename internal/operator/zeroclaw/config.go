@@ -208,7 +208,7 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (string, 
 	cfg := BootstrapConfig{
 		APIKey:             "",
 		DefaultProvider:    "openai",
-		DefaultModel:       "gpt-5.0-mini",
+		DefaultModel:       "gpt-5-mini",
 		DefaultTemperature: zc.Defaults.Temperature,
 		Autonomy: AutonomyConfig{
 			Level:           "supervised",
