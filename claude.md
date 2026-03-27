@@ -56,11 +56,13 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
   - `internal/orchestrator/service/` for typed service opts/contracts and business logic
   - `internal/orchestrator/server/` for HTTP handlers and request/response DTOs
   - `internal/pkg/` for shared database, error, runtime, and HTTP helpers
+- Pulumi (`internal/infra/`) bootstraps DOKS cluster and installs ArgoCD only — no edge package, no Helm chart management in this repo
+- All Helm charts live in `crawbl-argocd-apps/charts/`; ArgoCD manages all K8s resources after bootstrap
 - Keep `types.go` files for request/response types, constants, vars, and interfaces instead of scattering them through handler files
 - Follow the Soulheim/Skatts style: one `dbr.Session` per request, pass typed opts through service methods, and let repos work with a `SessionRunner`
 - Add new API surface in small vertical slices, starting from `crawbl-docs/ops/api-contract.md`
 - Local backend development should use the Postgres-backed path with `docker-compose.yaml`, `dockerfiles/`, SQL migrations, and `make setup/run`
-- Cluster deployment should use the `helm/orchestrator` chart and a separate migration Job, not ad hoc kubectl commands
+- Cluster deployment is managed by ArgoCD via `crawbl-argocd-apps` — Helm charts are vendored there, not in this repo; do not use `crawbl app deploy` for cluster rollouts
 - The current dev cluster uses a temporary single-node Bitnami PostgreSQL release in the `backend` namespace; later environments should move to a stronger database posture
 - Reuse patterns from `Skatts/monobackend` where they fit: `internal/pkg/database`, `cmd/migrate`, service Dockerfile, and compose-driven local setup
 - Use the local Docker stack for Venom-based minimal workflow verification; avoid reintroducing manual curl-only verification as the primary path

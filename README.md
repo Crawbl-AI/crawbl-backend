@@ -12,13 +12,12 @@ cmd/
 internal/
   orchestrator/         API server domain logic, services, handlers
   operator/             UserSwarm reconciler and controller
-  infra/                Pulumi infrastructure-as-code
+  infra/                Pulumi infrastructure-as-code (cluster + ArgoCD bootstrap only)
   pkg/                  Shared packages (database, errors, HTTP)
 api/                    Kubernetes CRD types (v1alpha1)
-helm/
-  orchestrator/         Helm chart for the orchestrator
-  operator/             Helm chart for the userswarm operator
-  values/               Default values for upstream charts
+config/
+  helm/                 ArgoCD Helm values for Pulumi
+  zeroclaw.yaml         ZeroClaw operator bootstrap defaults
 migrations/             PostgreSQL migration files
 dockerfiles/            Dockerfiles for each binary
 e2e/                    Venom end-to-end test suite
@@ -100,21 +99,17 @@ ZeroClaw builds clone the upstream repository at a pinned ref. Override with `--
 
 ### Deployments
 
-Runs Helm upgrade against the live cluster.
-
-```sh
-crawbl app deploy orchestrator --tag <tag>
-crawbl app deploy operator --tag <tag>
-```
+Deployments are managed by ArgoCD via the `crawbl-argocd-apps` repo. Push a new image with `crawbl app build`, then update the image tag in `crawbl-argocd-apps` values and commit — ArgoCD syncs the rollout automatically.
 
 ## Infrastructure
 
-Pulumi manages three layers:
+Pulumi manages two layers:
 
-- **Cluster** - DigitalOcean Kubernetes (DOKS), VPC, container registry
-- **Platform** - Namespaces, Vault, PostgreSQL, Redis, cert-manager, Envoy Gateway, operators
-- **Edge** - Cloudflare DNS, Gateway API, TLS certificates
+- **Cluster** - DigitalOcean Kubernetes (DOKS) with `registryIntegration=true`, VPC, container registry
+- **Platform** - ArgoCD Helm release only
+
+After `crawbl infra apply`, ArgoCD takes over and deploys all application resources (namespaces, Vault, PostgreSQL, Redis, cert-manager, Envoy Gateway, operators, external-dns) from `crawbl-argocd-apps`.
 
 Current environment: `dev` in DigitalOcean `fra1`.
 
-Code lives in `internal/infra/`. Configuration in `Pulumi.yaml` and `Pulumi.dev.yaml`.
+Code lives in `internal/infra/`. Configuration in `Pulumi.yaml` and `Pulumi.dev.yaml`. ArgoCD values in `config/helm/`.
