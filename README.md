@@ -92,14 +92,15 @@ Uses Docker buildx, pushes to DigitalOcean Container Registry.
 ```sh
 crawbl app build orchestrator --tag <tag> --push
 crawbl app build operator --tag <tag> --push
-crawbl app build zeroclaw --tag <tag> --push
+crawbl app build auth-filter --tag <tag> --push
+crawbl app build docs --tag <tag> --push
 ```
 
-ZeroClaw builds clone the upstream repository at a pinned ref. Override with `--source`, `--ref`, `--target`, `--repository`.
+ZeroClaw images are built separately from the `crawbl-zeroclaw` repo. Push a tag matching `v*-crawbl*` to trigger the CI build, which auto-updates `crawbl-argocd-apps`.
 
 ### Deployments
 
-Deployments are managed by ArgoCD via the `crawbl-argocd-apps` repo. Push a new image with `crawbl app build`, then update the image tag in `crawbl-argocd-apps` values and commit — ArgoCD syncs the rollout automatically.
+Deployments are managed by ArgoCD via the `crawbl-argocd-apps` repo. On push to `main`, CI builds images, updates tags in `crawbl-argocd-apps`, and ArgoCD syncs automatically.
 
 ## Infrastructure
 
