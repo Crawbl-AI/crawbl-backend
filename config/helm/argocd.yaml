@@ -1,18 +1,41 @@
 ## ArgoCD Helm values for dev environment.
 ## Tuned for single-node dev cluster (s-4vcpu-8gb).
+##
+## This file is used by Pulumi during initial cluster bootstrap to install ArgoCD.
+## After bootstrap, ArgoCD manages itself and all other platform components via
+## the crawbl-argocd-apps repository (app-of-apps pattern).
 
+## ---------------------------------------------------------------------------
+## Global settings
+## ---------------------------------------------------------------------------
 global:
+  ## No public domain for ArgoCD UI -- access via kubectl port-forward only.
   domain: ""
 
+## ---------------------------------------------------------------------------
+## ArgoCD configuration (ConfigMap and params)
+## ---------------------------------------------------------------------------
 configs:
   params:
+    ## Disable TLS on the ArgoCD API server. TLS terminates at the Envoy Gateway
+    ## edge, so internal ArgoCD traffic is plaintext within the cluster.
     server.insecure: true
+    ## Number of parallel status reconciliation workers. Reduced from default (20)
+    ## to save memory on the single-node dev cluster.
     controller.status.processors: "5"
+    ## Number of parallel operation (sync/hook) workers. Reduced from default (10).
     controller.operation.processors: "3"
   cm:
+    ## How often ArgoCD polls Git for changes. 60s keeps sync lag low in dev.
     timeout.reconciliation: 60s
+    ## Enable Kustomize alpha plugins (ksops) and exec-based plugins.
+    ## Required for SOPS decryption of encrypted manifests (.enc.yaml files).
+    ## See crawbl-docs/ops/argocd/ksops.md for full details.
     kustomize.buildOptions: --enable-alpha-plugins --enable-exec
 
+## ---------------------------------------------------------------------------
+## ArgoCD API Server
+## ---------------------------------------------------------------------------
 server:
   replicas: 1
   resources:
@@ -22,9 +45,16 @@ server:
     limits:
       memory: 128Mi
 
+## ---------------------------------------------------------------------------
+## Application Controller
+## Watches Application CRs and drives sync/reconciliation.
+## ---------------------------------------------------------------------------
 controller:
   replicas: 1
   env:
+    ## Go runtime memory limit. Prevents the controller from using excessive
+    ## memory on the constrained dev node. Set below the hard limit (512Mi)
+    ## so the GC kicks in before OOM.
     - name: GOMEMLIMIT
       value: 400MiB
   resources:
@@ -34,30 +64,53 @@ controller:
     limits:
       memory: 512Mi
 
+## ---------------------------------------------------------------------------
+## Repo Server
+## Clones Git repos, renders Helm charts, and runs Kustomize.
+## This is where ksops + sops run to decrypt SOPS-encrypted manifests.
+## ---------------------------------------------------------------------------
 repoServer:
   replicas: 1
   extraArgs:
+    ## Limit parallel manifest generation to avoid OOM on the small node.
     - --parallelismlimit=2
   resources:
     requests:
       cpu: 10m
       memory: 256Mi
     limits:
+      ## Higher limit than other components because Helm template rendering
+      ## and SOPS decryption can be memory-intensive.
       memory: 1Gi
+
+  ## -- Environment variables for SOPS/ksops decryption --
   env:
+    ## The age private key used by sops to decrypt .enc.yaml files.
+    ## Stored in the sops-age-key K8s Secret, provisioned by Pulumi at bootstrap.
     - name: SOPS_AGE_KEYS
       valueFrom:
         secretKeyRef:
           name: sops-age-key
           key: age-key
+    ## Kustomize looks for plugins under $XDG_CONFIG_HOME/kustomize/plugin/
+    ## We mount the ksops plugin binary there via the custom-tools volume.
     - name: XDG_CONFIG_HOME
       value: /.config
+    ## Add /custom-tools to PATH so Kustomize can find the sops binary
+    ## and the kustomize-sops wrapper.
     - name: PATH
       value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/custom-tools
+
+  ## -- Shared volume for init containers to install tools into --
   volumes:
     - name: custom-tools
       emptyDir: {}
+
+  ## -- Init containers that install ksops and sops binaries --
   initContainers:
+    ## Install ksops (Kustomize SOPS plugin) and its bundled kustomize binary.
+    ## ksops is the bridge: Kustomize calls ksops as an exec plugin, ksops
+    ## calls sops to decrypt, and returns the plaintext YAML to Kustomize.
     - name: install-ksops
       image: viaductoss/ksops:v4.3.2
       command: ["/bin/sh", "-c"]
@@ -72,6 +125,8 @@ repoServer:
       volumeMounts:
         - mountPath: /custom-tools
           name: custom-tools
+    ## Install the sops binary (called by ksops for actual decryption).
+    ## Using the official SOPS Alpine image as the source.
     - name: install-sops
       image: ghcr.io/getsops/sops:v3.9.4-alpine
       command: ["/bin/sh", "-c"]
@@ -80,13 +135,22 @@ repoServer:
       volumeMounts:
         - mountPath: /custom-tools
           name: custom-tools
+
+  ## -- Volume mounts for the repo-server container --
   volumeMounts:
+    ## Mount the ksops plugin at the XDG_CONFIG_HOME kustomize plugin path.
+    ## This is where Kustomize looks for exec plugins: $XDG_CONFIG_HOME/kustomize/plugin/
     - mountPath: /.config/kustomize/plugin
       name: custom-tools
       subPath: plugin
+    ## Mount the full custom-tools directory so sops and kustomize binaries
+    ## are available on PATH (/custom-tools/).
     - mountPath: /custom-tools
       name: custom-tools
 
+## ---------------------------------------------------------------------------
+## ArgoCD's internal Redis (used for caching, not application data)
+## ---------------------------------------------------------------------------
 redis:
   resources:
     requests:
@@ -95,11 +159,22 @@ redis:
     limits:
       memory: 64Mi
 
+## ---------------------------------------------------------------------------
+## Disabled components
+## These are not needed for the current dev setup.
+## ---------------------------------------------------------------------------
+
+## ApplicationSet controller -- generates Applications from templates.
+## Not used; we define Applications explicitly in apps/templates/.
 applicationSet:
   enabled: false
 
+## Notifications controller -- sends alerts on sync status changes.
+## Not needed in dev.
 notifications:
   enabled: false
 
+## Dex -- OIDC/SSO integration for ArgoCD UI login.
+## Not needed; using kubectl port-forward + local admin password.
 dex:
   enabled: false

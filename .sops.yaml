@@ -1,4 +1,21 @@
+# SOPS encryption rules for the crawbl-backend repository.
+# See crawbl-docs/ops/argocd/ksops.md for full SOPS/ksops documentation.
+#
+# How it works:
+#   1. Files matching the path_regex are eligible for SOPS encryption.
+#   2. Only YAML keys matching encrypted_regex are encrypted (structure stays readable).
+#   3. The age public key is used for encryption; the corresponding private key
+#      (stored in the sops-age-key K8s Secret) is used for decryption.
+#
+# To encrypt:  sops --encrypt --in-place secrets/my-secret.enc.yaml
+# To decrypt:  sops --decrypt secrets/my-secret.enc.yaml
+# To edit:     sops secrets/my-secret.enc.yaml  (decrypts, opens editor, re-encrypts)
 creation_rules:
+  # Match any .enc.yaml file under the secrets/ directory.
   - path_regex: secrets/.*\.enc\.yaml$
+    # Only encrypt fields named "data" or "stringData" (standard K8s Secret fields).
+    # All other fields (metadata, apiVersion, kind, etc.) remain in plaintext.
     encrypted_regex: "^(data|stringData)$"
+    # Age public key for encryption. The private key must be available to decrypt.
+    # Same key is used across crawbl-backend and crawbl-argocd-apps repos.
     age: age1n3flp34jm2lx0jqx8yrzzr4r0h42kqsywpr63zgdzyhfl26x0c3qxle8lj
