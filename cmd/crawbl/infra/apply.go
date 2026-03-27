@@ -23,12 +23,15 @@ func newApplyCommand() *cobra.Command {
 		Short: "Apply infrastructure changes",
 		Long: `Apply infrastructure changes using Pulumi.
 
-Resources are deployed in dependency order:
-  1. cluster  - DOKS cluster, VPC, container registry
-  2. platform - Namespaces, Helm releases (ArgoCD only)
-  3. edge     - DNS records, Gateway, TLS certificates
+Use this for incremental updates to existing infrastructure (e.g., change
+node size, update ArgoCD values). For first-time cluster setup, use
+'crawbl infra bootstrap' instead — it runs apply plus post-setup steps.
 
-Pulumi automatically handles dependencies between resources.`,
+Pulumi manages only:
+  - DOKS cluster + VPC + container registry
+  - ArgoCD namespace + Helm release + repo secret + root Application
+
+Everything else is managed by ArgoCD via the crawbl-argocd-apps repo.`,
 		Example: `  crawbl infra apply                    # Apply with confirmation
   crawbl infra apply --auto-approve     # Apply without confirmation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
