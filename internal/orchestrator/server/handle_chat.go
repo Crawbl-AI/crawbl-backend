@@ -163,6 +163,11 @@ func (s *Server) handleMessagesSend(w http.ResponseWriter, r *http.Request) {
 		Attachments:    attachmentsToDomain(reqBody.Attachments),
 	})
 	if mErr != nil {
+		s.logger.Error("send message failed",
+			"path", r.URL.Path,
+			"user_id", user.ID,
+			"error", mErr.Error(),
+		)
 		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
 		return
 	}
