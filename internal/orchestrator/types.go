@@ -569,6 +569,14 @@ var DefaultAgents = []DefaultAgentBlueprint{
 	},
 }
 
+// Mention represents an @-mention of an agent in a swarm message.
+type Mention struct {
+	AgentID   string `json:"agent_id"`
+	AgentName string `json:"agent_name"`
+	Offset    int    `json:"offset"`
+	Length    int    `json:"length"`
+}
+
 // ResolveRuntimeState determines the runtime state based on Kubernetes phase
 // and verification status. A verified swarm is always ready. Otherwise, the
 // state is derived from the phase:

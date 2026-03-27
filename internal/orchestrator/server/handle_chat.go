@@ -161,6 +161,7 @@ func (s *Server) handleMessagesSend(w http.ResponseWriter, r *http.Request) {
 		LocalID:        reqBody.LocalID,
 		Content:        content,
 		Attachments:    attachmentsToDomain(reqBody.Attachments),
+		Mentions:       mentionsToDomain(reqBody.Mentions),
 	})
 	if mErr != nil {
 		s.logger.Error("send message failed",
@@ -343,6 +344,23 @@ func attachmentsToDomain(attachments []attachmentResponse) []orchestrator.Attach
 		})
 	}
 	return response
+}
+
+// mentionsToDomain converts API mention payloads to domain Mentions.
+func mentionsToDomain(mentions []mentionPayload) []orchestrator.Mention {
+	if len(mentions) == 0 {
+		return nil
+	}
+	result := make([]orchestrator.Mention, 0, len(mentions))
+	for _, m := range mentions {
+		result = append(result, orchestrator.Mention{
+			AgentID:   m.AgentID,
+			AgentName: m.AgentName,
+			Offset:    m.Offset,
+			Length:    m.Length,
+		})
+	}
+	return result
 }
 
 // intQueryParam extracts an integer value from a query parameter.

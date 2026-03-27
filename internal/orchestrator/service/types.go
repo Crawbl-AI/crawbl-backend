@@ -220,6 +220,8 @@ type SendMessageOpts struct {
 	Content orchestrator.MessageContent
 	// Attachments is the list of files or resources attached to the message.
 	Attachments []orchestrator.Attachment
+	// Mentions is the list of @-mentioned agents in the message (swarm chat).
+	Mentions []orchestrator.Mention
 }
 
 // WorkspaceBootstrapper defines the interface for workspace initialization.

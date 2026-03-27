@@ -167,4 +167,15 @@ type sendMessageRequest struct {
 
 	// Attachments contains files to include with the message.
 	Attachments []attachmentResponse `json:"attachments"`
+
+	// Mentions is the list of @-mentioned agents in the message (swarm chat).
+	Mentions []mentionPayload `json:"mentions"`
+}
+
+// mentionPayload represents an @-mention of an agent in a message.
+type mentionPayload struct {
+	AgentID   string `json:"agent_id"`
+	AgentName string `json:"agent_name"`
+	Offset    int    `json:"offset"`
+	Length    int    `json:"length"`
 }
