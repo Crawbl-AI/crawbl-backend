@@ -111,42 +111,11 @@ func (r *UserSwarmReconciler) reconcileBackupJob(ctx context.Context, swarm *cra
 }
 
 // buildBackupJob constructs the Job spec for both periodic and final backups.
-// The s3Prefix parameter determines the S3 path segment ("hourly" or "final").
+// Uses the operator's own binary with the "backup" subcommand — no shell scripts,
+// no external images, no runtime package installs. The binary handles tar + gzip + S3
+// upload in pure Go.
 func (r *UserSwarmReconciler) buildBackupJob(swarm *crawblv1alpha1.UserSwarm, jobName, runtimeNamespace, s3Prefix string) batchv1.Job {
-	// Derive the environment name from the runtime namespace (e.g. "swarms-dev" -> "dev").
 	env := strings.TrimPrefix(runtimeNamespace, "swarms-")
-
-	// ZeroClaw stores data at /zeroclaw-data/workspace/:
-	//   workspace/sessions/sessions.db  — conversation history
-	//   workspace/memory/brain.db       — agent memory
-	//   workspace/state/                — runtime state
-	//   workspace/cron/                 — scheduled jobs
-	//
-	// amazon/aws-cli image doesn't have tar, so we install it first.
-	// The gzip pipe avoids needing tar entirely — just use the aws CLI to stream.
-	backupScript := `set -eu
-TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-DEST="s3://${BACKUP_BUCKET}/${ENV}/swarms/${USER_ID}/${SWARM_NAME}/` + s3Prefix + `/${TIMESTAMP}.tar.gz"
-WS="/zeroclaw-data/workspace"
-if [ ! -d "${WS}" ]; then
-  echo "No workspace directory found, skipping backup"
-  exit 0
-fi
-# Install tar (not included in amazon/aws-cli image)
-yum install -y tar gzip >/dev/null 2>&1 || apk add --no-cache tar gzip >/dev/null 2>&1 || true
-cd /zeroclaw-data
-find workspace -type f \( -name "*.db" -o -name "*.db-wal" -o -name "*.md" -o -name "*.json" \) -size -50M > /tmp/backup-filelist.txt
-if [ ! -s /tmp/backup-filelist.txt ]; then
-  echo "No workspace files found, skipping backup"
-  exit 0
-fi
-echo "Backing up $(wc -l < /tmp/backup-filelist.txt) files"
-cat /tmp/backup-filelist.txt
-tar czf /tmp/backup.tar.gz -T /tmp/backup-filelist.txt
-echo "Archive size: $(du -h /tmp/backup.tar.gz | cut -f1)"
-aws s3 cp /tmp/backup.tar.gz "${DEST}"
-echo "Backup uploaded to ${DEST}"
-`
 
 	return batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -165,9 +134,18 @@ echo "Backup uploaded to ${DEST}"
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{{
 						Name:            "backup",
-						Image:           r.BackupImage,
+						Image:           r.BootstrapImage, // Same binary as the operator — already cached on every node.
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:         []string{"sh", "-c", backupScript},
+						Command:         []string{"/userswarm-operator", "backup"},
+						Args: []string{
+							"--workspace=/zeroclaw-data/workspace",
+							fmt.Sprintf("--bucket=%s", r.BackupBucket),
+							fmt.Sprintf("--region=%s", r.BackupRegion),
+							fmt.Sprintf("--prefix=%s", s3Prefix),
+							fmt.Sprintf("--user-id=%s", swarm.Spec.UserID),
+							fmt.Sprintf("--swarm-name=%s", swarm.Name),
+							fmt.Sprintf("--env=%s", env),
+						},
 						Env: []corev1.EnvVar{
 							{
 								Name: "AWS_ACCESS_KEY_ID",
@@ -187,11 +165,6 @@ echo "Backup uploaded to ${DEST}"
 									},
 								},
 							},
-							{Name: "AWS_DEFAULT_REGION", Value: r.BackupRegion},
-							{Name: "BACKUP_BUCKET", Value: r.BackupBucket},
-							{Name: "USER_ID", Value: swarm.Spec.UserID},
-							{Name: "SWARM_NAME", Value: swarm.Name},
-							{Name: "ENV", Value: env},
 						},
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "zeroclaw-data",

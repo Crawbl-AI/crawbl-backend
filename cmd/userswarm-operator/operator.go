@@ -83,7 +83,6 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 		APIReader:        mgr.GetAPIReader(),
 		BootstrapImage:   bootstrapImage,
 		ZeroClawConfig:   zcConfig,
-		BackupImage:      os.Getenv("USERSWARM_BACKUP_IMAGE"),
 		BackupBucket:     os.Getenv("USERSWARM_BACKUP_BUCKET"),
 		BackupRegion:     os.Getenv("USERSWARM_BACKUP_REGION"),
 		BackupSecretName: os.Getenv("USERSWARM_BACKUP_SECRET_NAME"),

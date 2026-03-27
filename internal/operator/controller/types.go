@@ -60,9 +60,8 @@ type UserSwarmReconciler struct {
 	// ZeroClawConfig holds shared ZeroClaw settings (model providers, feature flags, etc.)
 	// that get baked into each runtime's bootstrap ConfigMap.
 	ZeroClawConfig *zeroclaw.ZeroClawConfig
-	// BackupImage is the container image used for backup Jobs (e.g. amazon/aws-cli:2.x).
-	BackupImage string
 	// BackupBucket is the S3 bucket for PVC backups (e.g. "crawbl-backups").
+	// Empty means backups are disabled.
 	BackupBucket string
 	// BackupRegion is the AWS region for S3 (e.g. "eu-central-1").
 	BackupRegion string
