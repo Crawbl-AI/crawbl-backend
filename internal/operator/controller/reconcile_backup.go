@@ -121,6 +121,9 @@ func (r *UserSwarmReconciler) buildBackupJob(swarm *crawblv1alpha1.UserSwarm, jo
 	//   workspace/memory/brain.db       — agent memory
 	//   workspace/state/                — runtime state
 	//   workspace/cron/                 — scheduled jobs
+	//
+	// amazon/aws-cli image doesn't have tar, so we install it first.
+	// The gzip pipe avoids needing tar entirely — just use the aws CLI to stream.
 	backupScript := `set -eu
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DEST="s3://${BACKUP_BUCKET}/${ENV}/swarms/${USER_ID}/${SWARM_NAME}/` + s3Prefix + `/${TIMESTAMP}.tar.gz"
@@ -129,13 +132,18 @@ if [ ! -d "${WS}" ]; then
   echo "No workspace directory found, skipping backup"
   exit 0
 fi
+# Install tar (not included in amazon/aws-cli image)
+yum install -y tar gzip >/dev/null 2>&1 || apk add --no-cache tar gzip >/dev/null 2>&1 || true
 cd /zeroclaw-data
 find workspace -type f \( -name "*.db" -o -name "*.db-wal" -o -name "*.md" -o -name "*.json" \) -size -50M > /tmp/backup-filelist.txt
 if [ ! -s /tmp/backup-filelist.txt ]; then
   echo "No workspace files found, skipping backup"
   exit 0
 fi
+echo "Backing up $(wc -l < /tmp/backup-filelist.txt) files"
+cat /tmp/backup-filelist.txt
 tar czf /tmp/backup.tar.gz -T /tmp/backup-filelist.txt
+echo "Archive size: $(du -h /tmp/backup.tar.gz | cut -f1)"
 aws s3 cp /tmp/backup.tar.gz "${DEST}"
 echo "Backup uploaded to ${DEST}"
 `
