@@ -922,7 +922,7 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 		}
 
 		job.Spec.BackoffLimit = ptrTo[int32](0)
-		const jobTTLSeconds = 300
+		const jobTTLSeconds = 60
 		job.Spec.TTLSecondsAfterFinished = ptrTo[int32](jobTTLSeconds)
 		job.Spec.Template.Labels = labelsFor(swarm)
 		job.Spec.Template.Annotations = map[string]string{
