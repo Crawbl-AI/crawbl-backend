@@ -11,6 +11,7 @@ configs:
     controller.operation.processors: "3"
   cm:
     timeout.reconciliation: 60s
+    kustomize.buildOptions: --enable-alpha-plugins --enable-exec
 
 server:
   replicas: 1
