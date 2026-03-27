@@ -172,7 +172,7 @@ func buildRuntimeClient(logger *slog.Logger) (runtimeclient.Client, error) {
 			StorageSize:         envOrDefault("CRAWBL_RUNTIME_STORAGE_SIZE", runtimeclient.DefaultRuntimeStorageSize),
 			StorageClassName:    strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_STORAGE_CLASS_NAME")),
 			DefaultProvider:     envOrDefault("CRAWBL_RUNTIME_DEFAULT_PROVIDER", "openai"),
-			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-4o-mini"),
+			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-5.0-mini"),
 			EnvSecretName:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_ENV_SECRET_NAME")),
 			TOMLOverrides:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_TOML_OVERRIDES")),
 			PollTimeout:         durationFromEnv("CRAWBL_RUNTIME_POLL_TIMEOUT", runtimeclient.DefaultPollTimeout),
