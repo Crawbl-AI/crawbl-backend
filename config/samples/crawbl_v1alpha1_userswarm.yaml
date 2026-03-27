@@ -24,7 +24,7 @@ spec:
     storageClassName: do-block-storage
   config:
     defaultProvider: openai
-    defaultModel: gpt-5.4
+    defaultModel: gpt-5.0-mini
     # The referenced Secret should expose OPENAI_API_KEY for the native OpenAI provider.
     envSecretRef:
       name: demo-user-provider-env
