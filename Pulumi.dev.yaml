@@ -45,7 +45,7 @@ config:
     # Pool name used in DigitalOcean dashboard.
     nodePoolName: platform-8gb
     # Droplet size: 4 vCPUs, 8GB RAM. Smallest size that can run the full
-    # platform stack (ArgoCD + Vault + PostgreSQL + Redis + operators + orchestrator).
+    # platform stack (ArgoCD + ESO + PostgreSQL + Redis + operators + orchestrator).
     nodeSize: s-4vcpu-8gb
     # Single node for dev (no redundancy needed).
     nodeCount: 1
