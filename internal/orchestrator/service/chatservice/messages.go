@@ -51,8 +51,9 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	// Route to the correct agent
 	responder := resolveResponder(conversation, agents, opts.Mentions)
 
-	// Typing indicator
+	// Signal agent is processing
 	if responder != nil {
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, responder.ID, string(orchestrator.AgentStatusBusy))
 		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, responder.ID, true)
 	}
 
@@ -68,8 +69,10 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	}
 	replyText, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 
+	// Signal agent is done
 	if responder != nil {
 		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, responder.ID, false)
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, responder.ID, string(orchestrator.AgentStatusOnline))
 	}
 
 	if mErr != nil {
