@@ -341,7 +341,7 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 		return nil, nil, nil, mErr
 	}
 
-	conversations, mErr := s.ensureDefaultConversations(ctx, sess, workspace)
+	conversations, mErr := s.ensureDefaultConversations(ctx, sess, workspace, agents)
 	if mErr != nil {
 		return nil, nil, nil, mErr
 	}
@@ -431,44 +431,80 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 	return createdAgents, nil
 }
 
-// ensureDefaultConversations ensures that a default swarm conversation exists
-// for the given workspace. If no swarm conversation exists, it creates one
-// with the default title.
-//
-// The function uses a transaction to ensure atomic creation and returns all
-// conversations for the workspace after ensuring the default exists.
-func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Conversation, *merrors.Error) {
+// ensureDefaultConversations ensures that a default swarm conversation and
+// per-agent conversations exist for the workspace. Creates any that are missing.
+func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) ([]*orchestrator.Conversation, *merrors.Error) {
 	conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	for _, conversation := range conversations {
-		if conversation.Type == orchestrator.ConversationTypeSwarm {
-			return conversations, nil
+	// Check what's missing: swarm conversation + one per agent
+	hasSwarm := false
+	agentConvs := make(map[string]bool) // agent ID → has conversation
+	for _, c := range conversations {
+		if c.Type == orchestrator.ConversationTypeSwarm {
+			hasSwarm = true
+		}
+		if c.AgentID != nil {
+			agentConvs[*c.AgentID] = true
 		}
 	}
 
+	allPresent := hasSwarm
+	for _, agent := range agents {
+		if !agentConvs[agent.ID] {
+			allPresent = false
+			break
+		}
+	}
+	if allPresent {
+		return conversations, nil
+	}
+
 	createdConversations, mErr := database.WithTransaction(sess, "ensure default conversations", func(tx *dbr.Tx) ([]*orchestrator.Conversation, *merrors.Error) {
-		if _, mErr := s.conversationRepo.FindDefaultSwarm(ctx, tx, workspace.ID); mErr == nil {
-			return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
-		} else if !merrors.IsCode(mErr, merrors.ErrCodeConversationNotFound) {
-			return nil, mErr
+		now := time.Now().UTC()
+
+		// Create swarm conversation if missing
+		if !hasSwarm {
+			if _, findErr := s.conversationRepo.FindDefaultSwarm(ctx, tx, workspace.ID); findErr != nil {
+				if !merrors.IsCode(findErr, merrors.ErrCodeConversationNotFound) {
+					return nil, findErr
+				}
+				swarmConv := &orchestrator.Conversation{
+					ID:          uuid.NewString(),
+					WorkspaceID: workspace.ID,
+					Type:        orchestrator.ConversationTypeSwarm,
+					Title:       orchestrator.DefaultSwarmTitle,
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				}
+				if mErr := s.conversationRepo.Save(ctx, tx, swarmConv); mErr != nil {
+					return nil, mErr
+				}
+			}
 		}
 
-		now := time.Now().UTC()
-		conversation := &orchestrator.Conversation{
-			ID:          uuid.NewString(),
-			WorkspaceID: workspace.ID,
-			Type:        orchestrator.ConversationTypeSwarm,
-			Title:       orchestrator.DefaultSwarmTitle,
-			UnreadCount: 0,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+		// Create per-agent conversations if missing
+		for _, agent := range agents {
+			if agentConvs[agent.ID] {
+				continue
+			}
+			agentID := agent.ID
+			agentConv := &orchestrator.Conversation{
+				ID:          uuid.NewString(),
+				WorkspaceID: workspace.ID,
+				AgentID:     &agentID,
+				Type:        orchestrator.ConversationTypeAgent,
+				Title:       agent.Name,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}
+			if mErr := s.conversationRepo.Save(ctx, tx, agentConv); mErr != nil {
+				return nil, mErr
+			}
 		}
-		if mErr := s.conversationRepo.Save(ctx, tx, conversation); mErr != nil {
-			return nil, mErr
-		}
+
 		return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
 	})
 	if mErr != nil {
