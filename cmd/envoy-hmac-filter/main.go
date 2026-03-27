@@ -19,16 +19,16 @@ import (
 
 const (
 	// maxTimestampAge is the maximum age of a timestamp before it's considered expired.
-	// Mirrors internal/pkg/httpserver/middleware.go.
+
 	maxTimestampAge = 2 * time.Minute
 
 	// maxClockSkew allows for small time differences between client and server clocks.
-	// Mirrors internal/pkg/httpserver/middleware.go.
+
 	maxClockSkew = 30 * time.Second
 )
 
 // Required device headers for X-Token authentication.
-// Mirrors requiredDeviceHeaders in internal/pkg/httpserver/middleware.go.
+// Required device headers for X-Token authentication.
 var requiredDeviceHeaders = []string{
 	"x-timestamp",
 	"x-signature",
@@ -121,7 +121,6 @@ type httpContext struct {
 }
 
 // OnHttpRequestHeaders validates HMAC device signatures for X-Token requests.
-// Mirrors the logic in AuthMiddleware + validateDeviceHeaders from middleware.go.
 //
 // Flow:
 //  1. Skip if environment is local/test (mirrors shouldSkipDeviceAuth)
@@ -131,7 +130,6 @@ type httpContext struct {
 //  5. Validate HMAC-SHA256 signature: HMAC(secret, token+":"+timestamp)
 func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
 	// Skip HMAC validation in local/test environments.
-	// Mirrors shouldSkipDeviceAuth in middleware.go.
 	if ctx.environment == "local" || ctx.environment == "test" {
 		return types.ActionContinue
 	}
@@ -145,7 +143,6 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	}
 
 	// X-Token present — validate required device headers.
-	// Mirrors the header collection loop in validateDeviceHeaders.
 	headers := make(map[string]string, len(requiredDeviceHeaders))
 	for _, h := range requiredDeviceHeaders {
 		val, _ := proxywasm.GetHttpRequestHeader(h)
@@ -165,7 +162,6 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	}
 
 	// Validate timestamp freshness.
-	// Mirrors the timestamp validation in validateDeviceHeaders.
 	timestamp := headers["x-timestamp"]
 	parsedTime, parseErr := time.Parse(time.RFC3339Nano, timestamp)
 	if parseErr != nil {
@@ -184,7 +180,6 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	}
 
 	// Validate HMAC-SHA256 signature.
-	// Mirrors GenerateHMAC + the comparison in validateDeviceHeaders.
 	signature := headers["x-signature"]
 	expectedSig := generateHMAC(ctx.hmacSecret, xToken+":"+timestamp)
 
@@ -198,7 +193,6 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	expectedMAC, _ := hex.DecodeString(expectedSig)
 
 	// Constant-time comparison to prevent timing attacks.
-	// Mirrors hmac.Equal usage in middleware.go.
 	if !hmac.Equal(receivedMAC, expectedMAC) {
 		proxywasm.LogWarnf("hmac-filter: signature mismatch")
 		_ = proxywasm.SendHttpResponse(403, jsonContentType(),
@@ -212,7 +206,6 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 // --- Helpers ---
 
 // generateHMAC produces an HMAC-SHA256 hex signature.
-// Mirrors GenerateHMAC in internal/pkg/httpserver/middleware.go.
 func generateHMAC(secret, data string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(data))

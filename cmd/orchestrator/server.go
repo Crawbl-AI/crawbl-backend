@@ -26,7 +26,6 @@ import (
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	backendfirebase "github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -154,7 +153,6 @@ func buildHTTPMiddleware(logger *slog.Logger) (*httpserver.MiddlewareConfig, err
 
 	return &httpserver.MiddlewareConfig{
 		Environment:      environment,
-		HMACSecret:       configenv.SecretString("CRAWBL_HTTP_HMAC_SECRET", ""),
 		IdentityVerifier: verifier,
 	}, nil
 }

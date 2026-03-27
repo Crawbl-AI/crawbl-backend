@@ -8,10 +8,6 @@ const (
 	AuthorizationHeader = "Authorization"
 	// XTokenHeader is the custom X-Token header for mobile authentication.
 	XTokenHeader = "X-Token"
-	// XTimestampHeader is the timestamp header for HMAC signature verification.
-	XTimestampHeader = "X-Timestamp"
-	// XSignatureHeader is the HMAC signature header.
-	XSignatureHeader = "X-Signature"
 	// XDeviceInfoHeader contains device information.
 	XDeviceInfoHeader = "X-Device-Info"
 	// XDeviceIDHeader contains the unique device identifier.
@@ -61,8 +57,6 @@ func (s AuthTokenSource) String() string {
 type MiddlewareConfig struct {
 	// Environment is the current environment (local, dev, prod, etc.).
 	Environment string
-	// HMACSecret is the secret key for HMAC signature verification.
-	HMACSecret string
 	// IdentityVerifier validates tokens and extracts principal information.
 	IdentityVerifier orchestrator.IdentityVerifier
 }
