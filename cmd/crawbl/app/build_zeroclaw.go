@@ -36,9 +36,9 @@ func newBuildZeroclawCommand() *cobra.Command {
 		Use:   "zeroclaw",
 		Short: "Build ZeroClaw runtime image",
 		Long:  "Build the ZeroClaw runtime Docker image using docker buildx. Clones the upstream ZeroClaw repository at a pinned ref and builds with OCI labels.",
-		Example: `  crawbl app build zeroclaw --tag v0.5.9
-  crawbl app build zeroclaw --tag v0.5.9 --ref v0.5.9 --push
-  crawbl app build zeroclaw --tag dev --source https://github.com/zeroclaw-labs/zeroclaw.git --ref main
+		Example: `  crawbl app build zeroclaw --tag v0.6.5-crawbl.1
+  crawbl app build zeroclaw --tag v0.6.5-crawbl.1 --ref v0.6.5-crawbl.1 --push
+  crawbl app build zeroclaw --tag dev --ref main
   crawbl app build zeroclaw --tag latest --platform linux/amd64,linux/arm64 --push`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tag == "" {

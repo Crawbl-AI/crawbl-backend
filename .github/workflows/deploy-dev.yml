@@ -10,11 +10,11 @@ on:
         type: boolean
         default: false
       zeroclaw_ref:
-        description: ZeroClaw git ref to build
-        default: v0.5.9
+        description: ZeroClaw fork git ref to build
+        default: v0.6.5-crawbl.1
       zeroclaw_tag:
         description: ZeroClaw image tag in DOCR
-        default: v0.5.9
+        default: v0.6.5-crawbl.1
 
 env:
   IMAGE_TAG: v0.1.${{ github.run_number }}

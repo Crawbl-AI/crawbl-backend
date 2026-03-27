@@ -7,7 +7,7 @@
 //	# Application commands
 //	crawbl app build orchestrator --tag v1.0.0 [--push]  # Build orchestrator image
 //	crawbl app build operator --tag v1.0.0 [--push]      # Build operator image
-//	crawbl app build zeroclaw --tag v0.5.9 [--push]      # Build ZeroClaw image
+//	crawbl app build zeroclaw --tag v0.6.5-crawbl.1 [--push]  # Build ZeroClaw image
 //	crawbl app deploy orchestrator --tag v1.0.0          # Deploy orchestrator to cluster
 //	crawbl app deploy operator --tag v1.0.0              # Deploy operator to cluster
 //

@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       git_ref:
-        description: Upstream ZeroClaw git tag or ref
+        description: ZeroClaw fork git tag or ref
         required: true
-        default: v0.5.9
+        default: v0.6.5-crawbl.1
       image_tag:
         description: Target image tag in DOCR
         required: true
-        default: v0.5.9
+        default: v0.6.5-crawbl.1
       docker_target:
         description: Dockerfile target to build
         required: true
