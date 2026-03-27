@@ -1,5 +1,5 @@
 ## ArgoCD Helm values for dev environment.
-## Ultra-minimal for single-node dev cluster (s-2vcpu-4gb).
+## Tuned for single-node dev cluster (s-4vcpu-8gb).
 
 global:
   domain: ""
@@ -7,6 +7,8 @@ global:
 configs:
   params:
     server.insecure: true
+    controller.status.processors: "5"
+    controller.operation.processors: "3"
   cm:
     timeout.reconciliation: 60s
 
@@ -21,21 +23,26 @@ server:
 
 controller:
   replicas: 1
+  env:
+    - name: GOMEMLIMIT
+      value: 400MiB
   resources:
     requests:
       cpu: 10m
-      memory: 128Mi
-    limits:
       memory: 256Mi
+    limits:
+      memory: 512Mi
 
 repoServer:
   replicas: 1
+  extraArgs:
+    - --parallelismlimit=2
   resources:
     requests:
       cpu: 10m
-      memory: 64Mi
+      memory: 256Mi
     limits:
-      memory: 128Mi
+      memory: 1Gi
 
 redis:
   resources:
