@@ -31,10 +31,11 @@ func newBootstrapCommand() *cobra.Command {
 This command automates the entire cluster bootstrap process:
   1. Run infra apply (creates DOKS cluster + ArgoCD via Pulumi)
   2. Save kubeconfig via doctl
-  3. Upgrade ArgoCD with production-grade memory limits
-  4. Wait for ArgoCD application-controller to be ready
-  5. Wait for all ArgoCD applications to sync (with timeout)
-  6. Print status summary`,
+  3. Add container registry to cluster via doctl
+  4. Upgrade ArgoCD with production-grade memory limits
+  5. Wait for ArgoCD application-controller to be ready
+  6. Wait for all ArgoCD applications to sync (with timeout)
+  7. Print status summary`,
 		Example: `  crawbl infra bootstrap                        # Bootstrap with confirmation
   crawbl infra bootstrap --auto-approve        # Bootstrap without confirmation
   crawbl infra bootstrap --cluster crawbl-prod # Use a different cluster name
@@ -69,35 +70,42 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 	}
 
 	// Step 1: Run infra apply
-	fmt.Println("\n[1/5] Applying infrastructure (Pulumi)...")
+	fmt.Println("\n[1/6] Applying infrastructure (Pulumi)...")
 	if err := runInfraApply(ctx, env, region); err != nil {
 		return fmt.Errorf("infra apply failed: %w", err)
 	}
 	fmt.Println("  ok")
 
 	// Step 2: Save kubeconfig
-	fmt.Println("\n[2/5] Saving kubeconfig...")
+	fmt.Println("\n[2/6] Saving kubeconfig...")
 	if err := runCommand("doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
 		return fmt.Errorf("kubeconfig save failed: %w", err)
 	}
 	fmt.Println("  ok")
 
-	// Step 3: Upgrade ArgoCD with production memory limits
-	fmt.Println("\n[3/5] Upgrading ArgoCD with production memory limits...")
+	// Step 3: Add container registry to cluster
+	fmt.Println("\n[3/6] Adding container registry to cluster...")
+	if err := runCommand("doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
+		return fmt.Errorf("registry add failed: %w", err)
+	}
+	fmt.Println("  ok")
+
+	// Step 4: Upgrade ArgoCD with production memory limits
+	fmt.Println("\n[4/6] Upgrading ArgoCD with production memory limits...")
 	if err := upgradeArgoCD(); err != nil {
 		return fmt.Errorf("argocd upgrade failed: %w", err)
 	}
 	fmt.Println("  ok")
 
-	// Step 4: Wait for controller to be ready
-	fmt.Println("\n[4/5] Waiting for ArgoCD application-controller...")
+	// Step 5: Wait for controller to be ready
+	fmt.Println("\n[5/6] Waiting for ArgoCD application-controller...")
 	if err := waitForController(ctx, timeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
 	}
 	fmt.Println("  ok")
 
-	// Step 5: Wait for all apps to sync
-	fmt.Println("\n[5/5] Waiting for all applications to sync...")
+	// Step 6: Wait for all apps to sync
+	fmt.Println("\n[6/6] Waiting for all applications to sync...")
 	if err := waitForAppsSync(ctx, timeout); err != nil {
 		return fmt.Errorf("app sync wait failed: %w", err)
 	}
