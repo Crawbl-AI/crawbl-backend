@@ -6,24 +6,24 @@ import (
 	"strings"
 )
 
-// defaultSecretsDir is the default mount path for CSI Secrets Store volumes.
+// defaultSecretsDir is the default path to check for file-based secrets.
 const defaultSecretsDir = "/mnt/secrets"
 
 // SecretString resolves a sensitive setting by checking, in order:
 //  1. The environment variable KEY directly
-//  2. A file at $SECRETS_DIR/<KEY> (CSI Secrets Store mount)
+//  2. A file at $SECRETS_DIR/<KEY> (volume-mounted secrets)
 //  3. A file path from the KEY_FILE environment variable
 //  4. The provided fallback value
 //
-// This allows the same code to work in local dev (env vars) and production
-// with CSI volume mounts.
+// This allows the same code to work in local dev (env vars) and
+// production with volume-mounted secrets.
 func SecretString(key, fallback string) string {
 	// 1. Direct env var.
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
 	}
 
-	// 2. CSI Secrets Store file mount at $SECRETS_DIR/<KEY>.
+	// 2. File-based secret at $SECRETS_DIR/<KEY>.
 	secretsDir := os.Getenv("SECRETS_DIR")
 	if secretsDir == "" {
 		secretsDir = defaultSecretsDir
