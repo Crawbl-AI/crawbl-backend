@@ -49,10 +49,13 @@ func buildConfig(env, region string) infra.Config {
 		clusterConfig.ProjectName = projectName
 	}
 
-	// Load ArgoCD SSH key from file (defaults to ~/.ssh/id_ed25519)
-	sshKeyPath := envOrDefault("ARGOCD_SSH_KEY_PATH", filepath.Join(os.Getenv("HOME"), ".ssh", "id_ed25519"))
-	if data, err := os.ReadFile(sshKeyPath); err == nil {
-		platformConfig.ArgoCDRepoSSHPrivateKey = string(data)
+	// ArgoCD deploy key — read from env var or file path
+	if key := os.Getenv("ARGOCD_SSH_PRIVATE_KEY"); key != "" {
+		platformConfig.ArgoCDRepoSSHPrivateKey = key
+	} else if keyPath := os.Getenv("ARGOCD_SSH_KEY_PATH"); keyPath != "" {
+		if data, err := os.ReadFile(keyPath); err == nil {
+			platformConfig.ArgoCDRepoSSHPrivateKey = string(data)
+		}
 	}
 
 	return infra.Config{
