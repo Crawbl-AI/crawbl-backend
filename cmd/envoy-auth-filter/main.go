@@ -1,6 +1,6 @@
-// Package main implements a proxy-wasm WASM plugin that validates HMAC device
-// signatures at the Envoy Gateway edge. It replicates the authentication logic
-// from internal/pkg/httpserver/middleware.go (validateDeviceHeaders + GenerateHMAC).
+// Package main implements a proxy-wasm WASM plugin for edge authentication
+// at the Envoy Gateway. It validates HMAC device signatures for mobile
+// X-Token requests and bypasses validation for WebSocket upgrades (Socket.IO).
 //
 // Build: tinygo build -o filter.wasm -scheduler=none -target=wasi .
 package main
@@ -66,13 +66,13 @@ type pluginContext struct {
 
 func (p *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPluginStartStatus {
 	if pluginConfigurationSize == 0 {
-		proxywasm.LogCriticalf("hmac-filter: plugin configuration is required")
+		proxywasm.LogCriticalf("auth-filter: plugin configuration is required")
 		return types.OnPluginStartStatusFailed
 	}
 
 	data, err := proxywasm.GetPluginConfiguration()
 	if err != nil {
-		proxywasm.LogCriticalf("hmac-filter: failed to read plugin configuration: %v", err)
+		proxywasm.LogCriticalf("auth-filter: failed to read plugin configuration: %v", err)
 		return types.OnPluginStartStatusFailed
 	}
 
@@ -84,24 +84,24 @@ func (p *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPlugi
 		var raw string
 		if err2 := json.Unmarshal(data, &raw); err2 == nil {
 			if err3 := json.Unmarshal([]byte(raw), &cfg); err3 != nil {
-				proxywasm.LogCriticalf("hmac-filter: failed to parse plugin configuration: %v (unwrap: %v)", err, err3)
+				proxywasm.LogCriticalf("auth-filter: failed to parse plugin configuration: %v (unwrap: %v)", err, err3)
 				return types.OnPluginStartStatusFailed
 			}
 		} else {
-			proxywasm.LogCriticalf("hmac-filter: failed to parse plugin configuration: %v", err)
+			proxywasm.LogCriticalf("auth-filter: failed to parse plugin configuration: %v", err)
 			return types.OnPluginStartStatusFailed
 		}
 	}
 
 	if cfg.HMACSecret == "" {
-		proxywasm.LogCriticalf("hmac-filter: hmac_secret is required in plugin configuration")
+		proxywasm.LogCriticalf("auth-filter: hmac_secret is required in plugin configuration")
 		return types.OnPluginStartStatusFailed
 	}
 
 	p.hmacSecret = cfg.HMACSecret
 	p.environment = strings.ToLower(strings.TrimSpace(cfg.Environment))
 
-	proxywasm.LogInfof("hmac-filter: initialized for environment=%s", p.environment)
+	proxywasm.LogInfof("auth-filter: initialized for environment=%s", p.environment)
 	return types.OnPluginStartStatusOK
 }
 
@@ -180,7 +180,7 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	now := time.Now().UTC()
 	age := now.Sub(parsedTime)
 	if age > maxTimestampAge || age < -maxClockSkew {
-		proxywasm.LogWarnf("hmac-filter: timestamp rejected age=%v", age)
+		proxywasm.LogWarnf("auth-filter: timestamp rejected age=%v", age)
 		_ = proxywasm.SendHttpResponse(403, jsonContentType(),
 			[]byte(`{"error":"timestamp expired"}`), -1)
 		return types.ActionPause
@@ -201,7 +201,7 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 
 	// Constant-time comparison to prevent timing attacks.
 	if !hmac.Equal(receivedMAC, expectedMAC) {
-		proxywasm.LogWarnf("hmac-filter: signature mismatch")
+		proxywasm.LogWarnf("auth-filter: signature mismatch")
 		_ = proxywasm.SendHttpResponse(403, jsonContentType(),
 			[]byte(`{"error":"invalid signature"}`), -1)
 		return types.ActionPause

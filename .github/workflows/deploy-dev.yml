@@ -70,9 +70,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=operator
 
   # ---------------------------------------------------------------------------
-  # Build and push envoy HMAC filter WASM image
+  # Build and push envoy auth filter WASM image
   # ---------------------------------------------------------------------------
-  build-hmac-filter:
+  build-auth-filter:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,13 +85,13 @@ jobs:
       - run: doctl registry login --expiry-seconds 1200
       - uses: docker/build-push-action@v6
         with:
-          context: cmd/envoy-hmac-filter
-          file: dockerfiles/envoy-hmac-filter.dockerfile
+          context: cmd/envoy-auth-filter
+          file: dockerfiles/envoy-auth-filter.dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.DOCR_REGISTRY }}/envoy-hmac-filter:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=hmac-filter
-          cache-to: type=gha,mode=max,scope=hmac-filter
+          tags: ${{ env.DOCR_REGISTRY }}/envoy-auth-filter:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=auth-filter
+          cache-to: type=gha,mode=max,scope=auth-filter
 
   # ---------------------------------------------------------------------------
   # Build and push ZeroClaw image (manual trigger only)
@@ -128,7 +128,7 @@ jobs:
   # Update image tags in crawbl-argocd-apps so ArgoCD syncs the new images
   # ---------------------------------------------------------------------------
   update-argocd:
-    needs: [build-orchestrator, build-operator, build-hmac-filter]
+    needs: [build-orchestrator, build-operator, build-auth-filter]
     runs-on: ubuntu-latest
     steps:
       - name: Update ArgoCD apps with new image tags
@@ -146,8 +146,8 @@ jobs:
           echo "Updating operator to ${IMAGE_TAG}"
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/userswarm-operator/chart/values.yaml
 
-          echo "Updating hmac-filter to ${IMAGE_TAG}"
-          sed -i "s|registry.digitalocean.com/crawbl/envoy-hmac-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-hmac-filter:${IMAGE_TAG}|g" \
+          echo "Updating auth-filter to ${IMAGE_TAG}"
+          sed -i "s|registry.digitalocean.com/crawbl/envoy-auth-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-auth-filter:${IMAGE_TAG}|g" \
             components/platform-resources/resources/envoy-extension-policy.yaml
 
           git config user.name "github-actions[bot]"

@@ -1,4 +1,4 @@
-module github.com/Crawbl-AI/crawbl-backend/cmd/envoy-hmac-filter
+module github.com/Crawbl-AI/crawbl-backend/cmd/envoy-auth-filter
 
 go 1.21
 
