@@ -57,7 +57,7 @@ spec:
     # LLM provider — "openai" is the only supported provider currently.
     defaultProvider: openai
     # Default model for chat completions. gpt-5-mini is the freemium default
-    # (cheaper than gpt-5.4, supports tool use including web_search).
+    # (cheaper than gpt-5, supports tool use including web_search).
     defaultModel: gpt-5-mini
     # Optional: override default temperature (0.0–2.0). Omit to use 0.7.
     # defaultTemperature: 0.7
