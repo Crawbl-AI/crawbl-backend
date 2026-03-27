@@ -87,7 +87,8 @@ func NewInfraCommand() *cobra.Command {
 		Example: `  crawbl infra init        # Initialize Pulumi stack
   crawbl infra plan        # Preview infrastructure changes
   crawbl infra apply       # Apply infrastructure changes
-  crawbl infra destroy     # Destroy all infrastructure`,
+  crawbl infra destroy     # Destroy all infrastructure
+  crawbl infra bootstrap   # Bootstrap cluster end-to-end`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -97,6 +98,7 @@ func NewInfraCommand() *cobra.Command {
 	cmd.AddCommand(newPlanCommand())
 	cmd.AddCommand(newApplyCommand())
 	cmd.AddCommand(newDestroyCommand())
+	cmd.AddCommand(newBootstrapCommand())
 
 	return cmd
 }
