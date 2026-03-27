@@ -20,12 +20,6 @@ type Config struct {
 	Environment        string
 	Region             string
 	ESCEnvironment     string // Pulumi ESC environment (e.g. "crawbl/dev")
-	DigitalOceanToken  string
-	CloudflareAPIToken string
-	OpenAIAPIKey       string
-	AWSAccessKeyID     string
-	AWSSecretAccessKey string
-	AWSRegion          string
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
@@ -104,12 +98,6 @@ func createKubernetesProvider(ctx *pulumi.Context, clusterResult *cluster.Cluste
 func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.Provider) error {
 	platformConfig := config.PlatformConfig
 	platformConfig.Provider = k8sProvider
-	platformConfig.DigitalOceanToken = config.DigitalOceanToken
-	platformConfig.CloudflareAPIToken = config.CloudflareAPIToken
-	platformConfig.OpenAIAPIKey = config.OpenAIAPIKey
-	platformConfig.AWSAccessKeyID = config.AWSAccessKeyID
-	platformConfig.AWSSecretAccessKey = config.AWSSecretAccessKey
-	platformConfig.AWSRegion = config.AWSRegion
 
 	_, err := platform.NewPlatform(ctx, "platform", platformConfig, pulumi.Provider(k8sProvider))
 	if err != nil {

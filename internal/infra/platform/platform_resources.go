@@ -1,8 +1,6 @@
 package platform
 
 import (
-	"fmt"
-
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
 	helmv3 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
@@ -20,31 +18,6 @@ func createArgoCDNamespace(ctx *pulumi.Context, name string, cfg Config, opts ..
 			}),
 		},
 	}, append(opts, pulumi.Provider(cfg.Provider))...)
-}
-
-// createAWSCredentialsSecret creates the aws-credentials K8s Secret in the argocd namespace.
-// ESO's ClusterSecretStore references this secret for AWS Secrets Manager authentication.
-// We use the argocd namespace (managed by Pulumi) instead of external-secrets (managed by ArgoCD)
-// to avoid namespace ownership conflicts.
-func createAWSCredentialsSecret(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) error {
-	_, err := corev1.NewSecret(ctx, name+"-aws-credentials", &corev1.SecretArgs{
-		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("aws-credentials"),
-			Namespace: pulumi.String("argocd"),
-		},
-		StringData: pulumi.StringMap{
-			"access-key": pulumi.String(cfg.AWSAccessKeyID),
-			"secret-key": pulumi.String(cfg.AWSSecretAccessKey),
-		},
-	}, append(opts,
-		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn(deps),
-	)...)
-	if err != nil {
-		return fmt.Errorf("create aws credentials secret: %w", err)
-	}
-
-	return nil
 }
 
 // deployArgoCD deploys the ArgoCD Helm chart.

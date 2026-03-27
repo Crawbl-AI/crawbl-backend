@@ -61,14 +61,8 @@ func buildConfig(env, region string) infra.Config {
 	return infra.Config{
 		Environment:        env,
 		Region:             region,
-		ESCEnvironment:     envOrDefault("CRAWBL_ESC_ENV", "crawbl/"+env),
-		DigitalOceanToken:  os.Getenv("DIGITALOCEAN_TOKEN"),
-		CloudflareAPIToken: os.Getenv("CLOUDFLARE_API_TOKEN"),
-		OpenAIAPIKey:       os.Getenv("OPENAI_API_KEY"),
-		AWSAccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
-		AWSSecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		AWSRegion:          envOrDefault("AWS_REGION", region),
-		ExistingVPCID:      os.Getenv("DIGITALOCEAN_VPC_ID"),
+		ESCEnvironment: envOrDefault("CRAWBL_ESC_ENV", "crawbl/"+env),
+		ExistingVPCID:  os.Getenv("DIGITALOCEAN_VPC_ID"),
 		ClusterConfig:  clusterConfig,
 		PlatformConfig: platformConfig,
 	}

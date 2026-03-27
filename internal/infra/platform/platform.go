@@ -15,16 +15,6 @@ type Config struct {
 	Provider      *kubernetes.Provider
 	HelmValuesDir string
 
-	// Bootstrap tokens — Pulumi creates a single K8s Secret for these.
-	DigitalOceanToken  string
-	CloudflareAPIToken string
-	OpenAIAPIKey       string
-
-	// AWS credentials — written as the aws-credentials K8s Secret in external-secrets namespace.
-	AWSAccessKeyID     string
-	AWSSecretAccessKey string
-	AWSRegion          string
-
 	// ArgoCD
 	InstallArgoCD            bool
 	ArgoCDChartVersion       string
@@ -60,12 +50,12 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 		return nil, fmt.Errorf("create argocd namespace: %w", err)
 	}
 
-	// 2. Create AWS credentials secret in argocd namespace (for ESO ClusterSecretStore)
-	if cfg.AWSAccessKeyID != "" && cfg.AWSSecretAccessKey != "" {
-		if err := createAWSCredentialsSecret(ctx, name, cfg, []pulumi.Resource{argocdNs}, opts...); err != nil {
-			return nil, fmt.Errorf("create aws credentials secret: %w", err)
-		}
-	}
+	// 2. AWS credentials for ESO are created manually during bootstrap:
+	//    kubectl create secret generic aws-credentials -n argocd \
+	//      --from-literal=access-key=$AWS_ACCESS_KEY_ID \
+	//      --from-literal=secret-key=$AWS_SECRET_ACCESS_KEY
+	// This keeps AWS keys out of Pulumi state and git entirely.
+	// See: crawbl-docs/ops/argocd/secrets-management.md
 
 	// 3. Deploy ArgoCD + repo secret + root Application
 	if cfg.InstallArgoCD {
