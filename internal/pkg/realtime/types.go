@@ -9,22 +9,19 @@ const (
 )
 
 // MessageEventPayload is the flat payload for message.new and message.updated events.
-// Mobile Freezed union expects {message: {...}} at top level.
 type MessageEventPayload struct {
 	Message any `json:"message"`
 }
 
 // AgentTypingPayload is the flat payload for agent.typing events.
-// Mobile Freezed union expects {conversationId, agentId, isTyping} at top level.
 type AgentTypingPayload struct {
-	ConversationID string `json:"conversationId"`
-	AgentID        string `json:"agentId"`
-	IsTyping       bool   `json:"isTyping"`
+	ConversationID string `json:"conversation_id"`
+	AgentID        string `json:"agent_id"`
+	IsTyping       bool   `json:"is_typing"`
 }
 
 // AgentStatusPayload is the flat payload for agent.status events.
-// Mobile Freezed union expects {agentId, status} at top level.
 type AgentStatusPayload struct {
-	AgentID string `json:"agentId"`
+	AgentID string `json:"agent_id"`
 	Status  string `json:"status"`
 }
