@@ -52,6 +52,8 @@ repoServer:
           key: age-key
     - name: XDG_CONFIG_HOME
       value: /.config
+    - name: PATH
+      value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/custom-tools
   volumes:
     - name: custom-tools
       emptyDir: {}
@@ -74,12 +76,8 @@ repoServer:
     - mountPath: /.config/kustomize/plugin
       name: custom-tools
       subPath: plugin
-    - mountPath: /usr/local/bin/kustomize
+    - mountPath: /custom-tools
       name: custom-tools
-      subPath: kustomize
-    - mountPath: /usr/local/bin/sops
-      name: custom-tools
-      subPath: sops
 
 redis:
   resources:
