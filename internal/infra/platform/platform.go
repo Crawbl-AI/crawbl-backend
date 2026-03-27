@@ -20,6 +20,11 @@ type Config struct {
 	CloudflareAPIToken string
 	OpenAIAPIKey       string
 
+	// AWS credentials — written as the aws-credentials K8s Secret in external-secrets namespace.
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	AWSRegion          string
+
 	// ArgoCD
 	InstallArgoCD            bool
 	ArgoCDChartVersion       string
@@ -55,10 +60,10 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 		return nil, fmt.Errorf("create argocd namespace: %w", err)
 	}
 
-	// 2. Create bootstrap secret in vault namespace
-	if cfg.DigitalOceanToken != "" || cfg.CloudflareAPIToken != "" || cfg.OpenAIAPIKey != "" {
-		if err := createBootstrapSecret(ctx, name, cfg, opts...); err != nil {
-			return nil, fmt.Errorf("create bootstrap secret: %w", err)
+	// 2. Create AWS credentials secret in external-secrets namespace
+	if cfg.AWSAccessKeyID != "" || cfg.AWSSecretAccessKey != "" {
+		if err := createAWSCredentialsSecret(ctx, name, cfg, opts...); err != nil {
+			return nil, fmt.Errorf("create aws credentials secret: %w", err)
 		}
 	}
 

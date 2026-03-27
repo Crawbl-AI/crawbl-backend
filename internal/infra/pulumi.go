@@ -20,9 +20,12 @@ type Config struct {
 	Environment        string
 	Region             string
 	ESCEnvironment     string // Pulumi ESC environment (e.g. "crawbl/dev")
-	DigitalOceanToken  string // Runtime use only (vault startupSecrets, DOCR)
-	CloudflareAPIToken string // Runtime use only (vault startupSecrets)
-	OpenAIAPIKey       string // Runtime use only (vault startupSecrets)
+	DigitalOceanToken  string
+	CloudflareAPIToken string
+	OpenAIAPIKey       string
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	AWSRegion          string
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
@@ -104,6 +107,9 @@ func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.
 	platformConfig.DigitalOceanToken = config.DigitalOceanToken
 	platformConfig.CloudflareAPIToken = config.CloudflareAPIToken
 	platformConfig.OpenAIAPIKey = config.OpenAIAPIKey
+	platformConfig.AWSAccessKeyID = config.AWSAccessKeyID
+	platformConfig.AWSSecretAccessKey = config.AWSSecretAccessKey
+	platformConfig.AWSRegion = config.AWSRegion
 
 	_, err := platform.NewPlatform(ctx, "platform", platformConfig, pulumi.Provider(k8sProvider))
 	if err != nil {

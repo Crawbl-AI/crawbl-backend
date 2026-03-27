@@ -22,38 +22,37 @@ func createArgoCDNamespace(ctx *pulumi.Context, name string, cfg Config, opts ..
 	}, append(opts, pulumi.Provider(cfg.Provider))...)
 }
 
-// createBootstrapSecret creates the vault-bootstrap-secrets K8s Secret in the vault namespace.
-// This is the only secret Pulumi manages — it contains tokens needed by the Vault bootstrap Job.
-func createBootstrapSecret(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) error {
-	// Create vault namespace first (ArgoCD will also manage it, but we need it for the secret).
-	vaultNs, err := corev1.NewNamespace(ctx, name+"-ns-vault", &corev1.NamespaceArgs{
+// createAWSCredentialsSecret creates the aws-credentials K8s Secret in the external-secrets namespace.
+// External Secrets Operator uses this secret to authenticate with AWS Secrets Manager.
+func createAWSCredentialsSecret(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) error {
+	// Create external-secrets namespace first (ArgoCD will also manage it, but we need it for the secret).
+	esNs, err := corev1.NewNamespace(ctx, name+"-ns-external-secrets", &corev1.NamespaceArgs{
 		Metadata: &metav1.ObjectMetaArgs{
-			Name: pulumi.String("vault"),
+			Name: pulumi.String("external-secrets"),
 			Labels: pulumi.ToStringMap(map[string]string{
 				"app.kubernetes.io/managed-by": "pulumi",
 			}),
 		},
 	}, append(opts, pulumi.Provider(cfg.Provider))...)
 	if err != nil {
-		return fmt.Errorf("create vault namespace: %w", err)
+		return fmt.Errorf("create external-secrets namespace: %w", err)
 	}
 
-	_, err = corev1.NewSecret(ctx, name+"-vault-bootstrap-secrets", &corev1.SecretArgs{
+	_, err = corev1.NewSecret(ctx, name+"-aws-credentials", &corev1.SecretArgs{
 		Metadata: &metav1.ObjectMetaArgs{
-			Name:      pulumi.String("vault-bootstrap-secrets"),
-			Namespace: pulumi.String("vault"),
+			Name:      pulumi.String("aws-credentials"),
+			Namespace: pulumi.String("external-secrets"),
 		},
 		StringData: pulumi.StringMap{
-			"DIGITALOCEAN_TOKEN":   pulumi.String(cfg.DigitalOceanToken),
-			"CLOUDFLARE_API_TOKEN": pulumi.String(cfg.CloudflareAPIToken),
-			"OPENAI_API_KEY":       pulumi.String(cfg.OpenAIAPIKey),
+			"access-key": pulumi.String(cfg.AWSAccessKeyID),
+			"secret-key": pulumi.String(cfg.AWSSecretAccessKey),
 		},
 	}, append(opts,
 		pulumi.Provider(cfg.Provider),
-		pulumi.DependsOn([]pulumi.Resource{vaultNs}),
+		pulumi.DependsOn([]pulumi.Resource{esNs}),
 	)...)
 	if err != nil {
-		return fmt.Errorf("create vault bootstrap secret: %w", err)
+		return fmt.Errorf("create aws credentials secret: %w", err)
 	}
 
 	return nil

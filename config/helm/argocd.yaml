@@ -28,10 +28,6 @@ configs:
   cm:
     ## How often ArgoCD polls Git for changes. 60s keeps sync lag low in dev.
     timeout.reconciliation: 60s
-    ## Enable Kustomize alpha plugins (ksops) and exec-based plugins.
-    ## Required for SOPS decryption of encrypted manifests (.enc.yaml files).
-    ## See crawbl-docs/ops/argocd/ksops.md for full details.
-    kustomize.buildOptions: --enable-alpha-plugins --enable-exec
 
 ## ---------------------------------------------------------------------------
 ## ArgoCD API Server
@@ -67,7 +63,6 @@ controller:
 ## ---------------------------------------------------------------------------
 ## Repo Server
 ## Clones Git repos, renders Helm charts, and runs Kustomize.
-## This is where ksops + sops run to decrypt SOPS-encrypted manifests.
 ## ---------------------------------------------------------------------------
 repoServer:
   replicas: 1
@@ -79,74 +74,7 @@ repoServer:
       cpu: 10m
       memory: 256Mi
     limits:
-      ## Higher limit than other components because Helm template rendering
-      ## and SOPS decryption can be memory-intensive.
       memory: 1Gi
-
-  ## -- Environment variables for SOPS/ksops decryption --
-  env:
-    ## The age private key used by sops to decrypt .enc.yaml files.
-    ## Stored in the sops-age-key K8s Secret, provisioned by Pulumi at bootstrap.
-    - name: SOPS_AGE_KEYS
-      valueFrom:
-        secretKeyRef:
-          name: sops-age-key
-          key: age-key
-    ## Kustomize looks for plugins under $XDG_CONFIG_HOME/kustomize/plugin/
-    ## We mount the ksops plugin binary there via the custom-tools volume.
-    - name: XDG_CONFIG_HOME
-      value: /.config
-    ## Add /custom-tools to PATH so Kustomize can find the sops binary
-    ## and the kustomize-sops wrapper.
-    - name: PATH
-      value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/custom-tools
-
-  ## -- Shared volume for init containers to install tools into --
-  volumes:
-    - name: custom-tools
-      emptyDir: {}
-
-  ## -- Init containers that install ksops and sops binaries --
-  initContainers:
-    ## Install ksops (Kustomize SOPS plugin) and its bundled kustomize binary.
-    ## ksops is the bridge: Kustomize calls ksops as an exec plugin, ksops
-    ## calls sops to decrypt, and returns the plaintext YAML to Kustomize.
-    - name: install-ksops
-      image: viaductoss/ksops:v4.3.2
-      command: ["/bin/sh", "-c"]
-      args:
-        - |
-          echo "Installing KSOPS..."
-          mkdir -p /custom-tools/plugin/viaduct.ai/v1/ksops
-          cp /usr/local/bin/ksops /custom-tools/plugin/viaduct.ai/v1/ksops/ksops
-          cp /usr/local/bin/kustomize /custom-tools/kustomize
-          cp /usr/local/bin/kustomize-sops /custom-tools/kustomize-sops
-          echo "Done."
-      volumeMounts:
-        - mountPath: /custom-tools
-          name: custom-tools
-    ## Install the sops binary (called by ksops for actual decryption).
-    ## Using the official SOPS Alpine image as the source.
-    - name: install-sops
-      image: ghcr.io/getsops/sops:v3.9.4-alpine
-      command: ["/bin/sh", "-c"]
-      args:
-        - cp /usr/local/bin/sops /custom-tools/sops
-      volumeMounts:
-        - mountPath: /custom-tools
-          name: custom-tools
-
-  ## -- Volume mounts for the repo-server container --
-  volumeMounts:
-    ## Mount the ksops plugin at the XDG_CONFIG_HOME kustomize plugin path.
-    ## This is where Kustomize looks for exec plugins: $XDG_CONFIG_HOME/kustomize/plugin/
-    - mountPath: /.config/kustomize/plugin
-      name: custom-tools
-      subPath: plugin
-    ## Mount the full custom-tools directory so sops and kustomize binaries
-    ## are available on PATH (/custom-tools/).
-    - mountPath: /custom-tools
-      name: custom-tools
 
 ## ---------------------------------------------------------------------------
 ## ArgoCD's internal Redis (used for caching, not application data)

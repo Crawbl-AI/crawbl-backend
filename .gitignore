@@ -6,4 +6,3 @@ e2e/*.log
 e2e/*.xml
 bin/
 .omc/
-secrets/age.key
