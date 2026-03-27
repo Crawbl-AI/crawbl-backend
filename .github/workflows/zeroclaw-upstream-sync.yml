@@ -70,7 +70,7 @@ jobs:
             --repo Crawbl-AI/crawbl-zeroclaw \
             --title "Upstream sync: ${UPSTREAM_SHA}" \
             --body "Merges latest upstream master. Clean merge, no conflicts. Review and merge when ready." \
-            --base main \
+            --base main-crawbl \
             --head "$BRANCH"
 
       - name: Push and create PR (conflicts)
@@ -86,6 +86,6 @@ jobs:
             --repo Crawbl-AI/crawbl-zeroclaw \
             --title "Upstream sync (CONFLICTS): ${UPSTREAM_SHA}" \
             --body "Upstream has changes that conflict with Crawbl extensions. Manual resolution required." \
-            --base main \
+            --base main-crawbl \
             --head "$BRANCH" \
             --label "upstream-sync"
