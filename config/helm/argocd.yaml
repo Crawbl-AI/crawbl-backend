@@ -1,5 +1,5 @@
 ## ArgoCD Helm values for dev environment.
-## Minimal single-replica config. Server runs in insecure mode (TLS terminated at Gateway).
+## Ultra-minimal for single-node dev cluster (s-2vcpu-4gb).
 
 global:
   domain: ""
@@ -8,51 +8,45 @@ configs:
   params:
     server.insecure: true
   cm:
-    timeout.reconciliation: 180s
+    timeout.reconciliation: 60s
 
 server:
   replicas: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
+      cpu: 10m
+      memory: 64Mi
     limits:
-      memory: 256Mi
+      memory: 128Mi
 
 controller:
   replicas: 1
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 10m
+      memory: 128Mi
     limits:
-      memory: 512Mi
+      memory: 256Mi
 
 repoServer:
   replicas: 1
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
+      cpu: 10m
+      memory: 64Mi
     limits:
-      memory: 256Mi
+      memory: 128Mi
 
 redis:
   resources:
     requests:
-      cpu: 25m
-      memory: 64Mi
+      cpu: 10m
+      memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 64Mi
 
 applicationSet:
-  replicas: 1
-  resources:
-    requests:
-      cpu: 25m
-      memory: 64Mi
-    limits:
-      memory: 128Mi
+  enabled: false
 
 notifications:
   enabled: false
