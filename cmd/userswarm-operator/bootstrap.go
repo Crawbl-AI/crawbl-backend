@@ -31,12 +31,7 @@ func newBootstrapCommand() *cobra.Command {
 				return err
 			}
 
-			vaultConfig := &zeroclaw.RuntimeVaultConfig{
-				Enabled:  envBool("VAULT_ENABLED", false),
-				FileName: envString("VAULT_FILE_NAME", "openai-api-key"),
-			}
-
-			return zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath, vaultConfig)
+			return zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath)
 		},
 	}
 

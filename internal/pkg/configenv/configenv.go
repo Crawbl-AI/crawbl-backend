@@ -12,11 +12,11 @@ const defaultSecretsDir = "/mnt/secrets"
 // SecretString resolves a sensitive setting by checking, in order:
 //  1. The environment variable KEY directly
 //  2. A file at $SECRETS_DIR/<KEY> (CSI Secrets Store mount)
-//  3. A file path from the KEY_FILE environment variable (legacy Vault Agent Injector)
+//  3. A file path from the KEY_FILE environment variable
 //  4. The provided fallback value
 //
-// This allows the same code to work in local dev (env vars), production with
-// CSI volume mounts, and legacy Vault Agent Injector setups.
+// This allows the same code to work in local dev (env vars) and production
+// with CSI volume mounts.
 func SecretString(key, fallback string) string {
 	// 1. Direct env var.
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {

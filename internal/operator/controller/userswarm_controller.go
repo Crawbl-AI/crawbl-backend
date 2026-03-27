@@ -48,11 +48,10 @@ const (
 
 type UserSwarmReconciler struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	APIReader       client.Reader
-	BootstrapImage  string
-	RuntimeVault    RuntimeVaultConfig
-	ZeroClawConfig  *zeroclaw.ZeroClawConfig
+	Scheme         *runtime.Scheme
+	APIReader      client.Reader
+	BootstrapImage string
+	ZeroClawConfig *zeroclaw.ZeroClawConfig
 }
 
 // Reconcile keeps one UserSwarm aligned with the shared-namespace runtime model:
@@ -313,10 +312,6 @@ func (r *UserSwarmReconciler) ensureImagePullSecretExists(ctx context.Context, s
 }
 
 func (r *UserSwarmReconciler) ensureRuntimeSecretExists(ctx context.Context, swarm *crawblv1alpha1.UserSwarm) error {
-	if r.runtimeVaultEnabled() {
-		return nil
-	}
-
 	name := envSecretName(swarm)
 	if name == "" && usesManagedEnvSecret(swarm) {
 		name = managedEnvSecretName(swarm)
@@ -557,9 +552,6 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 			"crawbl.ai/config-checksum": checksumStringMap(bootstrapFiles),
 			"crawbl.ai/env-secret-ref":  checksumString(envSecretRefName),
 		}
-		for key, value := range r.runtimeVaultAnnotations() {
-			obj.Spec.Template.Annotations[key] = value
-		}
 		obj.Spec.Template.Spec.ServiceAccountName = serviceAccountName(swarm)
 		obj.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 			RunAsNonRoot:        ptrTo(true),
@@ -603,23 +595,7 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 				},
 			},
 		}}
-		if r.runtimeVaultEnabled() {
-			obj.Spec.Template.Spec.InitContainers[0].Env = append(obj.Spec.Template.Spec.InitContainers[0].Env,
-				corev1.EnvVar{
-					Name:  "VAULT_ENABLED",
-					Value: "true",
-				},
-				corev1.EnvVar{
-					Name:  "VAULT_FILE_NAME",
-					Value: r.RuntimeVault.FileName,
-				},
-				corev1.EnvVar{
-					Name:  "OPENAI_API_KEY_FILE",
-					Value: r.runtimeVaultSecretFilePath(),
-				},
-			)
-		}
-		if !r.runtimeVaultEnabled() && envSecretRefName != "" {
+		if envSecretRefName != "" {
 			obj.Spec.Template.Spec.InitContainers[0].EnvFrom = []corev1.EnvFromSource{{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: envSecretRefName},
@@ -685,14 +661,7 @@ func (r *UserSwarmReconciler) reconcileStatefulSet(ctx context.Context, swarm *c
 			LivenessProbe:  healthProbe(),
 			StartupProbe:   startupProbe(),
 		}}
-		if r.runtimeVaultEnabled() {
-			obj.Spec.Template.Spec.Containers[0].Env = append(obj.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
-				Name:  "OPENAI_API_KEY_FILE",
-				Value: r.runtimeVaultSecretFilePath(),
-			})
-		}
-
-		if !r.runtimeVaultEnabled() && envSecretRefName != "" {
+		if envSecretRefName != "" {
 			// Keep provider credentials and other sensitive runtime env outside the bootstrap ConfigMap.
 			obj.Spec.Template.Spec.Containers[0].EnvFrom = []corev1.EnvFromSource{{
 				SecretRef: &corev1.SecretEnvSource{

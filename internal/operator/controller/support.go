@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"path"
 	"sort"
 	"strings"
 	"time"
@@ -110,52 +109,6 @@ func pvcName(sw *crawblv1alpha1.UserSwarm) string {
 	return truncateKubernetesName(fmt.Sprintf("zeroclaw-%s-data", sw.Name), kubernetesNameMaxLen)
 }
 
-func (r *UserSwarmReconciler) runtimeVaultEnabled() bool {
-	return r.RuntimeVault.EnabledForRuntime()
-}
-
-func (r *UserSwarmReconciler) runtimeVaultSecretFilePath() string {
-	return path.Join("/vault/secrets", r.RuntimeVault.FileName)
-}
-
-func (r *UserSwarmReconciler) runtimeVaultAnnotations() map[string]string {
-	if !r.runtimeVaultEnabled() {
-		return nil
-	}
-
-	annotations := map[string]string{
-		"vault.hashicorp.com/agent-inject":                       "true",
-		"vault.hashicorp.com/agent-init-first":                   "true",
-		"vault.hashicorp.com/agent-pre-populate-only":            fmt.Sprintf("%t", r.RuntimeVault.PrePopulateOnly),
-		"vault.hashicorp.com/auth-path":                          r.RuntimeVault.AuthPath,
-		"vault.hashicorp.com/role":                               r.RuntimeVault.Role,
-		"vault.hashicorp.com/agent-inject-secret-openai-api-key": r.RuntimeVault.SecretPath,
-		"vault.hashicorp.com/agent-inject-file-openai-api-key":   r.RuntimeVault.FileName,
-		// The bootstrap init container runs as a non-root user and reads the
-		// rendered Vault file via OPENAI_API_KEY_FILE. Set an explicit readable
-		// mode so the file can be merged into the live config before ZeroClaw starts.
-		"vault.hashicorp.com/agent-inject-perms-openai-api-key":    "0444",
-		"vault.hashicorp.com/agent-inject-template-openai-api-key": fmt.Sprintf("{{- with secret %q -}}{{ index .Data.data %q }}{{- end -}}", r.RuntimeVault.SecretPath, r.RuntimeVault.SecretKey),
-	}
-
-	// Vault injector defaults are fairly heavy for a tiny single-node dev cluster.
-	// Set explicit requests/limits so one extra swarm does not get stuck Pending
-	// purely because the init injector asked for more CPU than the node can spare.
-	if r.RuntimeVault.AgentCPURequest != "" {
-		annotations["vault.hashicorp.com/agent-requests-cpu"] = r.RuntimeVault.AgentCPURequest
-	}
-	if r.RuntimeVault.AgentMemoryRequest != "" {
-		annotations["vault.hashicorp.com/agent-requests-mem"] = r.RuntimeVault.AgentMemoryRequest
-	}
-	if r.RuntimeVault.AgentCPULimit != "" {
-		annotations["vault.hashicorp.com/agent-limits-cpu"] = r.RuntimeVault.AgentCPULimit
-	}
-	if r.RuntimeVault.AgentMemoryLimit != "" {
-		annotations["vault.hashicorp.com/agent-limits-mem"] = r.RuntimeVault.AgentMemoryLimit
-	}
-
-	return annotations
-}
 
 func httpRouteName(sw *crawblv1alpha1.UserSwarm) string {
 	return truncateKubernetesName(fmt.Sprintf("zeroclaw-%s-route", sw.Name), kubernetesNameMaxLen)

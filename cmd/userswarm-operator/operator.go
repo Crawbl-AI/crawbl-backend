@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,19 +54,6 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 	if bootstrapImage == "" {
 		bootstrapImage = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator:dev"
 	}
-	runtimeVault := controller.RuntimeVaultConfig{
-		Enabled:            envBool("USERSWARM_RUNTIME_VAULT_ENABLED", false),
-		AuthPath:           envString("USERSWARM_RUNTIME_VAULT_AUTH_PATH", "auth/kubernetes"),
-		Role:               envString("USERSWARM_RUNTIME_VAULT_ROLE", ""),
-		PrePopulateOnly:    envBool("USERSWARM_RUNTIME_VAULT_PRE_POPULATE_ONLY", true),
-		SecretPath:         envString("USERSWARM_RUNTIME_VAULT_SECRET_PATH", ""),
-		SecretKey:          envString("USERSWARM_RUNTIME_VAULT_SECRET_KEY", "OPENAI_API_KEY"),
-		FileName:           envString("USERSWARM_RUNTIME_VAULT_FILE_NAME", "openai-api-key"),
-		AgentCPURequest:    envString("USERSWARM_RUNTIME_VAULT_AGENT_REQUESTS_CPU", "25m"),
-		AgentMemoryRequest: envString("USERSWARM_RUNTIME_VAULT_AGENT_REQUESTS_MEM", "32Mi"),
-		AgentCPULimit:      envString("USERSWARM_RUNTIME_VAULT_AGENT_LIMITS_CPU", "100m"),
-		AgentMemoryLimit:   envString("USERSWARM_RUNTIME_VAULT_AGENT_LIMITS_MEM", "64Mi"),
-	}
 
 	ctrl.SetLogger(zap.New())
 
@@ -96,7 +82,6 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 		Scheme:         mgr.GetScheme(),
 		APIReader:      mgr.GetAPIReader(),
 		BootstrapImage: bootstrapImage,
-		RuntimeVault:   runtimeVault,
 		ZeroClawConfig: zcConfig,
 	}).SetupWithManager(mgr); err != nil {
 		return err
@@ -112,24 +97,3 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 	return mgr.Start(ctrl.SetupSignalHandler())
 }
 
-func envString(key, fallback string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func envBool(key string, fallback bool) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
-	switch value {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	case "":
-		return fallback
-	default:
-		return fallback
-	}
-}
