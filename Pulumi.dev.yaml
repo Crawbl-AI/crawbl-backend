@@ -2,7 +2,7 @@
 #
 # This file defines all infrastructure parameters for the dev DigitalOcean
 # Kubernetes cluster. Pulumi reads these values when running:
-#   set -a && source .env && set +a && crawbl infra apply
+#   set -a && source .env && set +a && crawbl infra update
 #
 # The Pulumi program (internal/infra/) uses these to provision:
 #   - A DOKS (DigitalOcean Kubernetes Service) cluster
