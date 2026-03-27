@@ -1,17 +1,41 @@
-# TODO: UPDATE THIS EXAMPLE, IT USES OLD STYLE OF USERSWARM CRD
+# Example UserSwarm CR — one per user, cluster-scoped.
+#
+# The orchestrator creates these automatically on sign-up/sign-in.
+# The userswarm-operator reconciles them into StatefulSets, Services,
+# ConfigMaps (config.toml, SOUL.md, IDENTITY.md), and PVCs in the
+# target runtime namespace.
+#
+# Docs: crawbl-docs/docs/infrastructure/platform.md
 apiVersion: crawbl.ai/v1alpha1
 kind: UserSwarm
 metadata:
+  # Name is typically the user's Firebase UID (set by orchestrator).
   name: demo-user
 spec:
+  # Firebase UID of the owning user.
   userId: "demo-user"
+
+  # --- Placement ---
+  # Controls which namespace the runtime pods land in.
+  # All user swarms share a single namespace (not namespace-per-user).
   placement:
+    # Default: swarms-dev (matches operator constant DefaultRuntimeNamespace).
     runtimeNamespace: swarms-dev
+
+  # --- Runtime ---
+  # ZeroClaw container configuration.
   runtime:
-    image: registry.digitalocean.com/crawbl/zeroclaw@v0.5.9
+    # ZeroClaw image — use digest pinning for reproducibility.
+    # Updated via CI when crawbl-argocd-apps values change.
+    image: "registry.digitalocean.com/crawbl/zeroclaw@sha256:84788c94299c032d700237875b900cdd9296425f1af958ade86dcc6f4f307f87"
+    # "daemon" keeps the pod running between requests (default).
     mode: daemon
+    # Gateway port ZeroClaw listens on inside the pod.
+    # Must match the operator's ClusterIP Service targetPort.
     port: 42617
-    imagePullSecretName: crawbl-docr
+    # DOCR pull secret — must exist in the runtime namespace.
+    imagePullSecretName: crawbl
+    # Resource requests/limits for the ZeroClaw container.
     resources:
       requests:
         cpu: 100m
@@ -19,21 +43,48 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
+
+  # --- Storage ---
+  # PVC for ZeroClaw workspace (conversation memory, file scratch).
   storage:
     size: 2Gi
-    storageClassName: do-block-storage
+    # Empty string uses the cluster default StorageClass (do-block-storage on DOKS).
+    storageClassName: ""
+
+  # --- Config ---
+  # LLM provider and model settings baked into the bootstrap config.toml.
   config:
+    # LLM provider — "openai" is the only supported provider currently.
     defaultProvider: openai
+    # Default model for chat completions. gpt-5.0-mini is the freemium default
+    # (cheaper than gpt-5.4, supports tool use including web_search).
     defaultModel: gpt-5.0-mini
-    # The referenced Secret should expose OPENAI_API_KEY for the native OpenAI provider.
+    # Optional: override default temperature (0.0–2.0). Omit to use 0.7.
+    # defaultTemperature: 0.7
+    # Optional: raw TOML string merged into the bootstrap config.toml.
+    # Use for overriding any ZeroClaw setting not exposed as a first-class field.
+    # tomlOverrides: ""
+    # Reference to a K8s Secret containing provider API keys.
+    # The Secret is mounted as envFrom on the ZeroClaw container.
+    # Must exist in the runtime namespace (swarms-dev).
     envSecretRef:
-      name: demo-user-provider-env
+      name: runtime-openai-secrets
+
+  # --- Exposure ---
+  # HTTPRoute for direct external access to this swarm (disabled by default).
+  # User swarms are internal-only — the orchestrator proxies requests via
+  # the ClusterIP Service. Only enable for debugging or special cases.
   exposure:
     httpRoute:
       enabled: false
-      host: zeroclaw-dev.example.com
-      path: /
-      pathMatch: PathPrefix
-      gatewayName: public-edge
-      gatewayNamespace: envoy-gateway-system
-      parentSectionName: https
+      # host: zeroclaw-dev.example.com
+      # path: /
+      # pathMatch: PathPrefix
+      # gatewayName: public-edge
+      # gatewayNamespace: envoy-gateway-system
+      # parentSectionName: https
+
+  # --- Suspend ---
+  # When true, the operator scales the StatefulSet to 0 replicas
+  # without deleting the PVC or ConfigMap. Useful for idle users.
+  # suspend: false
