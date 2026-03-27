@@ -63,6 +63,12 @@ const (
 	// AgentStatusBusy indicates the agent is currently processing a request.
 	AgentStatusBusy AgentStatus = "busy"
 
+	// AgentStatusPending indicates the agent's runtime is provisioning or starting up.
+	AgentStatusPending AgentStatus = "pending"
+
+	// AgentStatusError indicates the agent encountered an error during processing.
+	AgentStatusError AgentStatus = "error"
+
 	// AgentStatusOffline indicates the agent is not available.
 	AgentStatusOffline AgentStatus = "offline"
 )

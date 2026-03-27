@@ -85,7 +85,9 @@ func statusForRuntime(runtimeState *orchestrator.RuntimeStatus) orchestrator.Age
 	}
 	switch strings.ToLower(strings.TrimSpace(runtimeState.Phase)) {
 	case "progressing", "pending":
-		return orchestrator.AgentStatusBusy
+		return orchestrator.AgentStatusPending
+	case "failed", "error":
+		return orchestrator.AgentStatusError
 	default:
 		return orchestrator.AgentStatusOffline
 	}

@@ -76,6 +76,9 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	}
 
 	if mErr != nil {
+		if responder != nil {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, responder.ID, string(orchestrator.AgentStatusError))
+		}
 		return nil, mErr
 	}
 
