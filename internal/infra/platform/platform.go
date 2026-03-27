@@ -55,7 +55,7 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 	//      --from-literal=access-key=$AWS_ACCESS_KEY_ID \
 	//      --from-literal=secret-key=$AWS_SECRET_ACCESS_KEY
 	// This keeps AWS keys out of Pulumi state and git entirely.
-	// See: crawbl-docs/ops/argocd/secrets-management.md
+	// See: crawbl-docs/ops/argocd/security/secrets-management.md
 
 	// 3. Deploy ArgoCD + repo secret + root Application
 	if cfg.InstallArgoCD {
