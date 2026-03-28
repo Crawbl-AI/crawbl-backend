@@ -16,10 +16,11 @@ import (
 )
 
 // loadStackSection reads a section from Pulumi.<env>.yaml into target.
-func loadStackSection(env, key string, target interface{}) {
+func loadStackSection(env, key string, target interface{}) error {
 	if err := yamlvalues.LoadStackConfig(env, key, target); err != nil {
-		panic(fmt.Sprintf("load %s from Pulumi.%s.yaml: %v", key, env, err))
+		return fmt.Errorf("load %s from Pulumi.%s.yaml: %w", key, env, err)
 	}
+	return nil
 }
 
 // envOrDefault returns the environment variable value or a fallback.
@@ -31,10 +32,12 @@ func envOrDefault(key, fallback string) string {
 }
 
 // buildConfig creates the full infra.Config from Pulumi stack config and environment variables.
-func buildConfig(env, region string) infra.Config {
+func buildConfig(env, region string) (infra.Config, error) {
 	// Load config sections from Pulumi.<env>.yaml
 	var clusterCfg cluster.StackClusterConfig
-	loadStackSection(env, "crawbl:cluster", &clusterCfg)
+	if err := loadStackSection(env, "crawbl:cluster", &clusterCfg); err != nil {
+		return infra.Config{}, err
+	}
 
 	clusterConfig := cluster.ConfigFromStack(env, region, clusterCfg)
 	helmValuesDir := filepath.Join(must(os.Getwd()), "config", "helm")
@@ -72,7 +75,7 @@ func buildConfig(env, region string) infra.Config {
 		ExistingVPCID:  os.Getenv("DIGITALOCEAN_VPC_ID"),
 		ClusterConfig:  clusterConfig,
 		PlatformConfig: platformConfig,
-	}
+	}, nil
 }
 
 func must(s string, err error) string {

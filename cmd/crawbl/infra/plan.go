@@ -51,11 +51,20 @@ func runPlan(ctx context.Context, env, region string, jsonOut bool) error {
 		fmt.Printf("Planning infrastructure for environment '%s' in region '%s'\n", env, region)
 	}
 
-	config := buildConfig(env, region)
+	config, cfgErr := buildConfig(env, region)
+	if cfgErr != nil {
+		if jsonOut {
+			return printPreviewJSON(nil, cfgErr)
+		}
+		return fmt.Errorf("build config: %w", cfgErr)
+	}
 
-	stack, err := infra.NewStack(ctx, config)
-	if err != nil {
-		return fmt.Errorf("failed to create stack: %w", err)
+	stack, stackErr := infra.NewStack(ctx, config)
+	if stackErr != nil {
+		if jsonOut {
+			return printPreviewJSON(nil, stackErr)
+		}
+		return fmt.Errorf("failed to create stack: %w", stackErr)
 	}
 
 	result, previewErr := stack.Preview(ctx)

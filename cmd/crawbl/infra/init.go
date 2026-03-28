@@ -52,7 +52,10 @@ func runInit(ctx context.Context, env, region string) error {
 
 	fmt.Printf("Initializing Pulumi stack for environment '%s' in region '%s'\n", env, region)
 
-	config := buildConfig(env, region)
+	config, err := buildConfig(env, region)
+	if err != nil {
+		return fmt.Errorf("build config: %w", err)
+	}
 
 	stack, err := infra.NewStack(ctx, config)
 	if err != nil {

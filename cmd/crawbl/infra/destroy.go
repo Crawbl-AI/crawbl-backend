@@ -58,7 +58,10 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 		}
 	}
 
-	config := buildConfig(env, region)
+	config, err := buildConfig(env, region)
+	if err != nil {
+		return fmt.Errorf("build config: %w", err)
+	}
 
 	stack, err := infra.NewStack(ctx, config)
 	if err != nil {

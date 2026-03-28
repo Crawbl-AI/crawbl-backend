@@ -133,13 +133,14 @@ jobs:
   # Infrastructure drift check: verify Pulumi state matches actual infra.
   # Runs BEFORE update-argocd so we detect drift before pushing new tags.
   # Uses "crawbl infra plan --json" for machine-readable output.
-  # Warns on drift but does not block the deploy (exit 0 always).
   # ---------------------------------------------------------------------------
   infra-drift-check:
     needs: [build]
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download binary artifact
         uses: actions/download-artifact@v4
         with:
