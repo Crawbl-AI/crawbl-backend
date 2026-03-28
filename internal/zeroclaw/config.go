@@ -64,6 +64,13 @@ func DefaultConfig() *ZeroClawConfig {
 				"file_read", "memory_recall", "web_search_tool",
 				"web_fetch", "calculator", "glob_search",
 				"content_search", "image_info", "weather",
+				// Orchestrator MCP tools — safe to auto-approve because
+				// they are already scoped to the authenticated user via HMAC token.
+				"orchestrator__send_push_notification",
+				"orchestrator__get_user_profile",
+				"orchestrator__get_workspace_info",
+				"orchestrator__list_conversations",
+				"orchestrator__search_past_messages",
 			},
 		},
 	}
