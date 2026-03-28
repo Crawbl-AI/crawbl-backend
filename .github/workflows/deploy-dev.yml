@@ -130,14 +130,60 @@ jobs:
           tags: ${{ env.DOCR_REGISTRY }}/envoy-auth-filter:${{ env.IMAGE_TAG }}
 
   # ---------------------------------------------------------------------------
+  # Infrastructure drift check: verify Pulumi state matches actual infra.
+  # Runs BEFORE update-argocd so we detect drift before pushing new tags.
+  # Uses "crawbl infra plan --json" for machine-readable output.
+  # Warns on drift but does not block the deploy (exit 0 always).
+  # ---------------------------------------------------------------------------
+  infra-drift-check:
+    needs: [build]
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: crawbl-binary
+
+      - name: Make binary executable
+        run: chmod +x crawbl
+
+      - name: Check for infrastructure drift
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          RESULT=$(./crawbl infra plan --json 2>&1 | tail -1)
+          echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
+
+          ERROR=$(echo "$RESULT" | jq -r '.error // empty' 2>/dev/null)
+          if [ -n "$ERROR" ]; then
+            echo "::warning::Infra preview error: ${ERROR}"
+            exit 0
+          fi
+
+          HAS_DRIFT=$(echo "$RESULT" | jq -r '.hasDrift' 2>/dev/null)
+          if [ "$HAS_DRIFT" = "true" ]; then
+            CREATES=$(echo "$RESULT" | jq -r '.creates' 2>/dev/null)
+            UPDATES=$(echo "$RESULT" | jq -r '.updates' 2>/dev/null)
+            DELETES=$(echo "$RESULT" | jq -r '.deletes' 2>/dev/null)
+            echo "::warning::Infrastructure drift detected: ${CREATES} to create, ${UPDATES} to update, ${DELETES} to delete"
+          else
+            echo "No infrastructure drift detected."
+          fi
+
+  # ---------------------------------------------------------------------------
   # Update image tags in crawbl-argocd-apps
   #
-  # Clones the crawbl-argocd-apps repo, patches the image tags in Helm values
-  # and raw manifests, then pushes. ArgoCD watches this repo and auto-syncs the
-  # new tags to the cluster. A 2 vCPU runner is sufficient — this is just git + yq/sed.
+  # Runs AFTER infra-drift-check passes. Clones the crawbl-argocd-apps repo,
+  # patches image tags with yq/sed, then pushes. ArgoCD watches this repo and
+  # auto-syncs the new tags to the cluster.
   # ---------------------------------------------------------------------------
   update-argocd:
-    needs: [build]
+    needs: [build, infra-drift-check]
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 2
     steps:
@@ -165,61 +211,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          # Exit cleanly with no commit if nothing changed (e.g. workflow re-run with same run_number).
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "deploy: update images to ${IMAGE_TAG}
 
           Source: crawbl-backend@${COMMIT_SHA::7}
           Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           git push
-
-  # ---------------------------------------------------------------------------
-  # Infrastructure drift check: verify Pulumi state matches actual infra.
-  # Runs "crawbl infra plan" and fails if there are unexpected changes.
-  # This catches manual changes, missing resources, or config drift early.
-  # Runs in parallel with e2e-test since they're independent.
-  # ---------------------------------------------------------------------------
-  infra-drift-check:
-    needs: [build]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download binary artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: crawbl-binary
-
-      - name: Make binary executable
-        run: chmod +x crawbl
-
-      - name: Check for infrastructure drift
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-        run: |
-          RESULT=$(./crawbl infra plan --json)
-          echo "$RESULT" | jq .
-
-          ERROR=$(echo "$RESULT" | jq -r '.error // empty')
-          if [ -n "$ERROR" ]; then
-            echo "::warning::Infra preview error: ${ERROR}"
-            exit 0
-          fi
-
-          HAS_DRIFT=$(echo "$RESULT" | jq -r '.hasDrift')
-          if [ "$HAS_DRIFT" = "true" ]; then
-            CREATES=$(echo "$RESULT" | jq -r '.creates')
-            UPDATES=$(echo "$RESULT" | jq -r '.updates')
-            DELETES=$(echo "$RESULT" | jq -r '.deletes')
-            echo "::warning::Infrastructure drift detected: ${CREATES} to create, ${UPDATES} to update, ${DELETES} to delete"
-          else
-            echo "No infrastructure drift detected."
-          fi
 
   # ---------------------------------------------------------------------------
   # E2E tests: download pre-built binary, wait for deploy, run tests
