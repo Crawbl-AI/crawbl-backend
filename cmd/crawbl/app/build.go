@@ -15,18 +15,20 @@ func newBuildCommand() *cobra.Command {
 		Long:  "Build Docker images for Crawbl platform components.",
 		Example: `  crawbl app build orchestrator   # Build orchestrator image
   crawbl app build operator     # Build userswarm-operator image
+  crawbl app build zeroclaw     # Build ZeroClaw from local fork
   crawbl app build auth-filter  # Build Envoy auth WASM filter image
   crawbl app build docs         # Build docs site image`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return fmt.Errorf("unknown component: %s (valid: orchestrator, operator, auth-filter, docs)", args[0])
+			return fmt.Errorf("unknown component: %s (valid: orchestrator, operator, zeroclaw, auth-filter, docs)", args[0])
 		},
 	}
 
 	cmd.AddCommand(newBuildOrchestratorCommand())
 	cmd.AddCommand(newBuildOperatorCommand())
+	cmd.AddCommand(newBuildZeroclawCommand())
 	cmd.AddCommand(newBuildAuthFilterCommand())
 	cmd.AddCommand(newBuildDocsCommand())
 
