@@ -1,6 +1,6 @@
 // Package main is the unified Crawbl platform binary.
-// It contains all runtime subcommands under "platform" (server, webhook,
-// migrate, bootstrap, smoketest, backup) and local CLI tooling (app, infra).
+// It contains all runtime subcommands under "platform" (orchestrator,
+// userswarm) and local CLI tooling (app, infra, test).
 // One binary, one image, different entrypoints per K8s workload.
 package main
 
@@ -23,7 +23,7 @@ var version = "dev"
 var rootCmd = &cobra.Command{
 	Use:           "crawbl",
 	Short:         "Crawbl platform binary",
-	Long:          "Unified binary for the Crawbl platform. Contains the orchestrator, webhook, and all supporting subcommands.",
+	Long:          "Unified binary for the Crawbl platform. Contains the orchestrator, userswarm, and all supporting subcommands.",
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	Version:       version,

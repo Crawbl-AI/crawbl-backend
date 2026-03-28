@@ -1,4 +1,4 @@
-package platform
+package userswarm
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/testsuite/reaper"
+	"github.com/Crawbl-AI/crawbl-backend/internal/userswarm/reaper"
 )
 
 func newReaperCommand() *cobra.Command {
@@ -30,13 +30,13 @@ It also scans for orphaned UserSwarm CRs whose owning user no longer exists.
 
 Designed to run as a Kubernetes CronJob using the crawbl-platform image.`,
 		Example: `  # Dry run — see what would be cleaned up
-  crawbl platform reaper --max-age 2h --dry-run
+  crawbl platform userswarm reaper --max-age 2h --dry-run
 
   # Reap stale e2e resources older than 2 hours
-  crawbl platform reaper --max-age 2h
+  crawbl platform userswarm reaper --max-age 2h
 
   # CronJob mode (reads DATABASE_DSN from env)
-  crawbl platform reaper --max-age 2h`,
+  crawbl platform userswarm reaper --max-age 2h`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if databaseDSN == "" {
 				return fmt.Errorf("--database-dsn or CRAWBL_DATABASE_DSN is required")

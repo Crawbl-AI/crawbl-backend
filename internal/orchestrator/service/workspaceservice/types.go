@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	workspacerepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/runtimeclient"
+	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // workspaceRepo is a type alias for the WorkspaceRepo interface from the

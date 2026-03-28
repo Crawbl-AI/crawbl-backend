@@ -9,7 +9,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/runtimeclient"
+	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )

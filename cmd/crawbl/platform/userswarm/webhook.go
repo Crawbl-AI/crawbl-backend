@@ -1,9 +1,9 @@
-package platform
+package userswarm
 
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/operator/webhook"
+	"github.com/Crawbl-AI/crawbl-backend/internal/userswarm/webhook"
 )
 
 func newWebhookCommand() *cobra.Command {

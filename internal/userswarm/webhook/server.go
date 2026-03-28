@@ -27,7 +27,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
+	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // ServerConfig holds everything needed to start the webhook HTTP server.

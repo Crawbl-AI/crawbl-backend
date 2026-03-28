@@ -21,7 +21,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/runtimeclient"
+	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"

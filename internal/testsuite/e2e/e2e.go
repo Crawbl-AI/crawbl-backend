@@ -160,6 +160,7 @@ func PrintResults(w io.Writer, r *Results) {
 
 func findFeaturesDir() string {
 	candidates := []string{
+		"test-features",
 		"internal/testsuite/e2e/features",
 		"features",
 	}
@@ -175,7 +176,7 @@ func findFeaturesDir() string {
 			return dir
 		}
 	}
-	return "internal/testsuite/e2e/features"
+	return "test-features"
 }
 
 // testContext holds per-scenario state shared across step definitions.

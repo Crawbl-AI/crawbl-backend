@@ -1,4 +1,4 @@
-package platform
+package userswarm
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
+	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 const workspaceDirPerm = 0o700

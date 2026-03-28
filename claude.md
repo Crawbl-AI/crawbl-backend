@@ -4,7 +4,7 @@
 
 Build the Go middleware/orchestrator for Crawbl.
 
-This repo contains both the Crawbl orchestrator HTTP API and the Kubernetes operator/runtime control-plane code for `UserSwarm`.
+This repo contains both the Crawbl orchestrator HTTP API and the UserSwarm lifecycle/runtime control-plane code.
 
 The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns routing, auth, orchestration, integrations, billing controls, and auditability.
 

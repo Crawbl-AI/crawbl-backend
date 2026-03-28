@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/runtimeclient"
+	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )

@@ -1,4 +1,4 @@
-package platform
+package userswarm
 
 import (
 	"archive/tar"

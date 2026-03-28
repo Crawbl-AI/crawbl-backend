@@ -2,16 +2,14 @@
 // the deployed container image. Subcommands are grouped by role:
 //
 //	orchestrator  — HTTP API server + database migrations
-//	webhook       — Metacontroller sync webhook for UserSwarm CRs
-//	bootstrap     — Init container: merge operator config into PVC
-//	backup        — Job: S3 backup of ZeroClaw workspace data
-//	reaper        — CronJob: clean up orphaned e2e test resources
+//	userswarm     — UserSwarm lifecycle: webhook, bootstrap, backup, reaper
 package platform
 
 import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform/userswarm"
 )
 
 // NewPlatformCommand creates the "platform" parent command that groups
@@ -27,10 +25,7 @@ func NewPlatformCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(orchestrator.NewOrchestratorCommand())
-	cmd.AddCommand(newWebhookCommand())
-	cmd.AddCommand(newBootstrapCommand())
-	cmd.AddCommand(newBackupCommand())
-	cmd.AddCommand(newReaperCommand())
+	cmd.AddCommand(userswarm.NewUserSwarmCommand())
 
 	return cmd
 }

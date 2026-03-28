@@ -1,5 +1,5 @@
-// Package runtimeclient provides HTTP client for user swarm runtime.
-package runtimeclient
+// Package client provides HTTP client for user swarm runtime.
+package client
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
@@ -30,7 +30,7 @@ const defaultHTTPTimeout = 90 * time.Second
 const readyConditionType = "Ready"
 
 type userSwarmClient struct {
-	client     client.Client
+	client     k8sclient.Client
 	config     UserSwarmConfig
 	httpClient *http.Client
 }
@@ -54,7 +54,7 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 		return nil, err
 	}
 
-	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme})
+	k8sClient, err := k8sclient.New(restConfig, k8sclient.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +92,9 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 	desired := c.desiredUserSwarm(ctx, opts)
 
 	var actual crawblv1alpha1.UserSwarm
-	err := c.client.Get(ctx, client.ObjectKey{Name: desired.Name}, &actual)
+	err := c.client.Get(ctx, k8sclient.ObjectKey{Name: desired.Name}, &actual)
 	switch {
-	case client.IgnoreNotFound(err) != nil:
+	case k8sclient.IgnoreNotFound(err) != nil:
 		return nil, merrors.WrapStdServerError(err, "get userswarm")
 	case err != nil:
 		if createErr := c.client.Create(ctx, desired); createErr != nil {
@@ -193,7 +193,7 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (str
 
 func (c *userSwarmClient) getRuntimeState(ctx context.Context, swarmName string) (*orchestrator.RuntimeStatus, *merrors.Error) {
 	var swarm crawblv1alpha1.UserSwarm
-	if err := c.client.Get(ctx, client.ObjectKey{Name: swarmName}, &swarm); err != nil {
+	if err := c.client.Get(ctx, k8sclient.ObjectKey{Name: swarmName}, &swarm); err != nil {
 		return nil, merrors.WrapStdServerError(err, "get userswarm status")
 	}
 
@@ -270,16 +270,16 @@ func (c *userSwarmClient) DeleteRuntime(ctx context.Context, workspaceID string)
 
 	name := userswarmName(workspaceID)
 	var swarm crawblv1alpha1.UserSwarm
-	err := c.client.Get(ctx, client.ObjectKey{Name: name}, &swarm)
+	err := c.client.Get(ctx, k8sclient.ObjectKey{Name: name}, &swarm)
 	if err != nil {
-		if client.IgnoreNotFound(err) == nil {
+		if k8sclient.IgnoreNotFound(err) == nil {
 			return nil // already gone
 		}
 		return merrors.WrapStdServerError(err, "get userswarm for deletion")
 	}
 
 	if err := c.client.Delete(ctx, &swarm); err != nil {
-		if client.IgnoreNotFound(err) == nil {
+		if k8sclient.IgnoreNotFound(err) == nil {
 			return nil
 		}
 		return merrors.WrapStdServerError(err, "delete userswarm")

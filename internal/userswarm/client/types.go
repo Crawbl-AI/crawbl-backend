@@ -1,4 +1,4 @@
-package runtimeclient
+package client
 
 import (
 	"context"

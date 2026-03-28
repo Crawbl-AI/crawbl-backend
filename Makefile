@@ -1,4 +1,4 @@
-.PHONY: help deps-lint fmt tidy test verify setup stop clean run run-clean migrate test-e2e run-server run-operator lint lint-fix
+.PHONY: help deps-lint fmt tidy test verify setup stop clean run run-clean migrate test-e2e run-server run-webhook lint lint-fix
 
 ENV_FILE ?= .env
 
@@ -63,5 +63,5 @@ test-e2e: ## Run e2e tests against the dev cluster
 run-server: ## Run the orchestrator HTTP server locally
 	go run -mod=vendor ./cmd/crawbl platform orchestrator
 
-run-operator: ## Run the userswarm operator locally
-	go run -mod=vendor ./cmd/crawbl platform operator
+run-webhook: ## Run the userswarm webhook server locally
+	go run -mod=vendor ./cmd/crawbl platform userswarm webhook

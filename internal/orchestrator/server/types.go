@@ -8,7 +8,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/runtimeclient"
+	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
