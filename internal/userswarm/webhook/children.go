@@ -173,9 +173,11 @@ func DesiredStatefulSet(sw *crawblv1alpha1.UserSwarm, ns, bootstrapImage string,
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: AllLabels(sw),
 					Annotations: map[string]string{
-						// These checksums trigger rolling updates when config changes.
-						"crawbl.ai/config-checksum": kube.ChecksumMap(bootstrapFiles),
-						"crawbl.ai/env-secret-ref":  kube.ChecksumString(secretRef),
+						// These checksums trigger rolling updates when config or images change.
+						// Includes bootstrap image so a webhook redeploy forces ZeroClaw pod restart.
+						"crawbl.ai/config-checksum":    kube.ChecksumMap(bootstrapFiles),
+						"crawbl.ai/env-secret-ref":     kube.ChecksumString(secretRef),
+						"crawbl.ai/bootstrap-image":    kube.ChecksumString(bootstrapImage),
 					},
 				},
 				Spec: buildPodSpec(sw, port, bootstrapImage, secretRef),
