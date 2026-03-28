@@ -5,16 +5,19 @@ ARG GOARCH=amd64
 
 WORKDIR /build
 
+# Copy vendored dependencies first (cached layer — changes rarely).
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go env -w GOPROXY=direct && go mod download
+COPY vendor/ vendor/
 
-COPY . .
+# Copy source code (changes frequently — invalidates only this layer).
+COPY api/ api/
+COPY cmd/ cmd/
+COPY internal/ internal/
+COPY migrations/ migrations/
 
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/crawbl ./cmd/crawbl
+    go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/crawbl ./cmd/crawbl
 
 # ---------- RUNTIME STAGE ----------
 # Distroless static image: ca-certificates + tzdata, no shell, no glibc.

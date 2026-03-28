@@ -1,11 +1,7 @@
 .PHONY: help deps-lint fmt tidy test verify setup stop clean run run-clean migrate test-e2e run-server run-operator lint lint-fix
 
-GOCACHE ?= $(CURDIR)/.cache/go-build
-GOMODCACHE ?= $(CURDIR)/.cache/go-mod
 ENV_FILE ?= .env
 
-export GOCACHE
-export GOMODCACHE
 export ENV_FILE
 
 .env:
@@ -35,7 +31,7 @@ tidy: ## Sync go.mod and go.sum
 	go mod tidy
 
 test: ## Run the Go test suite
-	go test ./...
+	go test -mod=vendor ./...
 
 verify: fmt lint test ## Run formatting, linting, and tests together
 
@@ -62,10 +58,10 @@ migrate: .env ## Run the local orchestrator migrations once
 	@docker compose --profile database --profile migration run --rm migrations
 
 test-e2e: ## Run e2e tests against the dev cluster
-	go run ./cmd/crawbl test e2e --base-url https://dev.api.crawbl.com
+	go run -mod=vendor ./cmd/crawbl test e2e --base-url https://dev.api.crawbl.com
 
 run-server: ## Run the orchestrator HTTP server locally
-	go run ./cmd/crawbl platform orchestrator
+	go run -mod=vendor ./cmd/crawbl platform orchestrator
 
 run-operator: ## Run the userswarm operator locally
-	go run ./cmd/crawbl platform operator
+	go run -mod=vendor ./cmd/crawbl platform operator

@@ -105,6 +105,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Install doctl and configure kubectl
         uses: digitalocean/action-doctl@v2
@@ -145,7 +146,7 @@ jobs:
           CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
         run: |
           UID_SUFFIX=$(date +%s)
-          go run ./cmd/crawbl test e2e \
+          go run -mod=vendor ./cmd/crawbl test e2e \
             --base-url https://dev.api.crawbl.com \
             --e2e-token "${CRAWBL_E2E_TOKEN}" \
             --uid "ci-e2e-${UID_SUFFIX}" \
