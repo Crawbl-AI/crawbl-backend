@@ -49,6 +49,13 @@ func (r *UserSwarmReconciler) reconcileBackupJob(ctx context.Context, swarm *cra
 		return nil
 	}
 
+	// Skip periodic backups for e2e test swarms — they contain throwaway test
+	// data and the backup Jobs slow down deletion when the swarm is cleaned up.
+	// The label is set by the orchestrator when the user's subject starts with "e2e-".
+	if swarm.Labels["crawbl.ai/e2e"] == "true" {
+		return nil
+	}
+
 	// Check if enough time has passed since the last backup.
 	interval := r.BackupInterval
 	if interval == 0 {
