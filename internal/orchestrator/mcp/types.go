@@ -105,10 +105,10 @@ type userProfileOutput struct {
 	Surname     string  `json:"surname"`
 	CountryCode *string `json:"country_code,omitempty"`
 	CreatedAt   string  `json:"created_at"`
-	Preferences *prefs  `json:"preferences,omitempty"`
+	Preferences *userPrefs  `json:"preferences,omitempty"`
 }
 
-type prefs struct {
+type userPrefs struct {
 	Theme    *string `json:"theme,omitempty"`
 	Language *string `json:"language,omitempty"`
 	Currency *string `json:"currency,omitempty"`
@@ -172,4 +172,19 @@ type messageRow struct {
 	Role      string    `db:"role"`
 	Content   string    `db:"content"`
 	CreatedAt time.Time `db:"created_at"`
+}
+
+// ---------------------------------------------------------------------------
+// Audit log types
+// ---------------------------------------------------------------------------
+
+// auditEntry holds the fields for a single MCP tool call audit record.
+type auditEntry struct {
+	UserID      string
+	WorkspaceID string
+	ToolName    string
+	Input       string
+	Success     bool
+	ErrorMsg    string
+	DurationMs  int
 }

@@ -6,8 +6,6 @@ import (
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
 // ---------------------------------------------------------------------------
@@ -21,36 +19,57 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 			return nil, userProfileOutput{}, fmt.Errorf("unauthorized")
 		}
 
-		// Look up user by ID. We query by the internal user ID which
-		// was encoded in the MCP token at provisioning time.
 		sess := deps.newSession()
-		user, mErr := deps.UserRepo.GetBySubject(ctx, sess, userID)
-		if mErr != nil {
+
+		// The MCP token contains the internal DB user ID (not Firebase subject).
+		// Query the user table directly by primary key.
+		var row struct {
+			ID          string    `db:"id"`
+			Email       string    `db:"email"`
+			Nickname    string    `db:"nickname"`
+			Name        string    `db:"name"`
+			Surname     string    `db:"surname"`
+			CountryCode *string   `db:"country_code"`
+			CreatedAt   time.Time `db:"created_at"`
+		}
+		err := sess.Select("id", "email", "nickname", "name", "surname", "country_code", "created_at").
+			From("users").
+			Where("id = ?", userID).
+			LoadOneContext(ctx, &row)
+		if err != nil {
 			return nil, userProfileOutput{}, fmt.Errorf("user not found")
 		}
 
-		return nil, userProfileFromDomain(user), nil
-	}
-}
-
-func userProfileFromDomain(u *orchestrator.User) userProfileOutput {
-	out := userProfileOutput{
-		ID:          u.ID,
-		Email:       u.Email,
-		Nickname:    u.Nickname,
-		Name:        u.Name,
-		Surname:     u.Surname,
-		CountryCode: u.CountryCode,
-		CreatedAt:   u.CreatedAt.Format(time.RFC3339),
-	}
-	if u.Preferences.PlatformTheme != nil || u.Preferences.PlatformLanguage != nil || u.Preferences.CurrencyCode != nil {
-		out.Preferences = &prefs{
-			Theme:    u.Preferences.PlatformTheme,
-			Language: u.Preferences.PlatformLanguage,
-			Currency: u.Preferences.CurrencyCode,
+		// Load preferences separately.
+		var prefs struct {
+			Theme    *string `db:"platform_theme"`
+			Language *string `db:"platform_language"`
+			Currency *string `db:"currency_code"`
 		}
+		_ = sess.Select("platform_theme", "platform_language", "currency_code").
+			From("user_preferences").
+			Where("user_id = ?", userID).
+			LoadOneContext(ctx, &prefs)
+
+		out := userProfileOutput{
+			ID:          row.ID,
+			Email:       row.Email,
+			Nickname:    row.Nickname,
+			Name:        row.Name,
+			Surname:     row.Surname,
+			CountryCode: row.CountryCode,
+			CreatedAt:   row.CreatedAt.Format(time.RFC3339),
+		}
+		if prefs.Theme != nil || prefs.Language != nil || prefs.Currency != nil {
+			out.Preferences = &userPrefs{
+				Theme:    prefs.Theme,
+				Language: prefs.Language,
+				Currency: prefs.Currency,
+			}
+		}
+
+		return nil, out, nil
 	}
-	return out
 }
 
 // ---------------------------------------------------------------------------

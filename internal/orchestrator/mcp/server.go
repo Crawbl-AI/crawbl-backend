@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -31,6 +33,10 @@ func NewHandler(deps *Deps) http.Handler {
 	)
 
 	registerTools(server, deps)
+
+	// Add audit logging middleware for ISO 27001 compliance.
+	// Logs every tools/call invocation with input, output, duration, and identity.
+	server.AddReceivingMiddleware(auditMiddleware(deps))
 
 	handler := sdkmcp.NewStreamableHTTPHandler(
 		func(_ *http.Request) *sdkmcp.Server { return server },
@@ -65,6 +71,87 @@ func withAuth(next http.Handler, deps *Deps) http.Handler {
 		ctx := contextWithIdentity(r.Context(), userID, workspaceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// auditMiddleware logs every MCP tool call to the database for ISO 27001 audit compliance.
+func auditMiddleware(deps *Deps) sdkmcp.Middleware {
+	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
+		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
+			// Only audit tool calls, not initialize/list/etc.
+			if method != "tools/call" {
+				return next(ctx, method, req)
+			}
+
+			start := time.Now()
+			userID := userIDFromContext(ctx)
+			workspaceID := workspaceIDFromContext(ctx)
+
+			// Extract tool name and input from the request params.
+			toolName, inputJSON := extractToolCallParams(req)
+
+			// Execute the actual tool handler.
+			result, err := next(ctx, method, req)
+			duration := time.Since(start)
+
+			// Log the audit entry asynchronously to avoid slowing down the response.
+			go func() {
+				auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				logAudit(auditCtx, deps, auditEntry{
+					UserID:      userID,
+					WorkspaceID: workspaceID,
+					ToolName:    toolName,
+					Input:       inputJSON,
+					Success:     err == nil,
+					ErrorMsg:    errorString(err),
+					DurationMs:  int(duration.Milliseconds()),
+				})
+			}()
+
+			return result, err
+		}
+	}
+}
+
+// extractToolCallParams extracts the tool name and input JSON from an MCP request.
+func extractToolCallParams(req sdkmcp.Request) (string, string) {
+	params, ok := req.GetParams().(*sdkmcp.CallToolParamsRaw)
+	if !ok || params == nil {
+		return "unknown", "{}"
+	}
+	input := "{}"
+	if len(params.Arguments) > 0 {
+		input = string(params.Arguments)
+	}
+	return params.Name, input
+}
+
+// logAudit inserts an audit log entry into the database.
+func logAudit(ctx context.Context, deps *Deps, entry auditEntry) {
+	sess := deps.newSession()
+	_, err := sess.InsertInto("mcp_audit_logs").
+		Pair("user_id", entry.UserID).
+		Pair("workspace_id", entry.WorkspaceID).
+		Pair("tool_name", entry.ToolName).
+		Pair("input", entry.Input).
+		Pair("success", entry.Success).
+		Pair("error_message", entry.ErrorMsg).
+		Pair("duration_ms", entry.DurationMs).
+		ExecContext(ctx)
+	if err != nil {
+		deps.Logger.Error("failed to write mcp audit log",
+			slog.String("error", err.Error()),
+			slog.String("tool", entry.ToolName),
+			slog.String("user_id", entry.UserID),
+		)
+	}
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // registerTools adds all MCP tools to the server.
