@@ -161,8 +161,8 @@ jobs:
 
           ERROR=$(echo "$RESULT" | jq -r '.error // empty' 2>/dev/null)
           if [ -n "$ERROR" ]; then
-            echo "::warning::Infra preview error: ${ERROR}"
-            exit 0
+            echo "::error::Infra preview failed: ${ERROR}"
+            exit 1
           fi
 
           HAS_DRIFT=$(echo "$RESULT" | jq -r '.hasDrift' 2>/dev/null)
@@ -170,7 +170,9 @@ jobs:
             CREATES=$(echo "$RESULT" | jq -r '.creates' 2>/dev/null)
             UPDATES=$(echo "$RESULT" | jq -r '.updates' 2>/dev/null)
             DELETES=$(echo "$RESULT" | jq -r '.deletes' 2>/dev/null)
-            echo "::warning::Infrastructure drift detected: ${CREATES} to create, ${UPDATES} to update, ${DELETES} to delete"
+            echo "::error::Infrastructure drift detected: ${CREATES} to create, ${UPDATES} to update, ${DELETES} to delete"
+            echo "Fix the drift with 'crawbl infra update' before deploying."
+            exit 1
           else
             echo "No infrastructure drift detected."
           fi
