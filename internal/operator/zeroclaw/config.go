@@ -1,21 +1,83 @@
-// Package zeroclaw provides configuration management for ZeroClaw.
-// Config values are intentional literals for default settings.
+// Package zeroclaw provides configuration management for ZeroClaw AI agent runtimes.
+//
+// ZeroClaw is the AI agent runtime that runs inside each user's pod. This package
+// handles two configuration layers:
+//
+//  1. Operator config (config/zeroclaw.yaml) — cluster-wide defaults loaded at startup.
+//     Controls provider settings, tool permissions, autonomy rules, and reliability.
+//
+//  2. Per-user bootstrap config — generated from the operator config + UserSwarm CR spec.
+//     Written to a ConfigMap, then merged into the PVC-backed live config by the init container.
+//
+// File layout:
+//
+//	config.go    — Operator-side types and YAML loading
+//	toml.go      — Per-user TOML config generation (config.toml for the ConfigMap)
+//	markdown.go  — Markdown template builders (SOUL.md, IDENTITY.md, TOOLS.md, AGENTS.md)
+//	bootstrap.go — Init container logic: merge operator-managed keys into PVC live config
 package zeroclaw
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
-	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
-
-	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
-// Default configuration values for ZeroClaw bootstrap.
+// ---------------------------------------------------------------------------
+// Operator config (loaded from config/zeroclaw.yaml at startup)
+// ---------------------------------------------------------------------------
+
+// ZeroClawConfig holds cluster-wide defaults loaded from the operator's config file.
+// These values are baked into the per-user bootstrap config.toml at provisioning time.
+// The file is typically mounted as a ConfigMap in the webhook pod.
+type ZeroClawConfig struct {
+	Defaults    ZeroClawDefaults    `yaml:"defaults"`
+	HTTPRequest ZeroClawHTTPRequest `yaml:"httpRequest"`
+	WebFetch    ZeroClawWebFetch    `yaml:"webFetch"`
+	WebSearch   ZeroClawWebSearch   `yaml:"webSearch"`
+	Autonomy    ZeroClawAutonomy    `yaml:"autonomy"`
+}
+
+// ZeroClawDefaults controls global provider behavior: temperature, timeouts, retries.
+type ZeroClawDefaults struct {
+	Temperature       float64 `yaml:"temperature"`
+	Timeout           int     `yaml:"timeout"`
+	ShortTimeout      int     `yaml:"shortTimeout"`
+	ProviderRetries   uint32  `yaml:"providerRetries"`
+	ProviderBackoffMs uint64  `yaml:"providerBackoffMs"`
+}
+
+// ZeroClawHTTPRequest controls the http_request tool (raw HTTP calls from the agent).
+type ZeroClawHTTPRequest struct {
+	MaxResponseSize int      `yaml:"maxResponseSize"`
+	AllowedDomains  []string `yaml:"allowedDomains"`
+}
+
+// ZeroClawWebFetch controls the web_fetch tool (read web page content).
+type ZeroClawWebFetch struct {
+	MaxResponseSize int `yaml:"maxResponseSize"`
+}
+
+// ZeroClawWebSearch controls the web_search tool (internet search).
+type ZeroClawWebSearch struct {
+	Provider   string `yaml:"provider"`
+	MaxResults int    `yaml:"maxResults"`
+}
+
+// ZeroClawAutonomy controls what the agent can do without user approval.
+type ZeroClawAutonomy struct {
+	AllowedCommands []string `yaml:"allowedCommands"`
+	ForbiddenPaths  []string `yaml:"forbiddenPaths"`
+	AutoApprove     []string `yaml:"autoApprove"`
+}
+
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+// Built-in defaults used when no config file is provided or a field is missing.
 const (
 	DefaultTemperature          = 0.7
 	DefaultMaxResponseSize      = 1_000_000
@@ -27,47 +89,9 @@ const (
 	DefaultProviderBackoffMs    = 500
 )
 
-// ZeroClawConfig holds the operator-side defaults loaded from config/zeroclaw.yaml.
-// It controls what values are baked into the ZeroClaw bootstrap config.toml at
-// provisioning time.
-type ZeroClawConfig struct {
-	Defaults    ZeroClawDefaults    `yaml:"defaults"`
-	HTTPRequest ZeroClawHTTPRequest `yaml:"httpRequest"`
-	WebFetch    ZeroClawWebFetch    `yaml:"webFetch"`
-	WebSearch   ZeroClawWebSearch   `yaml:"webSearch"`
-	Autonomy    ZeroClawAutonomy    `yaml:"autonomy"`
-}
-
-type ZeroClawDefaults struct {
-	Temperature       float64 `yaml:"temperature"`
-	Timeout           int     `yaml:"timeout"`
-	ShortTimeout      int     `yaml:"shortTimeout"`
-	ProviderRetries   uint32  `yaml:"providerRetries"`
-	ProviderBackoffMs uint64  `yaml:"providerBackoffMs"`
-}
-
-type ZeroClawHTTPRequest struct {
-	MaxResponseSize int      `yaml:"maxResponseSize"`
-	AllowedDomains  []string `yaml:"allowedDomains"`
-}
-
-type ZeroClawWebFetch struct {
-	MaxResponseSize int `yaml:"maxResponseSize"`
-}
-
-type ZeroClawWebSearch struct {
-	Provider   string `yaml:"provider"`
-	MaxResults int    `yaml:"maxResults"`
-}
-
-type ZeroClawAutonomy struct {
-	AllowedCommands []string `yaml:"allowedCommands"`
-	ForbiddenPaths  []string `yaml:"forbiddenPaths"`
-	AutoApprove     []string `yaml:"autoApprove"`
-}
-
-// DefaultConfig returns a ZeroClawConfig populated with built-in defaults.
-// It is used when no config file is provided or when the file cannot be read.
+// DefaultConfig returns a ZeroClawConfig populated with sensible built-in defaults.
+// Used as the base before YAML overrides are applied, and as the fallback
+// when no config file exists.
 func DefaultConfig() *ZeroClawConfig {
 	return &ZeroClawConfig{
 		Defaults: ZeroClawDefaults{
@@ -108,8 +132,13 @@ func DefaultConfig() *ZeroClawConfig {
 	}
 }
 
-// LoadConfig reads a ZeroClawConfig from a YAML file at path.
-// If the file does not exist, DefaultConfig is returned with no error.
+// ---------------------------------------------------------------------------
+// Loading
+// ---------------------------------------------------------------------------
+
+// LoadConfig reads a ZeroClawConfig from a YAML file.
+// If the file does not exist, DefaultConfig is returned (no error).
+// This allows the webhook to start without a config file during development.
 func LoadConfig(path string) (*ZeroClawConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -124,277 +153,4 @@ func LoadConfig(path string) (*ZeroClawConfig, error) {
 		return nil, fmt.Errorf("parse zeroclaw config %s: %w", path, err)
 	}
 	return cfg, nil
-}
-
-type BootstrapConfig struct {
-	APIKey             string            `toml:"api_key"`
-	DefaultProvider    string            `toml:"default_provider"`
-	DefaultModel       string            `toml:"default_model"`
-	DefaultTemperature float64           `toml:"default_temperature"`
-	Autonomy           AutonomyConfig    `toml:"autonomy"`
-	HTTPRequest        HTTPRequestConfig `toml:"http_request"`
-	WebFetch           WebFetchConfig    `toml:"web_fetch"`
-	WebSearch          WebSearchConfig   `toml:"web_search"`
-	Gateway            GatewayConfig     `toml:"gateway"`
-	Reliability        Reliability       `toml:"reliability"`
-}
-
-type AutonomyConfig struct {
-	Level           string   `toml:"level"`
-	WorkspaceOnly   bool     `toml:"workspace_only"`
-	AllowedCommands []string `toml:"allowed_commands"`
-	ForbiddenPaths  []string `toml:"forbidden_paths"`
-	AutoApprove     []string `toml:"auto_approve"`
-	AlwaysAsk       []string `toml:"always_ask"`
-}
-
-type GatewayConfig struct {
-	Port            int32  `toml:"port"`
-	Host            string `toml:"host"`
-	AllowPublicBind bool   `toml:"allow_public_bind"`
-	RequirePairing  bool   `toml:"require_pairing"`
-}
-
-type HTTPRequestConfig struct {
-	Enabled           bool     `toml:"enabled"`
-	AllowedDomains    []string `toml:"allowed_domains"`
-	MaxResponseSize   int      `toml:"max_response_size"`
-	TimeoutSecs       int      `toml:"timeout_secs"`
-	AllowPrivateHosts bool     `toml:"allow_private_hosts"`
-}
-
-type WebFetchConfig struct {
-	Enabled         bool     `toml:"enabled"`
-	AllowedDomains  []string `toml:"allowed_domains"`
-	BlockedDomains  []string `toml:"blocked_domains"`
-	MaxResponseSize int      `toml:"max_response_size"`
-	TimeoutSecs     int      `toml:"timeout_secs"`
-}
-
-type WebSearchConfig struct {
-	Enabled            bool   `toml:"enabled"`
-	Provider           string `toml:"provider"`
-	MaxResults         int    `toml:"max_results"`
-	TimeoutSecs        int    `toml:"timeout_secs"`
-	SearxngInstanceURL string `toml:"searxng_instance_url,omitempty"`
-}
-
-type Reliability struct {
-	ProviderRetries uint32              `toml:"provider_retries"`
-	ProviderBackoff uint64              `toml:"provider_backoff_ms"`
-	ModelFallbacks  map[string][]string `toml:"model_fallbacks"`
-}
-
-func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (map[string]string, error) {
-	configTOML, err := BuildConfigTOML(sw, zc)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]string{
-		"config.toml": configTOML,
-		"SOUL.md":     BuildSoulMarkdown(sw),
-		"IDENTITY.md": BuildIdentityMarkdown(sw),
-		"TOOLS.md":    BuildToolsMarkdown(),
-		"AGENTS.md":   BuildAgentsMarkdown(),
-	}, nil
-}
-
-// BuildConfigTOML generates a minimal ZeroClaw bootstrap config for shared-namespace testing.
-// If zc is nil, DefaultConfig() is used.
-func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (string, error) {
-	if zc == nil {
-		zc = DefaultConfig()
-	}
-
-	cfg := BootstrapConfig{
-		APIKey:             "",
-		DefaultProvider:    "openai",
-		DefaultModel:       "gpt-5-mini",
-		DefaultTemperature: zc.Defaults.Temperature,
-		Autonomy: AutonomyConfig{
-			Level:           "supervised",
-			WorkspaceOnly:   true,
-			AllowedCommands: zc.Autonomy.AllowedCommands,
-			ForbiddenPaths:  zc.Autonomy.ForbiddenPaths,
-			AutoApprove:     zc.Autonomy.AutoApprove,
-			AlwaysAsk:       []string{},
-		},
-		HTTPRequest: HTTPRequestConfig{
-			Enabled:           true,
-			AllowedDomains:    zc.HTTPRequest.AllowedDomains,
-			MaxResponseSize:   zc.HTTPRequest.MaxResponseSize,
-			TimeoutSecs:       zc.Defaults.Timeout,
-			AllowPrivateHosts: false,
-		},
-		WebFetch: WebFetchConfig{
-			Enabled:         true,
-			AllowedDomains:  []string{"*"},
-			BlockedDomains:  []string{},
-			MaxResponseSize: zc.WebFetch.MaxResponseSize,
-			TimeoutSecs:     zc.Defaults.Timeout,
-		},
-		WebSearch: WebSearchConfig{
-			Enabled:     true,
-			Provider:    zc.WebSearch.Provider,
-			MaxResults:  zc.WebSearch.MaxResults,
-			TimeoutSecs: zc.Defaults.ShortTimeout,
-		},
-		Gateway: GatewayConfig{
-			Port: runtimePort(sw),
-			Host: "[::]",
-			// User swarms run behind an internal ClusterIP service, so the runtime has
-			// to bind the pod network address. Public exposure is blocked at the
-			// Kubernetes layer: no public route and a backend-only NetworkPolicy.
-			AllowPublicBind: true,
-			RequirePairing:  true,
-		},
-		Reliability: Reliability{
-			ProviderRetries: zc.Defaults.ProviderRetries,
-			ProviderBackoff: zc.Defaults.ProviderBackoffMs,
-			ModelFallbacks:  map[string][]string{},
-		},
-	}
-
-	if sw.Spec.Config.DefaultProvider != "" {
-		cfg.DefaultProvider = sw.Spec.Config.DefaultProvider
-	}
-	if sw.Spec.Config.DefaultModel != "" {
-		cfg.DefaultModel = sw.Spec.Config.DefaultModel
-	}
-	if sw.Spec.Config.DefaultTemperature != nil {
-		cfg.DefaultTemperature = *sw.Spec.Config.DefaultTemperature
-	}
-
-	if err := applyOverrides(&cfg, sw.Spec.Config.TOMLOverrides); err != nil {
-		return "", err
-	}
-
-	var buf bytes.Buffer
-	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
-		return "", fmt.Errorf("encode zeroclaw bootstrap config: %w", err)
-	}
-	return buf.String(), nil
-}
-
-func applyOverrides(cfg *BootstrapConfig, overrides string) error {
-	if strings.TrimSpace(overrides) == "" {
-		return nil
-	}
-
-	doc := strings.TrimSpace(overrides)
-	if _, err := toml.Decode(doc, cfg); err != nil {
-		return fmt.Errorf("decode zeroclaw config overrides: %w", err)
-	}
-
-	return nil
-}
-
-func runtimePort(sw *crawblv1alpha1.UserSwarm) int32 {
-	if sw.Spec.Runtime.Port != 0 {
-		return sw.Spec.Runtime.Port
-	}
-	return crawblv1alpha1.DefaultGatewayPort
-}
-
-func BuildSoulMarkdown(sw *crawblv1alpha1.UserSwarm) string {
-	return fmt.Sprintf(`# SOUL.md - Who You Are
-
-You are ZeroClaw, the private personal assistant for user %q inside Crawbl.
-
-## Core Principles
-- Speak naturally. Do not sound like a policy bot or a generic support script.
-- Start with the answer or useful action. Do not narrate internal processing.
-- Avoid phrases like "I will process that", "I will use the available tools", or "I will provide the result" unless the user asked about internals.
-- Be concise by default, but still sound human and grounded.
-- Use tools when needed, but keep tool use invisible in normal replies.
-- Be proactive and practical. Offer the next helpful step when it saves time.
-- If something is unclear, ask one short concrete question instead of padding the reply.
-- Do not invent facts, hidden actions, or completed work.
-`, sw.Spec.UserID)
-}
-
-func BuildIdentityMarkdown(sw *crawblv1alpha1.UserSwarm) string {
-	return fmt.Sprintf(`# IDENTITY.md - Who I Am
-
-I am ZeroClaw, %s's long-lived assistant in Crawbl.
-
-## Traits
-- Calm, direct, and useful
-- Conversational, not robotic
-- Opinionated when it helps the user decide faster
-- Respectful of the user's time; short answers are the default
-- Comfortable helping with planning, research, reminders, messages, and coordination
-`, sw.Spec.UserID)
-}
-
-// BuildToolsMarkdown generates instructions that guide ZeroClaw on when and how to use
-// its built-in tools. This file is loaded by the personality system and included in the
-// system prompt so the LLM knows what capabilities are available and when to use them.
-func BuildToolsMarkdown() string {
-	return `# TOOLS.md - Tool Usage Instructions
-
-## Web Search
-
-You have a **web_search_tool** that searches the internet for current information.
-Use it proactively when:
-- The user asks about current events, news, weather, or anything time-sensitive
-- The user asks you to "search", "look up", "find out", or "check" something online
-- You need factual information that may have changed since your training cutoff
-- The user asks about prices, stock, availability, or real-time data
-- You are unsure about a fact — verify it with a search instead of guessing
-
-Do NOT tell the user you are searching. Just search and provide the answer.
-
-## Web Fetch
-
-You have a **web_fetch** tool that reads the content of a specific URL.
-Use it when:
-- The user shares a URL and asks you to read, summarize, or analyze it
-- You found a relevant URL from web_search and need to read the full content
-- The user asks about the contents of a webpage, article, or documentation
-
-## File Operations
-
-You have **file_read** and **file_write** tools for working with files in your workspace.
-Use them when the user asks you to read, create, edit, or save files.
-
-## Memory
-
-You have **memory_store** and **memory_recall** tools for persistent memory.
-- Store important facts, preferences, and context the user shares
-- Recall stored memories when they are relevant to the current conversation
-
-## General Tool Guidance
-
-- Use tools silently — do not narrate that you are using them
-- Prefer using a tool over guessing or saying "I cannot"
-- If a tool fails, try an alternative approach before reporting failure
-- Chain tools when needed: search → fetch → summarize is a common pattern
-`
-}
-
-// BuildAgentsMarkdown generates role definitions for the default agents in a Crawbl workspace.
-// This is loaded by ZeroClaw's personality system and provides baseline agent behavior guidance.
-func BuildAgentsMarkdown() string {
-	return `# AGENTS.md - Agent Roles
-
-## Research Agent (researcher)
-
-You specialize in finding information, analyzing data, and providing well-sourced answers.
-- Break down questions systematically
-- Use web_search_tool and web_fetch to find current, accurate information
-- Consider multiple perspectives before answering
-- Cite your sources when possible
-- Be thorough but concise
-
-## Writer Agent (writer)
-
-You specialize in creating clear, engaging content.
-- Adapt your writing voice to match the user's needs (formal, casual, technical, creative)
-- Focus on clarity, tone, and structure
-- For emails: be concise and professional by default
-- For reports: be thorough and well-organized
-- For creative writing: be expressive and original
-`
 }

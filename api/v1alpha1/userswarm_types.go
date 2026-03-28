@@ -7,12 +7,9 @@ import (
 )
 
 const (
-	DefaultRuntimeNamespace       = "swarms-dev"
-	DefaultGatewayPort            = 42617
-	DefaultRuntimeMode            = "daemon"
-	DefaultPublicGatewayName      = "public-edge"
-	DefaultPublicGatewayNamespace = "envoy-gateway-system"
-	DefaultPublicGatewaySection   = "https"
+	DefaultRuntimeNamespace = "userswarms"
+	DefaultGatewayPort      = 42617
+	DefaultRuntimeMode      = "daemon"
 )
 
 // UserSwarmSpec describes the desired state for a single user's ZeroClaw runtime.
@@ -22,7 +19,6 @@ type UserSwarmSpec struct {
 	Runtime   UserSwarmRuntimeSpec   `json:"runtime"`
 	Storage   UserSwarmStorageSpec   `json:"storage"`
 	Config    UserSwarmConfigSpec    `json:"config,omitempty"`
-	Exposure  UserSwarmExposureSpec  `json:"exposure,omitempty"`
 	Suspend   bool                   `json:"suspend,omitempty"`
 }
 
@@ -34,7 +30,6 @@ type UserSwarmRuntimeSpec struct {
 	Image               string                      `json:"image"`
 	Mode                string                      `json:"mode,omitempty"`
 	Port                int32                       `json:"port,omitempty"`
-	ServiceAccountName  string                      `json:"serviceAccountName,omitempty"`
 	ImagePullSecretName string                      `json:"imagePullSecretName,omitempty"`
 	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
 }
@@ -49,26 +44,11 @@ type UserSwarmConfigSpec struct {
 	DefaultModel       string              `json:"defaultModel,omitempty"`
 	DefaultTemperature *float64            `json:"defaultTemperature,omitempty"`
 	TOMLOverrides      string              `json:"tomlOverrides,omitempty"`
-	SecretData         map[string]string   `json:"secretData,omitempty"`
 	EnvSecretRef       *UserSwarmSecretRef `json:"envSecretRef,omitempty"`
 }
 
 type UserSwarmSecretRef struct {
 	Name string `json:"name"`
-}
-
-type UserSwarmExposureSpec struct {
-	HTTPRoute UserSwarmHTTPRouteSpec `json:"httpRoute,omitempty"`
-}
-
-type UserSwarmHTTPRouteSpec struct {
-	Enabled           bool   `json:"enabled,omitempty"`
-	Host              string `json:"host,omitempty"`
-	Path              string `json:"path,omitempty"`
-	PathMatch         string `json:"pathMatch,omitempty"`
-	GatewayName       string `json:"gatewayName,omitempty"`
-	GatewayNamespace  string `json:"gatewayNamespace,omitempty"`
-	ParentSectionName string `json:"parentSectionName,omitempty"`
 }
 
 type UserSwarmStatus struct {
@@ -77,8 +57,6 @@ type UserSwarmStatus struct {
 	RuntimeNamespace   string             `json:"runtimeNamespace,omitempty"`
 	ServiceName        string             `json:"serviceName,omitempty"`
 	ReadyReplicas      int32              `json:"readyReplicas,omitempty"`
-	ImageRef           string             `json:"imageRef,omitempty"`
-	URL                string             `json:"url,omitempty"`
 	Conditions         []metav1.Condition `json:"conditions,omitempty"`
 }
 
@@ -156,7 +134,6 @@ func (in *UserSwarmSpec) DeepCopyInto(out *UserSwarmSpec) {
 	in.Runtime.DeepCopyInto(&out.Runtime)
 	out.Storage = in.Storage
 	in.Config.DeepCopyInto(&out.Config)
-	in.Exposure.DeepCopyInto(&out.Exposure)
 }
 
 func (in *UserSwarmRuntimeSpec) DeepCopyInto(out *UserSwarmRuntimeSpec) {
@@ -170,20 +147,9 @@ func (in *UserSwarmConfigSpec) DeepCopyInto(out *UserSwarmConfigSpec) {
 		value := *in.DefaultTemperature
 		out.DefaultTemperature = &value
 	}
-	if in.SecretData != nil {
-		out.SecretData = make(map[string]string, len(in.SecretData))
-		for key, val := range in.SecretData {
-			out.SecretData[key] = val
-		}
-	}
 	if in.EnvSecretRef != nil {
 		out.EnvSecretRef = &UserSwarmSecretRef{Name: in.EnvSecretRef.Name}
 	}
-}
-
-func (in *UserSwarmExposureSpec) DeepCopyInto(out *UserSwarmExposureSpec) {
-	*out = *in
-	out.HTTPRoute = in.HTTPRoute
 }
 
 func (in *UserSwarmStatus) DeepCopyInto(out *UserSwarmStatus) {

@@ -11,7 +11,7 @@ func newBuildCommand() *cobra.Command {
 		Use:   "build [component]",
 		Short: "Build Crawbl component images",
 		Long:  "Build Docker images for Crawbl platform components.",
-		Example: `  crawbl app build platform     # Build unified platform image (orchestrator + operator)
+		Example: `  crawbl app build platform     # Build unified platform image (orchestrator + webhook)
   crawbl app build auth-filter  # Build Envoy auth WASM filter image
   crawbl app build docs         # Build docs site image`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -27,7 +27,7 @@ import (
 // Default HTTP client timeout for runtime API calls.
 const defaultHTTPTimeout = 90 * time.Second
 
-const verifiedConditionType = "Verified"
+const readyConditionType = "Ready"
 
 type userSwarmClient struct {
 	client     client.Client
@@ -202,8 +202,8 @@ func (c *userSwarmClient) getRuntimeState(ctx context.Context, swarmName string)
 		RuntimeNamespace: swarm.Status.RuntimeNamespace,
 		ServiceName:      swarm.Status.ServiceName,
 		Phase:            swarm.Status.Phase,
-		Verified:         isConditionTrue(swarm.Status.Conditions, verifiedConditionType),
-		Status:           orchestrator.ResolveRuntimeState(swarm.Status.Phase, isConditionTrue(swarm.Status.Conditions, verifiedConditionType)),
+		Verified:         isConditionTrue(swarm.Status.Conditions, readyConditionType),
+		Status:           orchestrator.ResolveRuntimeState(swarm.Status.Phase, isConditionTrue(swarm.Status.Conditions, readyConditionType)),
 	}, nil
 }
 
@@ -250,11 +250,6 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 				DefaultProvider: c.config.DefaultProvider,
 				DefaultModel:    c.config.DefaultModel,
 				TOMLOverrides:   tomlOverrides,
-			},
-			Exposure: crawblv1alpha1.UserSwarmExposureSpec{
-				HTTPRoute: crawblv1alpha1.UserSwarmHTTPRouteSpec{
-					Enabled: false,
-				},
 			},
 		},
 	}

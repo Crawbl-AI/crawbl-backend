@@ -21,7 +21,7 @@ func newBuildPlatformCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "platform",
 		Short: "Build the unified platform image",
-		Long:  "Build the crawbl-platform Docker image containing the orchestrator, operator, and all supporting subcommands.",
+		Long:  "Build the crawbl-platform Docker image containing the orchestrator, webhook, and all supporting subcommands.",
 		Example: `  crawbl app build platform --tag v1.0.0
   crawbl app build platform --tag latest --push`,
 		RunE: func(_ *cobra.Command, _ []string) error {

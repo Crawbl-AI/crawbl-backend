@@ -13,7 +13,7 @@ const (
 	DriverUserSwarm = "userswarm"
 
 	DefaultFakeReplyPrefix          = "Fake runtime reply"
-	DefaultRuntimeNamespace         = "swarms-dev"
+	DefaultRuntimeNamespace         = "userswarms"
 	DefaultRuntimeStorageSize       = "2Gi"
 	DefaultRuntimePort        int32 = 42617
 	DefaultPollTimeout              = 60 * time.Second

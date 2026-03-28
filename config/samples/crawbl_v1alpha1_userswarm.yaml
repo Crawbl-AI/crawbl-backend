@@ -19,8 +19,8 @@ spec:
   # Controls which namespace the runtime pods land in.
   # All user swarms share a single namespace (not namespace-per-user).
   placement:
-    # Default: swarms-dev (matches operator constant DefaultRuntimeNamespace).
-    runtimeNamespace: swarms-dev
+    # Default: userswarms (matches operator constant DefaultRuntimeNamespace).
+    runtimeNamespace: userswarms
 
   # --- Runtime ---
   # ZeroClaw container configuration.
@@ -66,7 +66,7 @@ spec:
     # tomlOverrides: ""
     # Reference to a K8s Secret containing provider API keys.
     # The Secret is mounted as envFrom on the ZeroClaw container.
-    # Must exist in the runtime namespace (swarms-dev).
+    # Must exist in the runtime namespace (userswarms).
     envSecretRef:
       name: runtime-openai-secrets
 
