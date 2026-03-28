@@ -157,6 +157,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           ARGOCD_SSH_PRIVATE_KEY: ${{ secrets.ARGOCD_SSH_PRIVATE_KEY }}
+          DIGITALOCEAN_VPC_ID: ${{ secrets.DIGITALOCEAN_VPC_ID }}
+          DIGITALOCEAN_PROJECT_NAME: ${{ secrets.DIGITALOCEAN_PROJECT_NAME }}
         run: |
           RESULT=$(./crawbl infra plan --json 2>&1 | tail -1)
           echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
