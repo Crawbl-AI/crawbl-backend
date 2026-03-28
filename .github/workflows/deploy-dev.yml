@@ -5,12 +5,15 @@
 # Trigger: every push to main, or manual workflow_dispatch.
 #
 # Flow:
-#   1. build       — Compile the Go binary on Blacksmith, upload as artifact,
-#                    then build and push Docker images to DOCR (binary is COPYd in, not compiled in Docker).
-#   2. update-argocd — Clone crawbl-argocd-apps, patch image tags with yq/sed, push.
-#                      ArgoCD picks up the tag change and rolls out the new images.
-#   3. e2e-test    — Download the pre-built binary artifact (no recompilation), wait for
-#                    ArgoCD to sync the new image to the cluster, then run the E2E suite.
+#   1. build          — Compile the Go binary on Blacksmith, upload as artifact,
+#                        then build and push Docker images to DOCR (binary is COPYd in, not compiled in Docker).
+#   2. infra-drift    — Run Pulumi plan to detect infrastructure drift before deploying.
+#   3. update-argocd  — Clone crawbl-argocd-apps, capture previous tags, patch with new tags, push.
+#                        ArgoCD picks up the tag change and rolls out the new images.
+#   4. e2e-test       — Download the pre-built binary artifact (no recompilation), wait for
+#                        ArgoCD to sync the new image to the cluster, then run the E2E suite.
+#   5. rollback-argocd — (only on e2e failure) Restore previous image tags in crawbl-argocd-apps
+#                         so broken images don't stay deployed in dev/staging.
 #
 # History: pipeline went from 22 min → ~6 min.
 # Key wins: prebuilt binary (Docker no longer compiles Go), Blacksmith 16 vCPU,
@@ -192,8 +195,15 @@ jobs:
     needs: [build, infra-drift-check]
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 2
+    # Outputs capture the PREVIOUS image tags before this job overwrites them.
+    # The rollback-argocd job reads these to restore the prior state if e2e fails.
+    outputs:
+      prev-orchestrator-tag: ${{ steps.capture-tags.outputs.orchestrator }}
+      prev-auth-filter-tag: ${{ steps.capture-tags.outputs.auth-filter }}
+      prev-platform-tag: ${{ steps.capture-tags.outputs.platform }}
     steps:
       - name: Update ArgoCD apps with new image tags
+        id: capture-tags
         env:
           GH_PAT: ${{ secrets.ARGOCD_APPS_TOKEN }}
           IMAGE_TAG: v0.1.${{ github.run_number }}
@@ -201,6 +211,15 @@ jobs:
         run: |
           git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
           cd /tmp/argocd-apps
+
+          # Capture current tags BEFORE overwriting — these are the rollback targets.
+          PREV_ORCH=$(yq '.image.tag' components/orchestrator/chart/values.yaml)
+          PREV_AUTH=$(grep -oP 'envoy-auth-filter:\K[^ "]+' components/envoy-gateway/resources/envoy-extension-policy.yaml | head -1)
+          PREV_PLATFORM=$(grep -oP 'crawbl-platform:\K[^ "]+' components/metacontroller/resources/userswarm-webhook.yaml | head -1)
+          echo "orchestrator=${PREV_ORCH}" >> "$GITHUB_OUTPUT"
+          echo "auth-filter=${PREV_AUTH}" >> "$GITHUB_OUTPUT"
+          echo "platform=${PREV_PLATFORM}" >> "$GITHUB_OUTPUT"
+          echo "Previous tags: orchestrator=${PREV_ORCH} auth-filter=${PREV_AUTH} platform=${PREV_PLATFORM}"
 
           echo "Updating orchestrator image to ${IMAGE_TAG}"
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
@@ -304,3 +323,55 @@ jobs:
             --email "ci-e2e-${UID_SUFFIX}@crawbl.test" \
             --timeout 15s \
             -v
+
+  # ---------------------------------------------------------------------------
+  # Rollback: restore previous ArgoCD image tags if E2E tests fail
+  #
+  # Prevents broken images from staying deployed in dev/staging. Reads the
+  # previous tags captured by update-argocd (before it overwrote them) and
+  # patches them back into crawbl-argocd-apps. ArgoCD auto-syncs the rollback.
+  #
+  # Only runs when e2e-test fails — skipped on success or cancellation.
+  # ---------------------------------------------------------------------------
+  rollback-argocd:
+    needs: [update-argocd, e2e-test]
+    if: always() && needs.e2e-test.result == 'failure'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 2
+    steps:
+      - name: Rollback ArgoCD to previous image tags
+        env:
+          GH_PAT: ${{ secrets.ARGOCD_APPS_TOKEN }}
+          PREV_ORCH_TAG: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}
+          PREV_AUTH_TAG: ${{ needs.update-argocd.outputs.prev-auth-filter-tag }}
+          PREV_PLATFORM_TAG: ${{ needs.update-argocd.outputs.prev-platform-tag }}
+          FAILED_TAG: v0.1.${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          echo "E2E failed — rolling back from ${FAILED_TAG} to previous tags:"
+          echo "  orchestrator: ${PREV_ORCH_TAG}"
+          echo "  auth-filter:  ${PREV_AUTH_TAG}"
+          echo "  platform:     ${PREV_PLATFORM_TAG}"
+
+          git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
+          cd /tmp/argocd-apps
+
+          export IMAGE_TAG="${PREV_ORCH_TAG}"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
+
+          sed -i "s|registry.digitalocean.com/crawbl/envoy-auth-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-auth-filter:${PREV_AUTH_TAG}|g" \
+            components/envoy-gateway/resources/envoy-extension-policy.yaml
+
+          sed -i "s|registry.digitalocean.com/crawbl/crawbl-platform:[^ ]*|registry.digitalocean.com/crawbl/crawbl-platform:${PREV_PLATFORM_TAG}|g" \
+            components/metacontroller/resources/userswarm-webhook.yaml \
+            components/metacontroller/resources/e2e-reaper-cronjob.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes to rollback" && exit 0
+          git commit -m "rollback: revert images from ${FAILED_TAG} to ${PREV_ORCH_TAG} (e2e failed)
+
+          Source: crawbl-backend@${COMMIT_SHA::7}
+          Failed run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          git push
