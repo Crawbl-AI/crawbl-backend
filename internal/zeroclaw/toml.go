@@ -35,7 +35,7 @@ import (
 //
 // This function is pure and unit-testable: pass in a UserSwarm + ZeroClawConfig,
 // assert on the returned TOML string.
-func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (string, error) {
+func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, mcpCfg ...*MCPBootstrapConfig) (string, error) {
 	if zc == nil {
 		zc = DefaultConfig()
 	}
@@ -97,7 +97,12 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (string, 
 		cfg.DefaultTemperature = *sw.Spec.Config.DefaultTemperature
 	}
 
-	// Step 3: Apply raw TOML overrides (escape hatch for anything not in the spec).
+	// Step 3: Inject MCP client config if provided.
+	if len(mcpCfg) > 0 && mcpCfg[0] != nil {
+		cfg.MCP = *mcpCfg[0]
+	}
+
+	// Step 4: Apply raw TOML overrides (escape hatch for anything not in the spec).
 	if err := fileutil.ApplyTOMLOverrides(&cfg, sw.Spec.Config.TOMLOverrides); err != nil {
 		return "", err
 	}

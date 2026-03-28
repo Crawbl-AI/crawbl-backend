@@ -19,13 +19,25 @@ import (
 // Public API
 // ---------------------------------------------------------------------------
 
+// BuildBootstrapFilesOpts holds optional parameters for BuildBootstrapFiles.
+type BuildBootstrapFilesOpts struct {
+	// MCP is the MCP client config to inject into config.toml.
+	// If nil, the [mcp] section is omitted.
+	MCP *MCPBootstrapConfig
+}
+
 // BuildBootstrapFiles generates all 5 files that go into the bootstrap ConfigMap:
 // config.toml + 4 markdown personality files.
 //
 // This is the main entry point called by the webhook's Sync handler.
 // Returns a map of filename → content, ready to be set as ConfigMap.Data.
-func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (map[string]string, error) {
-	configTOML, err := BuildConfigTOML(sw, zc)
+func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, opts ...BuildBootstrapFilesOpts) (map[string]string, error) {
+	var mcpCfg *MCPBootstrapConfig
+	if len(opts) > 0 {
+		mcpCfg = opts[0].MCP
+	}
+
+	configTOML, err := BuildConfigTOML(sw, zc, mcpCfg)
 	if err != nil {
 		return nil, err
 	}

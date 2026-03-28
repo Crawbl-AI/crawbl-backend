@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -41,7 +42,9 @@ func (s *Server) handleWorkspacesList(w http.ResponseWriter, r *http.Request) {
 
 	response := make([]workspaceResponse, 0, len(workspaces))
 	for _, workspace := range workspaces {
-		response = append(response, toWorkspaceResponse(workspace))
+		resp := toWorkspaceResponse(workspace)
+		s.enrichWorkspaceResponse(r.Context(), workspace.ID, &resp)
+		response = append(response, resp)
 	}
 
 	httpserver.WriteSuccessResponse(w, http.StatusOK, response)
@@ -68,7 +71,9 @@ func (s *Server) handleWorkspaceGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpserver.WriteSuccessResponse(w, http.StatusOK, toWorkspaceResponse(workspace))
+	resp := toWorkspaceResponse(workspace)
+	s.enrichWorkspaceResponse(r.Context(), workspace.ID, &resp)
+	httpserver.WriteSuccessResponse(w, http.StatusOK, resp)
 }
 
 // toWorkspaceResponse converts a domain Workspace to the API response format.
@@ -91,4 +96,30 @@ func toWorkspaceResponse(workspace *orchestrator.Workspace) workspaceResponse {
 	}
 
 	return response
+}
+
+// enrichWorkspaceResponse fetches aggregate workspace data (agent count, last message)
+// and attaches it to the runtime response. Errors are silently ignored since this
+// data is supplementary and should not block the workspace response.
+func (s *Server) enrichWorkspaceResponse(ctx context.Context, workspaceID string, resp *workspaceResponse) {
+	if resp.Runtime == nil {
+		return
+	}
+
+	summary, mErr := s.chatService.GetWorkspaceSummary(ctx, &orchestratorservice.GetWorkspaceSummaryOpts{
+		Sess:        s.newSession(),
+		WorkspaceID: workspaceID,
+	})
+	if mErr != nil {
+		return
+	}
+
+	resp.Runtime.TotalAgents = summary.TotalAgents
+	if summary.LastMessagePreview != nil {
+		resp.Runtime.LastMessagePreview = &lastMessagePreviewResponse{
+			Text:       summary.LastMessagePreview.Text,
+			SenderName: summary.LastMessagePreview.SenderName,
+			Timestamp:  summary.LastMessagePreview.Timestamp,
+		}
+	}
 }

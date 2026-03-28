@@ -68,6 +68,10 @@ type NewServerOpts struct {
 	// RuntimeClient manages UserSwarm CRs for workspace provisioning and cleanup.
 	// Used by the delete handler to remove swarms when a user is deleted.
 	RuntimeClient userswarmclient.Client
+
+	// MCPHandler is the HTTP handler for the MCP server.
+	// If nil, the MCP endpoint is not mounted.
+	MCPHandler http.Handler
 }
 
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.

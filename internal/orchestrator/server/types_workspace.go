@@ -34,4 +34,22 @@ type workspaceRuntimeResponse struct {
 	// Verified indicates whether the swarm has passed health checks and is ready to receive requests.
 	// The backend should wait for Verified=true before routing user traffic to the swarm.
 	Verified bool `json:"verified"`
+
+	// TotalAgents is the number of agents provisioned in the workspace.
+	TotalAgents int `json:"total_agents"`
+
+	// LastMessagePreview is a preview of the most recent message across all workspace conversations.
+	LastMessagePreview *lastMessagePreviewResponse `json:"last_message_preview,omitempty"`
+}
+
+// lastMessagePreviewResponse represents a preview of the most recent message in a workspace.
+type lastMessagePreviewResponse struct {
+	// Text is the message text content.
+	Text string `json:"text"`
+
+	// SenderName is the display name of the message sender.
+	SenderName string `json:"sender_name"`
+
+	// Timestamp is when the message was created.
+	Timestamp time.Time `json:"timestamp"`
 }

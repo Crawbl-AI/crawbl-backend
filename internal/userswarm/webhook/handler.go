@@ -9,8 +9,9 @@ import (
 	"os"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
+	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
+	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // ConfigFromEnv builds a Config from environment variables.
@@ -18,6 +19,8 @@ import (
 func ConfigFromEnv() *Config {
 	return &Config{
 		BootstrapImage:   envOrDefault("USERSWARM_BOOTSTRAP_IMAGE", "registry.digitalocean.com/crawbl/crawbl-platform:dev"),
+		MCPEndpoint:      os.Getenv("CRAWBL_MCP_ENDPOINT"),
+		MCPSigningKey:    os.Getenv("CRAWBL_MCP_SIGNING_KEY"),
 		BackupBucket:     os.Getenv("USERSWARM_BACKUP_BUCKET"),
 		BackupRegion:     os.Getenv("USERSWARM_BACKUP_REGION"),
 		BackupSecretName: os.Getenv("USERSWARM_BACKUP_SECRET_NAME"),
@@ -109,7 +112,23 @@ func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncR
 	// Step 2: Build bootstrap files for the ConfigMap.
 	// These become the config.toml, SOUL.md, IDENTITY.md, TOOLS.md, AGENTS.md
 	// that the init container writes to the PVC on first boot.
-	bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm, cfg.ZeroClawConfig)
+	var bsOpts zeroclaw.BuildBootstrapFilesOpts
+	if cfg.MCPEndpoint != "" && cfg.MCPSigningKey != "" {
+		workspaceID := workspaceIDFromSwarmName(swarm.Name)
+		token := crawblmcp.GenerateToken(cfg.MCPSigningKey, swarm.Spec.UserID, workspaceID)
+		bsOpts.MCP = &zeroclaw.MCPBootstrapConfig{
+			Enabled:         true,
+			DeferredLoading: true,
+			Servers: []zeroclaw.MCPServerBootstrapConfig{{
+				Name:            "orchestrator",
+				Transport:       "http",
+				URL:             cfg.MCPEndpoint,
+				Headers:         map[string]string{"Authorization": "Bearer " + token},
+				ToolTimeoutSecs: 30,
+			}},
+		}
+	}
+	bootstrapFiles, err := zeroclaw.BuildBootstrapFiles(swarm, cfg.ZeroClawConfig, bsOpts)
 	if err != nil {
 		slog.Error("failed to build bootstrap files", "swarm", swarm.Name, "error", err)
 		return errorResponse(err)
@@ -137,13 +156,6 @@ func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncR
 	// Check the StatefulSet's readyReplicas to determine if the pod is up.
 	phase, readyStatus, readyReason := "Progressing", "False", "Reconciling"
 	readyReplicas := observedReadyReplicas(req)
-
-	// Debug: log children keys and readyReplicas for troubleshooting.
-	childKeys := make([]string, 0, len(req.Children))
-	for k := range req.Children {
-		childKeys = append(childKeys, k)
-	}
-	slog.Info("sync", "swarm", swarm.Name, "childKeys", childKeys, "readyReplicas", readyReplicas)
 
 	if swarm.Spec.Suspend {
 		phase, readyReason = "Suspended", "Suspended"

@@ -53,14 +53,18 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		cfg:              config,
 	}
 
-	// Build the combined handler: Socket.IO (if provided) + chi REST router.
-	// Socket.IO handles its own path matching via Engine.IO, so we use a
-	// ServeMux to let Socket.IO intercept /socket.io/ requests while chi
-	// handles everything else.
+	// Build the combined handler: MCP + Socket.IO (if provided) + chi REST router.
+	// Each sub-handler owns its own path prefix. We use a ServeMux so each
+	// handler intercepts its own requests while chi handles everything else.
 	handler := registerRoutes(srv)
-	if opts.SocketIOHandler != nil {
+	if opts.SocketIOHandler != nil || opts.MCPHandler != nil {
 		mux := http.NewServeMux()
-		mux.Handle("/socket.io/", opts.SocketIOHandler)
+		if opts.SocketIOHandler != nil {
+			mux.Handle("/socket.io/", opts.SocketIOHandler)
+		}
+		if opts.MCPHandler != nil {
+			mux.Handle("/mcp/v1", opts.MCPHandler)
+		}
 		mux.Handle("/", handler)
 		handler = mux
 	}

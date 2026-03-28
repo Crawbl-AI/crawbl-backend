@@ -87,6 +87,24 @@ type BootstrapConfig struct {
 	WebSearch          WebSearchConfig   `toml:"web_search"`
 	Gateway            GatewayConfig     `toml:"gateway"`
 	Reliability        Reliability       `toml:"reliability"`
+	MCP                MCPBootstrapConfig `toml:"mcp"`
+}
+
+// MCPBootstrapConfig controls ZeroClaw's MCP client connections.
+// The orchestrator MCP server is injected here at provisioning time.
+type MCPBootstrapConfig struct {
+	Enabled         bool                    `toml:"enabled"`
+	DeferredLoading bool                    `toml:"deferred_loading"`
+	Servers         []MCPServerBootstrapConfig `toml:"servers"`
+}
+
+// MCPServerBootstrapConfig defines a single MCP server connection for ZeroClaw.
+type MCPServerBootstrapConfig struct {
+	Name            string            `toml:"name"`
+	Transport       string            `toml:"transport"`
+	URL             string            `toml:"url"`
+	Headers         map[string]string `toml:"headers,omitempty"`
+	ToolTimeoutSecs int               `toml:"tool_timeout_secs,omitempty"`
 }
 
 // AutonomyConfig controls what the agent can do without asking the user.
@@ -157,6 +175,7 @@ var managedKeys = map[string][]string{
 	"web_fetch":    {"enabled", "allowed_domains", "blocked_domains", "max_response_size", "timeout_secs"},
 	"web_search":   {"enabled", "provider", "brave_api_key", "searxng_instance_url", "max_results", "timeout_secs"},
 	"gateway":      {"port", "host", "allow_public_bind", "require_pairing"},
+	"mcp":          {"enabled", "deferred_loading", "servers"},
 }
 
 // apiKeyEnvVars is the priority-ordered list of environment variables checked

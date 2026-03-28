@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/mcp"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
@@ -79,6 +80,8 @@ func runServer() error {
 	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
 	chatService := chatservice.New(workspaceRepo, agentRepo, conversationRepo, messageRepo, runtimeClient, broadcaster)
 
+	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo)
+
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
 	}, &server.NewServerOpts{
@@ -91,6 +94,7 @@ func runServer() error {
 		Broadcaster:      broadcaster,
 		SocketIOHandler:  socketIOHandler,
 		RuntimeClient:    runtimeClient,
+		MCPHandler:       mcpHandler,
 	})
 
 	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)
@@ -194,6 +198,49 @@ func int32FromEnv(key string, fallback int32) int32 {
 		}
 	}
 	return fallback
+}
+
+func buildMCPHandler(
+	logger *slog.Logger,
+	db *dbr.Connection,
+	userRepo orchestratorrepo.UserRepo,
+	workspaceRepo orchestratorrepo.WorkspaceRepo,
+	agentRepo orchestratorrepo.AgentRepo,
+	conversationRepo orchestratorrepo.ConversationRepo,
+	messageRepo orchestratorrepo.MessageRepo,
+) http.Handler {
+	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
+	if signingKey == "" {
+		logger.Warn("MCP server disabled: CRAWBL_MCP_SIGNING_KEY not set")
+		return nil
+	}
+
+	var fcm *crawblmcp.FCMClient
+	fcmProject := strings.TrimSpace(os.Getenv("CRAWBL_FCM_PROJECT_ID"))
+	fcmSAPath := strings.TrimSpace(os.Getenv("CRAWBL_FCM_SERVICE_ACCOUNT_PATH"))
+	if fcmProject != "" && fcmSAPath != "" {
+		var err error
+		fcm, err = crawblmcp.NewFCMClient(fcmProject, fcmSAPath)
+		if err != nil {
+			logger.Error("failed to create FCM client, push notifications disabled", "error", err)
+		} else {
+			logger.Info("FCM push notifications enabled", "project", fcmProject)
+		}
+	}
+
+	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
+		DB:               db,
+		Logger:           logger,
+		UserRepo:         userRepo,
+		WorkspaceRepo:    workspaceRepo,
+		AgentRepo:        agentRepo,
+		ConversationRepo: conversationRepo,
+		MessageRepo:      messageRepo,
+		SigningKey:        signingKey,
+		FCM:              fcm,
+	})
+	logger.Info("MCP server enabled at /mcp/v1")
+	return handler
 }
 
 func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig) (realtime.Broadcaster, http.Handler, func()) {

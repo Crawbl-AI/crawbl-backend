@@ -1,5 +1,7 @@
 package server
 
+import orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+
 // agentResponse represents an AI agent in API responses.
 // Agents are individual swarm members that users can interact with through conversations.
 type agentResponse struct {
@@ -17,4 +19,20 @@ type agentResponse struct {
 
 	// Status is the current availability status (e.g., "online", "offline", "busy").
 	Status string `json:"status"`
+}
+
+// toAgentResponse converts a domain Agent to the API response format.
+// Returns an empty response if the agent pointer is nil.
+func toAgentResponse(agent *orchestrator.Agent) agentResponse {
+	if agent == nil {
+		return agentResponse{}
+	}
+
+	return agentResponse{
+		ID:        agent.ID,
+		Name:      agent.Name,
+		Role:      agent.Role,
+		Avatar:    agent.AvatarURL,
+		Status: string(agent.Status),
+	}
 }

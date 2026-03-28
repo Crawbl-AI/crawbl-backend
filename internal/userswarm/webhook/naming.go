@@ -18,10 +18,17 @@ package webhook
 
 import (
 	"fmt"
+	"strings"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
+
+// workspaceIDFromSwarmName extracts the workspace ID from a UserSwarm CR name.
+// Swarm names follow the convention "workspace-{workspaceID}" (see userswarm client).
+func workspaceIDFromSwarmName(name string) string {
+	return strings.TrimPrefix(name, "workspace-")
+}
 
 // ---------------------------------------------------------------------------
 // Resource names

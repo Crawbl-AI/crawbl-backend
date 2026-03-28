@@ -224,6 +224,14 @@ type SendMessageOpts struct {
 	Mentions []orchestrator.Mention
 }
 
+// GetWorkspaceSummaryOpts contains options for the GetWorkspaceSummary method.
+type GetWorkspaceSummaryOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// WorkspaceID is the unique identifier of the workspace to summarize.
+	WorkspaceID string
+}
+
 // WorkspaceBootstrapper defines the interface for workspace initialization.
 // Implementations are responsible for creating the default workspace and
 // associated resources for a new user.
@@ -349,4 +357,11 @@ type ChatService interface {
 	//
 	// Returns the created Message on success, or a merrors.Error on failure.
 	SendMessage(ctx context.Context, opts *SendMessageOpts) (*orchestrator.Message, *merrors.Error)
+
+	// GetWorkspaceSummary retrieves aggregate workspace data including agent count
+	// and the most recent message preview. The caller must verify workspace ownership
+	// before calling this method.
+	//
+	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
+	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
 }

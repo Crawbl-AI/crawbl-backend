@@ -314,6 +314,28 @@ type Workspace struct {
 	Runtime *RuntimeStatus
 }
 
+// WorkspaceSummary contains aggregate information about a workspace,
+// including agent count and the most recent message preview.
+type WorkspaceSummary struct {
+	// TotalAgents is the number of agents in the workspace.
+	TotalAgents int
+
+	// LastMessagePreview is the most recent message across all conversations.
+	LastMessagePreview *LastMessagePreview
+}
+
+// LastMessagePreview represents a preview of the most recent message in a workspace.
+type LastMessagePreview struct {
+	// Text is the message text content.
+	Text string
+
+	// SenderName is the display name of the message sender.
+	SenderName string
+
+	// Timestamp is when the message was created.
+	Timestamp time.Time
+}
+
 // RuntimeState represents the operational state of a user's swarm runtime.
 type RuntimeState string
 
