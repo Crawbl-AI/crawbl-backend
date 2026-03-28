@@ -23,6 +23,8 @@ func registerAssertionSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the response JSON should match:$`, tc.assertJSONTable)
 	sc.Step(`^the saved "([^"]*)" should not equal the saved "([^"]*)"$`, tc.assertSavedNotEqual)
 	sc.Step(`^if the response status is (\d+):$`, tc.conditionalOnStatus)
+	sc.Step(`^if status is (\d+) the response JSON at "([^"]*)" should equal "([^"]*)"$`, tc.conditionalJSONEquals)
+	sc.Step(`^if status is (\d+) the response JSON at "([^"]*)" should not be empty$`, tc.conditionalJSONNotEmpty)
 }
 
 func (tc *testContext) assertStatus(expected int) error {
@@ -154,6 +156,23 @@ func (tc *testContext) conditionalOnStatus(expected int) error {
 		return nil
 	}
 	return nil
+}
+
+// conditionalJSONEquals asserts a JSON value only when the last status matches.
+// Used for steps like: And if status is 200 the response JSON at "data.role" should equal "agent"
+func (tc *testContext) conditionalJSONEquals(status int, path, expected string) error {
+	if tc.lastStatus != status {
+		return nil // skip — status didn't match
+	}
+	return tc.assertJSONEquals(path, expected)
+}
+
+// conditionalJSONNotEmpty asserts a JSON value is non-empty only when the last status matches.
+func (tc *testContext) conditionalJSONNotEmpty(status int, path string) error {
+	if tc.lastStatus != status {
+		return nil
+	}
+	return tc.assertJSONNotEmpty(path)
 }
 
 // gjsonGet is a convenience function for step helpers.

@@ -65,6 +65,8 @@ func (tc *testContext) userSendsDeleteJSON(alias, path string, body *godog.DocSt
 
 func (tc *testContext) sendWithBody(method, alias, path, jsonBody string) error {
 	path = tc.interpolatePath(path)
+	// Interpolate saved values in JSON body too (e.g. {researcher_id} → actual UUID).
+	jsonBody = tc.interpolatePath(jsonBody)
 	url := tc.cfg.BaseURL + path
 	req, err := http.NewRequest(method, url, bytes.NewBufferString(jsonBody))
 	if err != nil {
