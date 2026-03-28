@@ -14,11 +14,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
@@ -90,18 +93,40 @@ func Run(cfg *Config) *Results {
 		opts.Format = "progress"
 	}
 
-	suite := godog.TestSuite{
-		Name: "crawbl-e2e",
-		ScenarioInitializer: func(sc *godog.ScenarioContext) {
-			initScenario(sc, cfg, users)
-		},
-		Options: &opts,
+	allUsers := []*testUser{users.primary, users.frank, users.grace}
+
+	// Layer 3: use RunUntilSignal for graceful cleanup on SIGINT/SIGTERM.
+	// When CI cancels or user hits Ctrl+C, the stop function cleans up
+	// all test users before the process exits.
+	var exit int
+	cleanupFn := func(_ context.Context) error {
+		log.Println("cleaning up test users...")
+		for _, u := range allUsers {
+			cleanupUser(cfg, u)
+		}
+		log.Println("cleanup done")
+		return nil
 	}
 
-	exit := suite.Run()
+	runErr := backendruntime.RunUntilSignal(func() error {
+		suite := godog.TestSuite{
+			Name: "crawbl-e2e",
+			ScenarioInitializer: func(sc *godog.ScenarioContext) {
+				initScenario(sc, cfg, users)
+			},
+			Options: &opts,
+		}
+		exit = suite.Run()
+		return nil
+	}, cleanupFn, 10*time.Second)
 
-	// Clean up all 3 users after suite completes.
-	for _, u := range []*testUser{users.primary, users.frank, users.grace} {
+	if runErr != nil {
+		// Signal received — cleanup already ran in cleanupFn.
+		return &Results{Exit: 1}
+	}
+
+	// Normal cleanup after suite completes.
+	for _, u := range allUsers {
 		cleanupUser(cfg, u)
 	}
 

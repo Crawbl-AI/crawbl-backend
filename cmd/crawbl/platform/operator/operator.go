@@ -50,6 +50,7 @@ func NewOperatorCommand() *cobra.Command {
 	cmd.AddCommand(newBootstrapCommand())
 	cmd.AddCommand(newSmokeTestCommand())
 	cmd.AddCommand(newBackupCommand())
+	cmd.AddCommand(newReaperCommand())
 
 	return cmd
 }

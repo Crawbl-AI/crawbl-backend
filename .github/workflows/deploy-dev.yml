@@ -1,3 +1,20 @@
+# Deploy to Dev
+#
+# Full pipeline: compile Go binary → build Docker images → update ArgoCD manifests → E2E tests
+#
+# Trigger: every push to main, or manual workflow_dispatch.
+#
+# Flow:
+#   1. build       — Compile the Go binary on Blacksmith, upload as artifact,
+#                    then build and push Docker images to DOCR (binary is COPYd in, not compiled in Docker).
+#   2. update-argocd — Clone crawbl-argocd-apps, patch image tags with yq/sed, push.
+#                      ArgoCD picks up the tag change and rolls out the new images.
+#   3. e2e-test    — Download the pre-built binary artifact (no recompilation), wait for
+#                    ArgoCD to sync the new image to the cluster, then run the E2E suite.
+#
+# History: pipeline went from 22 min → ~6 min.
+# Key wins: prebuilt binary (Docker no longer compiles Go), Blacksmith 16 vCPU,
+# artifact sharing between build and e2e jobs, and NVMe Docker layer caching.
 name: Deploy to Dev
 
 on:
@@ -9,6 +26,14 @@ env:
   IMAGE_TAG: v0.1.${{ github.run_number }}
   DOCR_REGISTRY: registry.digitalocean.com/crawbl
 
+# Fixed group name "deploy-dev" means all runs (push AND workflow_dispatch) share one queue.
+# cancel-in-progress: false means queued runs wait instead of being cancelled — important on
+# main where we never want to skip a deploy silently.
+#
+# Previous approach used `group: ${{ github.ref }}`, which created separate concurrency
+# groups for push and workflow_dispatch events on the same branch. That caused a
+# workflow_dispatch run to cancel an in-progress push run (or vice versa), producing
+# unexpected skipped deploys.
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
@@ -16,6 +41,9 @@ concurrency:
 jobs:
   # ---------------------------------------------------------------------------
   # Build Go binary and Docker images on Blacksmith (16 vCPU)
+  #
+  # Blacksmith runners have NVMe-backed storage and significantly more CPU than
+  # GitHub-hosted runners. 16 vCPU dropped Go compilation from ~11 min to ~2-3 min.
   # ---------------------------------------------------------------------------
   build:
     runs-on: blacksmith-16vcpu-ubuntu-2404
@@ -25,12 +53,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # cache: false — setup-go's built-in cache keys on go.sum, which is useless when
+      # using vendored dependencies (go.sum doesn't change on source edits) and for
+      # cross-compilation targets. We manage the build cache explicitly below.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: false
 
+      # Explicit Go build cache keyed on actual source file hashes (cmd/, internal/, api/).
+      # This means a cache hit when source hasn't changed, and a proper miss when it has —
+      # unlike go.sum-keyed caches that never invalidate on source edits.
       - name: Restore Go build cache
         uses: actions/cache@v4
         with:
@@ -39,6 +73,13 @@ jobs:
           restore-keys: |
             go-build-${{ runner.os }}-
 
+      # GOMAXPROCS=16 — explicitly use all 16 Blacksmith vCPUs for parallel compilation.
+      # CGO_ENABLED=0 + GOOS/GOARCH — static cross-compile for the linux/amd64 container target.
+      # -mod=vendor — use the vendor/ directory; no network access needed.
+      # -trimpath — strip local build paths from the binary for reproducibility.
+      # -ldflags="-s -w" — strip symbol table and DWARF debug info to reduce binary size.
+      # -buildvcs=false — skip embedding git metadata (commit hash, dirty flag) into the binary.
+      #                   Saves a noticeable amount of overhead on every build.
       - name: Build crawbl binary
         env:
           GOMAXPROCS: "16"
@@ -47,6 +88,9 @@ jobs:
             go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
             -o crawbl ./cmd/crawbl
 
+      # Upload the compiled binary so the e2e-test job can download and reuse it.
+      # retention-days: 1 — artifact only needs to last for the duration of this pipeline run.
+      # This avoids recompiling Go in the e2e job and keeps the e2e runner small (2 vCPU).
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -54,7 +98,8 @@ jobs:
           path: crawbl
           retention-days: 1
 
-      # Blacksmith's Docker builder with NVMe layer caching.
+      # Blacksmith's Docker builder uses NVMe-backed layer caching, making layer
+      # pushes and pulls significantly faster than the default Docker BuildKit cache.
       - uses: useblacksmith/setup-docker-builder@v1
 
       - name: Login to DOCR
@@ -63,7 +108,9 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - run: doctl registry login --expiry-seconds 1200
 
-      # Docker just COPYs the pre-built binary (~5s).
+      # platform.dockerfile is the CI Dockerfile — it expects the binary to already exist
+      # at ./crawbl and simply COPYs it into a distroless base image. This takes ~5 seconds.
+      # (platform-full.dockerfile is for local builds where Docker compiles Go itself.)
       - name: Build and push platform image
         uses: useblacksmith/build-push-action@v2
         with:
@@ -84,6 +131,10 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Update image tags in crawbl-argocd-apps
+  #
+  # Clones the crawbl-argocd-apps repo, patches the image tags in Helm values
+  # and raw manifests, then pushes. ArgoCD watches this repo and auto-syncs the
+  # new tags to the cluster. A 2 vCPU runner is sufficient — this is just git + yq/sed.
   # ---------------------------------------------------------------------------
   update-argocd:
     needs: [build]
@@ -100,16 +151,21 @@ jobs:
           cd /tmp/argocd-apps
 
           echo "Updating platform image to ${IMAGE_TAG}"
+          # yq patches the image.tag field in the orchestrator and userswarm-operator Helm values.
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/userswarm-operator/chart/values.yaml
 
           echo "Updating auth-filter to ${IMAGE_TAG}"
+          # sed patches the auth-filter image reference in the raw Envoy ExtensionPolicy manifest.
+          # The pattern matches everything after the colon in the image reference so the tag is
+          # replaced regardless of the previous value.
           sed -i "s|registry.digitalocean.com/crawbl/envoy-auth-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-auth-filter:${IMAGE_TAG}|g" \
             components/platform-resources/resources/envoy-extension-policy.yaml
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
+          # Exit cleanly with no commit if nothing changed (e.g. workflow re-run with same run_number).
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "deploy: update images to ${IMAGE_TAG}
 
@@ -119,6 +175,11 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # E2E tests: download pre-built binary, wait for deploy, run tests
+  #
+  # Downloads the binary compiled in the build job — no Go toolchain needed here.
+  # Configures kubectl via doctl, then polls the cluster until ArgoCD has rolled
+  # out the new image tag. Once the deployment is live, runs the E2E suite through
+  # the pre-built crawbl binary.
   # ---------------------------------------------------------------------------
   e2e-test:
     needs: [update-argocd]
@@ -127,6 +188,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Reuse the binary built in the build job. Avoids installing Go and recompiling
+      # on this smaller runner. The artifact was uploaded with retention-days: 1.
       - name: Download binary artifact
         uses: actions/download-artifact@v4
         with:
@@ -143,6 +206,10 @@ jobs:
       - name: Save kubeconfig
         run: doctl kubernetes cluster kubeconfig save crawbl-dev
 
+      # Poll kubectl every 5 seconds (up to 90 attempts = 7.5 min) for the orchestrator
+      # deployment to show the expected image tag. This detects when ArgoCD has applied
+      # the manifest change from the update-argocd job and Kubernetes has started the
+      # new pod. Once the tag is visible, wait for a clean rollout before proceeding.
       - name: Wait for ArgoCD sync
         env:
           EXPECTED_TAG: v0.1.${{ github.run_number }}
@@ -162,12 +229,24 @@ jobs:
           done
           echo "WARNING: Timed out waiting for ${EXPECTED_TAG}"
 
+      # Run the E2E suite via the pre-built crawbl binary.
+      # Uses exec so the Go binary receives SIGINT directly from GitHub Actions
+      # on cancellation, allowing graceful cleanup of test users.
+      #
+      # --e2e-token: passed as the X-E2E-Token header. The gateway has a dedicated
+      #   HTTPRoute that bypasses Envoy's SecurityPolicy JWT validation for requests
+      #   carrying this token, so CI can authenticate without needing a real Firebase JWT.
+      #
+      # --uid / --email with a timestamp suffix: generates a unique test user per run
+      #   so concurrent or back-to-back runs do not collide on the same user record.
+      #
+      # --timeout 15s: per-request timeout for individual test steps.
       - name: Run e2e tests
         env:
           CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
         run: |
           UID_SUFFIX=$(date +%s)
-          ./crawbl test e2e \
+          exec ./crawbl test e2e \
             --base-url https://dev.api.crawbl.com \
             --e2e-token "${CRAWBL_E2E_TOKEN}" \
             --uid "ci-e2e-${UID_SUFFIX}" \
