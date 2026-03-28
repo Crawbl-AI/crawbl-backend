@@ -150,18 +150,17 @@ jobs:
           git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
           cd /tmp/argocd-apps
 
-          echo "Updating platform image to ${IMAGE_TAG}"
-          # yq patches the image.tag field in the orchestrator and userswarm-operator Helm values.
+          echo "Updating orchestrator image to ${IMAGE_TAG}"
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
-          yq -i '.image.tag = strenv(IMAGE_TAG)' components/userswarm-operator/chart/values.yaml
 
           echo "Updating auth-filter to ${IMAGE_TAG}"
           sed -i "s|registry.digitalocean.com/crawbl/envoy-auth-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-auth-filter:${IMAGE_TAG}|g" \
-            components/platform-resources/resources/envoy-extension-policy.yaml
+            components/envoy-gateway/resources/envoy-extension-policy.yaml
 
-          echo "Updating e2e-reaper CronJob to ${IMAGE_TAG}"
+          echo "Updating webhook + reaper images to ${IMAGE_TAG}"
           sed -i "s|registry.digitalocean.com/crawbl/crawbl-platform:[^ ]*|registry.digitalocean.com/crawbl/crawbl-platform:${IMAGE_TAG}|g" \
-            components/platform-resources/resources/e2e-reaper-cronjob.yaml
+            components/metacontroller/resources/userswarm-webhook.yaml \
+            components/metacontroller/resources/e2e-reaper-cronjob.yaml
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
