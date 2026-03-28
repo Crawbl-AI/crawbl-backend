@@ -11,44 +11,57 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Build and push the unified platform image (orchestrator + operator + tools)
+  # Build Go binary, Docker images, push, and upload binary artifact for e2e
   # ---------------------------------------------------------------------------
-  build-platform:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Single Go build — used for both Docker image and e2e tests (via artifact).
+      - name: Build crawbl binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
+            -o crawbl ./cmd/crawbl
+
+      # Upload binary as artifact so e2e job can download it without recompiling.
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawbl-binary
+          path: crawbl
+          retention-days: 1
+
       - uses: docker/setup-buildx-action@v3
-      - uses: digitalocean/action-doctl@v2
+
+      - name: Login to DOCR
+        uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - run: doctl registry login --expiry-seconds 1200
-      - uses: docker/build-push-action@v6
+
+      # Docker just packages the pre-built binary (~10s vs ~8 min).
+      - name: Build and push platform image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: dockerfiles/platform.dockerfile
+          build-args: PREBUILT=prebuilt
           platforms: linux/amd64
           push: true
           tags: ${{ env.DOCR_REGISTRY }}/crawbl-platform:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=platform
-          cache-to: type=gha,mode=max,scope=platform
 
-  # ---------------------------------------------------------------------------
-  # Build and push envoy auth filter WASM image
-  # ---------------------------------------------------------------------------
-  build-auth-filter:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      - run: doctl registry login --expiry-seconds 1200
-      - uses: docker/build-push-action@v6
+      - name: Build and push auth filter
+        uses: docker/build-push-action@v6
         with:
           context: cmd/envoy-auth-filter
           file: dockerfiles/envoy-auth-filter.dockerfile
@@ -59,10 +72,10 @@ jobs:
           cache-to: type=gha,mode=max,scope=auth-filter
 
   # ---------------------------------------------------------------------------
-  # Update image tags in crawbl-argocd-apps so ArgoCD syncs the new images
+  # Update image tags in crawbl-argocd-apps
   # ---------------------------------------------------------------------------
   update-argocd:
-    needs: [build-platform, build-auth-filter]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Update ArgoCD apps with new image tags
@@ -93,7 +106,7 @@ jobs:
           git push
 
   # ---------------------------------------------------------------------------
-  # E2E tests: build binary + wait for deploy in parallel, then run tests
+  # E2E tests: download pre-built binary, wait for deploy, run tests
   # ---------------------------------------------------------------------------
   e2e-test:
     needs: [update-argocd]
@@ -101,11 +114,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      # Download the pre-built binary from the build job (no recompilation).
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
         with:
-          go-version-file: go.mod
-          cache: true
+          name: crawbl-binary
+
+      - name: Make binary executable
+        run: chmod +x crawbl
 
       - name: Install doctl and configure kubectl
         uses: digitalocean/action-doctl@v2
@@ -115,17 +131,11 @@ jobs:
       - name: Save kubeconfig
         run: doctl kubernetes cluster kubeconfig save crawbl-dev
 
-      - name: Build e2e binary and wait for ArgoCD sync
+      - name: Wait for ArgoCD sync
         env:
           EXPECTED_TAG: v0.1.${{ github.run_number }}
         run: |
-          # Build the crawbl binary in the background while waiting for ArgoCD.
-          go build -mod=vendor -o /tmp/crawbl ./cmd/crawbl &
-          BUILD_PID=$!
-
-          # Poll immediately — no sleep. ArgoCD polls every 3 min by default,
-          # and the build step above takes ~30s which overlaps with the wait.
-          echo "Polling for image tag ${EXPECTED_TAG} in orchestrator deployment..."
+          echo "Polling for image tag ${EXPECTED_TAG}..."
           for i in $(seq 1 90); do
             CURRENT=$(kubectl get deployment orchestrator -n backend \
               -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
@@ -133,22 +143,19 @@ jobs:
               echo "ArgoCD synced: ${CURRENT}"
               kubectl rollout status deployment/orchestrator -n backend --timeout=180s
               echo "Rollout complete."
-              break
+              exit 0
             fi
             echo "  attempt ${i}/90: image=${CURRENT}"
             sleep 5
           done
-
-          # Wait for the Go build to finish.
-          wait $BUILD_PID
-          echo "Binary built."
+          echo "WARNING: Timed out waiting for ${EXPECTED_TAG}"
 
       - name: Run e2e tests
         env:
           CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
         run: |
           UID_SUFFIX=$(date +%s)
-          /tmp/crawbl test e2e \
+          ./crawbl test e2e \
             --base-url https://dev.api.crawbl.com \
             --e2e-token "${CRAWBL_E2E_TOKEN}" \
             --uid "ci-e2e-${UID_SUFFIX}" \
