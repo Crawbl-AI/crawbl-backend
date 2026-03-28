@@ -72,7 +72,7 @@ func NewHandler(cfg *Config) http.HandlerFunc {
 		if req.Finalizing {
 			resp = Finalize(&req, &swarm)
 		} else {
-			resp = Sync(&swarm, cfg)
+			resp = Sync(&req, &swarm, cfg)
 		}
 
 		// Step 5: Write the response.
@@ -103,7 +103,7 @@ func NewHandler(cfg *Config) http.HandlerFunc {
 //  3. Build the 6 core child resources (SA, ConfigMap, PVC, 2 Services, StatefulSet).
 //  4. Optionally add a backup Job if backup is configured and this isn't an e2e swarm.
 //  5. Compute status (phase, readyReplicas, conditions).
-func Sync(swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncResponse {
+func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncResponse {
 	ns := runtimeNS(swarm)
 
 	// Step 2: Build bootstrap files for the ConfigMap.
@@ -133,10 +133,15 @@ func Sync(swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncResponse {
 		children = append(children, DesiredBackupJob(swarm, ns, cfg))
 	}
 
-	// Step 5: Compute status.
-	phase, readyReason := "Progressing", "Reconciling"
+	// Step 5: Compute status from observed children.
+	// Check the StatefulSet's readyReplicas to determine if the pod is up.
+	phase, readyStatus, readyReason := "Progressing", "False", "Reconciling"
+	readyReplicas := observedReadyReplicas(req)
+
 	if swarm.Spec.Suspend {
 		phase, readyReason = "Suspended", "Suspended"
+	} else if readyReplicas > 0 {
+		phase, readyStatus, readyReason = "Ready", "True", "Ready"
 	}
 
 	return &SyncResponse{
@@ -145,12 +150,33 @@ func Sync(swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncResponse {
 			"phase":              phase,
 			"runtimeNamespace":   ns,
 			"serviceName":        ServiceName(swarm),
-			"readyReplicas":      ReplicaCount(swarm),
-			"conditions":         []interface{}{kube.StatusCondition("Ready", "False", readyReason, "")},
+			"readyReplicas":      readyReplicas,
+			"conditions":         []interface{}{kube.StatusCondition("Ready", readyStatus, readyReason, "")},
 		},
 		Children:           children,
 		ResyncAfterSeconds: 30,
 	}
+}
+
+// observedReadyReplicas extracts readyReplicas from the observed StatefulSet
+// in the Metacontroller sync request. Returns 0 if not found or not ready.
+func observedReadyReplicas(req *SyncRequest) int32 {
+	// Metacontroller keys observed children by "Kind.apiVersion".
+	stsGroup, ok := req.Children["StatefulSet.apps/v1"]
+	if !ok {
+		return 0
+	}
+	for _, raw := range stsGroup {
+		var sts struct {
+			Status struct {
+				ReadyReplicas int32 `json:"readyReplicas"`
+			} `json:"status"`
+		}
+		if err := json.Unmarshal(raw, &sts); err == nil {
+			return sts.Status.ReadyReplicas
+		}
+	}
+	return 0
 }
 
 // ---------------------------------------------------------------------------
