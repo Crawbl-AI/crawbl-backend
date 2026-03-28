@@ -42,7 +42,6 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig) (string, 
 
 	// Step 1: Build base config from cluster-wide defaults.
 	cfg := BootstrapConfig{
-		APIKey:             "",
 		DefaultProvider:    "openai",
 		DefaultModel:       "gpt-5-mini",
 		DefaultTemperature: zc.Defaults.Temperature,

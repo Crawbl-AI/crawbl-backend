@@ -78,7 +78,6 @@ const (
 // BootstrapConfig is the top-level TOML structure that ZeroClaw reads from config.toml.
 // Field names use snake_case to match ZeroClaw's expected TOML keys.
 type BootstrapConfig struct {
-	APIKey             string            `toml:"api_key,omitempty"`
 	DefaultProvider    string            `toml:"default_provider"`
 	DefaultModel       string            `toml:"default_model"`
 	DefaultTemperature float64           `toml:"default_temperature"`
