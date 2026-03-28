@@ -23,6 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
@@ -53,7 +54,8 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 	// and let the next reconcile create a fresh one. Can't update a Job in place.
 	if err == nil && (job.Annotations["crawbl.ai/smoke-checksum"] != checksum || job.Annotations["crawbl.ai/bootstrap-image"] != r.BootstrapImage) {
 		if job.DeletionTimestamp.IsZero() {
-			if deleteErr := r.Delete(ctx, &job); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+			// Use Background propagation to cascade-delete the Job's pods.
+			if deleteErr := r.Delete(ctx, &job, client.PropagationPolicy(metav1.DeletePropagationBackground)); deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
 				return metav1.ConditionFalse, conditionReasonReconcileError, "failed to refresh smoke test job", deleteErr
 			}
 		}
