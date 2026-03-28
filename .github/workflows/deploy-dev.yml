@@ -156,11 +156,12 @@ jobs:
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/userswarm-operator/chart/values.yaml
 
           echo "Updating auth-filter to ${IMAGE_TAG}"
-          # sed patches the auth-filter image reference in the raw Envoy ExtensionPolicy manifest.
-          # The pattern matches everything after the colon in the image reference so the tag is
-          # replaced regardless of the previous value.
           sed -i "s|registry.digitalocean.com/crawbl/envoy-auth-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-auth-filter:${IMAGE_TAG}|g" \
             components/platform-resources/resources/envoy-extension-policy.yaml
+
+          echo "Updating e2e-reaper CronJob to ${IMAGE_TAG}"
+          sed -i "s|registry.digitalocean.com/crawbl/crawbl-platform:[^ ]*|registry.digitalocean.com/crawbl/crawbl-platform:${IMAGE_TAG}|g" \
+            components/platform-resources/resources/e2e-reaper-cronjob.yaml
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
