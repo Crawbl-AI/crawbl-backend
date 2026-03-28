@@ -62,7 +62,24 @@ func (s AuthTokenSource) String() string {
 type MiddlewareConfig struct {
 	// Environment is the current environment (local, dev, prod, etc.).
 	Environment string
+	// E2EToken is a shared secret that enables e2e test auth bypass.
+	// When set and a request carries a matching X-E2E-Token header,
+	// the middleware reads identity from X-E2E-UID/Email/Name instead
+	// of requiring a real Firebase JWT. Empty disables the bypass.
+	E2EToken string
 }
+
+// E2E auth header constants.
+const (
+	// XE2ETokenHeader carries the shared secret for e2e test auth bypass.
+	XE2ETokenHeader = "X-E2E-Token"
+	// XE2EUIDHeader carries the test user's UID when using e2e auth.
+	XE2EUIDHeader = "X-E2E-UID"
+	// XE2EEmailHeader carries the test user's email when using e2e auth.
+	XE2EEmailHeader = "X-E2E-Email"
+	// XE2ENameHeader carries the test user's display name when using e2e auth.
+	XE2ENameHeader = "X-E2E-Name"
+)
 
 // RequestMetadata contains metadata extracted from request headers.
 type RequestMetadata struct {

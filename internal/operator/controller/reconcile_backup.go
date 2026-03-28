@@ -139,7 +139,7 @@ func (r *UserSwarmReconciler) buildBackupJob(swarm *crawblv1alpha1.UserSwarm, jo
 						Name:            "backup",
 						Image:           r.BootstrapImage, // Same binary as the operator — already cached on every node.
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:         []string{"/userswarm-operator", "backup"},
+						Command:         []string{"/crawbl", "platform", "operator", "backup"},
 						Args: []string{
 							"--workspace=/zeroclaw-data/workspace",
 							fmt.Sprintf("--bucket=%s", r.BackupBucket),

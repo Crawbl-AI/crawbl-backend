@@ -20,7 +20,6 @@ config/
   zeroclaw.yaml         ZeroClaw operator bootstrap defaults
 migrations/             PostgreSQL migration files
 dockerfiles/            Dockerfiles for each binary
-e2e/                    Venom end-to-end test suite
 ```
 
 ## Prerequisites
@@ -58,16 +57,10 @@ Stop all local services:
 make stop
 ```
 
-Run end-to-end tests (requires [venom](https://github.com/ovh/venom)):
+Run end-to-end tests against the dev cluster:
 
 ```sh
-make test-e2e
-```
-
-Run a single e2e test file:
-
-```sh
-make test-e2e-one FILE=01_orchestrator_smoke.yml
+crawbl test e2e --base-url https://dev.api.crawbl.com
 ```
 
 ## CLI

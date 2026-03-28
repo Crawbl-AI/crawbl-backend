@@ -1,4 +1,5 @@
-package main
+// Package orchestrator provides the orchestrator HTTP server and migration subcommands.
+package orchestrator
 
 import (
 	"fmt"
@@ -13,7 +14,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/spf13/cobra"
 
-	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
@@ -32,32 +33,24 @@ import (
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 )
 
-// shutdownTimeout defines the maximum duration to wait for graceful
-// server shutdown when a termination signal is received.
 const shutdownTimeout = 10 * time.Second
 
-
-// newServerCommand creates the "server" subcommand for starting the HTTP API.
-// This command initializes and runs the orchestrator HTTP server with all
-// configured services, repositories, and middleware.
-func newServerCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "server",
+// NewOrchestratorCommand creates the "orchestrator" parent command.
+// Running it directly starts the HTTP server; "migrate" is a subcommand.
+func NewOrchestratorCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "orchestrator",
 		Short: "Run the orchestrator HTTP server",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runServer()
 		},
 	}
+
+	cmd.AddCommand(newMigrateCommand())
+
+	return cmd
 }
 
-// runServer initializes and starts the orchestrator HTTP server.
-// It performs the following steps:
-//   - Configures structured logging based on LOG_LEVEL environment variable
-//   - Builds database connections and repository instances
-//   - Creates the runtime client for UserSwarm communication
-//   - Initializes authentication, workspace, and chat services
-//   - Configures HTTP middleware including identity verification
-//   - Starts the server with graceful shutdown handling
 func runServer() error {
 	logLevel := slog.LevelInfo
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
@@ -79,7 +72,6 @@ func runServer() error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	// Build the real-time layer: Redis → Socket.IO → Broadcaster.
 	broadcaster, socketIOHandler, cleanupRT := buildRealtime(logger, httpMiddleware)
 	defer cleanupRT()
 
@@ -103,32 +95,20 @@ func runServer() error {
 	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)
 }
 
-// envOrDefault retrieves an environment variable value or returns a fallback
-// if the variable is not set or empty.
 func envOrDefault(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	return value
+	return fallback
 }
 
-
-// buildHTTPMiddleware constructs the HTTP middleware configuration.
-// JWT verification is handled by Envoy Gateway SecurityPolicy at the edge.
 func buildHTTPMiddleware() *httpserver.MiddlewareConfig {
 	return &httpserver.MiddlewareConfig{
 		Environment: envOrDefault("CRAWBL_ENVIRONMENT", httpserver.EnvironmentLocal),
+		E2EToken:    os.Getenv("CRAWBL_E2E_TOKEN"),
 	}
 }
 
-
-
-// mustBuildRepos initializes the database connection and all repository instances
-// required by the orchestrator server. It ensures the database schema exists
-// and returns repositories for users, workspaces, agents, conversations, and messages.
-// The returned cleanup function should be called to close the database connection.
-// This function logs fatal errors and exits if initialization fails.
 func mustBuildRepos(logger *slog.Logger) (
 	*dbr.Connection,
 	orchestratorrepo.UserRepo,
@@ -143,24 +123,15 @@ func mustBuildRepos(logger *slog.Logger) (
 	if err := database.EnsureSchema(dbConfig); err != nil {
 		log.Fatal(err)
 	}
-
 	db, err := database.New(dbConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	return db, userrepo.New(), workspacerepo.New(), agentrepo.New(), conversationrepo.New(), messagerepo.New(), func() {
 		_ = db.Close()
 	}
 }
 
-// buildRuntimeClient creates the runtime client for communicating with UserSwarm
-// instances. The client type is determined by the CRAWBL_RUNTIME_DRIVER environment
-// variable:
-//   - "fake" or empty: Creates a fake client for local development/testing
-//   - "userswarm": Creates a Kubernetes-based client for production cluster deployment
-//
-// Returns an error if an unsupported driver is specified.
 func buildRuntimeClient(logger *slog.Logger) (runtimeclient.Client, error) {
 	cfg := runtimeclient.Config{
 		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", runtimeclient.DriverFake),
@@ -197,10 +168,8 @@ func buildRuntimeClient(logger *slog.Logger) (runtimeclient.Client, error) {
 	}
 }
 
-// legalDocumentsFromEnv constructs the legal documents configuration from
-// environment variables. Returns default Crawbl URLs if not explicitly configured.
-func legalDocumentsFromEnv() *orchestrator.LegalDocuments {
-	return &orchestrator.LegalDocuments{
+func legalDocumentsFromEnv() *orch.LegalDocuments {
+	return &orch.LegalDocuments{
 		TermsOfService:        envOrDefault("CRAWBL_LEGAL_TERMS_OF_SERVICE", "https://crawbl.com/terms"),
 		PrivacyPolicy:         envOrDefault("CRAWBL_LEGAL_PRIVACY_POLICY", "https://crawbl.com/privacy"),
 		TermsOfServiceVersion: envOrDefault("CRAWBL_LEGAL_TERMS_OF_SERVICE_VERSION", "v1"),
@@ -208,41 +177,24 @@ func legalDocumentsFromEnv() *orchestrator.LegalDocuments {
 	}
 }
 
-// durationFromEnv parses a duration value from an environment variable.
-// Accepts Go duration format (e.g., "30s", "5m", "1h").
-// Returns the fallback value if the variable is unset or has an invalid format.
 func durationFromEnv(key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
 	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
+	return fallback
 }
 
-// int32FromEnv parses an int32 value from an environment variable.
-// Returns the fallback value if the variable is unset or has an invalid format.
 func int32FromEnv(key string, fallback int32) int32 {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			return int32(n)
+		}
 	}
-
-	parsed, err := strconv.ParseInt(value, 10, 32)
-	if err != nil {
-		return fallback
-	}
-	return int32(parsed)
+	return fallback
 }
 
-// buildRealtime creates the Redis client, Socket.IO server with Redis adapter,
-// and the broadcaster that emits real-time events to connected mobile clients.
-// Returns a NopBroadcaster and nil handler if Redis is not configured (CRAWBL_REDIS_ADDR empty).
-// The returned cleanup function closes the Redis connection.
 func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig) (realtime.Broadcaster, http.Handler, func()) {
 	addr := strings.TrimSpace(os.Getenv("CRAWBL_REDIS_ADDR"))
 	if addr == "" {

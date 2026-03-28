@@ -1,4 +1,6 @@
-package main
+// Package operator provides the UserSwarm operator controller and its
+// supporting subcommands: bootstrap, smoketest, and backup.
+package operator
 
 import (
 	"fmt"
@@ -21,7 +23,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
 )
 
-func newOperatorCommand() *cobra.Command {
+// NewOperatorCommand creates the "operator" parent command.
+// Running it directly starts the controller manager; bootstrap, smoketest,
+// and backup are subcommands.
+func NewOperatorCommand() *cobra.Command {
 	var (
 		metricsAddr          string
 		probeAddr            string
@@ -33,7 +38,7 @@ func newOperatorCommand() *cobra.Command {
 		Use:   "operator",
 		Short: "Run the UserSwarm operator manager",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runOperatorWithOptions(metricsAddr, probeAddr, enableLeaderElection, zeroClawConfigPath)
+			return runOperator(metricsAddr, probeAddr, enableLeaderElection, zeroClawConfigPath)
 		},
 	}
 
@@ -42,10 +47,14 @@ func newOperatorCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	cmd.Flags().StringVar(&zeroClawConfigPath, "zeroclaw-config", "config/zeroclaw.yaml", "Path to the ZeroClaw operator config YAML file.")
 
+	cmd.AddCommand(newBootstrapCommand())
+	cmd.AddCommand(newSmokeTestCommand())
+	cmd.AddCommand(newBackupCommand())
+
 	return cmd
 }
 
-func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection bool, zeroClawConfigPath string) error {
+func runOperator(metricsAddr, probeAddr string, enableLeaderElection bool, zeroClawConfigPath string) error {
 	zcConfig, err := zeroclaw.LoadConfig(zeroClawConfigPath)
 	if err != nil {
 		return fmt.Errorf("load zeroclaw config: %w", err)
@@ -53,7 +62,7 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 
 	bootstrapImage := os.Getenv("USERSWARM_BOOTSTRAP_IMAGE")
 	if bootstrapImage == "" {
-		bootstrapImage = "registry.digitalocean.com/crawbl/crawbl-userswarm-operator:dev"
+		bootstrapImage = "registry.digitalocean.com/crawbl/crawbl-platform:dev"
 	}
 
 	ctrl.SetLogger(zap.New())
@@ -112,4 +121,3 @@ func parseDuration(s string) time.Duration {
 	}
 	return d
 }
-

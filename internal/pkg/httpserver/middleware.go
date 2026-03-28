@@ -46,6 +46,44 @@ func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handle
 				return
 			}
 
+			// E2E test auth bypass: when CRAWBL_E2E_TOKEN is set and the environment
+			// is NOT production, allow requests with a matching X-E2E-Token header
+			// to authenticate via X-E2E-UID/Email/Name instead of Firebase JWT.
+			// This is disabled in production even if the env var is accidentally set.
+			if cfg.E2EToken != "" && env != "production" && env != "prod" {
+				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && token == cfg.E2EToken {
+					e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
+					if e2eUID == "" {
+						WriteErrorResponse(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
+						return
+					}
+
+					principal := &orchestrator.Principal{
+						Subject: e2eUID,
+						Email:   strings.TrimSpace(r.Header.Get(XE2EEmailHeader)),
+						Name:    strings.TrimSpace(r.Header.Get(XE2ENameHeader)),
+					}
+
+					logger.Info("e2e auth bypass",
+						"method", r.Method,
+						"path", r.URL.Path,
+						"subject", principal.Subject,
+					)
+
+					ctx := ContextWithPrincipal(r.Context(), principal)
+					ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
+						TokenSource: AuthTokenSourceXToken,
+						DeviceInfo:  "e2e-test",
+						DeviceID:    "e2e-device",
+						Version:     "e2e",
+						Timezone:    "UTC",
+					})
+
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
 			// Read gateway-verified claims from Envoy-forwarded headers.
 			uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
 			if uid == "" {

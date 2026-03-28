@@ -2,12 +2,11 @@ services:
   orchestrator:
     build:
       context: .
-      dockerfile: dockerfiles/service.dockerfile
+      dockerfile: dockerfiles/platform.dockerfile
       args:
         GOARCH: amd64
-        CGO: "0"
-        LDFLAGS: "-s -w"
     env_file: ${ENV_FILE}
+    command: ["platform", "orchestrator"]
     profiles:
       - default
     networks:
@@ -22,11 +21,10 @@ services:
   migrations:
     build:
       context: .
-      dockerfile: dockerfiles/migrate.dockerfile
+      dockerfile: dockerfiles/platform.dockerfile
     env_file:
       - ${ENV_FILE}
-    command:
-      - "--svc=orchestrator"
+    command: ["platform", "orchestrator", "migrate", "--svc=orchestrator"]
     networks:
       - crawbl-backend
     profiles:

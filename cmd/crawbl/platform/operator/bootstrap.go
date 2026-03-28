@@ -1,5 +1,4 @@
-// Package controller provides Kubernetes controller logic.
-package main
+package operator
 
 import (
 	"os"
@@ -10,7 +9,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/operator/zeroclaw"
 )
 
-// Directory permission for workspace directories (owner rwx only).
 const workspaceDirPerm = 0o700
 
 func newBootstrapCommand() *cobra.Command {
@@ -30,7 +28,6 @@ func newBootstrapCommand() *cobra.Command {
 			if err := os.MkdirAll(workspacePath, workspaceDirPerm); err != nil {
 				return err
 			}
-
 			return zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath)
 		},
 	}

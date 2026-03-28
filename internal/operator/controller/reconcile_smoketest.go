@@ -96,7 +96,7 @@ func (r *UserSwarmReconciler) reconcileSmokeTestJob(ctx context.Context, swarm *
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			// Runs the operator binary in "smoketest" mode — it just does an HTTP GET
 			// to the service URL and checks for a 200 response.
-			Command: []string{"/userswarm-operator", "smoketest"},
+			Command: []string{"/crawbl", "platform", "operator", "smoketest"},
 			Args: []string{
 				fmt.Sprintf("--url=%s", smokeTestURL(swarm)),
 				"--timeout=15s",

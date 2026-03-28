@@ -1,7 +1,4 @@
-// Backup subcommand — tars workspace files from a PVC and uploads to S3.
-// Runs inside a K8s Job with the PVC mounted read-only at --workspace.
-// Same binary as the operator, just a different entrypoint.
-package main
+package operator
 
 import (
 	"archive/tar"
@@ -20,16 +17,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Max file size to include in backup (50MB). Anything larger is skipped.
 const maxBackupFileSize = 50 * 1024 * 1024
 
-// File extensions worth backing up. Everything else is temp/cache/disposable.
 var backupExtensions = map[string]bool{
-	".db":     true, // SQLite databases (sessions, memory, cron)
-	".db-wal": true, // SQLite WAL files (needed for consistency)
-	".db-shm": true, // SQLite shared memory
-	".md":     true, // SOUL.md, IDENTITY.md, memory markdown
-	".json":   true, // State files, config
+	".db":     true,
+	".db-wal": true,
+	".db-shm": true,
+	".md":     true,
+	".json":   true,
 }
 
 func newBackupCommand() *cobra.Command {
@@ -37,7 +32,7 @@ func newBackupCommand() *cobra.Command {
 		workspace string
 		bucket    string
 		region    string
-		prefix    string // "hourly" or "final"
+		prefix    string
 		userID    string
 		swarmName string
 		env       string
@@ -89,17 +84,15 @@ type backupOpts struct {
 }
 
 func runBackup(ctx context.Context, opts backupOpts) error {
-	// Check workspace exists
 	if _, err := os.Stat(opts.workspace); err != nil {
 		fmt.Println("No workspace directory found, skipping backup")
 		return nil
 	}
 
-	// Collect files to backup
 	var files []string
 	err := filepath.Walk(opts.workspace, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip unreadable files
+			return nil
 		}
 		if info.IsDir() {
 			return nil
@@ -108,7 +101,6 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 			return nil
 		}
 		ext := filepath.Ext(info.Name())
-		// Handle .db-wal and .db-shm (double extension)
 		if !backupExtensions[ext] {
 			base := strings.TrimSuffix(info.Name(), ext)
 			ext2 := filepath.Ext(base) + ext
@@ -134,7 +126,6 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 		fmt.Printf("  %s\n", rel)
 	}
 
-	// Create tar.gz archive in a temp file
 	tmpFile, err := os.CreateTemp("", "backup-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -147,12 +138,10 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 	}
 	_ = tmpFile.Close()
 
-	// Print archive size
 	if info, err := os.Stat(tmpFile.Name()); err == nil {
 		fmt.Printf("Archive size: %d bytes\n", info.Size())
 	}
 
-	// Upload to S3
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
 	key := fmt.Sprintf("%s/swarms/%s/%s/%s/%s.tar.gz",
 		opts.env, opts.userID, opts.swarmName, opts.prefix, timestamp)
@@ -165,7 +154,6 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 	return nil
 }
 
-// createArchive writes selected files into a tar.gz archive.
 func createArchive(w io.Writer, baseDir string, files []string) error {
 	gw := gzip.NewWriter(w)
 	defer func() { _ = gw.Close() }()
@@ -208,9 +196,7 @@ func createArchive(w io.Writer, baseDir string, files []string) error {
 	return nil
 }
 
-// uploadToS3 uploads a file to an S3 bucket.
 func uploadToS3(ctx context.Context, bucket, region, key, filePath string) error {
-	// Credentials from env vars (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if accessKey == "" || secretKey == "" {

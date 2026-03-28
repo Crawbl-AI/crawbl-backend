@@ -1,16 +1,8 @@
-.PHONY: help deps-venom deps-lint fmt tidy test verify setup stop clean run run-clean migrate test-e2e test-e2e-one run-server run-operator docr-login userswarm-operator-image-build userswarm-operator-image-push orchestrator-image-build orchestrator-image-push lint lint-fix
+.PHONY: help deps-lint fmt tidy test verify setup stop clean run run-clean migrate test-e2e run-server run-operator lint lint-fix
 
 GOCACHE ?= $(CURDIR)/.cache/go-build
 GOMODCACHE ?= $(CURDIR)/.cache/go-mod
-DOCR_REGISTRY ?= crawbl
-ORCHESTRATOR_IMAGE_REPOSITORY ?= registry.digitalocean.com/$(DOCR_REGISTRY)/crawbl-orchestrator
-IMAGE_REPOSITORY ?= registry.digitalocean.com/$(DOCR_REGISTRY)/crawbl-userswarm-operator
-IMAGE_TAG ?= dev
-ORCHESTRATOR_IMAGE_TAG ?= $(IMAGE_TAG)
-PLATFORM ?= linux/amd64
 ENV_FILE ?= .env
-E2E_DIR ?= $(CURDIR)/e2e
-VENOM_VERSION ?= v1.3.0
 
 export GOCACHE
 export GOMODCACHE
@@ -28,21 +20,6 @@ deps-lint: ## Install golangci-lint locally if it is missing
 	else \
 		echo "Installing golangci-lint..."; \
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-	fi
-
-deps-venom: ## Install ovh/venom locally if it is missing
-	@if command -v venom >/dev/null 2>&1; then \
-		echo "venom already installed: $$(venom version 2>/dev/null || echo unknown)"; \
-	else \
-		echo "Installing venom $(VENOM_VERSION)..."; \
-		OS=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
-		ARCH=$$(uname -m); \
-		case $$ARCH in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac; \
-		DEST=$${VENOM_INSTALL_DIR:-$(HOME)/bin}; \
-		mkdir -p $$DEST; \
-		curl -sSfL "https://github.com/ovh/venom/releases/download/$(VENOM_VERSION)/venom.$$OS-$$ARCH" -o "$$DEST/venom"; \
-		chmod +x "$$DEST/venom"; \
-		echo "venom $(VENOM_VERSION) installed to $$DEST/venom"; \
 	fi
 
 fmt: ## Format Go source files
@@ -84,39 +61,11 @@ migrate: .env ## Run the local orchestrator migrations once
 	@docker compose --profile database --profile migration build migrations
 	@docker compose --profile database --profile migration run --rm migrations
 
-test-e2e: deps-venom run-clean ## Run the minimal orchestrator workflow against the local Docker stack
-	@attempts=0; until curl -fsS http://127.0.0.1:7171/v1/health >/dev/null 2>/dev/null; do \
-		attempts=$$((attempts + 1)); \
-		if [ $$attempts -ge 60 ]; then \
-			echo "orchestrator health check did not become ready in time"; \
-			exit 1; \
-		fi; \
-		sleep 1; \
-	done
-	@PATH="$(HOME)/bin:$(PATH)" venom run $(E2E_DIR)/tests/ --output-dir=$(E2E_DIR) \
-		&& EXIT=0 || EXIT=$$?; \
-	$(MAKE) stop; \
-	exit $$EXIT
-
-test-e2e-one: deps-venom run-clean ## Run one Venom file from e2e/tests, e.g. FILE=01_orchestrator_smoke.yml
-	@attempts=0; until curl -fsS http://127.0.0.1:7171/v1/health >/dev/null 2>/dev/null; do \
-		attempts=$$((attempts + 1)); \
-		if [ $$attempts -ge 60 ]; then \
-			echo "orchestrator health check did not become ready in time"; \
-			exit 1; \
-		fi; \
-		sleep 1; \
-	done
-	@PATH="$(HOME)/bin:$(PATH)" venom run $(E2E_DIR)/tests/$(FILE) --output-dir=$(E2E_DIR) \
-		&& EXIT=0 || EXIT=$$?; \
-	$(MAKE) stop; \
-	exit $$EXIT
+test-e2e: ## Run e2e tests against the dev cluster
+	go run ./cmd/crawbl test e2e --base-url https://dev.api.crawbl.com
 
 run-server: ## Run the orchestrator HTTP server locally
-	go run ./cmd/orchestrator server
+	go run ./cmd/crawbl platform orchestrator
 
 run-operator: ## Run the userswarm operator locally
-	go run ./cmd/userswarm-operator operator
-
-docr-login: ## Log Docker into the DigitalOcean Container Registry
-	doctl registries login $(DOCR_REGISTRY)
+	go run ./cmd/crawbl platform operator

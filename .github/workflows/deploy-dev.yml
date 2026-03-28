@@ -11,9 +11,9 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Build and push orchestrator image
+  # Build and push the unified platform image (orchestrator + operator + tools)
   # ---------------------------------------------------------------------------
-  build-orchestrator:
+  build-platform:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,36 +27,12 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/service.dockerfile
+          file: dockerfiles/platform.dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.DOCR_REGISTRY }}/crawbl-orchestrator:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=orchestrator
-          cache-to: type=gha,mode=max,scope=orchestrator
-
-  # ---------------------------------------------------------------------------
-  # Build and push userswarm-operator image
-  # ---------------------------------------------------------------------------
-  build-operator:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      - run: doctl registry login --expiry-seconds 1200
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: dockerfiles/userswarm-operator.dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.DOCR_REGISTRY }}/crawbl-userswarm-operator:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=operator
-          cache-to: type=gha,mode=max,scope=operator
+          tags: ${{ env.DOCR_REGISTRY }}/crawbl-platform:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=platform
+          cache-to: type=gha,mode=max,scope=platform
 
   # ---------------------------------------------------------------------------
   # Build and push envoy auth filter WASM image
@@ -86,7 +62,7 @@ jobs:
   # Update image tags in crawbl-argocd-apps so ArgoCD syncs the new images
   # ---------------------------------------------------------------------------
   update-argocd:
-    needs: [build-orchestrator, build-operator, build-auth-filter]
+    needs: [build-platform, build-auth-filter]
     runs-on: ubuntu-latest
     steps:
       - name: Update ArgoCD apps with new image tags
@@ -98,10 +74,8 @@ jobs:
           git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
           cd /tmp/argocd-apps
 
-          echo "Updating orchestrator to ${IMAGE_TAG}"
+          echo "Updating platform image to ${IMAGE_TAG}"
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
-
-          echo "Updating operator to ${IMAGE_TAG}"
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/userswarm-operator/chart/values.yaml
 
           echo "Updating auth-filter to ${IMAGE_TAG}"
@@ -117,3 +91,63 @@ jobs:
           Source: crawbl-backend@${COMMIT_SHA::7}
           Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           git push
+
+  # ---------------------------------------------------------------------------
+  # E2E tests: wait for ArgoCD to deploy, then run against the public domain
+  # ---------------------------------------------------------------------------
+  e2e-test:
+    needs: [update-argocd]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install doctl and configure kubectl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save kubeconfig
+        run: doctl kubernetes cluster kubeconfig save crawbl-dev
+
+      - name: Wait for ArgoCD to sync new image
+        env:
+          EXPECTED_TAG: v0.1.${{ github.run_number }}
+        run: |
+          # Give ArgoCD time to detect the git commit and start syncing.
+          echo "Waiting 30s for ArgoCD to detect the new commit..."
+          sleep 30
+
+          # Poll until the deployment spec has the new image tag.
+          echo "Polling for image tag ${EXPECTED_TAG} in orchestrator deployment..."
+          for i in $(seq 1 60); do
+            CURRENT=$(kubectl get deployment orchestrator -n backend \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+            if echo "${CURRENT}" | grep -q "${EXPECTED_TAG}"; then
+              echo "ArgoCD synced: ${CURRENT}"
+              # Now wait for the new pods to actually be ready.
+              kubectl rollout status deployment/orchestrator -n backend --timeout=180s
+              echo "Rollout complete."
+              exit 0
+            fi
+            echo "  attempt ${i}/60: image=${CURRENT}, waiting for ${EXPECTED_TAG}"
+            sleep 5
+          done
+          echo "WARNING: Timed out waiting for ${EXPECTED_TAG} (current: ${CURRENT})"
+          echo "Running e2e tests against whatever is deployed."
+
+      - name: Run e2e tests
+        env:
+          CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
+        run: |
+          UID_SUFFIX=$(date +%s)
+          go run ./cmd/crawbl test e2e \
+            --base-url https://dev.api.crawbl.com \
+            --e2e-token "${CRAWBL_E2E_TOKEN}" \
+            --uid "ci-e2e-${UID_SUFFIX}" \
+            --email "ci-e2e-${UID_SUFFIX}@crawbl.test" \
+            --timeout 15s

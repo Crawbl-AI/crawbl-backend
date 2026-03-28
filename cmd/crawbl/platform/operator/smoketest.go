@@ -1,5 +1,4 @@
-// Package main provides smoketest command.
-package main
+package operator
 
 import (
 	"context"
@@ -12,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Smoke test default timeouts.
 const (
 	defaultHTTPClientTimeout   = 5 * time.Second
 	defaultSmokeTestTimeout    = 15 * time.Second

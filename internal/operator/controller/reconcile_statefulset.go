@@ -119,7 +119,7 @@ func buildInitContainer(bootstrapImage, envSecretRefName string) corev1.Containe
 		Name:            "bootstrap-config",
 		Image:           bootstrapImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"/userswarm-operator", "bootstrap"},
+		Command:         []string{"/crawbl", "platform", "operator", "bootstrap"},
 		Args: []string{
 			"--bootstrap-config=/bootstrap/config.toml",
 			"--live-config=/zeroclaw-data/.zeroclaw/config.toml",
