@@ -26,9 +26,8 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
-// backupInterval is how often periodic backups run. A backup Job is only
-// created if at least this much time has passed since the last successful one.
-const backupInterval = 1 * time.Hour
+// defaultBackupInterval is the fallback if BackupInterval is not set on the reconciler.
+const defaultBackupInterval = 12 * time.Hour
 
 // backupAnnotationLastTime is the annotation key stamped on the UserSwarm CR
 // after a successful backup. The value is an RFC3339 timestamp.
@@ -51,9 +50,13 @@ func (r *UserSwarmReconciler) reconcileBackupJob(ctx context.Context, swarm *cra
 	}
 
 	// Check if enough time has passed since the last backup.
+	interval := r.BackupInterval
+	if interval == 0 {
+		interval = defaultBackupInterval
+	}
 	if lastBackup, ok := swarm.Annotations[backupAnnotationLastTime]; ok {
 		if t, err := time.Parse(time.RFC3339, lastBackup); err == nil {
-			if time.Since(t) < backupInterval {
+			if time.Since(t) < interval {
 				return nil
 			}
 		}

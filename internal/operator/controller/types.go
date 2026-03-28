@@ -4,6 +4,8 @@
 package controller
 
 import (
+	"time"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -63,6 +65,8 @@ type UserSwarmReconciler struct {
 	// BackupBucket is the S3 bucket for PVC backups (e.g. "crawbl-backups").
 	// Empty means backups are disabled.
 	BackupBucket string
+	// BackupInterval is how often periodic backups run. Zero uses the default (12h).
+	BackupInterval time.Duration
 	// BackupRegion is the AWS region for S3 (e.g. "eu-central-1").
 	BackupRegion string
 	// BackupSecretName is the K8s Secret with AWS credentials for backup (access-key-id, secret-access-key).

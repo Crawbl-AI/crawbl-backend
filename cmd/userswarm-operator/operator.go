@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,6 +87,7 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 		BackupBucket:     os.Getenv("USERSWARM_BACKUP_BUCKET"),
 		BackupRegion:     os.Getenv("USERSWARM_BACKUP_REGION"),
 		BackupSecretName: os.Getenv("USERSWARM_BACKUP_SECRET_NAME"),
+		BackupInterval:   parseDuration(os.Getenv("USERSWARM_BACKUP_INTERVAL")),
 	}).SetupWithManager(mgr); err != nil {
 		return err
 	}
@@ -98,5 +100,16 @@ func runOperatorWithOptions(metricsAddr, probeAddr string, enableLeaderElection 
 	}
 
 	return mgr.Start(ctrl.SetupSignalHandler())
+}
+
+func parseDuration(s string) time.Duration {
+	if s == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
