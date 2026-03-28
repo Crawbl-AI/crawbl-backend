@@ -21,6 +21,7 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // Default HTTP client timeout for runtime API calls.
@@ -88,7 +89,7 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 		return nil, merrors.ErrInvalidInput
 	}
 
-	desired := c.desiredUserSwarm(opts)
+	desired := c.desiredUserSwarm(ctx, opts)
 
 	var actual crawblv1alpha1.UserSwarm
 	err := c.client.Get(ctx, client.ObjectKey{Name: desired.Name}, &actual)
@@ -206,7 +207,7 @@ func (c *userSwarmClient) getRuntimeState(ctx context.Context, swarmName string)
 	}, nil
 }
 
-func (c *userSwarmClient) desiredUserSwarm(opts *EnsureRuntimeOpts) *crawblv1alpha1.UserSwarm {
+func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRuntimeOpts) *crawblv1alpha1.UserSwarm {
 	name := userswarmName(opts.WorkspaceID)
 	tomlOverrides := strings.TrimSpace(c.config.TOMLOverrides)
 	if tomlOverrides == "" {
@@ -216,9 +217,19 @@ func (c *userSwarmClient) desiredUserSwarm(opts *EnsureRuntimeOpts) *crawblv1alp
 		tomlOverrides = "[gateway]\nhost = \"0.0.0.0\"\nrequire_pairing = false\nallow_public_bind = true"
 	}
 
+	labels := map[string]string{}
+	// Read principal from context to detect e2e users. The auth middleware
+	// stores it, so it's available throughout the request lifecycle.
+	if principal, ok := httpserver.PrincipalFromContext(ctx); ok {
+		if strings.HasPrefix(principal.Subject, "e2e-") {
+			labels["crawbl.ai/e2e"] = "true"
+		}
+	}
+
 	sw := &crawblv1alpha1.UserSwarm{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:   name,
+			Labels: labels,
 		},
 		Spec: crawblv1alpha1.UserSwarmSpec{
 			UserID: opts.UserID,

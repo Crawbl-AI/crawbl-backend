@@ -48,7 +48,9 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 	}
 
 	// Run a final backup before deleting the PVC, if backup is configured.
-	if r.BackupBucket != "" {
+	// Skip backup for e2e test swarms — labeled crawbl.ai/e2e=true by the
+	// orchestrator when the user's subject starts with "e2e-".
+	if r.BackupBucket != "" && swarm.Labels["crawbl.ai/e2e"] != "true" {
 		finalPending, finalErr := r.reconcileFinalBackup(ctx, swarm, runtimeNamespace)
 		if finalErr != nil {
 			return false, finalErr
