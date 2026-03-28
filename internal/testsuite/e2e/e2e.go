@@ -1,168 +1,168 @@
-// Package e2e provides the end-to-end test runner for the Crawbl orchestrator.
-// Tests run against a live environment using httpexpect for fluent HTTP assertions.
+// Package e2e provides a Cucumber/godog-based end-to-end test suite
+// for the Crawbl orchestrator. Tests are defined as .feature files
+// in Gherkin syntax and executed against a live environment.
 package e2e
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
-	"github.com/gavv/httpexpect/v2"
+	"github.com/cucumber/godog"
+	"github.com/cucumber/godog/colors"
+	_ "github.com/lib/pq"
 )
 
 // Config holds the configuration for an e2e test run.
 type Config struct {
-	BaseURL  string
-	UID      string
-	Email    string
-	Name     string
-	E2EToken string // shared secret for gateway auth bypass; empty = direct/port-forward mode
-	Verbose  bool
-	Timeout  time.Duration
+	BaseURL     string
+	UID         string
+	Email       string
+	Name        string
+	E2EToken    string
+	Verbose     bool
+	Timeout     time.Duration
+	DatabaseDSN string // postgres DSN for DB assertions (optional)
 }
 
 // Results holds the aggregate outcome of a test run.
 type Results struct {
-	Total   int
-	Passed  int
-	Failed  int
-	Cases   []CaseResult
+	Exit int
 }
 
-// CaseResult holds the outcome of a single test case.
-type CaseResult struct {
-	Suite   string
-	Name    string
-	Passed  bool
-	Error   string
-	Elapsed time.Duration
-}
-
-// Suite groups related test cases under a name.
-type Suite struct {
-	Name  string
-	Tests []Test
-}
-
-// Test is a named test case within a suite.
-type Test struct {
-	Name string
-	Fn   TestFunc
-}
-
-// TestFunc is a single e2e test. It receives an httpexpect instance with
-// auth headers pre-configured, a public (no-auth) instance, and shared state.
-type TestFunc func(auth *httpexpect.Expect, pub *httpexpect.Expect, state map[string]string)
-
-// Run executes all e2e test suites and returns aggregate results.
+// Run executes the godog test suite and returns results.
 func Run(cfg *Config) *Results {
-	reporter := &Reporter{}
-	state := map[string]string{}
+	featuresDir := findFeaturesDir()
 
-	printers := []httpexpect.Printer{}
-	if cfg.Verbose {
-		printers = append(printers, httpexpect.NewCompactPrinter(&verboseLogger{}))
+	opts := godog.Options{
+		Format:    "pretty",
+		Paths:     []string{featuresDir},
+		Output:    colors.Colored(os.Stdout),
+		Strict:    true,
+		Randomize: 0,
 	}
 
-	// Authenticated client — injects X-Firebase-UID/Email/Name on every request.
-	auth := httpexpect.WithConfig(httpexpect.Config{
-		BaseURL:  cfg.BaseURL,
-		Reporter: reporter,
-		Printers: printers,
-		Client: &http.Client{
-			Timeout: cfg.Timeout,
-			Transport: &authTransport{
-				base:     http.DefaultTransport,
-				uid:      cfg.UID,
-				email:    cfg.Email,
-				name:     cfg.Name,
-				e2eToken: cfg.E2EToken,
-			},
+	if !cfg.Verbose {
+		opts.Format = "progress"
+	}
+
+	suite := godog.TestSuite{
+		Name: "crawbl-e2e",
+		ScenarioInitializer: func(sc *godog.ScenarioContext) {
+			initScenario(sc, cfg)
 		},
-	})
-
-	// Public client — no auth headers.
-	pub := httpexpect.WithConfig(httpexpect.Config{
-		BaseURL:  cfg.BaseURL,
-		Reporter: reporter,
-		Printers: printers,
-		Client:   &http.Client{Timeout: cfg.Timeout},
-	})
-
-	suites := []Suite{
-		SuiteHealth(),
-		SuiteAuth(cfg),
-		SuiteProfile(),
-		SuiteLegal(),
-		SuiteWorkspaces(),
-		SuiteChat(cfg),
-		SuiteCleanup(),
+		Options: &opts,
 	}
 
-	results := &Results{}
-
-	for _, suite := range suites {
-		fmt.Printf("\n--- %s ---\n", suite.Name)
-		for _, t := range suite.Tests {
-			reporter.Reset()
-			start := time.Now()
-			t.Fn(auth, pub, state)
-			elapsed := time.Since(start)
-
-			cr := CaseResult{
-				Suite:   suite.Name,
-				Name:    t.Name,
-				Elapsed: elapsed,
-			}
-
-			if reporter.Failed() {
-				cr.Passed = false
-				cr.Error = reporter.Error()
-				results.Failed++
-				fmt.Printf("  FAIL %s: %s\n", t.Name, cr.Error)
-			} else {
-				cr.Passed = true
-				results.Passed++
-				fmt.Printf("  PASS %s (%s)\n", t.Name, elapsed.Truncate(time.Millisecond))
-			}
-
-			results.Cases = append(results.Cases, cr)
-			results.Total++
-		}
-	}
-
-	return results
+	return &Results{Exit: suite.Run()}
 }
 
-// PrintResults writes a human-readable test report to w.
+// PrintResults writes a summary to w.
 func PrintResults(w io.Writer, r *Results) {
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "=== E2E Test Results ===\n")
-	fmt.Fprintf(w, "Total: %d  Passed: %d  Failed: %d\n\n", r.Total, r.Passed, r.Failed)
-
-	for _, c := range r.Cases {
-		status := "PASS"
-		if !c.Passed {
-			status = "FAIL"
-		}
-		fmt.Fprintf(w, "  [%s] %s/%s (%s)\n", status, c.Suite, c.Name, c.Elapsed.Truncate(time.Millisecond))
-		if c.Error != "" {
-			fmt.Fprintf(w, "         %s\n", c.Error)
-		}
-	}
-
-	fmt.Fprintln(w)
-	if r.Failed == 0 {
-		fmt.Fprintln(w, "All tests passed.")
+	if r.Exit == 0 {
+		fmt.Fprintln(w, "All e2e tests passed.")
 	} else {
-		fmt.Fprintf(w, "%d test(s) failed.\n", r.Failed)
+		fmt.Fprintf(w, "E2e tests failed (exit code %d).\n", r.Exit)
 	}
 }
 
-// verboseLogger implements httpexpect.Logger for compact printer output.
-type verboseLogger struct{}
+func findFeaturesDir() string {
+	candidates := []string{
+		"internal/testsuite/e2e/features",
+		"features",
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	_, filename, _, ok := runtime.Caller(0)
+	if ok {
+		dir := filepath.Join(filepath.Dir(filename), "features")
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return "internal/testsuite/e2e/features"
+}
 
-func (l *verboseLogger) Logf(format string, args ...interface{}) {
-	fmt.Printf("  "+format+"\n", args...)
+// testContext holds per-scenario state shared across step definitions.
+type testContext struct {
+	cfg   *Config
+	http  *http.Client
+	db    *sql.DB
+	users map[string]*testUser
+	saved map[string]string
+	// Current response state.
+	lastStatus int
+	lastBody   []byte
+}
+
+type testUser struct {
+	alias   string
+	subject string
+	email   string
+	name    string
+}
+
+func newTestContext(cfg *Config) *testContext {
+	tc := &testContext{
+		cfg:   cfg,
+		http:  &http.Client{Timeout: cfg.Timeout},
+		users: make(map[string]*testUser),
+		saved: make(map[string]string),
+	}
+
+	if cfg.DatabaseDSN != "" {
+		db, err := sql.Open("postgres", cfg.DatabaseDSN)
+		if err == nil {
+			db.SetMaxOpenConns(2)
+			db.SetMaxIdleConns(1)
+			tc.db = db
+		}
+	}
+
+	return tc
+}
+
+// cleanupTestUsers deletes all test users created during this scenario
+// by calling DELETE /v1/auth/delete for each.
+func (tc *testContext) cleanupTestUsers() {
+	for alias := range tc.users {
+		body := map[string]any{
+			"reason":      "e2e-cleanup",
+			"description": "automatic post-scenario cleanup",
+		}
+		_, _ = tc.doRequest("DELETE", "/v1/auth/delete", alias, body)
+	}
+}
+
+func (tc *testContext) cleanup() {
+	if tc.db != nil {
+		_ = tc.db.Close()
+	}
+}
+
+func initScenario(sc *godog.ScenarioContext, cfg *Config) {
+	tc := newTestContext(cfg)
+
+	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
+		// Clean up all test users created during this scenario.
+		tc.cleanupTestUsers()
+		tc.cleanup()
+		return ctx, nil
+	})
+
+	registerHTTPSteps(sc, tc)
+	registerDBSteps(sc, tc)
+	registerUserSteps(sc, tc)
+	registerAssertionSteps(sc, tc)
+	registerStateSteps(sc, tc)
 }
