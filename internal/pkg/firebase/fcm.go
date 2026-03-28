@@ -19,23 +19,6 @@ const fcmScope = "https://www.googleapis.com/auth/firebase.messaging"
 // The project ID is substituted at send time.
 const fcmEndpoint = "https://fcm.googleapis.com/v1/projects/%s/messages:send"
 
-// fcmMessage is the top-level JSON envelope for an FCM v1 send request.
-type fcmMessage struct {
-	Message fcmMessageBody `json:"message"`
-}
-
-// fcmMessageBody contains the target token and the notification payload.
-type fcmMessageBody struct {
-	Token        string          `json:"token"`
-	Notification fcmNotification `json:"notification"`
-}
-
-// fcmNotification holds the user-visible notification content.
-type fcmNotification struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
-}
-
 // NewFCMClient creates an FCM client from a Google service account JSON file.
 //
 // Parameters:

@@ -8,16 +8,6 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type pushInput struct {
-	Title   string `json:"title" jsonschema:"the notification title shown on the device"`
-	Message string `json:"message" jsonschema:"the notification body text"`
-}
-
-type pushOutput struct {
-	Sent bool   `json:"sent"`
-	Info string `json:"info"`
-}
-
 func newPushHandler(deps *Deps) sdkmcp.ToolHandlerFor[pushInput, pushOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input pushInput) (*sdkmcp.CallToolResult, pushOutput, error) {
 		userID := userIDFromContext(ctx)

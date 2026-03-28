@@ -24,3 +24,20 @@ type FCMClient struct {
 	getAccessToken func(ctx context.Context) (string, error)
 	httpClient     *http.Client
 }
+
+// fcmMessage is the top-level JSON envelope for an FCM v1 send request.
+type fcmMessage struct {
+	Message fcmMessageBody `json:"message"`
+}
+
+// fcmMessageBody contains the target token and the notification payload.
+type fcmMessageBody struct {
+	Token        string          `json:"token"`
+	Notification fcmNotification `json:"notification"`
+}
+
+// fcmNotification holds the user-visible notification content.
+type fcmNotification struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}

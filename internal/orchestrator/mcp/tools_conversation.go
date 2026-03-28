@@ -13,21 +13,6 @@ import (
 // list_conversations
 // ---------------------------------------------------------------------------
 
-type listConversationsInput struct{}
-
-type listConversationsOutput struct {
-	Conversations []conversationBrief `json:"conversations"`
-}
-
-type conversationBrief struct {
-	ID        string  `json:"id"`
-	Title     string  `json:"title"`
-	Type      string  `json:"type"`
-	AgentID   *string `json:"agent_id,omitempty"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
-}
-
 func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversationsInput, listConversationsOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ listConversationsInput) (*sdkmcp.CallToolResult, listConversationsOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -68,24 +53,6 @@ func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversat
 // search_past_messages
 // ---------------------------------------------------------------------------
 
-type searchMessagesInput struct {
-	ConversationID string `json:"conversation_id" jsonschema:"ID of the conversation to search in"`
-	Query          string `json:"query" jsonschema:"search keyword or phrase"`
-	Limit          int    `json:"limit" jsonschema:"maximum results to return (default 20, max 50)"`
-}
-
-type searchMessagesOutput struct {
-	Messages []messageBrief `json:"messages"`
-	Count    int            `json:"count"`
-}
-
-type messageBrief struct {
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"created_at"`
-}
-
 func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesInput, searchMessagesOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input searchMessagesInput) (*sdkmcp.CallToolResult, searchMessagesOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -118,13 +85,6 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 		// we search the text representation for the query string.
 		// This is scoped to a verified conversation in the user's workspace.
 		query := "%" + sanitizeLike(input.Query) + "%"
-
-		type messageRow struct {
-			ID        string    `db:"id"`
-			Role      string    `db:"role"`
-			Content   string    `db:"content"`
-			CreatedAt time.Time `db:"created_at"`
-		}
 
 		var rows []messageRow
 		_, err := sess.Select("id", "role", "content::text as content", "created_at").

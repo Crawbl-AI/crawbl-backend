@@ -14,25 +14,6 @@ import (
 // get_user_profile
 // ---------------------------------------------------------------------------
 
-type userProfileInput struct{}
-
-type userProfileOutput struct {
-	ID          string  `json:"id"`
-	Email       string  `json:"email"`
-	Nickname    string  `json:"nickname"`
-	Name        string  `json:"name"`
-	Surname     string  `json:"surname"`
-	CountryCode *string `json:"country_code,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	Preferences *prefs  `json:"preferences,omitempty"`
-}
-
-type prefs struct {
-	Theme    *string `json:"theme,omitempty"`
-	Language *string `json:"language,omitempty"`
-	Currency *string `json:"currency,omitempty"`
-}
-
 func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, userProfileOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ userProfileInput) (*sdkmcp.CallToolResult, userProfileOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -75,21 +56,6 @@ func userProfileFromDomain(u *orchestrator.User) userProfileOutput {
 // ---------------------------------------------------------------------------
 // get_workspace_info
 // ---------------------------------------------------------------------------
-
-type workspaceInfoInput struct{}
-
-type workspaceInfoOutput struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	CreatedAt string        `json:"created_at"`
-	Agents    []agentBrief  `json:"agents"`
-}
-
-type agentBrief struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Role string `json:"role"`
-}
 
 func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInput, workspaceInfoOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ workspaceInfoInput) (*sdkmcp.CallToolResult, workspaceInfoOutput, error) {

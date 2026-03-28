@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
 
 // NewHandler creates the HTTP handler for the MCP server at /mcp/v1.
@@ -50,7 +52,7 @@ func withAuth(next http.Handler, deps *Deps) http.Handler {
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
 
-		userID, workspaceID, err := ValidateToken(deps.SigningKey, token)
+		userID, workspaceID, err := crawblhmac.ValidateToken(deps.SigningKey, token)
 		if err != nil {
 			deps.Logger.Warn("mcp auth failed",
 				slog.String("error", err.Error()),

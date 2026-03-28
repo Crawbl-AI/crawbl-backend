@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
 
 const testSigningKey = "test-mcp-signing-key-for-tests!!"
@@ -48,7 +50,7 @@ func TestMCPServerAuth(t *testing.T) {
 	})
 
 	t.Run("valid token passes auth", func(t *testing.T) {
-		token := GenerateToken(testSigningKey, "user-123", "ws-456")
+		token := crawblhmac.GenerateToken(testSigningKey, "user-123", "ws-456")
 
 		// Send MCP initialize request
 		initReq := map[string]any{
@@ -94,7 +96,7 @@ func TestMCPServerToolList(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	token := GenerateToken(testSigningKey, "user-123", "ws-456")
+	token := crawblhmac.GenerateToken(testSigningKey, "user-123", "ws-456")
 
 	// Step 1: Initialize session
 	sessionID := mcpInit(t, ts.URL, token)

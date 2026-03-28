@@ -9,7 +9,7 @@ import (
 	"os"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
+	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
@@ -115,7 +115,7 @@ func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncR
 	var bsOpts zeroclaw.BuildBootstrapFilesOpts
 	if cfg.MCPEndpoint != "" && cfg.MCPSigningKey != "" {
 		workspaceID := workspaceIDFromSwarmName(swarm.Name)
-		token := crawblmcp.GenerateToken(cfg.MCPSigningKey, swarm.Spec.UserID, workspaceID)
+		token := crawblhmac.GenerateToken(cfg.MCPSigningKey, swarm.Spec.UserID, workspaceID)
 		bsOpts.MCP = &zeroclaw.MCPBootstrapConfig{
 			Enabled:         true,
 			DeferredLoading: true,

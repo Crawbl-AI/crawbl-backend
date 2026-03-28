@@ -14,6 +14,7 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/gocraft/dbr/v2"
 
@@ -74,4 +75,101 @@ func contextWithIdentity(ctx context.Context, userID, workspaceID string) contex
 // newSession creates a new database session for MCP tool queries.
 func (d *Deps) newSession() *dbr.Session {
 	return d.DB.NewSession(nil)
+}
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — push notifications
+// ---------------------------------------------------------------------------
+
+type pushInput struct {
+	Title   string `json:"title" jsonschema:"the notification title shown on the device"`
+	Message string `json:"message" jsonschema:"the notification body text"`
+}
+
+type pushOutput struct {
+	Sent bool   `json:"sent"`
+	Info string `json:"info"`
+}
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — user context
+// ---------------------------------------------------------------------------
+
+type userProfileInput struct{}
+
+type userProfileOutput struct {
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	Nickname    string  `json:"nickname"`
+	Name        string  `json:"name"`
+	Surname     string  `json:"surname"`
+	CountryCode *string `json:"country_code,omitempty"`
+	CreatedAt   string  `json:"created_at"`
+	Preferences *prefs  `json:"preferences,omitempty"`
+}
+
+type prefs struct {
+	Theme    *string `json:"theme,omitempty"`
+	Language *string `json:"language,omitempty"`
+	Currency *string `json:"currency,omitempty"`
+}
+
+type workspaceInfoInput struct{}
+
+type workspaceInfoOutput struct {
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	CreatedAt string       `json:"created_at"`
+	Agents    []agentBrief `json:"agents"`
+}
+
+type agentBrief struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — conversations
+// ---------------------------------------------------------------------------
+
+type listConversationsInput struct{}
+
+type listConversationsOutput struct {
+	Conversations []conversationBrief `json:"conversations"`
+}
+
+type conversationBrief struct {
+	ID        string  `json:"id"`
+	Title     string  `json:"title"`
+	Type      string  `json:"type"`
+	AgentID   *string `json:"agent_id,omitempty"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+type searchMessagesInput struct {
+	ConversationID string `json:"conversation_id" jsonschema:"ID of the conversation to search in"`
+	Query          string `json:"query" jsonschema:"search keyword or phrase"`
+	Limit          int    `json:"limit" jsonschema:"maximum results to return (default 20, max 50)"`
+}
+
+type searchMessagesOutput struct {
+	Messages []messageBrief `json:"messages"`
+	Count    int            `json:"count"`
+}
+
+type messageBrief struct {
+	ID        string `json:"id"`
+	Role      string `json:"role"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
+}
+
+// messageRow is a database row type for message search queries.
+type messageRow struct {
+	ID        string    `db:"id"`
+	Role      string    `db:"role"`
+	Content   string    `db:"content"`
+	CreatedAt time.Time `db:"created_at"`
 }
