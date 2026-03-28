@@ -138,6 +138,13 @@ func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncR
 	phase, readyStatus, readyReason := "Progressing", "False", "Reconciling"
 	readyReplicas := observedReadyReplicas(req)
 
+	// Debug: log children keys and readyReplicas for troubleshooting.
+	childKeys := make([]string, 0, len(req.Children))
+	for k := range req.Children {
+		childKeys = append(childKeys, k)
+	}
+	slog.Info("sync", "swarm", swarm.Name, "childKeys", childKeys, "readyReplicas", readyReplicas)
+
 	if swarm.Spec.Suspend {
 		phase, readyReason = "Suspended", "Suspended"
 	} else if readyReplicas > 0 {
