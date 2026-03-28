@@ -80,6 +80,12 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 
 	// Walk through each resource: if it exists but hasn't been deleted yet, delete it.
 	// If it exists but is already terminating, just mark pending and wait.
+	// Use Background propagation so deleting a Job also deletes its pods immediately,
+	// instead of orphaning them (which causes "child pods are preserved" warnings
+	// and adds 30s requeue cycles per orphaned pod).
+	propagation := metav1.DeletePropagationBackground
+	deleteOpts := &client.DeleteOptions{PropagationPolicy: &propagation}
+
 	pending := false
 	for _, obj := range objects {
 		key := client.ObjectKeyFromObject(obj)
@@ -90,10 +96,9 @@ func (r *UserSwarmReconciler) cleanupManagedResources(ctx context.Context, swarm
 			return false, err
 		}
 
-		// Resource still exists — we need another reconcile pass to confirm it's gone.
 		pending = true
 		if obj.GetDeletionTimestamp().IsZero() {
-			if err := r.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
+			if err := r.Delete(ctx, obj, deleteOpts); err != nil && !apierrors.IsNotFound(err) {
 				return false, err
 			}
 		}
