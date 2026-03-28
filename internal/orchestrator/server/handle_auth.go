@@ -143,12 +143,21 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch workspaces before deletion so we can clean up UserSwarm CRs.
+	// Look up the user to get their internal UUID for workspace lookup.
 	sess := s.newSession()
-	workspaces, _ := s.workspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
-		Sess:   sess,
-		UserID: principal.Subject,
+	user, userErr := s.authService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
+		Sess:    sess,
+		Subject: principal.Subject,
 	})
+
+	// Fetch workspaces before deletion so we can clean up UserSwarm CRs.
+	var workspaces []*orchestrator.Workspace
+	if userErr == nil && user != nil {
+		workspaces, _ = s.workspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
+			Sess:   sess,
+			UserID: user.ID,
+		})
+	}
 
 	if mErr := s.authService.Delete(r.Context(), &orchestratorservice.DeleteOpts{
 		Sess:        sess,
@@ -161,13 +170,18 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Best-effort cleanup of UserSwarm CRs for each workspace.
-	if s.runtimeClient != nil && len(workspaces) > 0 {
+	if s.runtimeClient != nil {
 		for _, ws := range workspaces {
 			if delErr := s.runtimeClient.DeleteRuntime(r.Context(), ws.ID); delErr != nil {
 				s.logger.Warn("failed to delete userswarm on account deletion",
 					"workspace_id", ws.ID,
 					"user", principal.Subject,
 					"error", delErr,
+				)
+			} else {
+				s.logger.Info("deleted userswarm on account deletion",
+					"workspace_id", ws.ID,
+					"user", principal.Subject,
 				)
 			}
 		}
