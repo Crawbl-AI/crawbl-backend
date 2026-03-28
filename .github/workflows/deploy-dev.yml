@@ -49,13 +49,12 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - run: doctl registry login --expiry-seconds 1200
 
-      # Docker just packages the pre-built binary (~10s vs ~8 min).
+      # Docker just packages the pre-built binary (~5s vs ~8 min).
       - name: Build and push platform image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: dockerfiles/platform.dockerfile
-          build-args: PREBUILT=prebuilt
           platforms: linux/amd64
           push: true
           tags: ${{ env.DOCR_REGISTRY }}/crawbl-platform:${{ env.IMAGE_TAG }}

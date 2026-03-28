@@ -8,7 +8,7 @@ import (
 
 const (
 	buildPlatformImageRepo  = "registry.digitalocean.com/crawbl/crawbl-platform"
-	buildPlatformDockerfile = "dockerfiles/platform.dockerfile"
+	buildPlatformDockerfile = "dockerfiles/platform-full.dockerfile"
 )
 
 func newBuildPlatformCommand() *cobra.Command {
