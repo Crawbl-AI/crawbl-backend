@@ -93,7 +93,7 @@ jobs:
           git push
 
   # ---------------------------------------------------------------------------
-  # E2E tests: wait for ArgoCD to deploy, then run against the public domain
+  # E2E tests: build binary + wait for deploy in parallel, then run tests
   # ---------------------------------------------------------------------------
   e2e-test:
     needs: [update-argocd]
@@ -115,40 +115,43 @@ jobs:
       - name: Save kubeconfig
         run: doctl kubernetes cluster kubeconfig save crawbl-dev
 
-      - name: Wait for ArgoCD to sync new image
+      - name: Build e2e binary and wait for ArgoCD sync
         env:
           EXPECTED_TAG: v0.1.${{ github.run_number }}
         run: |
-          # Give ArgoCD time to detect the git commit and start syncing.
-          echo "Waiting 30s for ArgoCD to detect the new commit..."
-          sleep 30
+          # Build the crawbl binary in the background while waiting for ArgoCD.
+          go build -mod=vendor -o /tmp/crawbl ./cmd/crawbl &
+          BUILD_PID=$!
 
-          # Poll until the deployment spec has the new image tag.
+          # Poll immediately — no sleep. ArgoCD polls every 3 min by default,
+          # and the build step above takes ~30s which overlaps with the wait.
           echo "Polling for image tag ${EXPECTED_TAG} in orchestrator deployment..."
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             CURRENT=$(kubectl get deployment orchestrator -n backend \
               -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
             if echo "${CURRENT}" | grep -q "${EXPECTED_TAG}"; then
               echo "ArgoCD synced: ${CURRENT}"
-              # Now wait for the new pods to actually be ready.
               kubectl rollout status deployment/orchestrator -n backend --timeout=180s
               echo "Rollout complete."
-              exit 0
+              break
             fi
-            echo "  attempt ${i}/60: image=${CURRENT}, waiting for ${EXPECTED_TAG}"
+            echo "  attempt ${i}/90: image=${CURRENT}"
             sleep 5
           done
-          echo "WARNING: Timed out waiting for ${EXPECTED_TAG} (current: ${CURRENT})"
-          echo "Running e2e tests against whatever is deployed."
+
+          # Wait for the Go build to finish.
+          wait $BUILD_PID
+          echo "Binary built."
 
       - name: Run e2e tests
         env:
           CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
         run: |
           UID_SUFFIX=$(date +%s)
-          go run -mod=vendor ./cmd/crawbl test e2e \
+          /tmp/crawbl test e2e \
             --base-url https://dev.api.crawbl.com \
             --e2e-token "${CRAWBL_E2E_TOKEN}" \
             --uid "ci-e2e-${UID_SUFFIX}" \
             --email "ci-e2e-${UID_SUFFIX}@crawbl.test" \
-            --timeout 15s
+            --timeout 15s \
+            -v
