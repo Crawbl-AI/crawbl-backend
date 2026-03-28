@@ -29,6 +29,10 @@ const (
 type Config struct {
 	// Port is the TCP port on which the server listens for incoming connections.
 	Port string
+
+	// E2EToken is a shared secret that enables the dev-only /v1/e2e/query endpoint.
+	// When empty, the endpoint is not registered. Must never be set in production.
+	E2EToken string
 }
 
 // NewServerOpts contains all dependencies required to create a new Server instance.

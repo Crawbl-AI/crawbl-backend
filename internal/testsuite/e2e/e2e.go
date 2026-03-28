@@ -5,7 +5,6 @@ package e2e
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +15,8 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
+	"github.com/gocraft/dbr/v2"
+	"github.com/gocraft/dbr/v2/dialect"
 	_ "github.com/lib/pq"
 )
 
@@ -95,11 +96,11 @@ func findFeaturesDir() string {
 
 // testContext holds per-scenario state shared across step definitions.
 type testContext struct {
-	cfg   *Config
-	http  *http.Client
-	db    *sql.DB
-	users map[string]*testUser
-	saved map[string]string
+	cfg    *Config
+	http   *http.Client
+	dbConn *dbr.Connection
+	users  map[string]*testUser
+	saved  map[string]string
 	// Current response state.
 	lastStatus int
 	lastBody   []byte
@@ -121,11 +122,12 @@ func newTestContext(cfg *Config) *testContext {
 	}
 
 	if cfg.DatabaseDSN != "" {
-		db, err := sql.Open("postgres", cfg.DatabaseDSN)
+		conn, err := dbr.Open("postgres", cfg.DatabaseDSN, nil)
 		if err == nil {
-			db.SetMaxOpenConns(2)
-			db.SetMaxIdleConns(1)
-			tc.db = db
+			conn.Dialect = dialect.PostgreSQL
+			conn.SetMaxOpenConns(2)
+			conn.SetMaxIdleConns(1)
+			tc.dbConn = conn
 		}
 	}
 
@@ -145,8 +147,8 @@ func (tc *testContext) cleanupTestUsers() {
 }
 
 func (tc *testContext) cleanup() {
-	if tc.db != nil {
-		_ = tc.db.Close()
+	if tc.dbConn != nil {
+		_ = tc.dbConn.Close()
 	}
 }
 
@@ -154,7 +156,6 @@ func initScenario(sc *godog.ScenarioContext, cfg *Config) {
 	tc := newTestContext(cfg)
 
 	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
-		// Clean up all test users created during this scenario.
 		tc.cleanupTestUsers()
 		tc.cleanup()
 		return ctx, nil

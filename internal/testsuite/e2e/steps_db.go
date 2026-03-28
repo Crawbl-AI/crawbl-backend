@@ -1,11 +1,18 @@
+// Package e2e — database assertion step definitions.
+// Each step queries the orchestrator's Postgres database to verify
+// that API operations produced the expected data. Steps are skipped
+// gracefully when no --database-dsn is provided.
 package e2e
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/cucumber/godog"
+	"github.com/gocraft/dbr/v2"
 )
 
+// registerDBSteps binds all Gherkin phrases that assert database state.
 func registerDBSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the database should have a user with subject "([^"]*)"$`, tc.dbHasUserWithSubject)
 	sc.Step(`^the database should have (\d+) workspace(?:s)? for subject "([^"]*)"$`, tc.dbWorkspaceCountForSubject)
@@ -19,23 +26,44 @@ func registerDBSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the database user "([^"]*)" should have is_deleted "([^"]*)"$`, tc.dbUserIsDeleted)
 }
 
+// sess returns a dbr session for DB queries, or nil if not configured.
+func (tc *testContext) sess() *dbr.Session {
+	if tc.dbConn == nil {
+		return nil
+	}
+	return tc.dbConn.NewSession(nil)
+}
+
+// resolveSubject maps a user alias (e.g. "alice") to its generated subject ID.
 func (tc *testContext) resolveSubject(alias string) string {
-	user := tc.users[alias]
-	if user != nil {
+	if user := tc.users[alias]; user != nil {
 		return user.subject
 	}
 	return alias
 }
 
+// queryCount runs a raw COUNT query and returns the result.
+func (tc *testContext) queryCount(query string, args ...any) (int, error) {
+	s := tc.sess()
+	if s == nil {
+		return 0, nil
+	}
+	var count int
+	row := s.QueryRow(query, args...)
+	if err := row.Scan(&count); err != nil {
+		return 0, fmt.Errorf("DB query failed: %w", err)
+	}
+	return count, nil
+}
+
 func (tc *testContext) dbHasUserWithSubject(alias string) error {
-	if tc.db == nil {
-		return nil // skip DB assertions if no connection
+	if tc.dbConn == nil {
+		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var count int
-	err := tc.db.QueryRow("SELECT COUNT(*) FROM users WHERE subject = $1", subject).Scan(&count)
+	count, err := tc.queryCount("SELECT COUNT(*) FROM users WHERE subject = $1", subject)
 	if err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return err
 	}
 	if count == 0 {
 		return fmt.Errorf("no user with subject %q in database", subject)
@@ -44,97 +72,92 @@ func (tc *testContext) dbHasUserWithSubject(alias string) error {
 }
 
 func (tc *testContext) dbWorkspaceCountForSubject(expected int, alias string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var count int
-	err := tc.db.QueryRow(`
-		SELECT COUNT(*) FROM workspaces w
-		JOIN users u ON u.id = w.user_id
-		WHERE u.subject = $1`, subject).Scan(&count)
+	count, err := tc.queryCount(`
+		SELECT COUNT(*) FROM workspaces
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, subject)
 	if err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return err
 	}
 	if count != expected {
-		return fmt.Errorf("expected %d workspaces for %q, got %d", expected, alias, count)
+		return fmt.Errorf("expected %d workspace(s) for %q, got %d", expected, alias, count)
 	}
 	return nil
 }
 
 func (tc *testContext) dbAgentCountForSubject(expected int, alias string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var count int
-	err := tc.db.QueryRow(`
-		SELECT COUNT(*) FROM agents a
-		JOIN workspaces w ON w.id = a.workspace_id
-		JOIN users u ON u.id = w.user_id
-		WHERE u.subject = $1`, subject).Scan(&count)
+	count, err := tc.queryCount(`
+		SELECT COUNT(*) FROM agents
+		JOIN workspaces ON workspaces.id = agents.workspace_id
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, subject)
 	if err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return err
 	}
 	if count != expected {
-		return fmt.Errorf("expected %d agents for %q, got %d", expected, alias, count)
+		return fmt.Errorf("expected %d agent(s) for %q, got %d", expected, alias, count)
 	}
 	return nil
 }
 
 func (tc *testContext) dbConversationCountForSubject(expected int, alias string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var count int
-	err := tc.db.QueryRow(`
-		SELECT COUNT(*) FROM conversations c
-		JOIN workspaces w ON w.id = c.workspace_id
-		JOIN users u ON u.id = w.user_id
-		WHERE u.subject = $1`, subject).Scan(&count)
+	count, err := tc.queryCount(`
+		SELECT COUNT(*) FROM conversations
+		JOIN workspaces ON workspaces.id = conversations.workspace_id
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, subject)
 	if err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return err
 	}
 	if count != expected {
-		return fmt.Errorf("expected %d conversations for %q, got %d", expected, alias, count)
+		return fmt.Errorf("expected %d conversation(s) for %q, got %d", expected, alias, count)
 	}
 	return nil
 }
 
 func (tc *testContext) dbMessageCountForSubject(expected int, alias string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var count int
-	err := tc.db.QueryRow(`
-		SELECT COUNT(*) FROM messages m
-		JOIN conversations c ON c.id = m.conversation_id
-		JOIN workspaces w ON w.id = c.workspace_id
-		JOIN users u ON u.id = w.user_id
-		WHERE u.subject = $1`, subject).Scan(&count)
+	count, err := tc.queryCount(`
+		SELECT COUNT(*) FROM messages
+		JOIN conversations ON conversations.id = messages.conversation_id
+		JOIN workspaces ON workspaces.id = conversations.workspace_id
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, subject)
 	if err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return err
 	}
 	if count != expected {
-		return fmt.Errorf("expected %d messages for %q, got %d", expected, alias, count)
+		return fmt.Errorf("expected %d message(s) for %q, got %d", expected, alias, count)
 	}
 	return nil
 }
 
 func (tc *testContext) dbHasPushToken(token, alias string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var count int
-	err := tc.db.QueryRow(`
-		SELECT COUNT(*) FROM user_push_tokens pt
-		JOIN users u ON u.id = pt.user_id
-		WHERE u.subject = $1 AND pt.push_token = $2`, subject, token).Scan(&count)
+	count, err := tc.queryCount(`
+		SELECT COUNT(*) FROM user_push_tokens
+		JOIN users ON users.id = user_push_tokens.user_id
+		WHERE users.subject = $1 AND user_push_tokens.push_token = $2`, subject, token)
 	if err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return err
 	}
 	if count == 0 {
 		return fmt.Errorf("no push token %q for subject %q", token, alias)
@@ -143,13 +166,14 @@ func (tc *testContext) dbHasPushToken(token, alias string) error {
 }
 
 func (tc *testContext) dbUserHasNickname(alias, expected string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
+	s := tc.sess()
 	var got string
-	err := tc.db.QueryRow("SELECT nickname FROM users WHERE subject = $1", subject).Scan(&got)
-	if err != nil {
+	row := s.QueryRow("SELECT nickname FROM users WHERE subject = $1", subject)
+	if err := row.Scan(&got); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
 	if got != expected {
@@ -159,29 +183,31 @@ func (tc *testContext) dbUserHasNickname(alias, expected string) error {
 }
 
 func (tc *testContext) dbUserHasCountryCode(alias, expected string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	var got *string
-	err := tc.db.QueryRow("SELECT country_code FROM users WHERE subject = $1", subject).Scan(&got)
-	if err != nil {
+	s := tc.sess()
+	var got sql.NullString
+	row := s.QueryRow("SELECT country_code FROM users WHERE subject = $1", subject)
+	if err := row.Scan(&got); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
-	if got == nil || *got != expected {
+	if !got.Valid || got.String != expected {
 		return fmt.Errorf("expected country_code %q for %q, got %v", expected, alias, got)
 	}
 	return nil
 }
 
 func (tc *testContext) dbUserHasDeletedAt(alias string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
+	s := tc.sess()
 	var hasDeletedAt bool
-	err := tc.db.QueryRow("SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject).Scan(&hasDeletedAt)
-	if err != nil {
+	row := s.QueryRow("SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
+	if err := row.Scan(&hasDeletedAt); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
 	if !hasDeletedAt {
@@ -191,13 +217,14 @@ func (tc *testContext) dbUserHasDeletedAt(alias string) error {
 }
 
 func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
-	if tc.db == nil {
+	if tc.dbConn == nil {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
+	s := tc.sess()
 	var isDeleted bool
-	err := tc.db.QueryRow("SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject).Scan(&isDeleted)
-	if err != nil {
+	row := s.QueryRow("SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
+	if err := row.Scan(&isDeleted); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
 	got := fmt.Sprintf("%v", isDeleted)
