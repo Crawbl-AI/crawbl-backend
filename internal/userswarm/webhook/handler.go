@@ -118,7 +118,7 @@ func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncR
 		token := crawblhmac.GenerateToken(cfg.MCPSigningKey, swarm.Spec.UserID, workspaceID)
 		bsOpts.MCP = &zeroclaw.MCPBootstrapConfig{
 			Enabled:         true,
-			DeferredLoading: true,
+			DeferredLoading: false,
 			Servers: []zeroclaw.MCPServerBootstrapConfig{{
 				Name:            "orchestrator",
 				Transport:       "http",
