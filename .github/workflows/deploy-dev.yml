@@ -15,11 +15,11 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Build Go binary, Docker images, push, upload artifact
+  # Build Go binary and upload as artifact
   # ---------------------------------------------------------------------------
-  build:
+  build-binary:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -31,9 +31,6 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # Explicit Go build cache — keyed on source files, with fallback.
-      # setup-go cache: true only keys on go.sum which doesn't help with
-      # vendored deps and cross-compilation.
       - name: Restore Go build cache
         uses: actions/cache@v4
         with:
@@ -43,6 +40,8 @@ jobs:
             go-build-${{ runner.os }}-
 
       - name: Build crawbl binary
+        env:
+          GOMAXPROCS: "2"
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
@@ -55,6 +54,36 @@ jobs:
           path: crawbl
           retention-days: 1
 
+  # ---------------------------------------------------------------------------
+  # Build and push Docker images in parallel (matrix strategy)
+  # ---------------------------------------------------------------------------
+  build-images:
+    needs: [build-binary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - component: platform
+            context: .
+            file: dockerfiles/platform.dockerfile
+            image: crawbl-platform
+          - component: auth-filter
+            context: cmd/envoy-auth-filter
+            file: dockerfiles/envoy-auth-filter.dockerfile
+            image: envoy-auth-filter
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download pre-built binary for platform image.
+      - name: Download binary artifact
+        if: matrix.component == 'platform'
+        uses: actions/download-artifact@v4
+        with:
+          name: crawbl-binary
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Login to DOCR
@@ -63,32 +92,22 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - run: doctl registry login --expiry-seconds 1200
 
-      # Docker just COPYs the pre-built binary — ~5 seconds.
-      - name: Build and push platform image
+      - name: Build and push ${{ matrix.component }}
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: dockerfiles/platform.dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           platforms: linux/amd64
           push: true
-          tags: ${{ env.DOCR_REGISTRY }}/crawbl-platform:${{ env.IMAGE_TAG }}
-
-      - name: Build and push auth filter
-        uses: docker/build-push-action@v6
-        with:
-          context: cmd/envoy-auth-filter
-          file: dockerfiles/envoy-auth-filter.dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.DOCR_REGISTRY }}/envoy-auth-filter:${{ env.IMAGE_TAG }}
-          cache-from: type=gha,scope=auth-filter
-          cache-to: type=gha,mode=max,scope=auth-filter
+          tags: ${{ env.DOCR_REGISTRY }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+          cache-from: type=registry,ref=${{ env.DOCR_REGISTRY }}/${{ matrix.image }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCR_REGISTRY }}/${{ matrix.image }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
 
   # ---------------------------------------------------------------------------
   # Update image tags in crawbl-argocd-apps
   # ---------------------------------------------------------------------------
   update-argocd:
-    needs: [build]
+    needs: [build-images]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
