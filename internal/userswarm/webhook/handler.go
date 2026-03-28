@@ -9,7 +9,7 @@ import (
 	"os"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/mcp"
+	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )

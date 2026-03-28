@@ -15,7 +15,8 @@ import (
 	"github.com/spf13/cobra"
 
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/mcp"
+	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
@@ -215,12 +216,12 @@ func buildMCPHandler(
 		return nil
 	}
 
-	var fcm *crawblmcp.FCMClient
+	var fcm *firebase.FCMClient
 	fcmProject := strings.TrimSpace(os.Getenv("CRAWBL_FCM_PROJECT_ID"))
 	fcmSAPath := strings.TrimSpace(os.Getenv("CRAWBL_FCM_SERVICE_ACCOUNT_PATH"))
 	if fcmProject != "" && fcmSAPath != "" {
 		var err error
-		fcm, err = crawblmcp.NewFCMClient(fcmProject, fcmSAPath)
+		fcm, err = firebase.NewFCMClient(fcmProject, fcmSAPath)
 		if err != nil {
 			logger.Error("failed to create FCM client, push notifications disabled", "error", err)
 		} else {
