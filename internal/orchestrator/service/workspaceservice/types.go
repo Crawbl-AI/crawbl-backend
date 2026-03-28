@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	workspacerepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // workspaceRepo is a type alias for the WorkspaceRepo interface from the
@@ -26,7 +26,7 @@ type service struct {
 
 	// runtimeClient provides access to the swarm runtime orchestration
 	// layer for querying and ensuring runtime status for workspaces.
-	runtimeClient runtimeclient.Client
+	runtimeClient userswarmclient.Client
 
 	// logger provides structured logging for diagnostic output,
 	// warnings, and error reporting within the service.

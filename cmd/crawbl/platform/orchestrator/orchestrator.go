@@ -21,7 +21,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
@@ -133,32 +133,32 @@ func mustBuildRepos(logger *slog.Logger) (
 	}
 }
 
-func buildRuntimeClient(logger *slog.Logger) (runtimeclient.Client, error) {
-	cfg := runtimeclient.Config{
-		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", runtimeclient.DriverFake),
-		FakeReplyPrefix: envOrDefault("CRAWBL_RUNTIME_FAKE_REPLY_PREFIX", runtimeclient.DefaultFakeReplyPrefix),
-		UserSwarm: runtimeclient.UserSwarmConfig{
-			RuntimeNamespace:    envOrDefault("CRAWBL_RUNTIME_NAMESPACE", runtimeclient.DefaultRuntimeNamespace),
+func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
+	cfg := userswarmclient.Config{
+		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", userswarmclient.DriverFake),
+		FakeReplyPrefix: envOrDefault("CRAWBL_RUNTIME_FAKE_REPLY_PREFIX", userswarmclient.DefaultFakeReplyPrefix),
+		UserSwarm: userswarmclient.UserSwarmConfig{
+			RuntimeNamespace:    envOrDefault("CRAWBL_RUNTIME_NAMESPACE", userswarmclient.DefaultRuntimeNamespace),
 			Image:               strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE")),
 			ImagePullSecretName: strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE_PULL_SECRET")),
-			StorageSize:         envOrDefault("CRAWBL_RUNTIME_STORAGE_SIZE", runtimeclient.DefaultRuntimeStorageSize),
+			StorageSize:         envOrDefault("CRAWBL_RUNTIME_STORAGE_SIZE", userswarmclient.DefaultRuntimeStorageSize),
 			StorageClassName:    strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_STORAGE_CLASS_NAME")),
 			DefaultProvider:     envOrDefault("CRAWBL_RUNTIME_DEFAULT_PROVIDER", "openai"),
 			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-5-mini"),
 			EnvSecretName:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_ENV_SECRET_NAME")),
 			TOMLOverrides:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_TOML_OVERRIDES")),
-			PollTimeout:         durationFromEnv("CRAWBL_RUNTIME_POLL_TIMEOUT", runtimeclient.DefaultPollTimeout),
-			PollInterval:        durationFromEnv("CRAWBL_RUNTIME_POLL_INTERVAL", runtimeclient.DefaultPollInterval),
-			Port:                int32FromEnv("CRAWBL_RUNTIME_PORT", runtimeclient.DefaultRuntimePort),
+			PollTimeout:         durationFromEnv("CRAWBL_RUNTIME_POLL_TIMEOUT", userswarmclient.DefaultPollTimeout),
+			PollInterval:        durationFromEnv("CRAWBL_RUNTIME_POLL_INTERVAL", userswarmclient.DefaultPollInterval),
+			Port:                int32FromEnv("CRAWBL_RUNTIME_PORT", userswarmclient.DefaultRuntimePort),
 		},
 	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.Driver)) {
-	case "", runtimeclient.DriverFake:
+	case "", userswarmclient.DriverFake:
 		logger.Info("configured fake runtime client")
-		return runtimeclient.NewFakeClient(cfg), nil
-	case runtimeclient.DriverUserSwarm:
-		client, err := runtimeclient.NewUserSwarmClient(cfg)
+		return userswarmclient.NewFakeClient(cfg), nil
+	case userswarmclient.DriverUserSwarm:
+		client, err := userswarmclient.NewUserSwarmClient(cfg)
 		if err != nil {
 			return nil, err
 		}

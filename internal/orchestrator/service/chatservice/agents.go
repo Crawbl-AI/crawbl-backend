@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
@@ -56,7 +56,7 @@ func resolveResponder(conversation *orchestrator.Conversation, agents []*orchest
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
 func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &runtimeclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: false,

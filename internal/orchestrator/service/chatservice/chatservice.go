@@ -2,7 +2,7 @@ package chatservice
 
 import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
@@ -13,7 +13,7 @@ func New(
 	agentRepo agentRepo,
 	conversationRepo conversationRepo,
 	messageRepo messageRepo,
-	runtimeClient runtimeclient.Client,
+	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
 ) orchestratorservice.ChatService {
 	if workspaceRepo == nil {

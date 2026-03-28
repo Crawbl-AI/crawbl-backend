@@ -8,7 +8,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -67,7 +67,7 @@ type NewServerOpts struct {
 
 	// RuntimeClient manages UserSwarm CRs for workspace provisioning and cleanup.
 	// Used by the delete handler to remove swarms when a user is deleted.
-	RuntimeClient runtimeclient.Client
+	RuntimeClient userswarmclient.Client
 }
 
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.
@@ -100,7 +100,7 @@ type Server struct {
 	broadcaster realtime.Broadcaster
 
 	// runtimeClient manages UserSwarm CRs. Used to delete swarms on user deletion.
-	runtimeClient runtimeclient.Client
+	runtimeClient userswarmclient.Client
 
 	// cfg holds the server configuration.
 	cfg *Config

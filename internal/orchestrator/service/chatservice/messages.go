@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -35,7 +35,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		return nil, mErr
 	}
 
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &runtimeclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: true,
@@ -58,7 +58,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	}
 
 	// Call ZeroClaw
-	sendOpts := &runtimeclient.SendTextOpts{
+	sendOpts := &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   opts.Content.Text,
 		SessionID: conversation.ID,

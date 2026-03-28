@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	runtimeclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
@@ -32,7 +32,7 @@ import (
 //   - logger: Structured logger for diagnostic and error logging.
 //
 // Returns an orchestratorservice.WorkspaceService implementation.
-func New(workspaceRepo workspaceRepo, runtimeClient runtimeclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+func New(workspaceRepo workspaceRepo, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
 	if workspaceRepo == nil {
 		panic("workspace service repo cannot be nil")
 	}
@@ -157,7 +157,7 @@ func (s *service) attachRuntimeStatus(ctx context.Context, workspace *orchestrat
 		return
 	}
 
-	runtimeStatus, mErr := s.runtimeClient.EnsureRuntime(ctx, &runtimeclient.EnsureRuntimeOpts{
+	runtimeStatus, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: false,
