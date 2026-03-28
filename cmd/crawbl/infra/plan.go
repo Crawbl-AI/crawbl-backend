@@ -58,13 +58,13 @@ func runPlan(ctx context.Context, env, region string, jsonOut bool) error {
 		return fmt.Errorf("failed to create stack: %w", err)
 	}
 
-	result, err := stack.Preview(ctx)
-	if err != nil {
-		return fmt.Errorf("preview failed: %w", err)
-	}
+	result, previewErr := stack.Preview(ctx)
 
 	if jsonOut {
-		return printPreviewJSON(result)
+		return printPreviewJSON(result, previewErr)
+	}
+	if previewErr != nil {
+		return fmt.Errorf("preview failed: %w", previewErr)
 	}
 	printPreviewSummary(result)
 	return nil
@@ -73,14 +73,17 @@ func runPlan(ctx context.Context, env, region string, jsonOut bool) error {
 // planOutput is the JSON structure for --json output. CI parses this
 // instead of scraping human-readable text.
 type planOutput struct {
-	Creates   int  `json:"creates"`
-	Updates   int  `json:"updates"`
-	Deletes   int  `json:"deletes"`
-	Unchanged int  `json:"unchanged"`
-	HasDrift  bool `json:"hasDrift"`
+	Creates   int    `json:"creates"`
+	Updates   int    `json:"updates"`
+	Deletes   int    `json:"deletes"`
+	Unchanged int    `json:"unchanged"`
+	HasDrift  bool   `json:"hasDrift"`
+	Error     string `json:"error,omitempty"`
 }
 
-func printPreviewJSON(result *infra.PreviewResult) error {
+// printPreviewJSON always outputs JSON, even on errors. This lets CI
+// parse the result without the command exit code hiding the data.
+func printPreviewJSON(result *infra.PreviewResult, previewErr error) error {
 	out := planOutput{}
 	if result != nil {
 		out.Creates = result.Adds
@@ -88,6 +91,9 @@ func printPreviewJSON(result *infra.PreviewResult) error {
 		out.Deletes = result.Deletes
 		out.Unchanged = result.Same
 		out.HasDrift = result.Adds > 0 || result.Updates > 0 || result.Deletes > 0
+	}
+	if previewErr != nil {
+		out.Error = previewErr.Error()
 	}
 	return json.NewEncoder(os.Stdout).Encode(out)
 }

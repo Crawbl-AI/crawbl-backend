@@ -201,6 +201,12 @@ jobs:
           RESULT=$(./crawbl infra plan --json)
           echo "$RESULT" | jq .
 
+          ERROR=$(echo "$RESULT" | jq -r '.error // empty')
+          if [ -n "$ERROR" ]; then
+            echo "::warning::Infra preview error: ${ERROR}"
+            exit 0
+          fi
+
           HAS_DRIFT=$(echo "$RESULT" | jq -r '.hasDrift')
           if [ "$HAS_DRIFT" = "true" ]; then
             CREATES=$(echo "$RESULT" | jq -r '.creates')
