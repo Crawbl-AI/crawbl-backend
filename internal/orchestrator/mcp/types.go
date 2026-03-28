@@ -95,7 +95,12 @@ type pushOutput struct {
 // Tool input/output types — user context
 // ---------------------------------------------------------------------------
 
-type userProfileInput struct{}
+// Note: empty input structs need at least one field to generate valid OpenAI tool schemas.
+// OpenAI rejects {"type":"object","additionalProperties":false} without "properties".
+
+type userProfileInput struct {
+	IncludePreferences bool `json:"include_preferences,omitempty" jsonschema:"include user preferences in response"`
+}
 
 type userProfileOutput struct {
 	ID          string  `json:"id"`
@@ -114,7 +119,9 @@ type userPrefs struct {
 	Currency *string `json:"currency,omitempty"`
 }
 
-type workspaceInfoInput struct{}
+type workspaceInfoInput struct {
+	IncludeAgents bool `json:"include_agents,omitempty" jsonschema:"include agent list in response"`
+}
 
 type workspaceInfoOutput struct {
 	ID        string       `json:"id"`
@@ -133,7 +140,9 @@ type agentBrief struct {
 // Tool input/output types — conversations
 // ---------------------------------------------------------------------------
 
-type listConversationsInput struct{}
+type listConversationsInput struct {
+	IncludeArchived bool `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
+}
 
 type listConversationsOutput struct {
 	Conversations []conversationBrief `json:"conversations"`
