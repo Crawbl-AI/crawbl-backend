@@ -58,4 +58,7 @@ type SendTextOpts struct {
 type Client interface {
 	EnsureRuntime(ctx context.Context, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error)
 	SendText(ctx context.Context, opts *SendTextOpts) (string, *merrors.Error)
+	// DeleteRuntime removes the UserSwarm CR for a workspace, triggering
+	// the operator to clean up all child resources (StatefulSet, PVC, etc.).
+	DeleteRuntime(ctx context.Context, workspaceID string) *merrors.Error
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -118,10 +119,18 @@ func (s *Server) handleAuthSignUp(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteNoContent(w)
 }
 
-// handleAuthDelete permanently deletes the authenticated user's account.
-// The request body must contain a reason and optional description for the deletion.
-// This action is irreversible and removes all user data.
+// handleAuthDelete deletes the authenticated user's account.
+// Restricted to non-production environments. In addition to soft-deleting the user,
+// it also deletes any UserSwarm CRs associated with the user's workspaces to prevent
+// orphaned swarm resources in the cluster.
 func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
+	// Block account deletion in production.
+	env := strings.ToLower(strings.TrimSpace(s.httpMiddleware.Environment))
+	if env == "production" || env == "prod" {
+		httpserver.WriteErrorResponse(w, http.StatusForbidden, "account deletion is not available")
+		return
+	}
+
 	principal, err := principalFromRequest(r)
 	if err != nil {
 		httpserver.WriteErrorResponse(w, http.StatusUnauthorized, err.Error())
@@ -134,14 +143,34 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch workspaces before deletion so we can clean up UserSwarm CRs.
+	sess := s.newSession()
+	workspaces, _ := s.workspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
+		Sess:   sess,
+		UserID: principal.Subject,
+	})
+
 	if mErr := s.authService.Delete(r.Context(), &orchestratorservice.DeleteOpts{
-		Sess:        s.newSession(),
+		Sess:        sess,
 		Principal:   principal,
 		Reason:      reqBody.Reason,
 		Description: reqBody.Description,
 	}); mErr != nil {
 		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
 		return
+	}
+
+	// Best-effort cleanup of UserSwarm CRs for each workspace.
+	if s.runtimeClient != nil && len(workspaces) > 0 {
+		for _, ws := range workspaces {
+			if delErr := s.runtimeClient.DeleteRuntime(r.Context(), ws.ID); delErr != nil {
+				s.logger.Warn("failed to delete userswarm on account deletion",
+					"workspace_id", ws.ID,
+					"user", principal.Subject,
+					"error", delErr,
+				)
+			}
+		}
 	}
 
 	httpserver.WriteNoContent(w)

@@ -49,6 +49,8 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		chatService:      opts.ChatService,
 		httpMiddleware:   opts.HTTPMiddleware,
 		broadcaster:      broadcaster,
+		runtimeClient:    opts.RuntimeClient,
+		cfg:              config,
 	}
 
 	// Build the combined handler: Socket.IO (if provided) + chi REST router.

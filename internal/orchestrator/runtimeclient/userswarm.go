@@ -255,6 +255,33 @@ func (c *userSwarmClient) desiredUserSwarm(opts *EnsureRuntimeOpts) *crawblv1alp
 	return sw
 }
 
+// DeleteRuntime deletes the UserSwarm CR for the given workspace ID.
+// The operator's finalizer handles cleanup of all child resources.
+func (c *userSwarmClient) DeleteRuntime(ctx context.Context, workspaceID string) *merrors.Error {
+	if strings.TrimSpace(workspaceID) == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	name := userswarmName(workspaceID)
+	var swarm crawblv1alpha1.UserSwarm
+	err := c.client.Get(ctx, client.ObjectKey{Name: name}, &swarm)
+	if err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil // already gone
+		}
+		return merrors.WrapStdServerError(err, "get userswarm for deletion")
+	}
+
+	if err := c.client.Delete(ctx, &swarm); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return nil
+		}
+		return merrors.WrapStdServerError(err, "delete userswarm")
+	}
+
+	return nil
+}
+
 func userswarmName(workspaceID string) string {
 	return "workspace-" + strings.ToLower(strings.TrimSpace(workspaceID))
 }

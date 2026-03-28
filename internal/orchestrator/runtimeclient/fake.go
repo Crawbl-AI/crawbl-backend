@@ -37,6 +37,10 @@ func (c *fakeClient) EnsureRuntime(_ context.Context, opts *EnsureRuntimeOpts) (
 	}, nil
 }
 
+func (c *fakeClient) DeleteRuntime(_ context.Context, _ string) *merrors.Error {
+	return nil // no-op for fake client
+}
+
 func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) (string, *merrors.Error) {
 	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
 		return "", merrors.ErrInvalidInput

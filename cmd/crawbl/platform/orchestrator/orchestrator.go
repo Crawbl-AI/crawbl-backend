@@ -90,6 +90,7 @@ func runServer() error {
 		HTTPMiddleware:   httpMiddleware,
 		Broadcaster:      broadcaster,
 		SocketIOHandler:  socketIOHandler,
+		RuntimeClient:    runtimeClient,
 	})
 
 	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)
