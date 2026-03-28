@@ -9,12 +9,17 @@ env:
   IMAGE_TAG: v0.1.${{ github.run_number }}
   DOCR_REGISTRY: registry.digitalocean.com/crawbl
 
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
 jobs:
   # ---------------------------------------------------------------------------
-  # Build Go binary, Docker images, push, and upload binary artifact for e2e
+  # Build Go binary, Docker images, push, upload artifact
   # ---------------------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -24,16 +29,25 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      # Single Go build — used for both Docker image and e2e tests (via artifact).
+      # Explicit Go build cache — keyed on source files, with fallback.
+      # setup-go cache: true only keys on go.sum which doesn't help with
+      # vendored deps and cross-compilation.
+      - name: Restore Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-${{ runner.os }}-${{ hashFiles('cmd/**/*.go', 'internal/**/*.go', 'api/**/*.go') }}
+          restore-keys: |
+            go-build-${{ runner.os }}-
+
       - name: Build crawbl binary
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
             -o crawbl ./cmd/crawbl
 
-      # Upload binary as artifact so e2e job can download it without recompiling.
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -49,7 +63,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       - run: doctl registry login --expiry-seconds 1200
 
-      # Docker just packages the pre-built binary (~5s vs ~8 min).
+      # Docker just COPYs the pre-built binary — ~5 seconds.
       - name: Build and push platform image
         uses: docker/build-push-action@v6
         with:
@@ -76,6 +90,7 @@ jobs:
   update-argocd:
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: Update ArgoCD apps with new image tags
         env:
@@ -110,10 +125,10 @@ jobs:
   e2e-test:
     needs: [update-argocd]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      # Download the pre-built binary from the build job (no recompilation).
       - name: Download binary artifact
         uses: actions/download-artifact@v4
         with:
