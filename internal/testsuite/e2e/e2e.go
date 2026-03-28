@@ -2,9 +2,12 @@
 // for the Crawbl orchestrator. Tests are defined as .feature files
 // in Gherkin syntax and executed against a live environment.
 //
-// The suite uses a single shared test user across all scenarios to avoid
-// creating excessive UserSwarm CRs in the cluster. Multi-user isolation
-// tests create additional users but are capped at 3 total.
+// The suite uses exactly 3 test users across ALL scenarios:
+//   - primary: shared across most scenarios (auth, profile, legal, workspaces, chat)
+//   - frank: used for multi-user isolation tests
+//   - grace: used for multi-user isolation tests
+//
+// This prevents UserSwarm explosion in the cluster (max 3 UserSwarms per run).
 package e2e
 
 import (
@@ -33,7 +36,7 @@ type Config struct {
 	E2EToken    string
 	Verbose     bool
 	Timeout     time.Duration
-	DatabaseDSN string // postgres DSN for DB assertions (optional)
+	DatabaseDSN string
 }
 
 // Results holds the aggregate outcome of a test run.
@@ -41,17 +44,38 @@ type Results struct {
 	Exit int
 }
 
+// suiteUsers holds the 3 fixed test users created once per suite run.
+type suiteUsers struct {
+	primary *testUser
+	frank   *testUser
+	grace   *testUser
+}
+
 // Run executes the godog test suite and returns results.
 func Run(cfg *Config) *Results {
 	featuresDir := findFeaturesDir()
 
-	// Create the shared primary test user once for the entire suite.
+	// Create exactly 3 test users for the entire suite run.
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
-	primary := &testUser{
-		alias:   "primary",
-		subject: fmt.Sprintf("e2e-primary-%s", suffix),
-		email:   fmt.Sprintf("e2e-primary-%s@crawbl.test", suffix),
-		name:    "E2E Primary",
+	users := &suiteUsers{
+		primary: &testUser{
+			alias:   "primary",
+			subject: fmt.Sprintf("e2e-primary-%s", suffix),
+			email:   fmt.Sprintf("e2e-primary-%s@crawbl.test", suffix),
+			name:    "E2E Primary",
+		},
+		frank: &testUser{
+			alias:   "frank",
+			subject: fmt.Sprintf("e2e-frank-%s", suffix),
+			email:   fmt.Sprintf("e2e-frank-%s@crawbl.test", suffix),
+			name:    "E2E Frank",
+		},
+		grace: &testUser{
+			alias:   "grace",
+			subject: fmt.Sprintf("e2e-grace-%s", suffix),
+			email:   fmt.Sprintf("e2e-grace-%s@crawbl.test", suffix),
+			name:    "E2E Grace",
+		},
 	}
 
 	opts := godog.Options{
@@ -69,15 +93,17 @@ func Run(cfg *Config) *Results {
 	suite := godog.TestSuite{
 		Name: "crawbl-e2e",
 		ScenarioInitializer: func(sc *godog.ScenarioContext) {
-			initScenario(sc, cfg, primary)
+			initScenario(sc, cfg, users)
 		},
 		Options: &opts,
 	}
 
 	exit := suite.Run()
 
-	// Clean up primary user after entire suite.
-	cleanupUser(cfg, primary)
+	// Clean up all 3 users after suite completes.
+	for _, u := range []*testUser{users.primary, users.frank, users.grace} {
+		cleanupUser(cfg, u)
+	}
 
 	return &Results{Exit: exit}
 }
@@ -134,9 +160,6 @@ type testContext struct {
 	dbConn *dbr.Connection
 	users  map[string]*testUser
 	saved  map[string]string
-	// extraUsers tracks users created in this scenario (not the primary).
-	// These get deleted in the After hook.
-	extraUsers []string
 	// Current response state.
 	lastStatus int
 	lastBody   []byte
@@ -144,13 +167,14 @@ type testContext struct {
 
 // testUser represents a test user.
 type testUser struct {
-	alias   string
-	subject string
-	email   string
-	name    string
+	alias    string
+	subject  string
+	email    string
+	name     string
+	signedUp bool // track if this user has signed up in the current suite run
 }
 
-func newTestContext(cfg *Config, primary *testUser) *testContext {
+func newTestContext(cfg *Config, users *suiteUsers) *testContext {
 	tc := &testContext{
 		cfg:   cfg,
 		http:  &http.Client{Timeout: cfg.Timeout},
@@ -158,8 +182,12 @@ func newTestContext(cfg *Config, primary *testUser) *testContext {
 		saved: make(map[string]string),
 	}
 
-	// The primary user is shared across all scenarios.
-	tc.users["primary"] = primary
+	// All 3 users are available in every scenario.
+	tc.users["primary"] = users.primary
+	tc.users["frank"] = users.frank
+	tc.users["grace"] = users.grace
+	// Also register "zach" as an alias for "frank" for cleanup scenarios.
+	tc.users["zach"] = users.frank
 
 	if cfg.DatabaseDSN != "" {
 		conn, err := dbr.Open("postgres", cfg.DatabaseDSN, nil)
@@ -174,28 +202,16 @@ func newTestContext(cfg *Config, primary *testUser) *testContext {
 	return tc
 }
 
-// cleanupExtraUsers deletes users created during this scenario (not primary).
-func (tc *testContext) cleanupExtraUsers() {
-	for _, alias := range tc.extraUsers {
-		body := map[string]any{
-			"reason":      "e2e-cleanup",
-			"description": "post-scenario cleanup",
-		}
-		_, _ = tc.doRequest("DELETE", "/v1/auth/delete", alias, body)
-	}
-}
-
 func (tc *testContext) cleanup() {
 	if tc.dbConn != nil {
 		_ = tc.dbConn.Close()
 	}
 }
 
-func initScenario(sc *godog.ScenarioContext, cfg *Config, primary *testUser) {
-	tc := newTestContext(cfg, primary)
+func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
+	tc := newTestContext(cfg, users)
 
 	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
-		tc.cleanupExtraUsers()
 		tc.cleanup()
 		return ctx, nil
 	})
