@@ -11,10 +11,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// messageRepo is the PostgreSQL implementation of the MessageRepo interface.
-// It handles message data persistence and retrieval operations.
-type messageRepo struct{}
-
 // New creates a new MessageRepo instance backed by PostgreSQL.
 // The returned repository uses the database session runner pattern for transaction support.
 func New() *messageRepo {

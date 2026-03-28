@@ -3,6 +3,10 @@
 // preferences, and push notification tokens.
 package userrepo
 
+// userRepo is the PostgreSQL implementation of the UserRepo interface.
+// It handles user data persistence and retrieval operations.
+type userRepo struct{}
+
 // userColumns defines the column names used in SELECT queries for the users table.
 // These columns map directly to the UserRow struct fields.
 var userColumns = []string{

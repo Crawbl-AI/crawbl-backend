@@ -21,29 +21,6 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
-// Config holds the configuration for a reaper run.
-type Config struct {
-	DatabaseDSN string
-	MaxAge      time.Duration
-	DryRun      bool
-}
-
-// staleUser holds the minimal fields needed to clean up a test user.
-type staleUser struct {
-	ID        string
-	Subject   string
-	Email     string
-	CreatedAt time.Time
-}
-
-// Result holds the outcome of a reaper run.
-type Result struct {
-	UsersFound   int
-	UsersReaped  int
-	SwarmsReaped int
-	Errors       int
-}
-
 // Run executes the reaper and returns a summary.
 func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	logger := slog.Default()

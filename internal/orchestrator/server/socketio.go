@@ -25,23 +25,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
-// socketNamespace is the Socket.IO namespace path that the mobile client connects to.
-const socketNamespace = "/v1"
-
-// workspaceRoomPrefix is prepended to workspace IDs to form room names.
-const workspaceRoomPrefix = "workspace:"
-
-// SocketIOConfig holds the dependencies for creating a Socket.IO server.
-type SocketIOConfig struct {
-	// Logger provides structured logging for Socket.IO operations.
-	Logger *slog.Logger
-
-
-	// RedisClient is the Redis client for the pub/sub adapter.
-	// Required for cross-pod fan-out in clustered deployments.
-	RedisClient *redis.Client
-}
-
 // NewSocketIOServer creates and configures a Socket.IO server with authentication
 // middleware, workspace room management, and Redis adapter for cross-pod event fan-out.
 //
@@ -134,18 +117,6 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(http.Header(h.Headers).Get(key))
-}
-
-// Socket event names for workspace subscription management.
-const (
-	eventWorkspaceSubscribe   = "workspace.subscribe"
-	eventWorkspaceUnsubscribe = "workspace.unsubscribe"
-	eventWorkspaceSubscribed  = "workspace.subscribed"
-)
-
-// workspaceSubscribePayload is the JSON payload for subscribe/unsubscribe events.
-type workspaceSubscribePayload struct {
-	WorkspaceIDs []string `json:"workspace_ids"`
 }
 
 // registerConnectionHandler sets up the "connection" event on the namespace.
@@ -249,15 +220,6 @@ func SocketIOHandler(io *socket.Server) http.Handler {
 // ---------------------------------------------------------------------------
 // SocketIOBroadcaster — implements realtime.Broadcaster
 // ---------------------------------------------------------------------------
-
-// SocketIOBroadcaster emits real-time events to connected clients via Socket.IO.
-// It broadcasts to workspace-scoped rooms so only clients subscribed to a given
-// workspace receive the events. When a Redis adapter is configured, events are
-// automatically fanned out across all pods.
-type SocketIOBroadcaster struct {
-	io     *socket.Server
-	logger *slog.Logger
-}
 
 // NewSocketIOBroadcaster creates a Broadcaster backed by the given Socket.IO server.
 func NewSocketIOBroadcaster(io *socket.Server, logger *slog.Logger) *SocketIOBroadcaster {

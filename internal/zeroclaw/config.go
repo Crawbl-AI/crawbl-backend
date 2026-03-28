@@ -11,7 +11,8 @@
 //
 // File layout:
 //
-//	config.go    — Operator-side types and YAML loading
+//	types.go     — All shared types, constants, and variables
+//	config.go    — Operator-side YAML loading
 //	toml.go      — Per-user TOML config generation (config.toml for the ConfigMap)
 //	markdown.go  — Markdown template builders (SOUL.md, IDENTITY.md, TOOLS.md, AGENTS.md)
 //	bootstrap.go — Init container logic: merge operator-managed keys into PVC live config
@@ -23,70 +24,6 @@ import (
 	"os"
 
 	"gopkg.in/yaml.v3"
-)
-
-// ---------------------------------------------------------------------------
-// Operator config (loaded from config/zeroclaw.yaml at startup)
-// ---------------------------------------------------------------------------
-
-// ZeroClawConfig holds cluster-wide defaults loaded from the operator's config file.
-// These values are baked into the per-user bootstrap config.toml at provisioning time.
-// The file is typically mounted as a ConfigMap in the webhook pod.
-type ZeroClawConfig struct {
-	Defaults    ZeroClawDefaults    `yaml:"defaults"`
-	HTTPRequest ZeroClawHTTPRequest `yaml:"httpRequest"`
-	WebFetch    ZeroClawWebFetch    `yaml:"webFetch"`
-	WebSearch   ZeroClawWebSearch   `yaml:"webSearch"`
-	Autonomy    ZeroClawAutonomy    `yaml:"autonomy"`
-}
-
-// ZeroClawDefaults controls global provider behavior: temperature, timeouts, retries.
-type ZeroClawDefaults struct {
-	Temperature       float64 `yaml:"temperature"`
-	Timeout           int     `yaml:"timeout"`
-	ShortTimeout      int     `yaml:"shortTimeout"`
-	ProviderRetries   uint32  `yaml:"providerRetries"`
-	ProviderBackoffMs uint64  `yaml:"providerBackoffMs"`
-}
-
-// ZeroClawHTTPRequest controls the http_request tool (raw HTTP calls from the agent).
-type ZeroClawHTTPRequest struct {
-	MaxResponseSize int      `yaml:"maxResponseSize"`
-	AllowedDomains  []string `yaml:"allowedDomains"`
-}
-
-// ZeroClawWebFetch controls the web_fetch tool (read web page content).
-type ZeroClawWebFetch struct {
-	MaxResponseSize int `yaml:"maxResponseSize"`
-}
-
-// ZeroClawWebSearch controls the web_search tool (internet search).
-type ZeroClawWebSearch struct {
-	Provider   string `yaml:"provider"`
-	MaxResults int    `yaml:"maxResults"`
-}
-
-// ZeroClawAutonomy controls what the agent can do without user approval.
-type ZeroClawAutonomy struct {
-	AllowedCommands []string `yaml:"allowedCommands"`
-	ForbiddenPaths  []string `yaml:"forbiddenPaths"`
-	AutoApprove     []string `yaml:"autoApprove"`
-}
-
-// ---------------------------------------------------------------------------
-// Defaults
-// ---------------------------------------------------------------------------
-
-// Built-in defaults used when no config file is provided or a field is missing.
-const (
-	DefaultTemperature          = 0.7
-	DefaultMaxResponseSize      = 1_000_000
-	DefaultTimeoutSecs          = 30
-	DefaultMaxResponseSizeSmall = 500_000
-	DefaultMaxResults           = 5
-	DefaultTimeoutSecsShort     = 15
-	DefaultProviderRetries      = 2
-	DefaultProviderBackoffMs    = 500
 )
 
 // DefaultConfig returns a ZeroClawConfig populated with sensible built-in defaults.

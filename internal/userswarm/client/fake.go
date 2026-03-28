@@ -9,10 +9,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-type fakeClient struct {
-	replyPrefix string
-}
-
 func NewFakeClient(config Config) Client {
 	replyPrefix := strings.TrimSpace(config.FakeReplyPrefix)
 	if replyPrefix == "" {

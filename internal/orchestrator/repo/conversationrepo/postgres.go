@@ -10,10 +10,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// conversationRepo is the PostgreSQL implementation of the ConversationRepo interface.
-// It handles conversation data persistence and retrieval operations.
-type conversationRepo struct{}
-
 // New creates a new ConversationRepo instance backed by PostgreSQL.
 // The returned repository uses the database session runner pattern for transaction support.
 func New() *conversationRepo {

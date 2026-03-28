@@ -33,14 +33,6 @@ import (
 
 )
 
-// Security constants for ZeroClaw runtime containers.
-// UID/GID 65532 is the standard "nonroot" user in distroless images.
-const (
-	runtimeUID          int64 = 65532
-	runtimeGID          int64 = 65532
-	bootstrapConfigMode int32 = 0o444 // world-readable, nobody can write
-)
-
 // ---------------------------------------------------------------------------
 // 1. ServiceAccount
 // ---------------------------------------------------------------------------

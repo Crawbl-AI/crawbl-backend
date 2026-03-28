@@ -30,15 +30,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
-// ServerConfig holds everything needed to start the webhook HTTP server.
-type ServerConfig struct {
-	// Addr is the host:port to listen on (e.g. ":8080").
-	Addr string
-	// ZeroClawCfgPath is the path to the ZeroClaw operator config YAML
-	// (usually mounted from a ConfigMap at /config/zeroclaw.yaml).
-	ZeroClawCfgPath string
-}
-
 // ListenAndServe loads configuration and starts the HTTP server.
 //
 // Steps:

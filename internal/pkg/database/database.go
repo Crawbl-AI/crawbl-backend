@@ -40,30 +40,6 @@ func ConfigFromEnv(prefix string) Config {
 	}
 }
 
-// SessionRunner defines the interface for database session operations.
-// It mirrors the dbr.Session interface methods needed for building queries.
-// This interface allows repository code to work with either a session or a transaction,
-// enabling clean transaction handling patterns.
-type SessionRunner interface {
-	// Select creates a SELECT statement for the given columns.
-	Select(column ...any) *dbr.SelectStmt
-
-	// SelectBySql creates a SELECT statement from raw SQL with optional parameters.
-	SelectBySql(query string, value ...any) *dbr.SelectStmt
-
-	// InsertInto creates an INSERT statement for the given table.
-	InsertInto(table string) *dbr.InsertStmt
-
-	// InsertBySql creates an INSERT statement from raw SQL with optional parameters.
-	InsertBySql(query string, value ...any) *dbr.InsertStmt
-
-	// Update creates an UPDATE statement for the given table.
-	Update(table string) *dbr.UpdateStmt
-
-	// DeleteFrom creates a DELETE statement for the given table.
-	DeleteFrom(table string) *dbr.DeleteStmt
-}
-
 // New creates a new database connection using the provided configuration.
 // It opens a PostgreSQL connection, configures the connection pool settings,
 // and verifies connectivity with retry logic before returning the connection.

@@ -3,7 +3,14 @@ package redisclient
 import (
 	"context"
 	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 )
+
+// redis implements the Client interface using go-redis.
+type redis struct {
+	rc *goredis.Client
+}
 
 // Default Redis connection configuration values.
 const (

@@ -30,37 +30,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/fileutil"
 )
 
-// configFilePerm is the permission for the live config file (owner read/write only).
-const configFilePerm = 0o600
-
-// ---------------------------------------------------------------------------
-// Managed key definitions
-//
-// These are the TOML keys the operator controls. Any key NOT listed here
-// belongs to ZeroClaw and is never overwritten by the merge.
-// ---------------------------------------------------------------------------
-
-var managedKeys = map[string][]string{
-	"":             {"default_provider", "default_model", "default_temperature"},
-	"autonomy":     {"level", "workspace_only", "allowed_commands", "forbidden_paths", "auto_approve", "always_ask"},
-	"http_request": {"enabled", "allowed_domains", "max_response_size", "timeout_secs", "allow_private_hosts"},
-	"web_fetch":    {"enabled", "allowed_domains", "blocked_domains", "max_response_size", "timeout_secs"},
-	"web_search":   {"enabled", "provider", "brave_api_key", "searxng_instance_url", "max_results", "timeout_secs"},
-	"gateway":      {"port", "host", "allow_public_bind", "require_pairing"},
-}
-
-// apiKeyEnvVars is the priority-ordered list of environment variables checked
-// for the LLM provider API key. The first non-empty value wins.
-var apiKeyEnvVars = []string{
-	"OPENAI_API_KEY",
-	"USERSWARM_API_KEY",
-	"ZEROCLAW_API_KEY",
-	"API_KEY",
-	"OPENROUTER_API_KEY",
-	"ANTHROPIC_API_KEY",
-	"GEMINI_API_KEY",
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------

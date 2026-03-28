@@ -10,10 +10,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// agentRepo is the PostgreSQL implementation of the AgentRepo interface.
-// It handles agent data persistence and retrieval operations.
-type agentRepo struct{}
-
 // New creates a new AgentRepo instance backed by PostgreSQL.
 // The returned repository uses the database session runner pattern for transaction support.
 func New() *agentRepo {

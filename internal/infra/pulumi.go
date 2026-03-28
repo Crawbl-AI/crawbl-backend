@@ -1,4 +1,3 @@
-// Package infra provides Pulumi-based infrastructure management for Crawbl.
 package infra
 
 import (
@@ -14,22 +13,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 )
-
-// Config holds all infrastructure configuration.
-type Config struct {
-	Environment        string
-	Region             string
-	ESCEnvironment     string // Pulumi ESC environment (e.g. "crawbl/dev")
-	ExistingVPCID  string
-	ClusterConfig  cluster.Config
-	PlatformConfig platform.Config
-}
-
-// Stack represents a Pulumi stack.
-type Stack struct {
-	stack  auto.Stack
-	config Config
-}
 
 // NewStack creates or selects a Pulumi stack.
 func NewStack(ctx context.Context, config Config) (*Stack, error) {
@@ -114,14 +97,6 @@ func exportOutputs(ctx *pulumi.Context, clusterResult *cluster.Cluster) {
 	ctx.Export("kubeconfig", clusterResult.Outputs.Kubeconfig)
 }
 
-// PreviewResult contains preview summary information.
-type PreviewResult struct {
-	Adds    int
-	Updates int
-	Deletes int
-	Same    int
-}
-
 // Preview runs a Pulumi preview.
 func (s *Stack) Preview(ctx context.Context) (*PreviewResult, error) {
 	result, err := s.stack.Preview(ctx, optpreview.ProgressStreams(os.Stdout))
@@ -144,11 +119,6 @@ func (s *Stack) Preview(ctx context.Context) (*PreviewResult, error) {
 		}
 	}
 	return summary, nil
-}
-
-// UpResult contains apply result information.
-type UpResult struct {
-	Outputs map[string]interface{}
 }
 
 // Up runs a Pulumi up to deploy infrastructure.

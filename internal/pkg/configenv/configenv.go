@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-// defaultSecretsDir is the default path to check for file-based secrets.
-const defaultSecretsDir = "/mnt/secrets"
-
 // SecretString resolves a sensitive setting by checking, in order:
 //  1. The environment variable KEY directly
 //  2. A file at $SECRETS_DIR/<KEY> (volume-mounted secrets)

@@ -10,10 +10,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// workspaceRepo is the PostgreSQL implementation of the WorkspaceRepo interface.
-// It handles workspace data persistence and retrieval operations.
-type workspaceRepo struct{}
-
 // New creates a new WorkspaceRepo instance backed by PostgreSQL.
 // The returned repository uses the database session runner pattern for transaction support.
 func New() *workspaceRepo {

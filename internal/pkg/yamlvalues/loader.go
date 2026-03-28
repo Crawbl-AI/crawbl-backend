@@ -9,11 +9,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// stackConfigFile represents the structure of Pulumi.<env>.yaml.
-type stackConfigFile struct {
-	Config map[string]interface{} `yaml:"config"`
-}
-
 // LoadStackConfig reads a key from a Pulumi stack config file (Pulumi.<env>.yaml)
 // and unmarshals it into the provided target struct.
 func LoadStackConfig(env, key string, target interface{}) error {

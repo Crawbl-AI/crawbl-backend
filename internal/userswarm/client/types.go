@@ -2,11 +2,38 @@ package client
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// Default HTTP client timeout for runtime API calls.
+const defaultHTTPTimeout = 90 * time.Second
+
+const readyConditionType = "Ready"
+
+type userSwarmClient struct {
+	client     k8sclient.Client
+	config     UserSwarmConfig
+	httpClient *http.Client
+}
+
+type webhookRequest struct {
+	Message      string  `json:"message"`
+	AgentID      *string `json:"agent_id,omitempty"`
+	SystemPrompt *string `json:"system_prompt,omitempty"`
+}
+
+type webhookResponse struct {
+	Response string `json:"response"`
+}
+
+type fakeClient struct {
+	replyPrefix string
+}
 
 const (
 	DriverFake      = "fake"

@@ -18,11 +18,6 @@ import (
 // Ensure redis implements Client at compile time.
 var _ Client = (*redis)(nil)
 
-// redis implements the Client interface using go-redis.
-type redis struct {
-	rc *goredis.Client
-}
-
 // ConfigFromEnv builds a Config from environment variables using the given prefix.
 // It reads:
 //   - {prefix}REDIS_ADDR     (default: "localhost:6379")
