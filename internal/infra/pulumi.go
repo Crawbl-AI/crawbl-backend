@@ -23,7 +23,6 @@ type Config struct {
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
-	AWSConfig      platform.AWSConfig
 }
 
 // Stack represents a Pulumi stack.
@@ -64,13 +63,8 @@ func buildProgram(infraCfg Config) pulumi.RunFunc {
 			return err
 		}
 
-		// Phase 3: Create platform services
+		// Phase 3: Create platform services (ArgoCD + AWS backup resources)
 		if err := createPlatform(ctx, infraCfg, k8sProvider); err != nil {
-			return err
-		}
-
-		// Phase 4: Create AWS resources (S3 backup bucket, IAM, Secrets Manager)
-		if err := createAWSResources(ctx, infraCfg); err != nil {
 			return err
 		}
 
@@ -108,18 +102,6 @@ func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.
 	_, err := platform.NewPlatform(ctx, "platform", platformConfig, pulumi.Provider(k8sProvider))
 	if err != nil {
 		return fmt.Errorf("create platform: %w", err)
-	}
-	return nil
-}
-
-// createAWSResources provisions AWS resources (S3 backup bucket, IAM, Secrets Manager).
-func createAWSResources(ctx *pulumi.Context, config Config) error {
-	if config.AWSConfig.Region == "" {
-		return nil // AWS not configured, skip
-	}
-	_, err := platform.NewAWSResources(ctx, config.AWSConfig)
-	if err != nil {
-		return fmt.Errorf("create AWS resources: %w", err)
 	}
 	return nil
 }

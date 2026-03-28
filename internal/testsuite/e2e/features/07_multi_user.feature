@@ -3,9 +3,12 @@ Feature: Multi-user isolation
   I must ensure users cannot see each other's data
   And each user has isolated workspaces, conversations, and messages
 
+  # Multi-user scenarios use extra users (max 2 additional per scenario).
+  # These are cleaned up after each scenario.
+
   Scenario: Two users have separate workspaces
-    Given a new test user "frank"
-    And a new test user "grace"
+    Given an extra test user "frank"
+    And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
     When user "frank" sends a GET request to "/v1/workspaces"
@@ -15,8 +18,8 @@ Feature: Multi-user isolation
     Then the saved "frank_workspace" should not equal the saved "grace_workspace"
 
   Scenario: User cannot access another user's workspace
-    Given a new test user "frank"
-    And a new test user "grace"
+    Given an extra test user "frank"
+    And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
     When user "frank" sends a GET request to "/v1/workspaces"
@@ -25,8 +28,8 @@ Feature: Multi-user isolation
     Then the response status should be 404
 
   Scenario: User cannot list another user's agents
-    Given a new test user "frank"
-    And a new test user "grace"
+    Given an extra test user "frank"
+    And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
     When user "frank" sends a GET request to "/v1/workspaces"
@@ -35,8 +38,8 @@ Feature: Multi-user isolation
     Then the response status should be 404
 
   Scenario: User cannot list another user's conversations
-    Given a new test user "frank"
-    And a new test user "grace"
+    Given an extra test user "frank"
+    And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
     When user "frank" sends a GET request to "/v1/workspaces"
@@ -45,8 +48,8 @@ Feature: Multi-user isolation
     Then the response status should be 404
 
   Scenario: Deleting one user does not affect another
-    Given a new test user "frank"
-    And a new test user "grace"
+    Given an extra test user "frank"
+    And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
     When user "frank" sends a DELETE request to "/v1/auth/delete" with JSON:
@@ -59,8 +62,8 @@ Feature: Multi-user isolation
     And the response JSON at "data.is_deleted" should equal "false"
 
   Scenario: Each user gets their own set of agents
-    Given a new test user "frank"
-    And a new test user "grace"
+    Given an extra test user "frank"
+    And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
     When user "frank" sends a GET request to "/v1/workspaces"

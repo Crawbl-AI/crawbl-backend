@@ -22,6 +22,10 @@ type Config struct {
 	ArgoCDAppsRepoURL        string
 	ArgoCDAppsTargetRevision string
 	ArgoCDRepoSSHPrivateKey  string // SSH private key for repo access
+
+	// AWS backup infrastructure
+	AWSRegion   string // AWS region (e.g. "eu-central-1"). Empty = skip AWS resources.
+	Environment string // Environment name (e.g. "dev"), used in S3 paths and Secrets Manager names.
 }
 
 // DefaultPlatformConfig returns default platform configuration.
@@ -68,6 +72,13 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 
 		if _, err := createArgoCDRootApp(ctx, name, cfg, argoDeps, opts...); err != nil {
 			return nil, fmt.Errorf("create argocd root app: %w", err)
+		}
+	}
+
+	// Create AWS backup resources (S3 bucket, IAM user, Secrets Manager)
+	if cfg.AWSRegion != "" {
+		if err := createAWSBackupResources(ctx, cfg, opts...); err != nil {
+			return nil, fmt.Errorf("create AWS backup resources: %w", err)
 		}
 	}
 
