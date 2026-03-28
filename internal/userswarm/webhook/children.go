@@ -210,7 +210,7 @@ func DesiredBackupJob(sw *crawblv1alpha1.UserSwarm, ns string, cfg *Config) *bat
 					Containers: []corev1.Container{{
 						Name:    "backup",
 						Image:   cfg.BootstrapImage,
-						Command: []string{"/crawbl", "platform", "backup"},
+						Command: []string{"/crawbl", "platform", "userswarm", "backup"},
 						Args: []string{
 							"--workspace=/zeroclaw-data/workspace",
 							"--bucket=" + cfg.BackupBucket,
@@ -284,7 +284,7 @@ func buildInitContainer(bootstrapImage, secretRef string) corev1.Container {
 		Name:            "bootstrap-config",
 		Image:           bootstrapImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"/crawbl", "platform", "bootstrap"},
+		Command:         []string{"/crawbl", "platform", "userswarm", "bootstrap"},
 		Args: []string{
 			"--bootstrap-config=/bootstrap/config.toml",
 			"--live-config=/zeroclaw-data/.zeroclaw/config.toml",

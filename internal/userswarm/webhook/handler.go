@@ -165,10 +165,11 @@ func Sync(req *SyncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *Config) *SyncR
 	}
 }
 
-// observedReadyReplicas extracts readyReplicas from the observed StatefulSet
-// in the Metacontroller sync request. Returns 0 if not found or not ready.
+// observedReadyReplicas extracts the effective ready replica count from the
+// observed StatefulSet in the Metacontroller sync request.
+// Checks readyReplicas first, then falls back to availableReplicas, then
+// updatedReplicas (K8s may populate different fields depending on version).
 func observedReadyReplicas(req *SyncRequest) int32 {
-	// Metacontroller keys observed children by "Kind.apiVersion".
 	stsGroup, ok := req.Children["StatefulSet.apps/v1"]
 	if !ok {
 		return 0
@@ -176,11 +177,24 @@ func observedReadyReplicas(req *SyncRequest) int32 {
 	for _, raw := range stsGroup {
 		var sts struct {
 			Status struct {
-				ReadyReplicas int32 `json:"readyReplicas"`
+				ReadyReplicas     int32 `json:"readyReplicas"`
+				AvailableReplicas int32 `json:"availableReplicas"`
+				Replicas          int32 `json:"replicas"`
+				UpdatedReplicas   int32 `json:"updatedReplicas"`
 			} `json:"status"`
 		}
-		if err := json.Unmarshal(raw, &sts); err == nil {
+		if err := json.Unmarshal(raw, &sts); err != nil {
+			continue
+		}
+		if sts.Status.ReadyReplicas > 0 {
 			return sts.Status.ReadyReplicas
+		}
+		if sts.Status.AvailableReplicas > 0 {
+			return sts.Status.AvailableReplicas
+		}
+		// If replicas are running and updated, consider it ready.
+		if sts.Status.Replicas > 0 && sts.Status.UpdatedReplicas > 0 {
+			return sts.Status.UpdatedReplicas
 		}
 	}
 	return 0
