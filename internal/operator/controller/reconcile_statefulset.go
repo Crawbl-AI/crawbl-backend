@@ -218,6 +218,20 @@ func buildRuntimeContainer(swarm *crawblv1alpha1.UserSwarm, envSecretRefName str
 				SubPath:   "IDENTITY.md",
 				ReadOnly:  true,
 			},
+			{
+				// TOOLS.md — tool usage instructions so the LLM knows when to use web_search, etc.
+				Name:      bootstrapConfigVolumeName(),
+				MountPath: "/zeroclaw-data/workspace/TOOLS.md",
+				SubPath:   "TOOLS.md",
+				ReadOnly:  true,
+			},
+			{
+				// AGENTS.md — role definitions for Research and Writer agents.
+				Name:      bootstrapConfigVolumeName(),
+				MountPath: "/zeroclaw-data/workspace/AGENTS.md",
+				SubPath:   "AGENTS.md",
+				ReadOnly:  true,
+			},
 		},
 		ReadinessProbe: healthProbe(),
 		LivenessProbe:  healthProbe(),
