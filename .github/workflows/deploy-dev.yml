@@ -196,13 +196,15 @@ jobs:
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
-          OUTPUT=$(./crawbl infra plan 2>&1)
-          echo "$OUTPUT"
+          RESULT=$(./crawbl infra plan --json)
+          echo "$RESULT" | jq .
 
-          # The plan summary line looks like: "+ N to create  ~ N to update  - N to delete  = N unchanged"
-          # If there are only unchanged resources, there's no drift.
-          if echo "$OUTPUT" | grep -qE '\+ [1-9]|~ [1-9]|- [1-9]'; then
-            echo "::warning::Infrastructure drift detected — review the plan output above"
+          HAS_DRIFT=$(echo "$RESULT" | jq -r '.hasDrift')
+          if [ "$HAS_DRIFT" = "true" ]; then
+            CREATES=$(echo "$RESULT" | jq -r '.creates')
+            UPDATES=$(echo "$RESULT" | jq -r '.updates')
+            DELETES=$(echo "$RESULT" | jq -r '.deletes')
+            echo "::warning::Infrastructure drift detected: ${CREATES} to create, ${UPDATES} to update, ${DELETES} to delete"
           else
             echo "No infrastructure drift detected."
           fi
