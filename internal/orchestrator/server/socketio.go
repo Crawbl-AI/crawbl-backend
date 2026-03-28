@@ -136,11 +136,21 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 	return strings.TrimSpace(http.Header(h.Headers).Get(key))
 }
 
+// Socket event names for workspace subscription management.
+const (
+	eventWorkspaceSubscribe   = "workspace.subscribe"
+	eventWorkspaceUnsubscribe = "workspace.unsubscribe"
+	eventWorkspaceSubscribed  = "workspace.subscribed"
+)
+
+// workspaceSubscribePayload is the JSON payload for subscribe/unsubscribe events.
+type workspaceSubscribePayload struct {
+	WorkspaceIDs []string `json:"workspace_ids"`
+}
+
 // registerConnectionHandler sets up the "connection" event on the namespace.
-// For each authenticated socket it:
-//   - Reads the workspaceId query parameter
-//   - Joins the socket to the workspace room
-//   - Registers a disconnect handler for cleanup logging
+// For each authenticated socket it registers workspace.subscribe/unsubscribe
+// event handlers for dynamic room management and a disconnect handler for cleanup.
 func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 	nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
@@ -148,28 +158,45 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 			return
 		}
 
-		workspaceID := extractWorkspaceID(s.Handshake())
-		if workspaceID == "" {
-			logger.Warn("socketio: missing workspaceId query param, disconnecting",
-				"socket_id", string(s.Id()),
-			)
-			s.Disconnect(true)
-			return
-		}
-
-		// Join the workspace-scoped room for targeted broadcasts.
-		room := socket.Room(workspaceRoomPrefix + workspaceID)
-		s.Join(room)
-
-		// Extract subject for logging, if available.
 		subject := principalSubjectFromSocket(s)
 
 		logger.Info("socketio: client connected",
 			"socket_id", string(s.Id()),
-			"workspace_id", workspaceID,
-			"room", string(room),
 			"subject", subject,
 		)
+
+		// workspace.subscribe — join rooms and acknowledge.
+		s.On(eventWorkspaceSubscribe, func(args ...any) {
+			ids := parseWorkspaceIDs(args)
+			if len(ids) == 0 {
+				return
+			}
+			for _, id := range ids {
+				s.Join(socket.Room(workspaceRoomPrefix + id))
+			}
+			logger.Info("socketio: workspace subscribe",
+				"socket_id", string(s.Id()),
+				"subject", subject,
+				"workspace_ids", ids,
+			)
+			s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: ids})
+		})
+
+		// workspace.unsubscribe — leave rooms.
+		s.On(eventWorkspaceUnsubscribe, func(args ...any) {
+			ids := parseWorkspaceIDs(args)
+			if len(ids) == 0 {
+				return
+			}
+			for _, id := range ids {
+				s.Leave(socket.Room(workspaceRoomPrefix + id))
+			}
+			logger.Info("socketio: workspace unsubscribe",
+				"socket_id", string(s.Id()),
+				"subject", subject,
+				"workspace_ids", ids,
+			)
+		})
 
 		s.On("disconnect", func(args ...any) {
 			reason := ""
@@ -180,12 +207,37 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 			}
 			logger.Info("socketio: client disconnected",
 				"socket_id", string(s.Id()),
-				"workspace_id", workspaceID,
 				"subject", subject,
 				"reason", reason,
 			)
 		})
 	})
+}
+
+// parseWorkspaceIDs extracts workspace IDs from a workspace.subscribe/unsubscribe event.
+func parseWorkspaceIDs(args []any) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	data, ok := args[0].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := data["workspace_ids"]
+	if !ok {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			ids = append(ids, strings.TrimSpace(s))
+		}
+	}
+	return ids
 }
 
 // SocketIOHandler returns an http.Handler that serves the Socket.IO engine.
@@ -264,55 +316,6 @@ func (b *SocketIOBroadcaster) EmitAgentStatus(ctx context.Context, workspaceID s
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-// extractTokenFromHandshake extracts the authentication token from the Socket.IO
-// handshake headers. It mirrors the REST middleware priority:
-//  1. X-Token header
-//  2. Authorization: Bearer <token>
-func extractTokenFromHandshake(h *socket.Handshake) (token, source string) {
-	if h == nil {
-		return "", "unknown"
-	}
-
-	// Check X-Token header first (primary mobile path).
-	if values, ok := h.Headers["x-token"]; ok && len(values) > 0 {
-		if t := strings.TrimSpace(values[0]); t != "" {
-			return t, "x-token"
-		}
-	}
-	// Headers may be title-cased depending on the transport.
-	if values, ok := h.Headers["X-Token"]; ok && len(values) > 0 {
-		if t := strings.TrimSpace(values[0]); t != "" {
-			return t, "x-token"
-		}
-	}
-
-	// Fallback to Authorization: Bearer (dev/tooling).
-	for _, key := range []string{"authorization", "Authorization"} {
-		if values, ok := h.Headers[key]; ok && len(values) > 0 {
-			header := strings.TrimSpace(values[0])
-			if strings.HasPrefix(header, "Bearer ") {
-				if t := strings.TrimSpace(strings.TrimPrefix(header, "Bearer ")); t != "" {
-					return t, "authorization"
-				}
-			}
-		}
-	}
-
-	return "", "unknown"
-}
-
-// extractWorkspaceID reads the workspaceId query parameter from the handshake.
-// The mobile client sends it as: io('$baseUrl/v1', { query: { workspaceId: id } }).
-func extractWorkspaceID(h *socket.Handshake) string {
-	if h == nil || h.Query == nil {
-		return ""
-	}
-	if values, ok := h.Query["workspaceId"]; ok && len(values) > 0 {
-		return strings.TrimSpace(values[0])
-	}
-	return ""
-}
 
 // principalSubjectFromSocket extracts the principal subject stored in socket.Data()
 // by the auth middleware. Returns empty string if unavailable.
