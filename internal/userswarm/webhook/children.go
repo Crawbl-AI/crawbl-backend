@@ -76,6 +76,10 @@ func DesiredConfigMap(sw *crawblv1alpha1.UserSwarm, ns string, data map[string]s
 // Holds /zeroclaw-data — config, workspace files, and any state ZeroClaw accumulates.
 // RWO because each user has a single-replica StatefulSet.
 func DesiredPVC(sw *crawblv1alpha1.UserSwarm, ns string) *corev1.PersistentVolumeClaim {
+	storageSize := sw.Spec.Storage.Size
+	if storageSize == "" {
+		storageSize = "2Gi"
+	}
 	pvc := &corev1.PersistentVolumeClaim{
 		TypeMeta:   kube.TypeMeta("v1", "PersistentVolumeClaim"),
 		ObjectMeta: objectMeta(PVCName(sw), ns, sw),
@@ -83,7 +87,7 @@ func DesiredPVC(sw *crawblv1alpha1.UserSwarm, ns string) *corev1.PersistentVolum
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(sw.Spec.Storage.Size),
+					corev1.ResourceStorage: resource.MustParse(storageSize),
 				},
 			},
 		},
@@ -322,9 +326,13 @@ func buildRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, secretRef s
 		FailureThreshold: 18, // 18 * 10s = 3 min startup budget
 	}
 
+	image := sw.Spec.Runtime.Image
+	if image == "" {
+		image = "registry.digitalocean.com/crawbl/zeroclaw:latest"
+	}
 	c := corev1.Container{
 		Name:            "zeroclaw",
-		Image:           sw.Spec.Runtime.Image,
+		Image:           image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args:            []string{runtimeMode(sw)},
 		Ports:           []corev1.ContainerPort{{Name: "http", ContainerPort: port}},
