@@ -2,8 +2,6 @@
 
 # 🧠 Crawbl
 
-**Control plane for Crawbl AI infrastructure**
-
 [![CI](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![K8s](https://img.shields.io/badge/K8s-DOKS-326CE5?logo=kubernetes&logoColor=white)]()
@@ -13,11 +11,13 @@
 
 ---
 
-The backend that powers Crawbl. When you open the app and talk to your AI agent,
-this is the server that authenticates you, routes your messages to the right agent,
-and connects your apps (Gmail, Slack, Calendar) so the agent can act on your behalf.
-It also provisions the infrastructure — spinning up isolated AI agent pods for each
-user on Kubernetes, managing their lifecycle, and tearing them down when no longer needed.
+**Control plane for Crawbl AI**
+
+- 🔐 **Auth & API** — authenticates users and serves the mobile app
+- 💬 **Chat routing** — delivers messages between you and your AI agent
+- 🔌 **Integrations** — connects Gmail, Slack, Calendar so the agent can act on your behalf
+- 🧠 **Agent management** — spins up a private AI agent for each user, configures its tools and personality
+- ☸️ **Infrastructure** — provisions and manages everything on Kubernetes via Pulumi + ArgoCD
 
 > 📚 **Full docs:** [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) · API reference, architecture, runbooks
 
