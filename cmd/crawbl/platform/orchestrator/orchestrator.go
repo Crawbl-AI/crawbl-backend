@@ -27,6 +27,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
+	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -80,6 +81,7 @@ func runServer() error {
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
 	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
 	chatService := chatservice.New(workspaceRepo, agentRepo, conversationRepo, messageRepo, runtimeClient, broadcaster)
+	integrationService := integrationservice.New(logger)
 
 	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo)
 
@@ -94,8 +96,9 @@ func runServer() error {
 		HTTPMiddleware:   httpMiddleware,
 		Broadcaster:      broadcaster,
 		SocketIOHandler:  socketIOHandler,
-		RuntimeClient:    runtimeClient,
-		MCPHandler:       mcpHandler,
+		RuntimeClient:      runtimeClient,
+		MCPHandler:         mcpHandler,
+		IntegrationService: integrationService,
 	})
 
 	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)

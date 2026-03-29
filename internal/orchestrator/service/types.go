@@ -365,3 +365,64 @@ type ChatService interface {
 	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
 	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
 }
+
+// ---------------------------------------------------------------------------
+// Integration service
+// ---------------------------------------------------------------------------
+
+// ListIntegrationsOpts contains parameters for listing available integrations.
+type ListIntegrationsOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user requesting the integration list.
+	UserID string
+}
+
+// GetOAuthConfigOpts contains parameters for getting OAuth config for a provider.
+type GetOAuthConfigOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user requesting the OAuth config.
+	UserID string
+	// Provider is the integration provider identifier (e.g., "google_calendar", "gmail").
+	Provider string
+}
+
+// OAuthCallbackOpts contains the OAuth callback parameters from the mobile app.
+type OAuthCallbackOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user completing the OAuth flow.
+	UserID string
+	// Provider is the integration provider identifier.
+	Provider string
+	// AuthorizationCode is the OAuth authorization code from the provider.
+	AuthorizationCode string
+	// CodeVerifier is the PKCE code verifier used to initiate the flow.
+	CodeVerifier string
+	// RedirectURL is the redirect URI used in the OAuth flow.
+	RedirectURL string
+}
+
+// IntegrationService manages third-party app connections via OAuth.
+// Handles listing available integrations, initiating OAuth flows,
+// and exchanging authorization codes for tokens.
+type IntegrationService interface {
+	// ListIntegrations returns all available integrations with the user's
+	// connection status for each provider.
+	//
+	// Returns a slice of IntegrationItem pointers on success, or a merrors.Error on failure.
+	ListIntegrations(ctx context.Context, opts *ListIntegrationsOpts) ([]*orchestrator.IntegrationItem, *merrors.Error)
+
+	// GetOAuthConfig returns the OAuth configuration for initiating an
+	// authorization flow with the specified provider.
+	//
+	// Returns the OAuthConfig on success, or a merrors.Error on failure.
+	GetOAuthConfig(ctx context.Context, opts *GetOAuthConfigOpts) (*orchestrator.OAuthConfig, *merrors.Error)
+
+	// HandleOAuthCallback exchanges the authorization code for tokens
+	// and stores the connection in the database.
+	//
+	// Returns a merrors.Error if the operation fails, or nil on success.
+	HandleOAuthCallback(ctx context.Context, opts *OAuthCallbackOpts) *merrors.Error
+}

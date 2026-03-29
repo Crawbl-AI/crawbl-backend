@@ -109,6 +109,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
   - `GET /v1/workspaces`
   - `GET /v1/workspaces/{id}`
   - `GET /v1/workspaces/{workspaceId}/agents`
+  - `GET /v1/workspaces/{workspaceId}/tools`
   - `GET /v1/workspaces/{workspaceId}/conversations`
   - `GET /v1/workspaces/{workspaceId}/conversations/{id}`
   - `GET /v1/workspaces/{workspaceId}/conversations/{id}/messages`

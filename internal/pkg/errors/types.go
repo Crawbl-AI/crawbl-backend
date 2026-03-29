@@ -48,6 +48,9 @@ const (
 
 	// Runtime error codes (RTMxxxx)
 	ErrCodeRuntimeNotReady = "RTM0001" // User swarm runtime is not ready
+
+	// Integration error codes (INTxxxx)
+	ErrCodeIntegrationNotConfigured = "INT0001" // Integration provider is not yet configured
 )
 
 // Predefined business errors for common error conditions.
@@ -78,6 +81,9 @@ var (
 
 	// Runtime errors
 	ErrRuntimeNotReady = NewBusinessError("Assistant is still starting", ErrCodeRuntimeNotReady)
+
+	// Integration errors
+	ErrIntegrationNotConfigured = NewBusinessError("Integration is not yet available", ErrCodeIntegrationNotConfigured)
 
 	// Validation errors (server-side, not exposed to clients)
 	ErrInvalidInput    = NewServerErrorText("invalid input provided")

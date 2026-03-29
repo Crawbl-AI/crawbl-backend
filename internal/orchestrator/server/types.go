@@ -72,6 +72,10 @@ type NewServerOpts struct {
 	// MCPHandler is the HTTP handler for the MCP server.
 	// If nil, the MCP endpoint is not mounted.
 	MCPHandler http.Handler
+
+	// IntegrationService manages third-party OAuth connections.
+	// If nil, integration endpoints return service-unavailable errors.
+	IntegrationService orchestratorservice.IntegrationService
 }
 
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.
@@ -105,6 +109,9 @@ type Server struct {
 
 	// runtimeClient manages UserSwarm CRs. Used to delete swarms on user deletion.
 	runtimeClient userswarmclient.Client
+
+	// integrationService manages third-party OAuth connections.
+	integrationService orchestratorservice.IntegrationService
 
 	// cfg holds the server configuration.
 	cfg *Config

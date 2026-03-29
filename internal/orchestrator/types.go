@@ -641,6 +641,45 @@ type Mention struct {
 	Length    int    `json:"length"`
 }
 
+// ---------------------------------------------------------------------------
+// Integration items (for API responses)
+// ---------------------------------------------------------------------------
+
+// IntegrationItem represents an available integration with its connection status.
+// Returned by GET /v1/integrations for the mobile app's Connected Apps screen.
+type IntegrationItem struct {
+	// Provider is the unique identifier for the integration (e.g., "google_calendar").
+	Provider string
+	// Name is the human-readable display name (e.g., "Google Calendar").
+	Name string
+	// Description explains what the integration does.
+	Description string
+	// IconURL is the URL to the integration's icon image.
+	IconURL string
+	// IsConnected indicates whether the user has an active OAuth connection.
+	IsConnected bool
+	// IsEnabled indicates whether the integration is available for connection.
+	// False means "coming soon" (shown but not connectable).
+	IsEnabled bool
+}
+
+// OAuthConfig contains the OAuth parameters the mobile app needs to start
+// an authorization flow via flutter_appauth.
+type OAuthConfig struct {
+	// ClientID is the OAuth client identifier for the provider.
+	ClientID string
+	// RedirectURL is the redirect URI registered with the provider.
+	RedirectURL string
+	// AuthorizationEndpoint is the provider's OAuth authorization URL.
+	AuthorizationEndpoint string
+	// TokenEndpoint is the provider's OAuth token exchange URL.
+	TokenEndpoint string
+	// Scopes is the list of OAuth scopes to request.
+	Scopes []string
+	// AdditionalParameters contains provider-specific OAuth parameters.
+	AdditionalParameters map[string]string
+}
+
 // ResolveRuntimeState determines the runtime state based on Kubernetes phase
 // and verification status. A verified swarm is always ready. Otherwise, the
 // state is derived from the phase:

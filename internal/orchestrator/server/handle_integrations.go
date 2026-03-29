@@ -3,107 +3,50 @@ package server
 import (
 	"net/http"
 
+	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
-// availableIntegrations defines all integrations the platform supports.
-// Each entry represents a third-party service users can connect via OAuth.
-// New integrations are added here as they're implemented.
-func availableIntegrations() []integrationItemResponse {
-	return []integrationItemResponse{
-		{
-			Provider:    "google_calendar",
-			Name:        "Google Calendar",
-			Description: "View and create calendar events, check availability",
-			IconURL:     "https://cdn.crawbl.com/integrations/google-calendar.png",
-			IsConnected: false,
-			IsEnabled:   true,
-		},
-		{
-			Provider:    "gmail",
-			Name:        "Gmail",
-			Description: "Search and read emails, draft responses",
-			IconURL:     "https://cdn.crawbl.com/integrations/gmail.png",
-			IsConnected: false,
-			IsEnabled:   true,
-		},
-		{
-			Provider:    "slack",
-			Name:        "Slack",
-			Description: "Send messages, search channels, manage notifications",
-			IconURL:     "https://cdn.crawbl.com/integrations/slack.png",
-			IsConnected: false,
-			IsEnabled:   false,
-		},
-		{
-			Provider:    "jira",
-			Name:        "Jira",
-			Description: "Search and manage issues, track projects",
-			IconURL:     "https://cdn.crawbl.com/integrations/jira.png",
-			IsConnected: false,
-			IsEnabled:   false,
-		},
-		{
-			Provider:    "notion",
-			Name:        "Notion",
-			Description: "Search pages, create documents, manage databases",
-			IconURL:     "https://cdn.crawbl.com/integrations/notion.png",
-			IsConnected: false,
-			IsEnabled:   false,
-		},
-		{
-			Provider:    "asana",
-			Name:        "Asana",
-			Description: "Manage tasks, track project progress",
-			IconURL:     "https://cdn.crawbl.com/integrations/asana.png",
-			IsConnected: false,
-			IsEnabled:   false,
-		},
-		{
-			Provider:    "github",
-			Name:        "GitHub",
-			Description: "Browse repositories, manage issues and pull requests",
-			IconURL:     "https://cdn.crawbl.com/integrations/github.png",
-			IsConnected: false,
-			IsEnabled:   false,
-		},
-		{
-			Provider:    "zoom",
-			Name:        "Zoom",
-			Description: "Schedule and manage meetings",
-			IconURL:     "https://cdn.crawbl.com/integrations/zoom.png",
-			IsConnected: false,
-			IsEnabled:   false,
-		},
-	}
-}
-
-// handleIntegrationsList returns all available integrations with their connection status.
-// In the future, this will check the integration_connections table to determine
-// which providers the user has actually connected via OAuth.
+// handleIntegrationsList returns all available integrations with the user's connection status.
 //
 // GET /v1/integrations
 func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) {
-	_, mErr := s.currentUserFromRequest(r)
+	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
 		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
 		return
 	}
 
-	// TODO: Query integration_connections table to check which providers
-	// are connected for this user and set IsConnected=true accordingly.
-	integrations := availableIntegrations()
+	items, mErr := s.integrationService.ListIntegrations(r.Context(), &orchestratorservice.ListIntegrationsOpts{
+		Sess:   s.newSession(),
+		UserID: user.ID,
+	})
+	if mErr != nil {
+		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
+		return
+	}
 
-	httpserver.WriteSuccessResponse(w, http.StatusOK, integrations)
+	response := make([]integrationItemResponse, 0, len(items))
+	for _, item := range items {
+		response = append(response, integrationItemResponse{
+			Provider:    item.Provider,
+			Name:        item.Name,
+			Description: item.Description,
+			IconURL:     item.IconURL,
+			IsConnected: item.IsConnected,
+			IsEnabled:   item.IsEnabled,
+		})
+	}
+
+	httpserver.WriteSuccessResponse(w, http.StatusOK, response)
 }
 
-// handleIntegrationConnect returns the OAuth configuration for a provider.
-// The mobile app uses this to initiate the OAuth PKCE flow via flutter_appauth.
+// handleIntegrationConnect returns OAuth configuration for a provider.
 //
 // POST /v1/integrations/connect
 func (s *Server) handleIntegrationConnect(w http.ResponseWriter, r *http.Request) {
-	_, mErr := s.currentUserFromRequest(r)
+	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
 		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
 		return
@@ -115,19 +58,31 @@ func (s *Server) handleIntegrationConnect(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// TODO: Look up OAuth client credentials from config/secrets based on provider.
-	// For now, return a placeholder response that tells the mobile app
-	// this integration is not yet configured on the server side.
-	httpserver.WriteErrorResponse(w, http.StatusNotImplemented, "integration "+req.Provider+" is not yet available")
+	config, mErr := s.integrationService.GetOAuthConfig(r.Context(), &orchestratorservice.GetOAuthConfigOpts{
+		Sess:     s.newSession(),
+		UserID:   user.ID,
+		Provider: req.Provider,
+	})
+	if mErr != nil {
+		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
+		return
+	}
+
+	httpserver.WriteSuccessResponse(w, http.StatusOK, integrationConnectResponse{
+		ClientID:              config.ClientID,
+		RedirectURL:           config.RedirectURL,
+		AuthorizationEndpoint: config.AuthorizationEndpoint,
+		TokenEndpoint:         config.TokenEndpoint,
+		Scopes:                config.Scopes,
+		AdditionalParameters:  config.AdditionalParameters,
+	})
 }
 
-// handleIntegrationCallback receives the OAuth authorization code from the mobile app
-// after the user completes the OAuth flow. The backend exchanges the code for
-// access/refresh tokens and stores them in the integration_connections table.
+// handleIntegrationCallback exchanges the OAuth code for tokens.
 //
 // POST /v1/integrations/callback
 func (s *Server) handleIntegrationCallback(w http.ResponseWriter, r *http.Request) {
-	_, mErr := s.currentUserFromRequest(r)
+	user, mErr := s.currentUserFromRequest(r)
 	if mErr != nil {
 		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
 		return
@@ -144,8 +99,17 @@ func (s *Server) handleIntegrationCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// TODO: Exchange authorization code for tokens using the provider's token endpoint.
-	// Store tokens in integration_connections table (encrypted).
-	// For now, return not implemented.
-	httpserver.WriteErrorResponse(w, http.StatusNotImplemented, "OAuth callback for "+req.Provider+" is not yet implemented")
+	if mErr := s.integrationService.HandleOAuthCallback(r.Context(), &orchestratorservice.OAuthCallbackOpts{
+		Sess:              s.newSession(),
+		UserID:            user.ID,
+		Provider:          req.Provider,
+		AuthorizationCode: req.AuthorizationCode,
+		CodeVerifier:      req.CodeVerifier,
+		RedirectURL:       req.RedirectURL,
+	}); mErr != nil {
+		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -46,11 +46,12 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		logger:           opts.Logger,
 		authService:      opts.AuthService,
 		workspaceService: opts.WorkspaceService,
-		chatService:      opts.ChatService,
-		httpMiddleware:   opts.HTTPMiddleware,
-		broadcaster:      broadcaster,
-		runtimeClient:    opts.RuntimeClient,
-		cfg:              config,
+		chatService:        opts.ChatService,
+		integrationService: opts.IntegrationService,
+		httpMiddleware:     opts.HTTPMiddleware,
+		broadcaster:        broadcaster,
+		runtimeClient:      opts.RuntimeClient,
+		cfg:                config,
 	}
 
 	// Build the combined handler: MCP + Socket.IO (if provided) + chi REST router.
