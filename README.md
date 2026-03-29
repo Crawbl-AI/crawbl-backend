@@ -23,26 +23,33 @@
 
 ## 🏗️ Architecture
 
-```
-  📱 Mobile App
-       │
-       ▼
-  🔒 Envoy Gateway (JWT auth)
-       │
-       ▼
-  ⚙️  Orchestrator ◄──── 🗄️ Postgres + Redis
-       │       │
-       │       └──── 🔌 MCP Server (/mcp/v1)
-       │                    ▲
-       ▼                    │
-  🔄 Metacontroller         │
-       │                    │
-       ▼                    │
-  🧠 ZeroClaw Pods ─────────┘
-     (per-user agents)
+```mermaid
+flowchart LR
+    client["Mobile App / API Client"]
+    envoy["Envoy Gateway"]
+    orch["Orchestrator"]
+    db["Postgres"]
+    redis["Redis"]
+    cr["UserSwarm CR"]
+    mc["Metacontroller"]
+    runtime["ZeroClaw Runtime"]
+    mcp["Embedded MCP Server"]
+    llm["LLM / External APIs"]
+
+    client --> envoy
+    envoy --> orch
+    orch --> db
+    orch --> redis
+    orch --> cr
+    cr --> mc
+    mc --> runtime
+    orch --> runtime
+    runtime --> mcp
+    mcp --> orch
+    runtime --> llm
 ```
 
-> ⚠️ Simplified view. For detailed architecture, data flows, and system diagrams see [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs).
+> ⚠️ Simplified view. For detailed architecture, data flows, and system diagrams see [crawbl-docs](https://dev.docs.crawbl.com/core-concepts/architecture/system-overview).
 
 ## 🚀 Quick Start
 
@@ -58,7 +65,9 @@ set -a && source .env && set +a
 curl http://localhost:7171/v1/health
 ```
 
-The repo root ships a small `./crawbl` launcher. It builds `bin/crawbl` on first run and rebuilds it when CLI source changes, so you do not need a global install.
+🚀 The repo root ships a small `./crawbl` launcher. 
+
+It builds `bin/crawbl` on first run and rebuilds it when CLI source changes, so you do not need a global install.
 
 - Docs site: https://dev.docs.crawbl.com
 - Getting started: https://dev.docs.crawbl.com/getting-started
