@@ -13,6 +13,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/app"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/infra"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/setup"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/test"
 )
 
@@ -37,6 +38,7 @@ func main() {
 	rootCmd.AddCommand(infra.NewInfraCommand())
 	rootCmd.AddCommand(app.NewAppCommand())
 	rootCmd.AddCommand(test.NewTestCommand())
+	rootCmd.AddCommand(setup.NewSetupCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "error:", err)
