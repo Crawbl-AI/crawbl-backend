@@ -1,28 +1,33 @@
 package server
 
-// integrationsResponse is the unified response for GET /v1/integrations.
-// Contains both agent tools and third-party app integrations in one payload
-// so the mobile app can render the full profile capabilities screen.
+// integrationsResponse wraps the integrations payload in a data envelope.
 type integrationsResponse struct {
-	// Tools are the agent's built-in capabilities (search, memory, scheduling, etc.).
-	// Shown in the "Tools" tab of the profile capabilities screen.
-	Tools []integrationItemResponse `json:"tools"`
-
-	// Integrations are third-party app connections (Gmail, Slack, etc.).
-	// Shown in the "Connected Apps" tab of the profile capabilities screen.
-	Integrations []integrationItemResponse `json:"integrations"`
+	Data integrationsData `json:"data"`
 }
 
-// integrationItemResponse represents a single item in the tools or integrations list.
-// Field names match the mobile app's IntegrationItemData model.
+// integrationsData contains tool categories and a flat list of items
+// (both tools and third-party integrations).
+type integrationsData struct {
+	Categories []categoryResponse        `json:"categories"`
+	Items      []integrationItemResponse `json:"items"`
+}
+
+// categoryResponse represents a tool category in the integrations list.
+type categoryResponse struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ImageURL string `json:"image_url"`
+}
+
+// integrationItemResponse represents a single tool or integration item.
 type integrationItemResponse struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	IconURL     string `json:"icon_url"`
+	CategoryID  string `json:"category_id"`
+	Type        string `json:"type"`
 	Provider    string `json:"provider,omitempty"`
-	Category    string `json:"category,omitempty"`
-	IsConnected bool   `json:"is_connected"`
-	IsEnabled   bool   `json:"is_enabled"`
+	Enabled     bool   `json:"enabled"`
 }
 
 // integrationConnectRequest is the body for POST /v1/integrations/connect.

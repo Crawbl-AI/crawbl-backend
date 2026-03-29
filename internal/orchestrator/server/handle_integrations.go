@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -31,34 +32,57 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	integrations := make([]integrationItemResponse, 0, len(items))
-	for _, item := range items {
-		integrations = append(integrations, integrationItemResponse{
-			Provider:    item.Provider,
-			Name:        item.Name,
-			Description: item.Description,
-			IconURL:     item.IconURL,
-			IsConnected: item.IsConnected,
-			IsEnabled:   item.IsEnabled,
+	// Build categories by merging tool categories (zeroclaw) and integration categories (orchestrator).
+	toolCats := zeroclaw.ToolCategories()
+	appCats := orchestrator.IntegrationCategories()
+	categories := make([]categoryResponse, 0, len(toolCats)+len(appCats))
+	for _, c := range toolCats {
+		categories = append(categories, categoryResponse{
+			ID:       string(c.ID),
+			Name:     c.Name,
+			ImageURL: c.ImageURL,
+		})
+	}
+	for _, c := range appCats {
+		categories = append(categories, categoryResponse{
+			ID:       c.ID,
+			Name:     c.Name,
+			ImageURL: c.ImageURL,
 		})
 	}
 
-	// Build tools list from the canonical catalog (zeroclaw/tools.go).
+	// Build items: tools first, then integrations.
 	catalog := zeroclaw.DefaultToolCatalog()
-	tools := make([]integrationItemResponse, 0, len(catalog))
+	itemsList := make([]integrationItemResponse, 0, len(catalog)+len(items))
+
 	for _, t := range catalog {
-		tools = append(tools, integrationItemResponse{
+		itemsList = append(itemsList, integrationItemResponse{
 			Name:        t.DisplayName,
 			Description: t.Description,
 			IconURL:     t.IconURL,
-			Category:    string(t.Category),
-			IsEnabled:   true,
+			CategoryID:  string(t.Category),
+			Type:        string(orchestrator.ItemTypeTool),
+			Enabled:     true,
+		})
+	}
+
+	for _, ig := range items {
+		itemsList = append(itemsList, integrationItemResponse{
+			Name:        ig.Name,
+			Description: ig.Description,
+			IconURL:     ig.IconURL,
+			CategoryID:  ig.CategoryID,
+			Type:        string(orchestrator.ItemTypeApp),
+			Provider:    ig.Provider,
+			Enabled:     ig.IsEnabled,
 		})
 	}
 
 	httpserver.WriteSuccessResponse(w, http.StatusOK, integrationsResponse{
-		Tools:        tools,
-		Integrations: integrations,
+		Data: integrationsData{
+			Categories: categories,
+			Items:      itemsList,
+		},
 	})
 }
 

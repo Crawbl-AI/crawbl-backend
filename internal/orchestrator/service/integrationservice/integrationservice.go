@@ -28,16 +28,17 @@ var providerCatalog = []struct {
 	Name        string
 	Description string
 	IconURL     string
+	CategoryID  string
 	IsEnabled   bool
 }{
-	{"google_calendar", "Google Calendar", "View and create calendar events, check availability", "https://cdn.crawbl.com/integrations/google-calendar.png", true},
-	{"gmail", "Gmail", "Search and read emails, draft responses", "https://cdn.crawbl.com/integrations/gmail.png", true},
-	{"slack", "Slack", "Send messages, search channels, manage notifications", "https://cdn.crawbl.com/integrations/slack.png", false},
-	{"jira", "Jira", "Search and manage issues, track projects", "https://cdn.crawbl.com/integrations/jira.png", false},
-	{"notion", "Notion", "Search pages, create documents, manage databases", "https://cdn.crawbl.com/integrations/notion.png", false},
-	{"asana", "Asana", "Manage tasks, track project progress", "https://cdn.crawbl.com/integrations/asana.png", false},
-	{"github", "GitHub", "Browse repositories, manage issues and pull requests", "https://cdn.crawbl.com/integrations/github.png", false},
-	{"zoom", "Zoom", "Schedule and manage meetings", "https://cdn.crawbl.com/integrations/zoom.png", false},
+	{"google_calendar", "Google Calendar", "View and create calendar events, check availability", "https://cdn.crawbl.com/integrations/google-calendar.png", "productivity", true},
+	{"gmail", "Gmail", "Search and read emails, draft responses", "https://cdn.crawbl.com/integrations/gmail.png", "communication", true},
+	{"slack", "Slack", "Send messages, search channels, manage notifications", "https://cdn.crawbl.com/integrations/slack.png", "communication", false},
+	{"jira", "Jira", "Search and manage issues, track projects", "https://cdn.crawbl.com/integrations/jira.png", "productivity", false},
+	{"notion", "Notion", "Search pages, create documents, manage databases", "https://cdn.crawbl.com/integrations/notion.png", "productivity", false},
+	{"asana", "Asana", "Manage tasks, track project progress", "https://cdn.crawbl.com/integrations/asana.png", "productivity", false},
+	{"github", "GitHub", "Browse repositories, manage issues and pull requests", "https://cdn.crawbl.com/integrations/github.png", "development", false},
+	{"zoom", "Zoom", "Schedule and manage meetings", "https://cdn.crawbl.com/integrations/zoom.png", "communication", false},
 }
 
 // ListIntegrations returns all available integrations, merging the static catalog
@@ -76,6 +77,7 @@ func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservic
 			Name:        p.Name,
 			Description: p.Description,
 			IconURL:     p.IconURL,
+			CategoryID:  p.CategoryID,
 			IsConnected: connectedProviders[p.Provider],
 			IsEnabled:   p.IsEnabled,
 		})

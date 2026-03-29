@@ -16,15 +16,15 @@ package zeroclaw
 type ToolCategory string
 
 const (
-	ToolCategorySearch       ToolCategory = "search"
-	ToolCategoryFiles        ToolCategory = "files"
-	ToolCategoryMemory       ToolCategory = "memory"
-	ToolCategoryScheduling   ToolCategory = "scheduling"
-	ToolCategoryNotification ToolCategory = "notification"
-	ToolCategoryContext      ToolCategory = "context"
-	ToolCategoryUtility      ToolCategory = "utility"
-	ToolCategoryIntegration  ToolCategory = "integration"
-	ToolCategoryShell        ToolCategory = "shell"
+	CategorySearch       ToolCategory = "search"
+	CategoryFiles        ToolCategory = "files"
+	CategoryMemory       ToolCategory = "memory"
+	CategoryScheduling   ToolCategory = "scheduling"
+	CategoryNotification ToolCategory = "notification"
+	CategoryContext      ToolCategory = "context"
+	CategoryUtility      ToolCategory = "utility"
+	CategoryIntegration  ToolCategory = "integration"
+	CategoryShell        ToolCategory = "shell"
 )
 
 // ToolDef describes a single tool in the agent's capability set.
@@ -45,44 +45,44 @@ type ToolDef struct {
 // Order here determines display order in the mobile app.
 var defaultToolCatalog = []ToolDef{
 	// --- Search & Web ---
-	{"web_search_tool", "Web Search", "Search the internet for current information, news, and real-time data", ToolCategorySearch, "https://cdn.crawbl.com/tools/web-search.png"},
-	{"web_fetch", "Web Fetch", "Read and extract content from any webpage URL", ToolCategorySearch, "https://cdn.crawbl.com/tools/web-fetch.png"},
-	{"http_request", "HTTP Request", "Make HTTP API calls to external services", ToolCategorySearch, "https://cdn.crawbl.com/tools/http-request.png"},
+	{"web_search_tool", "Web Search", "Search the internet for current information, news, and real-time data", CategorySearch, "https://cdn.crawbl.com/tools/web-search.png"},
+	{"web_fetch", "Web Fetch", "Read and extract content from any webpage URL", CategorySearch, "https://cdn.crawbl.com/tools/web-fetch.png"},
+	{"http_request", "HTTP Request", "Make HTTP API calls to external services", CategorySearch, "https://cdn.crawbl.com/tools/http-request.png"},
 
 	// --- Files ---
-	{"file_read", "Read Files", "Read files from the agent's workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/file-read.png"},
-	{"file_write", "Write Files", "Create and write files in the agent's workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/file-write.png"},
-	{"file_edit", "Edit Files", "Edit existing files in the agent's workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/file-edit.png"},
-	{"glob_search", "File Search", "Search for files by name pattern in the workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/glob-search.png"},
-	{"content_search", "Content Search", "Search inside files for specific text or patterns", ToolCategoryFiles, "https://cdn.crawbl.com/tools/content-search.png"},
+	{"file_read", "Read Files", "Read files from the agent's workspace", CategoryFiles, "https://cdn.crawbl.com/tools/file-read.png"},
+	{"file_write", "Write Files", "Create and write files in the agent's workspace", CategoryFiles, "https://cdn.crawbl.com/tools/file-write.png"},
+	{"file_edit", "Edit Files", "Edit existing files in the agent's workspace", CategoryFiles, "https://cdn.crawbl.com/tools/file-edit.png"},
+	{"glob_search", "File Search", "Search for files by name pattern in the workspace", CategoryFiles, "https://cdn.crawbl.com/tools/glob-search.png"},
+	{"content_search", "Content Search", "Search inside files for specific text or patterns", CategoryFiles, "https://cdn.crawbl.com/tools/content-search.png"},
 
 	// --- Memory ---
-	{"memory_store", "Remember", "Store important information for future conversations", ToolCategoryMemory, "https://cdn.crawbl.com/tools/memory-store.png"},
-	{"memory_recall", "Recall", "Retrieve previously stored information and context", ToolCategoryMemory, "https://cdn.crawbl.com/tools/memory-recall.png"},
-	{"memory_forget", "Forget", "Remove stored information from memory", ToolCategoryMemory, "https://cdn.crawbl.com/tools/memory-forget.png"},
+	{"memory_store", "Remember", "Store important information for future conversations", CategoryMemory, "https://cdn.crawbl.com/tools/memory-store.png"},
+	{"memory_recall", "Recall", "Retrieve previously stored information and context", CategoryMemory, "https://cdn.crawbl.com/tools/memory-recall.png"},
+	{"memory_forget", "Forget", "Remove stored information from memory", CategoryMemory, "https://cdn.crawbl.com/tools/memory-forget.png"},
 
 	// --- Scheduling ---
-	{"cron_add", "Schedule Task", "Create scheduled or recurring tasks", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-add.png"},
-	{"cron_list", "List Schedules", "View all scheduled tasks", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-list.png"},
-	{"cron_remove", "Remove Schedule", "Delete a scheduled task", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-remove.png"},
-	{"cron_update", "Update Schedule", "Modify an existing scheduled task", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-update.png"},
-	{"cron_run", "Run Now", "Execute a scheduled task immediately", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-run.png"},
-	{"cron_runs", "Run History", "View execution history for a scheduled task", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-runs.png"},
+	{"cron_add", "Schedule Task", "Create scheduled or recurring tasks", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-add.png"},
+	{"cron_list", "List Schedules", "View all scheduled tasks", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-list.png"},
+	{"cron_remove", "Remove Schedule", "Delete a scheduled task", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-remove.png"},
+	{"cron_update", "Update Schedule", "Modify an existing scheduled task", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-update.png"},
+	{"cron_run", "Run Now", "Execute a scheduled task immediately", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-run.png"},
+	{"cron_runs", "Run History", "View execution history for a scheduled task", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-runs.png"},
 
 	// --- Orchestrator MCP: Notifications ---
-	{"orchestrator__send_push_notification", "Push Notification", "Send push notifications to your mobile device", ToolCategoryNotification, "https://cdn.crawbl.com/tools/push-notification.png"},
+	{"orchestrator__send_push_notification", "Push Notification", "Send push notifications to your mobile device", CategoryNotification, "https://cdn.crawbl.com/tools/push-notification.png"},
 
 	// --- Orchestrator MCP: User Context ---
-	{"orchestrator__get_user_profile", "User Profile", "Access your profile information and preferences", ToolCategoryContext, "https://cdn.crawbl.com/tools/user-profile.png"},
-	{"orchestrator__get_workspace_info", "Workspace Info", "Get workspace details and agent list", ToolCategoryContext, "https://cdn.crawbl.com/tools/workspace-info.png"},
-	{"orchestrator__list_conversations", "Conversations", "List all conversations in your workspace", ToolCategoryContext, "https://cdn.crawbl.com/tools/conversations.png"},
-	{"orchestrator__search_past_messages", "Search Messages", "Search through past conversation messages", ToolCategoryContext, "https://cdn.crawbl.com/tools/search-messages.png"},
+	{"orchestrator__get_user_profile", "User Profile", "Access your profile information and preferences", CategoryContext, "https://cdn.crawbl.com/tools/user-profile.png"},
+	{"orchestrator__get_workspace_info", "Workspace Info", "Get workspace details and agent list", CategoryContext, "https://cdn.crawbl.com/tools/workspace-info.png"},
+	{"orchestrator__list_conversations", "Conversations", "List all conversations in your workspace", CategoryContext, "https://cdn.crawbl.com/tools/conversations.png"},
+	{"orchestrator__search_past_messages", "Search Messages", "Search through past conversation messages", CategoryContext, "https://cdn.crawbl.com/tools/search-messages.png"},
 
 	// --- Utility ---
-	{"calculator", "Calculator", "Perform mathematical calculations", ToolCategoryUtility, "https://cdn.crawbl.com/tools/calculator.png"},
-	{"weather", "Weather", "Get current weather information for any location", ToolCategoryUtility, "https://cdn.crawbl.com/tools/weather.png"},
-	{"image_info", "Image Info", "Analyze and extract information from images", ToolCategoryUtility, "https://cdn.crawbl.com/tools/image-info.png"},
-	{"shell", "Shell Commands", "Run shell commands in the agent's environment", ToolCategoryShell, "https://cdn.crawbl.com/tools/shell.png"},
+	{"calculator", "Calculator", "Perform mathematical calculations", CategoryUtility, "https://cdn.crawbl.com/tools/calculator.png"},
+	{"weather", "Weather", "Get current weather information for any location", CategoryUtility, "https://cdn.crawbl.com/tools/weather.png"},
+	{"image_info", "Image Info", "Analyze and extract information from images", CategoryUtility, "https://cdn.crawbl.com/tools/image-info.png"},
+	{"shell", "Shell Commands", "Run shell commands in the agent's environment", CategoryShell, "https://cdn.crawbl.com/tools/shell.png"},
 }
 
 // DefaultToolCatalog returns the full tool catalog for API responses.
@@ -98,4 +98,26 @@ func DefaultAutoApproveList() []string {
 		names = append(names, t.Name)
 	}
 	return names
+}
+
+// CategoryMeta holds the display metadata for a tool category.
+type CategoryMeta struct {
+	ID       ToolCategory
+	Name     string
+	ImageURL string
+}
+
+// ToolCategories returns display metadata for all tool categories.
+func ToolCategories() []CategoryMeta {
+	return []CategoryMeta{
+		{CategorySearch, "Search", "https://cdn.crawbl.com/categories/search.png"},
+		{CategoryFiles, "Files", "https://cdn.crawbl.com/categories/files.png"},
+		{CategoryMemory, "Memory", "https://cdn.crawbl.com/categories/memory.png"},
+		{CategoryScheduling, "Scheduling", "https://cdn.crawbl.com/categories/scheduling.png"},
+		{CategoryNotification, "Notification", "https://cdn.crawbl.com/categories/notification.png"},
+		{CategoryContext, "Context", "https://cdn.crawbl.com/categories/context.png"},
+		{CategoryUtility, "Utility", "https://cdn.crawbl.com/categories/utility.png"},
+		{CategoryIntegration, "Integration", "https://cdn.crawbl.com/categories/integration.png"},
+		{CategoryShell, "Shell", "https://cdn.crawbl.com/categories/shell.png"},
+	}
 }

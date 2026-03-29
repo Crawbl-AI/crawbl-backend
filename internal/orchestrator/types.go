@@ -603,8 +603,36 @@ type Mention struct {
 }
 
 // ---------------------------------------------------------------------------
-// Integration items (for API responses)
+// Integration categories and items (for API responses)
 // ---------------------------------------------------------------------------
+
+// ItemType distinguishes tools from third-party integrations in the API response.
+type ItemType string
+
+const (
+	// ItemTypeTool is an agent tool (search, memory, scheduling, etc.).
+	ItemTypeTool ItemType = "tool"
+	// ItemTypeApp is a third-party integration (Gmail, Slack, etc.).
+	ItemTypeApp ItemType = "app"
+)
+
+// CategoryMeta holds display metadata for an item category.
+// Used by the handler to build the categories list for GET /v1/integrations.
+type CategoryMeta struct {
+	ID       string
+	Name     string
+	ImageURL string
+}
+
+// IntegrationCategories returns display metadata for integration (app) categories.
+// Tool categories live in the zeroclaw package; these are merged at the handler level.
+func IntegrationCategories() []CategoryMeta {
+	return []CategoryMeta{
+		{"communication", "Communication", "https://cdn.crawbl.com/categories/communication.png"},
+		{"productivity", "Productivity", "https://cdn.crawbl.com/categories/productivity.png"},
+		{"development", "Development", "https://cdn.crawbl.com/categories/development.png"},
+	}
+}
 
 // IntegrationItem represents an available integration with its connection status.
 // Returned by GET /v1/integrations for the mobile app's Connected Apps screen.
@@ -617,6 +645,8 @@ type IntegrationItem struct {
 	Description string
 	// IconURL is the URL to the integration's icon image.
 	IconURL string
+	// CategoryID groups the integration by type (e.g., "communication", "productivity").
+	CategoryID string
 	// IsConnected indicates whether the user has an active OAuth connection.
 	IsConnected bool
 	// IsEnabled indicates whether the integration is available for connection.
