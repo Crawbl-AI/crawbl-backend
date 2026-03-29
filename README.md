@@ -56,7 +56,7 @@ All secrets in `.env` — copy from `.env.example` and `source .env` before runn
 |---|-----------|-------------|
 | 🌐 | **Orchestrator** | Mobile-facing HTTP API + MCP server |
 | 🔄 | **Webhook** | Builds and manages per-user AI agent pods |
-| 🔐 | **Auth Filter** | Envoy ExtProc sidecar (JWT validation) |
+| 🔐 | **Auth Filter** | Verifies user identity before requests reach the API |
 | 🧹 | **Reaper** | Cleans up stale e2e test resources |
 | 🏗️ | **Infra** | Pulumi IaC (cluster bootstrap only) |
 
