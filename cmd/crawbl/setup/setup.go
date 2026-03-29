@@ -27,7 +27,7 @@ What it does:
   1. Checks that required tools are installed (Go, Docker, kubectl, etc.)
   2. Creates .env from .env.example if it doesn't exist
 
-After setup completes, run 'crawbl dev start' to start the orchestrator.`,
+After setup completes, run './crawbl dev start' to start the orchestrator.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup()
 		},
@@ -101,7 +101,7 @@ func runSetup() error {
 	out.Infof("1. Source your environment:")
 	out.Infof("   set -a && source .env && set +a")
 	out.Infof("2. Start everything:")
-	out.Infof("   crawbl dev start")
+	out.Infof("   ./crawbl dev start")
 	out.Infof("3. Verify:")
 	out.Infof("   curl http://localhost:7171/v1/health")
 	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")

@@ -1,37 +1,55 @@
-# Thin wrapper around `crawbl` CLI.
-# All commands live in cmd/crawbl/ — this file exists for convenience.
+# Thin wrapper around the repo-local `./crawbl` launcher.
+# The launcher builds `bin/crawbl` on demand and keeps it fresh.
 
-.PHONY: setup run run-clean stop clean migrate test test-e2e fmt lint verify
+.PHONY: setup hooks build build-ci run run-db run-clean stop clean migrate test test-e2e fmt lint verify ci-check
 
-setup:
-	go run ./cmd/crawbl setup
+setup: hooks build
+	./crawbl setup
+
+hooks:
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-push ./crawbl
+
+build:
+	./crawbl --version >/dev/null
+
+build-ci:
+	mkdir -p .artifacts/bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
+		-o .artifacts/bin/crawbl-linux-amd64 ./cmd/crawbl
 
 run:
-	go run ./cmd/crawbl dev start
+	./crawbl dev start
+
+run-db:
+	./crawbl dev start --database-only
 
 run-clean:
-	go run ./cmd/crawbl dev start --clean
+	./crawbl dev start --clean
 
 stop:
-	go run ./cmd/crawbl dev stop
+	./crawbl dev stop
 
 clean:
-	go run ./cmd/crawbl dev reset
+	./crawbl dev reset
 
 migrate:
-	go run ./cmd/crawbl dev migrate
+	./crawbl dev migrate
 
 test:
-	go run ./cmd/crawbl test unit
+	./crawbl test unit
 
 test-e2e:
-	go run ./cmd/crawbl test e2e --base-url https://dev.api.crawbl.com
+	./crawbl test e2e --base-url https://dev.api.crawbl.com
 
 fmt:
-	go run ./cmd/crawbl dev fmt
+	./crawbl dev fmt
 
 lint:
-	go run ./cmd/crawbl dev lint
+	./crawbl dev lint
 
 verify:
-	go run ./cmd/crawbl dev verify
+	./crawbl dev verify
+
+ci-check: build test build-ci

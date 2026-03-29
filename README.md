@@ -47,36 +47,55 @@
 ## 🚀 Quick Start
 
 ```bash
-# 1. Check your machine has everything needed:
-go run ./cmd/crawbl setup
+# 1. Build the repo-local CLI, install hooks, and check your machine:
+make setup
 
 # 2. Source environment and start the stack:
 set -a && source .env && set +a
-crawbl dev start
+./crawbl dev start
 
 # 3. Verify:
 curl http://localhost:7171/v1/health
 ```
 
+The repo root ships a small `./crawbl` launcher. It builds `bin/crawbl` on first run and rebuilds it when CLI source changes, so you do not need a global install.
+
+- Docs site: https://dev.docs.crawbl.com
+- Getting started: https://dev.docs.crawbl.com/getting-started
+- System overview: https://dev.docs.crawbl.com/core-concepts/architecture/system-overview
+- CLI reference: https://dev.docs.crawbl.com/reference/cli/crawbl-cli
+
 ## 🛠️ CLI
 
-Everything is managed through the `crawbl` CLI — no Makefile needed.
+Everything is managed through the `./crawbl` launcher or the thin root `Makefile`.
 
 ```
-crawbl setup                  # Check tools + create .env
-crawbl dev start [--clean]    # Start Postgres + orchestrator
-crawbl dev stop               # Stop containers
-crawbl dev reset              # Wipe database + stop
-crawbl dev migrate            # Run migrations only
-crawbl dev fmt                # Format code
-crawbl dev lint [--fix]       # Run linter
-crawbl dev verify             # fmt + lint + test (pre-push)
-crawbl test unit              # Go unit tests
-crawbl test e2e               # E2E against dev cluster
-crawbl app build <component>  # Build Docker images
-crawbl infra plan             # Preview infra changes
-crawbl infra update           # Apply infra changes
+./crawbl setup                  # Check tools + create .env
+./crawbl dev start              # Start the full local stack
+./crawbl dev start --database-only
+./crawbl dev stop
+./crawbl dev reset
+./crawbl dev migrate
+./crawbl dev fmt
+./crawbl dev lint [--fix]
+./crawbl dev verify
+./crawbl test unit
+./crawbl test e2e
+./crawbl app build <component>
+./crawbl infra plan
+./crawbl infra update
 ```
+
+## ✅ Local Checks
+
+This repo ships a versioned `pre-push` hook in `.githooks/pre-push`.
+
+- `make setup` installs the hook automatically
+- `make hooks` re-installs it if your Git config was reset
+- the hook runs `make ci-check`
+- `make ci-check` runs unit tests plus local and linux/amd64 `crawbl` builds to catch the same local-safe failures CI would catch later
+
+The hook does not run the live E2E suite because that depends on the shared dev cluster and takes longer than a normal push gate should. Lint stays available as an explicit manual check with `./crawbl dev lint`.
 
 ## 📦 Components
 
