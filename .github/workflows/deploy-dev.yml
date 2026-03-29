@@ -5,7 +5,7 @@
 # Trigger: every push to main, or manual workflow_dispatch.
 #
 # Flow:
-#   1. build          — Compile the Go binary on Blacksmith, upload as artifact,
+#   1. build          — Compile the Go binary on GitHub-hosted Ubuntu, upload as artifact,
 #                        then build and push Docker images to DOCR (binary is COPYd in, not compiled in Docker).
 #   2. infra-drift    — Run Pulumi plan to detect infrastructure drift before deploying.
 #   3. update-argocd  — Clone crawbl-argocd-apps, capture previous tags, patch with new tags, push.
@@ -15,9 +15,8 @@
 #   5. rollback-argocd — (only on e2e failure) Restore previous image tags in crawbl-argocd-apps
 #                         so broken images don't stay deployed in dev/staging.
 #
-# History: pipeline went from 22 min → ~6 min.
-# Key wins: prebuilt binary (Docker no longer compiles Go), Blacksmith 16 vCPU,
-# artifact sharing between build and e2e jobs, and NVMe Docker layer caching.
+# Key wins: prebuilt binary (Docker no longer compiles Go), artifact sharing
+# between build and e2e jobs, and Buildx layer caching.
 name: Deploy to Dev
 
 on:
@@ -43,14 +42,13 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Build Go binary and Docker images on Blacksmith (16 vCPU)
+  # Build Go binary and Docker images on a standard GitHub-hosted Ubuntu runner.
   #
-  # Blacksmith runners have NVMe-backed storage and significantly more CPU than
-  # GitHub-hosted runners. 16 vCPU dropped Go compilation from ~11 min to ~2-3 min.
+  # Docker layer caching is handled via the GitHub Actions cache backend.
   # ---------------------------------------------------------------------------
   build:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -76,7 +74,6 @@ jobs:
           restore-keys: |
             go-build-${{ runner.os }}-
 
-      # GOMAXPROCS=16 — explicitly use all 16 Blacksmith vCPUs for parallel compilation.
       # CGO_ENABLED=0 + GOOS/GOARCH — static cross-compile for the linux/amd64 container target.
       # -mod=vendor — use the vendor/ directory; no network access needed.
       # -trimpath — strip local build paths from the binary for reproducibility.
@@ -84,16 +81,15 @@ jobs:
       # -buildvcs=false — skip embedding git metadata (commit hash, dirty flag) into the binary.
       #                   Saves a noticeable amount of overhead on every build.
       - name: Build crawbl binary
-        env:
-          GOMAXPROCS: "16"
         run: |
+          export GOMAXPROCS="$(nproc)"
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
             -o crawbl ./cmd/crawbl
 
       # Upload the compiled binary so the e2e-test job can download and reuse it.
       # retention-days: 1 — artifact only needs to last for the duration of this pipeline run.
-      # This avoids recompiling Go in the e2e job and keeps the e2e runner small (2 vCPU).
+      # This avoids recompiling Go in the e2e job and keeps the deploy pipeline simpler.
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -101,9 +97,7 @@ jobs:
           path: crawbl
           retention-days: 1
 
-      # Blacksmith's Docker builder uses NVMe-backed layer caching, making layer
-      # pushes and pulls significantly faster than the default Docker BuildKit cache.
-      - uses: useblacksmith/setup-docker-builder@v1
+      - uses: docker/setup-buildx-action@v3
 
       - name: Login to DOCR
         uses: digitalocean/action-doctl@v2
@@ -115,22 +109,26 @@ jobs:
       # at ./crawbl and simply COPYs it into a distroless base image. This takes ~5 seconds.
       # (platform-full.dockerfile is for local builds where Docker compiles Go itself.)
       - name: Build and push platform image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: dockerfiles/platform.dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.DOCR_REGISTRY }}/crawbl-platform:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=crawbl-platform
+          cache-to: type=gha,mode=max,scope=crawbl-platform
 
       - name: Build and push auth filter
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: cmd/envoy-auth-filter
           file: dockerfiles/envoy-auth-filter.dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.DOCR_REGISTRY }}/envoy-auth-filter:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=envoy-auth-filter
+          cache-to: type=gha,mode=max,scope=envoy-auth-filter
 
   # ---------------------------------------------------------------------------
   # Infrastructure drift check: verify Pulumi state matches actual infra.
@@ -139,8 +137,8 @@ jobs:
   # ---------------------------------------------------------------------------
   infra-drift-check:
     needs: [build]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -193,8 +191,8 @@ jobs:
   # ---------------------------------------------------------------------------
   update-argocd:
     needs: [build, infra-drift-check]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     # Outputs capture the PREVIOUS image tags before this job overwrites them.
     # The rollback-argocd job reads these to restore the prior state if e2e fails.
     outputs:
@@ -253,13 +251,13 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e-test:
     needs: [update-argocd]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       # Reuse the binary built in the build job. Avoids installing Go and recompiling
-      # on this smaller runner. The artifact was uploaded with retention-days: 1.
+      # in this job. The artifact was uploaded with retention-days: 1.
       - name: Download binary artifact
         uses: actions/download-artifact@v4
         with:
@@ -336,8 +334,8 @@ jobs:
   rollback-argocd:
     needs: [update-argocd, e2e-test]
     if: always() && needs.e2e-test.result == 'failure'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Rollback ArgoCD to previous image tags
         env:
