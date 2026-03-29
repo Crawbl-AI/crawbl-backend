@@ -88,6 +88,9 @@ func registerRoutes(s *Server) http.Handler {
 			r.Get("/workspaces/{workspaceId}/conversations/{id}", s.handleConversationGet)
 			r.Get("/workspaces/{workspaceId}/conversations/{id}/messages", s.handleMessagesList)
 			r.Post("/workspaces/{workspaceId}/conversations/{id}/messages", s.handleMessagesSend)
+			r.Get("/integrations", s.handleIntegrationsList)
+			r.Post("/integrations/connect", s.handleIntegrationConnect)
+			r.Post("/integrations/callback", s.handleIntegrationCallback)
 		})
 	})
 
