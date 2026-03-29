@@ -1,0 +1,11 @@
+# Tool versions for crawbl-backend.
+# Install all: `mise install`
+# Docs: https://mise.jdx.dev/
+
+[tools]
+go = "1.25.8"
+kubectl = "1.32"
+helm = "3.7"
+doctl = "1.152"
+awscli = "2.24"
+pulumi = "3.228"
