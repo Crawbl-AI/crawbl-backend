@@ -1,5 +1,5 @@
 # Thin wrapper around `crawbl` CLI.
-# All commands live in cmd/crawbl/ — this file exists for muscle memory.
+# All commands live in cmd/crawbl/ — this file exists for convenience.
 
 .PHONY: setup run run-clean stop clean migrate test test-e2e fmt lint verify
 

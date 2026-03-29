@@ -69,7 +69,7 @@ Source `.env` before running: `set -a && source .env && set +a`
 
 ## 📋 Samples
 
-- [`config/samples/zeroclaw.yaml.example`](samples/zeroclaw.yaml.example) — Full ZeroClaw config with all options commented
+- [`config/samples/zeroclaw.yaml`](samples/zeroclaw.yaml) — Full ZeroClaw config with all options commented
 
 ## 📖 Deep Reference
 
