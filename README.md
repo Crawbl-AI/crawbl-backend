@@ -17,6 +17,29 @@ Sits between the mobile app and per-user [ZeroClaw](https://github.com/Crawbl-AI
 
 > 📚 **Full docs:** [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) · API reference, architecture, runbooks
 
+## 🏗️ Architecture
+
+```
+  📱 Mobile App
+       │
+       ▼
+  🔒 Envoy Gateway (JWT auth)
+       │
+       ▼
+  ⚙️  Orchestrator ◄──── 🗄️ Postgres + Redis
+       │       │
+       │       └──── 🔌 MCP Server (/mcp/v1)
+       │                    ▲
+       ▼                    │
+  🔄 Metacontroller         │
+       │                    │
+       ▼                    │
+  🧠 ZeroClaw Pods ─────────┘
+     (per-user agents)
+```
+
+> ⚠️ Simplified view. For detailed architecture, data flows, and system diagrams see [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs).
+
 ## 🚀 Quick Start
 
 ```bash
