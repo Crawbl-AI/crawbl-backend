@@ -6,6 +6,7 @@ import (
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // handleIntegrationsList returns both agent tools and third-party integrations
@@ -42,10 +43,10 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	// Build tools list (static, always-on agent capabilities).
-	defaults := defaultTools()
-	tools := make([]toolResponse, 0, len(defaults))
-	for _, t := range defaults {
+	// Build tools list from the canonical catalog (zeroclaw/tools.go).
+	catalog := zeroclaw.DefaultToolCatalog()
+	tools := make([]toolResponse, 0, len(catalog))
+	for _, t := range catalog {
 		tools = append(tools, toolResponse{
 			Name:        t.Name,
 			DisplayName: t.DisplayName,

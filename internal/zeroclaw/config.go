@@ -60,28 +60,8 @@ func DefaultConfig() *ZeroClawConfig {
 				"/sys", "/var", "/tmp",
 				"~/.ssh", "~/.gnupg", "~/.aws", "~/.config",
 			},
-			AutoApprove: []string{
-				// File and search tools.
-				"file_read", "file_write", "file_edit",
-				"glob_search", "content_search",
-				// Memory tools.
-				"memory_store", "memory_recall", "memory_forget",
-				// Web tools.
-				"web_search_tool", "web_fetch", "http_request",
-				// Utility tools.
-				"calculator", "image_info", "weather",
-				// Scheduling and cron tools.
-				"cron_add", "cron_list", "cron_remove", "cron_update", "cron_run", "cron_runs",
-				// Shell (limited by allowed_commands list).
-				"shell",
-				// Orchestrator MCP tools — safe to auto-approve because
-				// they are already scoped to the authenticated user via HMAC token.
-				"orchestrator__send_push_notification",
-				"orchestrator__get_user_profile",
-				"orchestrator__get_workspace_info",
-				"orchestrator__list_conversations",
-				"orchestrator__search_past_messages",
-			},
+			// Derived from the tool catalog in tools.go — single source of truth.
+			AutoApprove: DefaultAutoApproveList(),
 		},
 	}
 }
