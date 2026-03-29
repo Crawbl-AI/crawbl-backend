@@ -67,23 +67,33 @@ cmd/crawbl/                     # Main binary: CLI + servers
 cmd/envoy-auth-filter/          # Auth filter for Envoy Gateway
 internal/
 ├── orchestrator/               # 🌐 API domain
-│   ├── mcp/                    #    MCP server (agent ↔ orchestrator)
-│   ├── integration/            #    OAuth connections
-│   ├── server/                 #    HTTP handlers
-│   ├── service/                #    Business logic
-│   └── repo/                   #    Postgres repos
-├── userswarm/                  # 🔄 K8s lifecycle
-│   ├── client/                 #    CR management
-│   ├── webhook/                #    Metacontroller sync
-│   └── reaper/                 #    Stale user + orphan pod cleanup
-├── zeroclaw/                   # 🧠 Agent runtime config
+│   ├── mcp/                    #    MCP server (agent ↔ orchestrator tools)
+│   ├── integration/            #    OAuth connections (Gmail, Slack, etc.)
+│   ├── server/                 #    HTTP handlers + Socket.IO realtime
+│   ├── service/                #    Business logic layer
+│   └── repo/                   #    Data access (Postgres)
+├── userswarm/                  # 🔄 Agent pod lifecycle
+│   ├── client/                 #    Creates and manages agent pods on K8s
+│   ├── webhook/                #    Builds pod specs when agents are provisioned
+│   └── reaper/                 #    Cleans up stale users + orphaned pods
+├── zeroclaw/                   # 🧠 Agent runtime config + tool catalog
 ├── pkg/                        # 📦 Shared packages
-│   ├── firebase/               #    FCM push
-│   ├── hmac/                   #    Token signing
-│   ├── database/               #    Postgres helpers
-│   └── ...
-└── infra/                      # 🏗️ Pulumi bootstrap
+│   ├── configenv/              #    Environment variable loading
+│   ├── database/               #    Postgres connection + migrations
+│   ├── errors/                 #    Typed error codes
+│   ├── fileutil/               #    File + TOML helpers
+│   ├── firebase/               #    FCM push notifications
+│   ├── hmac/                   #    HMAC token signing + validation
+│   ├── httpserver/             #    HTTP middleware + auth
+│   ├── kube/                   #    Kubernetes helpers
+│   ├── realtime/               #    Socket.IO + Redis pub/sub
+│   ├── redisclient/            #    Redis connection
+│   ├── runtime/                #    Graceful shutdown helpers
+│   └── yamlvalues/             #    YAML file patching
+└── infra/                      # 🏗️ Pulumi IaC
 config/                         # 📋 Config reference + samples
+migrations/                     # 📊 Postgres schema migrations
+api/                            # 📐 Kubernetes CRD types
 ```
 
 ## ⚙️ Configuration
