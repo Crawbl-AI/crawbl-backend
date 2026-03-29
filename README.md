@@ -47,12 +47,18 @@
 ## 🚀 Quick Start
 
 ```bash
-make setup      # Postgres + Redis via docker-compose
-make run        # Orchestrator on :7171
-make test       # Run tests
+# First time? One command sets up everything:
+go run ./cmd/crawbl setup
+
+# Then start the orchestrator:
+set -a && source .env && set +a
+make run
+
+# Verify it works:
+curl http://localhost:7171/v1/health
 ```
 
-All secrets in `.env` — copy from `.env.example` and `source .env` before running.
+`crawbl setup` checks your tools, creates `.env`, starts Postgres, and runs migrations. Use `--skip-docker` for a tools-only check.
 
 ## 📦 Components
 
