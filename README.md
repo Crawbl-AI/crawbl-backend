@@ -65,14 +65,7 @@ set -a && source .env && set +a
 curl http://localhost:7171/v1/health
 ```
 
-🚀 The repo root ships a small `./crawbl` launcher. 
-
-It builds `bin/crawbl` on first run and rebuilds it when CLI source changes, so you do not need a global install.
-
-- Docs site: https://dev.docs.crawbl.com
-- Getting started: https://dev.docs.crawbl.com/getting-started
-- System overview: https://dev.docs.crawbl.com/core-concepts/architecture/system-overview
-- CLI reference: https://dev.docs.crawbl.com/reference/cli/crawbl-cli
+💡 It builds `bin/crawbl` on first run and rebuilds it when CLI source changes, so you do not need a global install.
 
 ## 🛠️ CLI
 
@@ -81,18 +74,7 @@ Everything is managed through the `./crawbl` launcher or the thin root `Makefile
 ```
 ./crawbl setup                  # Check tools + create .env
 ./crawbl dev start              # Start the full local stack
-./crawbl dev start --database-only
-./crawbl dev stop
-./crawbl dev reset
-./crawbl dev migrate
-./crawbl dev fmt
-./crawbl dev lint [--fix]
-./crawbl dev verify
-./crawbl test unit
-./crawbl test e2e
-./crawbl app build <component>
-./crawbl infra plan
-./crawbl infra update
+./crawbl --help                 # Check other commands
 ```
 
 ## ✅ Local Checks
