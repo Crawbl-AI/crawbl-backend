@@ -1,13 +1,9 @@
 package server
 
-// integrationsResponse wraps the integrations payload in a data envelope.
-type integrationsResponse struct {
-	Data integrationsData `json:"data"`
-}
-
-// integrationsData contains tool categories and a flat list of items
+// integrationsResponse contains tool categories and a flat list of items
 // (both tools and third-party integrations).
-type integrationsData struct {
+// WriteSuccessResponse wraps this in the standard {"data": ...} envelope.
+type integrationsResponse struct {
 	Categories []categoryResponse        `json:"categories"`
 	Items      []integrationItemResponse `json:"items"`
 }

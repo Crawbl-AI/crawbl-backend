@@ -79,10 +79,8 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 	}
 
 	httpserver.WriteSuccessResponse(w, http.StatusOK, integrationsResponse{
-		Data: integrationsData{
-			Categories: categories,
-			Items:      itemsList,
-		},
+		Categories: categories,
+		Items:      itemsList,
 	})
 }
 
