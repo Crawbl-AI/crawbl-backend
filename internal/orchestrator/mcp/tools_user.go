@@ -20,6 +20,7 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 		}
 
 		sess := deps.newSession()
+		RecordAPICall(ctx, "DB:SELECT users WHERE id="+userID)
 
 		// The MCP token contains the internal DB user ID (not Firebase subject).
 		// Query the user table directly by primary key.
@@ -87,6 +88,7 @@ func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInpu
 		sess := deps.newSession()
 
 		// Verify workspace belongs to user.
+		RecordAPICall(ctx, "DB:SELECT workspaces WHERE id="+workspaceID)
 		ws, mErr := deps.WorkspaceRepo.GetByID(ctx, sess, userID, workspaceID)
 		if mErr != nil {
 			return nil, workspaceInfoOutput{}, fmt.Errorf("workspace not found")

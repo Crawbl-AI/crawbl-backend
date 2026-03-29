@@ -29,6 +29,7 @@ const (
 	ctxKeyUserID      contextKey = "mcp_user_id"
 	ctxKeyWorkspaceID contextKey = "mcp_workspace_id"
 	ctxKeySessionID   contextKey = "mcp_session_id"
+	ctxKeyAPICalls    contextKey = "mcp_api_calls"
 )
 
 // Deps holds all dependencies needed by the MCP server and tool handlers.
@@ -76,6 +77,9 @@ func contextWithIdentity(ctx context.Context, userID, workspaceID, sessionID str
 	ctx = context.WithValue(ctx, ctxKeyUserID, userID)
 	ctx = context.WithValue(ctx, ctxKeyWorkspaceID, workspaceID)
 	ctx = context.WithValue(ctx, ctxKeySessionID, sessionID)
+	// Initialize API call tracker for outgoing call auditing.
+	calls := make([]string, 0, 4)
+	ctx = context.WithValue(ctx, ctxKeyAPICalls, &calls)
 	return ctx
 }
 
@@ -201,6 +205,8 @@ type auditEntry struct {
 	SessionID   string
 	ToolName    string
 	Input       string
+	Output      string // JSON response returned to the agent
+	APICalls    string // outgoing API calls made by this tool (e.g. "FCM:POST /v1/projects/crawbl-dev/messages:send")
 	Success     bool
 	ErrorMsg    string
 	DurationMs  int

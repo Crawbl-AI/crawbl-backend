@@ -20,6 +20,7 @@ func newPushHandler(deps *Deps) sdkmcp.ToolHandlerFor[pushInput, pushOutput] {
 		}
 
 		// Look up the user's FCM token directly.
+		RecordAPICall(ctx, "DB:SELECT user_push_tokens WHERE user_id="+userID)
 		sess := deps.newSession()
 		var pushToken string
 		err := sess.Select("push_token").
@@ -30,6 +31,7 @@ func newPushHandler(deps *Deps) sdkmcp.ToolHandlerFor[pushInput, pushOutput] {
 			return nil, pushOutput{Info: "user has no push token registered — they need to open the mobile app first"}, nil
 		}
 
+		RecordAPICall(ctx, "FCM:POST /v1/projects/crawbl-dev/messages:send")
 		if err := deps.FCM.Send(ctx, pushToken, input.Title, input.Message); err != nil {
 			deps.Logger.ErrorContext(ctx, "fcm send failed",
 				slog.String("error", err.Error()),

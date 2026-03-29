@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -94,6 +95,10 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 			result, err := next(ctx, method, req)
 			duration := time.Since(start)
 
+			// Capture the output and any API calls made during tool execution.
+			outputJSON := extractResultJSON(result)
+			apiCalls := apiCallsFromContext(ctx)
+
 			// Log the audit entry asynchronously to avoid slowing down the response.
 			go func() {
 				auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -104,6 +109,8 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 					SessionID:   sessionIDFromContext(ctx),
 					ToolName:    toolName,
 					Input:       inputJSON,
+					Output:      outputJSON,
+					APICalls:    apiCalls,
 					Success:     err == nil,
 					ErrorMsg:    errorString(err),
 					DurationMs:  int(duration.Milliseconds()),
@@ -128,6 +135,44 @@ func extractToolCallParams(req sdkmcp.Request) (string, string) {
 	return params.Name, input
 }
 
+// extractResultJSON serializes the MCP result for audit logging.
+func extractResultJSON(result sdkmcp.Result) string {
+	if result == nil {
+		return "{}"
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return "{}"
+	}
+	// Truncate to 2KB to avoid bloating audit logs with large responses.
+	s := string(data)
+	if len(s) > 2048 {
+		return s[:2048] + "..."
+	}
+	return s
+}
+
+// apiCallsFromContext retrieves the recorded API calls from the request context.
+// Tool handlers use RecordAPICall to log outgoing calls during execution.
+func apiCallsFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxKeyAPICalls).(*[]string)
+	if v == nil || len(*v) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(*v)
+	return string(data)
+}
+
+// RecordAPICall appends an outgoing API call description to the context.
+// Called by tool handlers to track what external calls they make.
+// Format: "SERVICE:METHOD URL" e.g. "FCM:POST /v1/projects/crawbl-dev/messages:send"
+func RecordAPICall(ctx context.Context, call string) {
+	v, _ := ctx.Value(ctxKeyAPICalls).(*[]string)
+	if v != nil {
+		*v = append(*v, call)
+	}
+}
+
 // logAudit inserts an audit log entry into the database.
 func logAudit(ctx context.Context, deps *Deps, entry auditEntry) {
 	sess := deps.newSession()
@@ -137,6 +182,8 @@ func logAudit(ctx context.Context, deps *Deps, entry auditEntry) {
 		Pair("session_id", entry.SessionID).
 		Pair("tool_name", entry.ToolName).
 		Pair("input", entry.Input).
+		Pair("output", entry.Output).
+		Pair("api_calls", entry.APICalls).
 		Pair("success", entry.Success).
 		Pair("error_message", entry.ErrorMsg).
 		Pair("duration_ms", entry.DurationMs).
