@@ -1,7 +1,30 @@
 package server
 
-// integrationItemResponse represents a single integration in the list.
-// Field names must match the mobile app's IntegrationItemData model.
+// integrationsResponse is the unified response for GET /v1/integrations.
+// Contains both agent tools and third-party app integrations in one payload
+// so the mobile app can render the full profile capabilities screen.
+type integrationsResponse struct {
+	// Tools are the agent's built-in capabilities (search, memory, scheduling, etc.).
+	// Shown in the "Tools" tab of the profile capabilities screen.
+	Tools []toolResponse `json:"tools"`
+
+	// Integrations are third-party app connections (Gmail, Slack, etc.).
+	// Shown in the "Connected Apps" tab of the profile capabilities screen.
+	Integrations []integrationItemResponse `json:"integrations"`
+}
+
+// toolResponse represents a single agent tool.
+type toolResponse struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	Enabled     bool   `json:"enabled"`
+	Toggleable  bool   `json:"toggleable"`
+}
+
+// integrationItemResponse represents a single third-party integration.
+// Field names match the mobile app's IntegrationItemData model.
 type integrationItemResponse struct {
 	Provider    string `json:"provider"`
 	Name        string `json:"name"`
@@ -11,18 +34,12 @@ type integrationItemResponse struct {
 	IsEnabled   bool   `json:"is_enabled"`
 }
 
-// integrationsListResponse wraps the list for GET /v1/integrations.
-type integrationsListResponse struct {
-	Data []integrationItemResponse `json:"data"`
-}
-
 // integrationConnectRequest is the body for POST /v1/integrations/connect.
 type integrationConnectRequest struct {
 	Provider string `json:"provider"`
 }
 
 // integrationConnectResponse returns OAuth config for the mobile app to start the flow.
-// Field names must match IntegrationConnectResponse in the mobile app.
 type integrationConnectResponse struct {
 	ClientID              string            `json:"client_id"`
 	RedirectURL           string            `json:"redirect_url"`
@@ -33,7 +50,6 @@ type integrationConnectResponse struct {
 }
 
 // integrationCallbackRequest is the body for POST /v1/integrations/callback.
-// Contains the OAuth authorization code from the mobile OAuth flow (PKCE).
 type integrationCallbackRequest struct {
 	Provider          string `json:"provider"`
 	AuthorizationCode string `json:"authorization_code"`

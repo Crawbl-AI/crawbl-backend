@@ -1,15 +1,12 @@
 package server
 
 import (
-	"net/http"
-
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // defaultTools returns the list of tools that are always enabled in ZeroClaw.
 // These are auto-loaded at agent startup and cannot be toggled off by the user.
+// Used by handleIntegrationsList to populate the "tools" section of the response.
 func defaultTools() []orchestrator.AgentTool {
 	return []orchestrator.AgentTool{
 		// --- Search & Web ---
@@ -52,60 +49,4 @@ func defaultTools() []orchestrator.AgentTool {
 		{Name: "image_info", DisplayName: "Image Info", Description: "Analyze and extract information from images", Category: orchestrator.ToolCategoryUtility, Enabled: true},
 		{Name: "shell", DisplayName: "Shell Commands", Description: "Run shell commands in the agent's environment", Category: orchestrator.ToolCategoryShell, Enabled: true},
 	}
-}
-
-// optionalTools returns tools that can be toggled on/off by the user.
-// Currently empty — will be populated as integrations are added.
-func optionalTools() []orchestrator.AgentTool {
-	return []orchestrator.AgentTool{
-		// Future integration tools (placeholders — RequiresSetup=true until OAuth connected):
-		// {Name: "gmail_search", DisplayName: "Gmail", Description: "Search and read your Gmail inbox", Category: orchestrator.ToolCategoryIntegration, Toggleable: true, RequiresSetup: true},
-		// {Name: "google_calendar", DisplayName: "Google Calendar", Description: "View and create calendar events", Category: orchestrator.ToolCategoryIntegration, Toggleable: true, RequiresSetup: true},
-		// {Name: "slack_send", DisplayName: "Slack", Description: "Send messages and search Slack channels", Category: orchestrator.ToolCategoryIntegration, Toggleable: true, RequiresSetup: true},
-		// {Name: "jira_search", DisplayName: "Jira", Description: "Search and manage Jira issues", Category: orchestrator.ToolCategoryIntegration, Toggleable: true, RequiresSetup: true},
-	}
-}
-
-// handleToolsList returns the list of tools available in a workspace.
-// Default tools are always enabled and cannot be toggled.
-// Optional tools can be enabled/disabled by the user.
-func (s *Server) handleToolsList(w http.ResponseWriter, r *http.Request) {
-	_, mErr := s.currentUserFromRequest(r)
-	if mErr != nil {
-		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
-		return
-	}
-
-	defaults := defaultTools()
-	optional := optionalTools()
-
-	resp := toolsListResponse{
-		DefaultTools:  make([]toolResponse, 0, len(defaults)),
-		OptionalTools: make([]toolResponse, 0, len(optional)),
-	}
-
-	for _, t := range defaults {
-		resp.DefaultTools = append(resp.DefaultTools, toolResponse{
-			Name:        t.Name,
-			DisplayName: t.DisplayName,
-			Description: t.Description,
-			Category:    string(t.Category),
-			Enabled:     true,
-			Toggleable:  false,
-		})
-	}
-
-	for _, t := range optional {
-		resp.OptionalTools = append(resp.OptionalTools, toolResponse{
-			Name:          t.Name,
-			DisplayName:   t.DisplayName,
-			Description:   t.Description,
-			Category:      string(t.Category),
-			Enabled:       t.Enabled,
-			Toggleable:    t.Toggleable,
-			RequiresSetup: t.RequiresSetup,
-		})
-	}
-
-	httpserver.WriteSuccessResponse(w, http.StatusOK, resp)
 }

@@ -8,7 +8,9 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
-// handleIntegrationsList returns all available integrations with the user's connection status.
+// handleIntegrationsList returns both agent tools and third-party integrations
+// in a single response. The mobile app renders this as two tabs in the profile
+// capabilities screen: "Tools" and "Connected Apps".
 //
 // GET /v1/integrations
 func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) {
@@ -18,6 +20,7 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Fetch integrations (with connection status from DB).
 	items, mErr := s.integrationService.ListIntegrations(r.Context(), &orchestratorservice.ListIntegrationsOpts{
 		Sess:   s.newSession(),
 		UserID: user.ID,
@@ -27,9 +30,9 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	response := make([]integrationItemResponse, 0, len(items))
+	integrations := make([]integrationItemResponse, 0, len(items))
 	for _, item := range items {
-		response = append(response, integrationItemResponse{
+		integrations = append(integrations, integrationItemResponse{
 			Provider:    item.Provider,
 			Name:        item.Name,
 			Description: item.Description,
@@ -39,7 +42,24 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	httpserver.WriteSuccessResponse(w, http.StatusOK, response)
+	// Build tools list (static, always-on agent capabilities).
+	defaults := defaultTools()
+	tools := make([]toolResponse, 0, len(defaults))
+	for _, t := range defaults {
+		tools = append(tools, toolResponse{
+			Name:        t.Name,
+			DisplayName: t.DisplayName,
+			Description: t.Description,
+			Category:    string(t.Category),
+			Enabled:     true,
+			Toggleable:  false,
+		})
+	}
+
+	httpserver.WriteSuccessResponse(w, http.StatusOK, integrationsResponse{
+		Tools:        tools,
+		Integrations: integrations,
+	})
 }
 
 // handleIntegrationConnect returns OAuth configuration for a provider.
@@ -93,7 +113,6 @@ func (s *Server) handleIntegrationCallback(w http.ResponseWriter, r *http.Reques
 		httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-
 	if req.Provider == "" || req.AuthorizationCode == "" || req.CodeVerifier == "" {
 		httpserver.WriteErrorResponse(w, http.StatusBadRequest, "provider, authorization_code, and code_verifier are required")
 		return

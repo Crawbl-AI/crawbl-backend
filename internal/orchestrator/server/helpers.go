@@ -83,7 +83,6 @@ func registerRoutes(s *Server) http.Handler {
 			r.Get("/workspaces", s.handleWorkspacesList)
 			r.Get("/workspaces/{id}", s.handleWorkspaceGet)
 			r.Get("/workspaces/{workspaceId}/agents", s.handleWorkspaceAgentsList)
-			r.Get("/workspaces/{workspaceId}/tools", s.handleToolsList)
 			r.Get("/workspaces/{workspaceId}/conversations", s.handleConversationsList)
 			r.Get("/workspaces/{workspaceId}/conversations/{id}", s.handleConversationGet)
 			r.Get("/workspaces/{workspaceId}/conversations/{id}/messages", s.handleMessagesList)
