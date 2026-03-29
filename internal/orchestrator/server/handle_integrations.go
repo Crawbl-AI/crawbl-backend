@@ -45,15 +45,14 @@ func (s *Server) handleIntegrationsList(w http.ResponseWriter, r *http.Request) 
 
 	// Build tools list from the canonical catalog (zeroclaw/tools.go).
 	catalog := zeroclaw.DefaultToolCatalog()
-	tools := make([]toolResponse, 0, len(catalog))
+	tools := make([]integrationItemResponse, 0, len(catalog))
 	for _, t := range catalog {
-		tools = append(tools, toolResponse{
-			Name:        t.Name,
-			DisplayName: t.DisplayName,
+		tools = append(tools, integrationItemResponse{
+			Name:        t.DisplayName,
 			Description: t.Description,
+			IconURL:     t.IconURL,
 			Category:    string(t.Category),
-			Enabled:     true,
-			Toggleable:  false,
+			IsEnabled:   true,
 		})
 	}
 

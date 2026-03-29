@@ -6,30 +6,21 @@ package server
 type integrationsResponse struct {
 	// Tools are the agent's built-in capabilities (search, memory, scheduling, etc.).
 	// Shown in the "Tools" tab of the profile capabilities screen.
-	Tools []toolResponse `json:"tools"`
+	Tools []integrationItemResponse `json:"tools"`
 
 	// Integrations are third-party app connections (Gmail, Slack, etc.).
 	// Shown in the "Connected Apps" tab of the profile capabilities screen.
 	Integrations []integrationItemResponse `json:"integrations"`
 }
 
-// toolResponse represents a single agent tool.
-type toolResponse struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
-	Enabled     bool   `json:"enabled"`
-	Toggleable  bool   `json:"toggleable"`
-}
-
-// integrationItemResponse represents a single third-party integration.
+// integrationItemResponse represents a single item in the tools or integrations list.
 // Field names match the mobile app's IntegrationItemData model.
 type integrationItemResponse struct {
-	Provider    string `json:"provider"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	IconURL     string `json:"icon_url"`
+	Provider    string `json:"provider"`
+	Category    string `json:"category"`
 	IsConnected bool   `json:"is_connected"`
 	IsEnabled   bool   `json:"is_enabled"`
 }

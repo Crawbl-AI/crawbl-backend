@@ -37,50 +37,52 @@ type ToolDef struct {
 	Description string
 	// Category groups the tool for UI organization.
 	Category ToolCategory
+	// IconURL is a CDN URL for the tool's icon, used in the mobile app.
+	IconURL string
 }
 
 // defaultToolCatalog is the complete list of tools loaded into every ZeroClaw agent.
 // Order here determines display order in the mobile app.
 var defaultToolCatalog = []ToolDef{
 	// --- Search & Web ---
-	{"web_search_tool", "Web Search", "Search the internet for current information, news, and real-time data", ToolCategorySearch},
-	{"web_fetch", "Web Fetch", "Read and extract content from any webpage URL", ToolCategorySearch},
-	{"http_request", "HTTP Request", "Make HTTP API calls to external services", ToolCategorySearch},
+	{"web_search_tool", "Web Search", "Search the internet for current information, news, and real-time data", ToolCategorySearch, "https://cdn.crawbl.com/tools/web-search.png"},
+	{"web_fetch", "Web Fetch", "Read and extract content from any webpage URL", ToolCategorySearch, "https://cdn.crawbl.com/tools/web-fetch.png"},
+	{"http_request", "HTTP Request", "Make HTTP API calls to external services", ToolCategorySearch, "https://cdn.crawbl.com/tools/http-request.png"},
 
 	// --- Files ---
-	{"file_read", "Read Files", "Read files from the agent's workspace", ToolCategoryFiles},
-	{"file_write", "Write Files", "Create and write files in the agent's workspace", ToolCategoryFiles},
-	{"file_edit", "Edit Files", "Edit existing files in the agent's workspace", ToolCategoryFiles},
-	{"glob_search", "File Search", "Search for files by name pattern in the workspace", ToolCategoryFiles},
-	{"content_search", "Content Search", "Search inside files for specific text or patterns", ToolCategoryFiles},
+	{"file_read", "Read Files", "Read files from the agent's workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/file-read.png"},
+	{"file_write", "Write Files", "Create and write files in the agent's workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/file-write.png"},
+	{"file_edit", "Edit Files", "Edit existing files in the agent's workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/file-edit.png"},
+	{"glob_search", "File Search", "Search for files by name pattern in the workspace", ToolCategoryFiles, "https://cdn.crawbl.com/tools/glob-search.png"},
+	{"content_search", "Content Search", "Search inside files for specific text or patterns", ToolCategoryFiles, "https://cdn.crawbl.com/tools/content-search.png"},
 
 	// --- Memory ---
-	{"memory_store", "Remember", "Store important information for future conversations", ToolCategoryMemory},
-	{"memory_recall", "Recall", "Retrieve previously stored information and context", ToolCategoryMemory},
-	{"memory_forget", "Forget", "Remove stored information from memory", ToolCategoryMemory},
+	{"memory_store", "Remember", "Store important information for future conversations", ToolCategoryMemory, "https://cdn.crawbl.com/tools/memory-store.png"},
+	{"memory_recall", "Recall", "Retrieve previously stored information and context", ToolCategoryMemory, "https://cdn.crawbl.com/tools/memory-recall.png"},
+	{"memory_forget", "Forget", "Remove stored information from memory", ToolCategoryMemory, "https://cdn.crawbl.com/tools/memory-forget.png"},
 
 	// --- Scheduling ---
-	{"cron_add", "Schedule Task", "Create scheduled or recurring tasks", ToolCategoryScheduling},
-	{"cron_list", "List Schedules", "View all scheduled tasks", ToolCategoryScheduling},
-	{"cron_remove", "Remove Schedule", "Delete a scheduled task", ToolCategoryScheduling},
-	{"cron_update", "Update Schedule", "Modify an existing scheduled task", ToolCategoryScheduling},
-	{"cron_run", "Run Now", "Execute a scheduled task immediately", ToolCategoryScheduling},
-	{"cron_runs", "Run History", "View execution history for a scheduled task", ToolCategoryScheduling},
+	{"cron_add", "Schedule Task", "Create scheduled or recurring tasks", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-add.png"},
+	{"cron_list", "List Schedules", "View all scheduled tasks", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-list.png"},
+	{"cron_remove", "Remove Schedule", "Delete a scheduled task", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-remove.png"},
+	{"cron_update", "Update Schedule", "Modify an existing scheduled task", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-update.png"},
+	{"cron_run", "Run Now", "Execute a scheduled task immediately", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-run.png"},
+	{"cron_runs", "Run History", "View execution history for a scheduled task", ToolCategoryScheduling, "https://cdn.crawbl.com/tools/cron-runs.png"},
 
 	// --- Orchestrator MCP: Notifications ---
-	{"orchestrator__send_push_notification", "Push Notification", "Send push notifications to your mobile device", ToolCategoryNotification},
+	{"orchestrator__send_push_notification", "Push Notification", "Send push notifications to your mobile device", ToolCategoryNotification, "https://cdn.crawbl.com/tools/push-notification.png"},
 
 	// --- Orchestrator MCP: User Context ---
-	{"orchestrator__get_user_profile", "User Profile", "Access your profile information and preferences", ToolCategoryContext},
-	{"orchestrator__get_workspace_info", "Workspace Info", "Get workspace details and agent list", ToolCategoryContext},
-	{"orchestrator__list_conversations", "Conversations", "List all conversations in your workspace", ToolCategoryContext},
-	{"orchestrator__search_past_messages", "Search Messages", "Search through past conversation messages", ToolCategoryContext},
+	{"orchestrator__get_user_profile", "User Profile", "Access your profile information and preferences", ToolCategoryContext, "https://cdn.crawbl.com/tools/user-profile.png"},
+	{"orchestrator__get_workspace_info", "Workspace Info", "Get workspace details and agent list", ToolCategoryContext, "https://cdn.crawbl.com/tools/workspace-info.png"},
+	{"orchestrator__list_conversations", "Conversations", "List all conversations in your workspace", ToolCategoryContext, "https://cdn.crawbl.com/tools/conversations.png"},
+	{"orchestrator__search_past_messages", "Search Messages", "Search through past conversation messages", ToolCategoryContext, "https://cdn.crawbl.com/tools/search-messages.png"},
 
 	// --- Utility ---
-	{"calculator", "Calculator", "Perform mathematical calculations", ToolCategoryUtility},
-	{"weather", "Weather", "Get current weather information for any location", ToolCategoryUtility},
-	{"image_info", "Image Info", "Analyze and extract information from images", ToolCategoryUtility},
-	{"shell", "Shell Commands", "Run shell commands in the agent's environment", ToolCategoryShell},
+	{"calculator", "Calculator", "Perform mathematical calculations", ToolCategoryUtility, "https://cdn.crawbl.com/tools/calculator.png"},
+	{"weather", "Weather", "Get current weather information for any location", ToolCategoryUtility, "https://cdn.crawbl.com/tools/weather.png"},
+	{"image_info", "Image Info", "Analyze and extract information from images", ToolCategoryUtility, "https://cdn.crawbl.com/tools/image-info.png"},
+	{"shell", "Shell Commands", "Run shell commands in the agent's environment", ToolCategoryShell, "https://cdn.crawbl.com/tools/shell.png"},
 }
 
 // DefaultToolCatalog returns the full tool catalog for API responses.
