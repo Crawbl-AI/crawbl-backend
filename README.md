@@ -2,6 +2,8 @@
 
 # 🧠 Crawbl
 
+"**Control plane for Crawbl AI**"
+
 [![CI](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![K8s](https://img.shields.io/badge/K8s-DOKS-326CE5?logo=kubernetes&logoColor=white)]()
@@ -10,8 +12,6 @@
 </div>
 
 ---
-
-**Control plane for Crawbl AI**
 
 - 🔐 **Auth & API** — authenticates users and serves the mobile app
 - 💬 **Chat routing** — delivers messages between you and your AI agent
