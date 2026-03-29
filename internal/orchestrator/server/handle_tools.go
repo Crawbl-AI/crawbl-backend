@@ -33,6 +33,9 @@ func defaultTools() []orchestrator.AgentTool {
 		{Name: "cron_add", DisplayName: "Schedule Task", Description: "Create scheduled or recurring tasks", Category: orchestrator.ToolCategoryScheduling, Enabled: true},
 		{Name: "cron_list", DisplayName: "List Schedules", Description: "View all scheduled tasks", Category: orchestrator.ToolCategoryScheduling, Enabled: true},
 		{Name: "cron_remove", DisplayName: "Remove Schedule", Description: "Delete a scheduled task", Category: orchestrator.ToolCategoryScheduling, Enabled: true},
+		{Name: "cron_update", DisplayName: "Update Schedule", Description: "Modify an existing scheduled task", Category: orchestrator.ToolCategoryScheduling, Enabled: true},
+		{Name: "cron_run", DisplayName: "Run Now", Description: "Execute a scheduled task immediately", Category: orchestrator.ToolCategoryScheduling, Enabled: true},
+		{Name: "cron_runs", DisplayName: "Run History", Description: "View execution history for a scheduled task", Category: orchestrator.ToolCategoryScheduling, Enabled: true},
 
 		// --- Orchestrator MCP: Notifications ---
 		{Name: "orchestrator__send_push_notification", DisplayName: "Push Notification", Description: "Send push notifications to your mobile device", Category: orchestrator.ToolCategoryNotification, Enabled: true},
