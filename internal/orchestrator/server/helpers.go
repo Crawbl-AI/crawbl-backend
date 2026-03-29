@@ -72,6 +72,7 @@ func registerRoutes(s *Server) http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(httpserver.AuthMiddleware(s.httpMiddleware, s.logger))
+			r.Use(AuditMiddleware(s.db, s.logger))
 			r.Post("/fcm-token", s.handleSaveFCMToken)
 			r.Post("/auth/sign-in", s.handleAuthSignIn)
 			r.Post("/auth/sign-up", s.handleAuthSignUp)

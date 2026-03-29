@@ -28,6 +28,7 @@ type contextKey string
 const (
 	ctxKeyUserID      contextKey = "mcp_user_id"
 	ctxKeyWorkspaceID contextKey = "mcp_workspace_id"
+	ctxKeySessionID   contextKey = "mcp_session_id"
 )
 
 // Deps holds all dependencies needed by the MCP server and tool handlers.
@@ -66,9 +67,15 @@ func workspaceIDFromContext(ctx context.Context) string {
 	return v
 }
 
-func contextWithIdentity(ctx context.Context, userID, workspaceID string) context.Context {
+func sessionIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxKeySessionID).(string)
+	return v
+}
+
+func contextWithIdentity(ctx context.Context, userID, workspaceID, sessionID string) context.Context {
 	ctx = context.WithValue(ctx, ctxKeyUserID, userID)
 	ctx = context.WithValue(ctx, ctxKeyWorkspaceID, workspaceID)
+	ctx = context.WithValue(ctx, ctxKeySessionID, sessionID)
 	return ctx
 }
 
@@ -191,6 +198,7 @@ type messageRow struct {
 type auditEntry struct {
 	UserID      string
 	WorkspaceID string
+	SessionID   string
 	ToolName    string
 	Input       string
 	Success     bool

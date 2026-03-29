@@ -68,7 +68,8 @@ func withAuth(next http.Handler, deps *Deps) http.Handler {
 			return
 		}
 
-		ctx := contextWithIdentity(r.Context(), userID, workspaceID)
+		sessionID := r.Header.Get("Mcp-Session-Id")
+		ctx := contextWithIdentity(r.Context(), userID, workspaceID, sessionID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -100,6 +101,7 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 				logAudit(auditCtx, deps, auditEntry{
 					UserID:      userID,
 					WorkspaceID: workspaceID,
+					SessionID:   sessionIDFromContext(ctx),
 					ToolName:    toolName,
 					Input:       inputJSON,
 					Success:     err == nil,
@@ -132,6 +134,7 @@ func logAudit(ctx context.Context, deps *Deps, entry auditEntry) {
 	_, err := sess.InsertInto("mcp_audit_logs").
 		Pair("user_id", entry.UserID).
 		Pair("workspace_id", entry.WorkspaceID).
+		Pair("session_id", entry.SessionID).
 		Pair("tool_name", entry.ToolName).
 		Pair("input", entry.Input).
 		Pair("success", entry.Success).
