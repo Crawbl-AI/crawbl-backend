@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 crawbl-backend
+# 🧠 Crawbl
 
 **Control plane for Crawbl AI infrastructure**
 
@@ -55,7 +55,7 @@ All secrets in `.env` — copy from `.env.example` and `source .env` before runn
 | | Component | What it does |
 |---|-----------|-------------|
 | 🌐 | **Orchestrator** | Mobile-facing HTTP API + MCP server |
-| 🔄 | **Webhook** | Metacontroller sync for UserSwarm CRs |
+| 🔄 | **Webhook** | Builds and manages per-user AI agent pods |
 | 🔐 | **Auth Filter** | Envoy ExtProc sidecar (JWT validation) |
 | 🧹 | **Reaper** | Cleans up stale e2e test resources |
 | 🏗️ | **Infra** | Pulumi IaC (cluster bootstrap only) |
