@@ -63,7 +63,8 @@ All secrets in `.env` — copy from `.env.example` and `source .env` before runn
 ## 🗂️ Structure
 
 ```
-cmd/crawbl/                     # Single binary: CLI + servers
+cmd/crawbl/                     # Main binary: CLI + servers
+cmd/envoy-auth-filter/          # Auth filter for Envoy Gateway
 internal/
 ├── orchestrator/               # 🌐 API domain
 │   ├── mcp/                    #    MCP server (agent ↔ orchestrator)
