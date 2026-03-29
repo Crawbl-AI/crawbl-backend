@@ -4,6 +4,9 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 func newStartCommand() *cobra.Command {
@@ -11,9 +14,11 @@ func newStartCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "start",
-		Short: "Start the local development stack (Postgres + orchestrator)",
-		Long: `Starts PostgreSQL, runs migrations, and launches the orchestrator.
-Use --clean to wipe the database and start fresh.`,
+		Short: "Start the local development stack",
+		Long: `Start PostgreSQL, run database migrations, and launch the local orchestrator.
+
+Use this command when you want a working local API with the standard Docker
+Compose workflow. Pass --clean to wipe the database and start fresh.`,
 		Example: `  crawbl dev start          # Normal start
   crawbl dev start --clean  # Wipe database and start fresh`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -30,37 +35,35 @@ func runStart(clean bool) error {
 	ensureEnvFile()
 
 	// Stop any running containers first.
-	fmt.Println("⏹️  Stopping existing containers...")
+	out.Step(style.Stopping, "Stopping existing containers...")
 	_ = shellCmd("docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
 
 	// If --clean, remove the Postgres volume.
 	if clean {
-		fmt.Println("🗑️  Removing database volume...")
+		out.Step(style.Delete, "Removing the database volume...")
 		_ = shellCmd("docker", "compose", "down", "-v")
 	}
 
 	// Start Postgres.
-	fmt.Println("🐘 Starting PostgreSQL...")
+	out.Step(style.Database, "Starting PostgreSQL...")
 	if err := shellCmd("docker", "compose", "--profile", "database", "up", "-d"); err != nil {
 		return fmt.Errorf("failed to start Postgres: %w", err)
 	}
 
 	// Wait for Postgres to be ready.
-	fmt.Print("   Waiting for Postgres")
+	out.Step(style.Waiting, "Waiting for Postgres to become ready...")
 	for i := 0; i < 30; i++ {
 		if silentCmd("docker", "compose", "exec", "-T", "postgresdb", "pg_isready", "-h", "postgresdb") == nil {
-			fmt.Println(" ✅")
+			out.Step(style.Ready, "Postgres is ready")
 			break
 		}
-		fmt.Print(".")
 		if i == 29 {
-			fmt.Println(" ❌")
 			return fmt.Errorf("Postgres did not become ready in 30 seconds")
 		}
 	}
 
 	// Run migrations.
-	fmt.Println("🔄 Running migrations...")
+	out.Step(style.Migrate, "Running database migrations...")
 	if err := shellCmd("docker", "compose", "--profile", "database", "--profile", "migration", "build", "migrations"); err != nil {
 		return fmt.Errorf("migration build failed: %w", err)
 	}
@@ -69,14 +72,14 @@ func runStart(clean bool) error {
 	}
 
 	// Start the orchestrator.
-	fmt.Println("🚀 Starting orchestrator...")
+	out.Step(style.Running, "Starting the orchestrator...")
 	if err := shellCmd("docker", "compose", "--profile", "default", "--profile", "database", "up", "-d", "--build", "--remove-orphans"); err != nil {
 		return fmt.Errorf("failed to start orchestrator: %w", err)
 	}
 
-	fmt.Println()
-	fmt.Println("✅ Stack is running!")
-	fmt.Println("   API: http://localhost:7171/v1/health")
-	fmt.Println("   Stop: crawbl dev stop")
+	out.Ln()
+	out.Success("Stack is running")
+	out.Step(style.URL, "API: http://localhost:7171/v1/health")
+	out.Step(style.Tip, "Stop: crawbl dev stop")
 	return nil
 }

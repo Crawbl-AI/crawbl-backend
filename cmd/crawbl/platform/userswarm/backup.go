@@ -15,6 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/spf13/cobra"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 const maxBackupFileSize = 50 * 1024 * 1024
@@ -40,7 +43,7 @@ func newBackupCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "backup",
-		Short: "Backup workspace files to S3",
+		Short: "Back up workspace files to S3",
 		Long:  "Tar selected workspace files and upload to S3. Runs as a Job with PVC mounted read-only.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if bucket == "" || workspace == "" {
@@ -65,7 +68,7 @@ func newBackupCommand() *cobra.Command {
 	cmd.Flags().StringVar(&workspace, "workspace", "/zeroclaw-data/workspace", "Path to the ZeroClaw workspace directory")
 	cmd.Flags().StringVar(&bucket, "bucket", os.Getenv("BACKUP_BUCKET"), "S3 bucket name")
 	cmd.Flags().StringVar(&region, "region", os.Getenv("AWS_DEFAULT_REGION"), "AWS region")
-	cmd.Flags().StringVar(&prefix, "prefix", "hourly", "S3 path prefix (hourly or final)")
+	cmd.Flags().StringVar(&prefix, "prefix", "hourly", "S3 path prefix, either hourly or final")
 	cmd.Flags().StringVar(&userID, "user-id", os.Getenv("USER_ID"), "User ID for S3 path")
 	cmd.Flags().StringVar(&swarmName, "swarm-name", os.Getenv("SWARM_NAME"), "Swarm name for S3 path")
 	cmd.Flags().StringVar(&env, "env", os.Getenv("ENV"), "Environment name for S3 path")
@@ -85,7 +88,7 @@ type backupOpts struct {
 
 func runBackup(ctx context.Context, opts backupOpts) error {
 	if _, err := os.Stat(opts.workspace); err != nil {
-		fmt.Println("No workspace directory found, skipping backup")
+		out.Warning("No workspace directory found, skipping backup")
 		return nil
 	}
 
@@ -116,14 +119,14 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 	}
 
 	if len(files) == 0 {
-		fmt.Println("No workspace files found, skipping backup")
+		out.Warning("No workspace files found, skipping backup")
 		return nil
 	}
 
-	fmt.Printf("Backing up %d files\n", len(files))
+	out.Step(style.Backup, "Backing up %d files", len(files))
 	for _, f := range files {
 		rel, _ := filepath.Rel(filepath.Dir(opts.workspace), f)
-		fmt.Printf("  %s\n", rel)
+		out.Infof("%s", rel)
 	}
 
 	tmpFile, err := os.CreateTemp("", "backup-*.tar.gz")
@@ -139,7 +142,7 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 	_ = tmpFile.Close()
 
 	if info, err := os.Stat(tmpFile.Name()); err == nil {
-		fmt.Printf("Archive size: %d bytes\n", info.Size())
+		out.Step(style.Backup, "Archive size: %d bytes", info.Size())
 	}
 
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
@@ -150,7 +153,7 @@ func runBackup(ctx context.Context, opts backupOpts) error {
 		return fmt.Errorf("uploading to S3: %w", err)
 	}
 
-	fmt.Printf("Backup uploaded to s3://%s/%s\n", opts.bucket, key)
+	out.Success("Backup uploaded to s3://%s/%s", opts.bucket, key)
 	return nil
 }
 

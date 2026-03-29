@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // newBootstrapCommand creates the infra bootstrap subcommand.
@@ -23,7 +26,7 @@ func newBootstrapCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "bootstrap",
-		Short: "Bootstrap cluster end-to-end",
+		Short: "Bootstrap a new cluster from scratch",
 		Long: `Bootstrap the full cluster from scratch.
 
 This command automates the entire cluster bootstrap process:
@@ -41,11 +44,11 @@ This command automates the entire cluster bootstrap process:
 		},
 	}
 
-	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name (dev, staging, prod)")
-	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region (fra1, nyc1, sfo2)")
+	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
+	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
 	cmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Skip confirmation prompts")
 	cmd.Flags().StringVar(&clusterName, "cluster", "crawbl-dev", "DOKS cluster name for kubeconfig")
-	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "Timeout waiting for apps to sync")
+	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "Timeout while waiting for applications to sync")
 
 	return cmd
 }
@@ -55,54 +58,56 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 		return err
 	}
 
-	fmt.Println("=== Crawbl Cluster Bootstrap ===")
-	fmt.Printf("Environment: %s | Region: %s | Cluster: %s\n\n", env, region, clusterName)
+	out.Step(style.Infra, "Crawbl Cluster Bootstrap")
+	out.Step(style.Config, "Environment: %s | Region: %s | Cluster: %s", env, region, clusterName)
+	out.Ln()
 
 	if !autoApprove {
 		if !confirmUpdate() {
-			fmt.Println("Bootstrap cancelled")
+			out.Warning("Bootstrap cancelled")
 			return nil
 		}
 	}
 
 	// Step 1: Run Pulumi up
-	fmt.Println("\n[1/5] Applying infrastructure (Pulumi)...")
+	out.Step(style.Infra, "[1/5] Applying infrastructure (Pulumi)...")
 	if err := pulumiUp(ctx, env, region); err != nil {
 		return fmt.Errorf("pulumi up failed: %w", err)
 	}
-	fmt.Println("  ok")
+	out.Step(style.Check, "Infrastructure applied")
 
 	// Step 2: Save kubeconfig
-	fmt.Println("\n[2/5] Saving kubeconfig...")
+	out.Step(style.Infra, "[2/5] Saving kubeconfig...")
 	if err := runCommand("doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
 		return fmt.Errorf("kubeconfig save failed: %w", err)
 	}
-	fmt.Println("  ok")
+	out.Step(style.Check, "Kubeconfig saved")
 
 	// Step 3: Ensure DOCR registry integration (Pulumi sets registryIntegration=true
 	// on the cluster, but doctl registry add is a safety net in case of state drift).
-	fmt.Println("\n[3/5] Ensuring DOCR registry integration...")
+	out.Step(style.Infra, "[3/5] Ensuring DOCR registry integration...")
 	if err := runCommand("doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
-		fmt.Printf("  warning: registry add failed (may already be integrated): %v\n", err)
+		out.Warning("Registry add failed and may already be integrated: %v", err)
 	}
-	fmt.Println("  ok")
+	out.Step(style.Check, "Registry integration verified")
 
 	// Step 4: Wait for controller to be ready
-	fmt.Println("\n[4/5] Waiting for ArgoCD application-controller...")
+	out.Step(style.Infra, "[4/5] Waiting for ArgoCD application-controller...")
 	if err := waitForController(ctx, timeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
 	}
-	fmt.Println("  ok")
+	out.Step(style.Ready, "ArgoCD application-controller is ready")
 
 	// Step 5: Wait for all apps to sync
-	fmt.Println("\n[5/5] Waiting for all applications to sync...")
+	out.Step(style.Infra, "[5/5] Waiting for all applications to sync...")
 	if err := waitForAppsSync(ctx, timeout); err != nil {
 		return fmt.Errorf("app sync wait failed: %w", err)
 	}
-	fmt.Println("  ok")
+	out.Step(style.Ready, "Applications are synced")
 
 	// Print final status
-	fmt.Println("\n=== Bootstrap Complete ===")
+	out.Ln()
+	out.Step(style.Celebrate, "Bootstrap complete")
 	printAppStatus()
 	return nil
 }
@@ -127,12 +132,12 @@ func waitForAppsSync(ctx context.Context, timeout time.Duration) error {
 
 		synced, total, err := checkAppSyncStatus()
 		if err != nil {
-			fmt.Printf("  waiting for applications to appear... (%v)\n", err)
+			out.Infof("Waiting for applications to appear... (%v)", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
-		fmt.Printf("  %d/%d applications synced\n", synced, total)
+		out.Infof("%d/%d applications synced", synced, total)
 
 		if total > 0 && synced == total {
 			return nil
@@ -179,7 +184,8 @@ func checkAppSyncStatus() (int, int, error) {
 
 // printAppStatus prints the current status of all ArgoCD applications.
 func printAppStatus() {
-	fmt.Println("\nApplication Status:")
+	out.Ln()
+	out.Step(style.Config, "Application status:")
 	cmd := exec.Command("kubectl", "get", "applications", "-n", "argocd",
 		"-o", "custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,MESSAGE:.status.conditions[0].message")
 	cmd.Stdout = os.Stdout

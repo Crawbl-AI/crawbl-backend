@@ -10,8 +10,8 @@ import (
 func NewDevCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dev",
-		Short: "Local development commands",
-		Long:  "Start, stop, and manage the local development environment. Replaces the old Makefile targets.",
+		Short: "Manage the local development environment",
+		Long:  "Start, stop, reset, and verify the local Crawbl development stack.",
 	}
 
 	cmd.AddCommand(

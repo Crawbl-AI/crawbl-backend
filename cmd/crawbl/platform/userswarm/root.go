@@ -7,8 +7,8 @@ import "github.com/spf13/cobra"
 func NewUserSwarmCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "userswarm",
-		Short: "UserSwarm lifecycle subcommands",
-		Long:  "Manage UserSwarm runtimes: webhook server, bootstrap, backup, and cleanup.",
+		Short: "Manage UserSwarm runtime lifecycle",
+		Long:  "Manage the runtime lifecycle commands used for UserSwarm bootstrap, backup, cleanup, and reconciliation.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},

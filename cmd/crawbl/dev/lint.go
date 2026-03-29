@@ -5,12 +5,16 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 func newFmtCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "fmt",
-		Short: "Format Go source files",
+		Short: "Format Go source files with gofmt",
+		Long:  "Run gofmt across the main Go packages in the repository.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return shellCmd("gofmt", "-w", "./api", "./cmd", "./internal")
 		},
@@ -22,11 +26,12 @@ func newLintCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "lint",
-		Short: "Run golangci-lint",
+		Short: "Run the Go linter",
+		Long:  "Run golangci-lint across the repository and optionally apply available fixes.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Install golangci-lint if missing.
 			if _, err := exec.LookPath("golangci-lint"); err != nil {
-				fmt.Println("📦 Installing golangci-lint...")
+				out.Step(style.Deploy, "Installing golangci-lint...")
 				if err := shellCmd("go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"); err != nil {
 					return fmt.Errorf("failed to install golangci-lint: %w", err)
 				}
@@ -38,24 +43,25 @@ func newLintCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&fix, "fix", false, "Auto-fix lint issues")
+	cmd.Flags().BoolVar(&fix, "fix", false, "Auto-fix lint issues when supported")
 	return cmd
 }
 
 func newVerifyCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "verify",
-		Short: "Run fmt + lint + tests (pre-push check)",
+		Short: "Run all checks before pushing (format, lint, test)",
+		Long:  "Run formatting, linting, and the Go test suite in the same order used for local pre-push verification.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("📐 Formatting...")
+			out.Step(style.Format, "Formatting Go source files...")
 			if err := shellCmd("gofmt", "-w", "./api", "./cmd", "./internal"); err != nil {
 				return err
 			}
-			fmt.Println("🔍 Linting...")
+			out.Step(style.Lint, "Running the linter...")
 			if err := shellCmd("golangci-lint", "run", "./..."); err != nil {
 				return err
 			}
-			fmt.Println("🧪 Testing...")
+			out.Step(style.Test, "Running tests...")
 			return shellCmd("go", "test", "-mod=vendor", "./...")
 		},
 	}

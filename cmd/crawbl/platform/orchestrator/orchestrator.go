@@ -16,24 +16,24 @@ import (
 
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -43,7 +43,8 @@ const shutdownTimeout = 10 * time.Second
 func NewOrchestratorCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "orchestrator",
-		Short: "Run the orchestrator HTTP server",
+		Short: "Start the orchestrator HTTP API server",
+		Long:  "Start the Crawbl orchestrator API server, realtime layer, runtime client, and embedded MCP server.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runServer()
 		},
@@ -88,14 +89,14 @@ func runServer() error {
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
 	}, &server.NewServerOpts{
-		DB:               db,
-		Logger:           logger,
-		AuthService:      authService,
-		WorkspaceService: workspaceService,
-		ChatService:      chatService,
-		HTTPMiddleware:   httpMiddleware,
-		Broadcaster:      broadcaster,
-		SocketIOHandler:  socketIOHandler,
+		DB:                 db,
+		Logger:             logger,
+		AuthService:        authService,
+		WorkspaceService:   workspaceService,
+		ChatService:        chatService,
+		HTTPMiddleware:     httpMiddleware,
+		Broadcaster:        broadcaster,
+		SocketIOHandler:    socketIOHandler,
 		RuntimeClient:      runtimeClient,
 		MCPHandler:         mcpHandler,
 		IntegrationService: integrationService,
@@ -240,7 +241,7 @@ func buildMCPHandler(
 		AgentRepo:        agentRepo,
 		ConversationRepo: conversationRepo,
 		MessageRepo:      messageRepo,
-		SigningKey:        signingKey,
+		SigningKey:       signingKey,
 		FCM:              fcm,
 	})
 	logger.Info("MCP server enabled at /mcp/v1")

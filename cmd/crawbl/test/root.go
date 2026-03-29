@@ -11,7 +11,7 @@ func NewTestCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Run test suites",
-		Long:  "Run test suites against live Crawbl environments.",
+		Long:  "Run unit tests or end-to-end test suites against local or live Crawbl environments.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},

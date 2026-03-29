@@ -12,6 +12,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // newDestroyCommand creates the infra destroy subcommand.
@@ -24,7 +26,7 @@ func newDestroyCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "destroy",
-		Short: "Destroy infrastructure",
+		Short: "Destroy all infrastructure resources",
 		Long: `Destroy all infrastructure resources in the stack.
 
 This command removes all resources managed by Pulumi for the specified environment.
@@ -36,8 +38,8 @@ Use with caution - this operation is irreversible.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name (dev, staging, prod)")
-	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region (fra1, nyc1, sfo2)")
+	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
+	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
 	cmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Skip confirmation prompts")
 
 	return cmd
@@ -48,12 +50,12 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 		return err
 	}
 
-	fmt.Printf("Destroying infrastructure for environment '%s' in region '%s'\n", env, region)
-	fmt.Println("WARNING: This will permanently delete all resources!")
+	out.Step(style.Destroyed, "Destroying infrastructure for environment %q in region %q", env, region)
+	out.Warning("This will permanently delete all resources")
 
 	if !autoApprove {
 		if !confirmDestroy() {
-			fmt.Println("Destroy cancelled")
+			out.Warning("Destroy cancelled")
 			return nil
 		}
 	}
@@ -73,17 +75,18 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 	// when K8s LoadBalancer Services are provisioned (e.g. by Envoy Gateway).
 	// If we destroy the cluster with LBs still attached, they become orphaned
 	// in the DO account and must be cleaned up manually.
-	fmt.Println("Cleaning up LoadBalancer Services before cluster destroy...")
+	out.Step(style.Delete, "Cleaning up LoadBalancer Services before cluster destroy...")
 	if err := deleteLoadBalancerServices(ctx); err != nil {
-		fmt.Printf("Warning: failed to clean up LoadBalancers: %v\n", err)
-		fmt.Println("Proceeding with destroy anyway — check for orphaned LBs in DO console.")
+		out.Warning("Failed to clean up LoadBalancers: %v", err)
+		out.Warning("Proceeding anyway — check for orphaned load balancers in the DO console")
 	}
 
 	if err := stack.Destroy(ctx); err != nil {
 		return fmt.Errorf("destroy failed: %w", err)
 	}
 
-	fmt.Println("\n✓ Destroy complete")
+	out.Ln()
+	out.Success("Destroy complete")
 	return nil
 }
 
@@ -119,27 +122,27 @@ func deleteLoadBalancerServices(ctx context.Context) error {
 			continue
 		}
 
-		fmt.Printf("  Deleting LoadBalancer service %s/%s...\n", svc.Namespace, svc.Name)
+		out.Infof("Deleting LoadBalancer service %s/%s...", svc.Namespace, svc.Name)
 		if err := clientset.CoreV1().Services(svc.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{}); err != nil {
-			fmt.Printf("  Warning: failed to delete %s/%s: %v\n", svc.Namespace, svc.Name, err)
+			out.Warning("Failed to delete %s/%s: %v", svc.Namespace, svc.Name, err)
 			continue
 		}
 		lbCount++
 	}
 
 	if lbCount == 0 {
-		fmt.Println("  No LoadBalancer services found.")
+		out.Infof("No LoadBalancer services found")
 		return nil
 	}
 
 	// Wait for DO cloud controller to deprovision LBs.
-	fmt.Printf("  Waiting 30s for %d LoadBalancer(s) to deprovision...\n", lbCount)
+	out.Step(style.Waiting, "Waiting 30s for %d LoadBalancer(s) to deprovision...", lbCount)
 	time.Sleep(30 * time.Second)
 	return nil
 }
 
 func confirmDestroy() bool {
-	fmt.Print("Do you want to destroy all resources? This cannot be undone. (y/N): ")
+	out.Prompt(style.Warning, "Do you want to destroy all resources? This cannot be undone. (y/N): ")
 	var response string
 	fmt.Scanln(&response)
 	return response == "y" || response == "Y"

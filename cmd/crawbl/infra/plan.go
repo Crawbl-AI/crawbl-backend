@@ -9,19 +9,21 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // newPlanCommand creates the infra plan subcommand.
 func newPlanCommand() *cobra.Command {
 	var (
-		env      string
-		region   string
-		jsonOut  bool
+		env     string
+		region  string
+		jsonOut bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "plan",
-		Short: "Preview infrastructure changes",
+		Short: "Preview infrastructure changes without applying",
 		Long: `Preview infrastructure changes using Pulumi.
 
 Shows what changes would be made without actually applying them.
@@ -35,9 +37,9 @@ Resources are deployed in dependency order:
 		},
 	}
 
-	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name (dev, staging, prod)")
-	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region (fra1, nyc1, sfo2)")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output result as JSON (for CI parsing)")
+	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
+	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output the result as JSON for CI parsing")
 
 	return cmd
 }
@@ -48,7 +50,7 @@ func runPlan(ctx context.Context, env, region string, jsonOut bool) error {
 	}
 
 	if !jsonOut {
-		fmt.Printf("Planning infrastructure for environment '%s' in region '%s'\n", env, region)
+		out.Step(style.Infra, "Planning infrastructure for environment %q in region %q", env, region)
 	}
 
 	config, cfgErr := buildConfig(env, region)
@@ -108,21 +110,23 @@ func printPreviewJSON(result *infra.PreviewResult, previewErr error) error {
 }
 
 func printPreviewSummary(result *infra.PreviewResult) {
-	fmt.Println("\n Preview complete")
+	out.Ln()
+	out.Success("Preview complete")
 	if result == nil {
 		return
 	}
 	if result.Adds > 0 {
-		fmt.Printf("  + %d to create\n", result.Adds)
+		out.Infof("+ %d to create", result.Adds)
 	}
 	if result.Updates > 0 {
-		fmt.Printf("  ~ %d to update\n", result.Updates)
+		out.Infof("~ %d to update", result.Updates)
 	}
 	if result.Deletes > 0 {
-		fmt.Printf("  - %d to delete\n", result.Deletes)
+		out.Infof("- %d to delete", result.Deletes)
 	}
 	if result.Same > 0 {
-		fmt.Printf("  = %d unchanged\n", result.Same)
+		out.Infof("= %d unchanged", result.Same)
 	}
-	fmt.Println("\nRun 'crawbl infra update' to apply changes")
+	out.Ln()
+	out.Step(style.Tip, "Run 'crawbl infra update' to apply changes")
 }

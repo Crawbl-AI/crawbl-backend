@@ -22,7 +22,7 @@ func newBuildDocsCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "docs",
-		Short: "Build docs site image",
+		Short: "Build the documentation site image",
 		Long:  "Build the Crawbl documentation site Docker image using docker buildx.",
 		Example: `  crawbl app build docs --tag v1.0.0
   crawbl app build docs --tag latest --push`,

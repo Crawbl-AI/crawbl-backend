@@ -17,8 +17,8 @@ import (
 func NewPlatformCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "platform",
-		Short: "Runtime platform subcommands",
-		Long:  "Subcommands that run inside the deployed container, grouped by role.",
+		Short: "Run deployed platform services",
+		Long:  "Run the runtime entrypoints that are used inside deployed Crawbl containers.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},

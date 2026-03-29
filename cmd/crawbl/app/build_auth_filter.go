@@ -21,7 +21,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "auth-filter",
-		Short: "Build Envoy auth filter WASM image",
+		Short: "Build the Envoy auth filter image",
 		Long:  "Build the Envoy edge authentication WASM filter as an OCI image using docker buildx.",
 		Example: `  crawbl app build auth-filter --tag v1.0.0
   crawbl app build auth-filter --tag latest --push`,

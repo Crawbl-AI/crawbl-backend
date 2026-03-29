@@ -8,6 +8,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // getRootDir returns the git repository root directory.
@@ -33,6 +36,7 @@ type buildOpts struct {
 // runDockerBuild executes docker buildx build with the given options.
 func runDockerBuild(opts buildOpts) error {
 	imageRef := fmt.Sprintf("%s:%s", opts.imageRepo, opts.tag)
+	out.Step(style.Docker, "Building %s", imageRef)
 
 	args := []string{
 		"buildx", "build",
@@ -61,16 +65,16 @@ func runDockerBuild(opts buildOpts) error {
 	}
 
 	if opts.push {
-		fmt.Printf("Pushed %s\n", imageRef)
+		out.Step(style.Deploy, "Pushed %s", imageRef)
 	} else {
-		fmt.Printf("Built %s locally\n", imageRef)
+		out.Success("Built %s locally", imageRef)
 	}
 	return nil
 }
 
 // addBuildFlags registers --tag, --platform, and --push on a cobra command.
 func addBuildFlags(cmd *cobra.Command, tag *string, platform *string, push *bool) {
-	cmd.Flags().StringVarP(tag, "tag", "t", "dev", "Image tag")
-	cmd.Flags().StringVar(platform, "platform", "linux/amd64", "Build platform")
-	cmd.Flags().BoolVar(push, "push", true, "Push image to registry after build (default: true)")
+	cmd.Flags().StringVarP(tag, "tag", "t", "dev", "Image tag to build")
+	cmd.Flags().StringVar(platform, "platform", "linux/amd64", "Build platform, for example linux/amd64")
+	cmd.Flags().BoolVar(push, "push", true, "Push the image to the registry after building")
 }

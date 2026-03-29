@@ -9,8 +9,8 @@ import (
 func newBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build [component]",
-		Short: "Build Crawbl component images",
-		Long:  "Build Docker images for Crawbl platform components.",
+		Short: "Build a component Docker image",
+		Long:  "Build a Docker image for one Crawbl component such as the platform, auth filter, or docs site.",
 		Example: `  crawbl app build platform     # Build unified platform image (orchestrator + webhook)
   crawbl app build auth-filter  # Build Envoy auth WASM filter image
   crawbl app build docs         # Build docs site image`,

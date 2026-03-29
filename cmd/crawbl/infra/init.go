@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // newInitCommand creates the infra init subcommand.
@@ -19,7 +21,7 @@ func newInitCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Initialize Pulumi stack",
+		Short: "Initialize the Pulumi stack for an environment",
 		Long: `Initialize or select a Pulumi stack for infrastructure management.
 
 This command:
@@ -33,8 +35,8 @@ This command:
 		},
 	}
 
-	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name (dev, staging, prod)")
-	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region (fra1, nyc1, sfo2)")
+	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
+	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
 
 	return cmd
 }
@@ -43,14 +45,14 @@ func runInit(ctx context.Context, env, region string) error {
 	// Only PULUMI_ACCESS_TOKEN is required as an env var.
 	// Provider tokens (DO, Cloudflare) are injected by Pulumi ESC.
 	if os.Getenv("PULUMI_ACCESS_TOKEN") == "" {
-		fmt.Println("Missing required environment variable:")
-		fmt.Println("  - PULUMI_ACCESS_TOKEN")
-		fmt.Println("\nSet it before running init:")
-		fmt.Println("  export PULUMI_ACCESS_TOKEN=...")
+		out.Fail("Missing required environment variable")
+		out.Infof("- PULUMI_ACCESS_TOKEN")
+		out.Warning("Set it before running init")
+		out.Infof("export PULUMI_ACCESS_TOKEN=...")
 		return fmt.Errorf("missing PULUMI_ACCESS_TOKEN")
 	}
 
-	fmt.Printf("Initializing Pulumi stack for environment '%s' in region '%s'\n", env, region)
+	out.Step(style.Infra, "Initializing the Pulumi stack for environment %q in region %q", env, region)
 
 	config, err := buildConfig(env, region)
 	if err != nil {
@@ -63,11 +65,11 @@ func runInit(ctx context.Context, env, region string) error {
 	}
 	_ = stack
 
-	fmt.Println("✓ Stack initialized successfully")
-	fmt.Printf("✓ Pulumi ESC environment: %s\n", config.ESCEnvironment)
-	fmt.Println("\nNext steps:")
-	fmt.Println("  crawbl infra plan    # Preview infrastructure changes")
-	fmt.Println("  crawbl infra apply   # Apply infrastructure changes")
+	out.Success("Stack initialized successfully")
+	out.Step(style.Config, "Pulumi ESC environment: %s", config.ESCEnvironment)
+	out.Step(style.Tip, "Next steps:")
+	out.Infof("crawbl infra plan    # Preview infrastructure changes")
+	out.Infof("crawbl infra update  # Apply infrastructure changes")
 
 	return nil
 }

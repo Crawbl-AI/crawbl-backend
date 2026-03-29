@@ -11,14 +11,15 @@ func newWebhookCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "webhook",
-		Short: "Run the Metacontroller sync webhook server",
+		Short: "Start the Metacontroller sync webhook server",
+		Long:  "Start the HTTP server that Metacontroller calls to reconcile UserSwarm resources.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return webhook.ListenAndServe(sc)
 		},
 	}
 
 	cmd.Flags().StringVar(&sc.Addr, "addr", ":8080", "Address to listen on")
-	cmd.Flags().StringVar(&sc.ZeroClawCfgPath, "zeroclaw-config", "config/zeroclaw.yaml", "Path to ZeroClaw config YAML")
+	cmd.Flags().StringVar(&sc.ZeroClawCfgPath, "zeroclaw-config", "config/zeroclaw.yaml", "Path to the ZeroClaw config YAML")
 
 	return cmd
 }

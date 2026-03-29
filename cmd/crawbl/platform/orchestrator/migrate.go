@@ -16,7 +16,8 @@ func newMigrateCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "migrate",
-		Short: "Run database migrations",
+		Short: "Run database migrations for the orchestrator",
+		Long:  "Run the orchestrator database migrations for the selected service migration set.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			dbConfig := database.ConfigFromEnv("CRAWBL_")
 			if err := database.EnsureSchema(dbConfig); err != nil {
@@ -38,7 +39,7 @@ func newMigrateCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&serviceName, "svc", defaultServiceName, "migration service name")
+	cmd.Flags().StringVar(&serviceName, "svc", defaultServiceName, "Migration service name")
 
 	return cmd
 }

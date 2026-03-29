@@ -12,6 +12,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
 )
 
@@ -61,7 +62,7 @@ func buildConfig(env, region string) (infra.Config, error) {
 		}
 	}
 	if platformConfig.ArgoCDRepoSSHPrivateKey == "" {
-		fmt.Println("WARNING: ARGOCD_SSH_PRIVATE_KEY and ARGOCD_SSH_KEY_PATH are both unset — repo secret will not be managed by Pulumi")
+		out.Warning("ARGOCD_SSH_PRIVATE_KEY and ARGOCD_SSH_KEY_PATH are both unset — repo secret will not be managed by Pulumi")
 	}
 
 	// AWS backup infrastructure config
@@ -89,11 +90,11 @@ func must(s string, err error) string {
 func NewInfraCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "infra",
-		Short: "Manage infrastructure with Pulumi",
+		Short: "Manage cloud infrastructure with Pulumi",
 		Long:  "Manage Crawbl infrastructure (Kubernetes cluster, platform services, ArgoCD bootstrap) using Pulumi.",
 		Example: `  crawbl infra init        # Initialize Pulumi stack
   crawbl infra plan        # Preview infrastructure changes
-  crawbl infra update       # Apply infrastructure changes
+  crawbl infra update      # Apply infrastructure changes
   crawbl infra destroy     # Destroy all infrastructure
   crawbl infra bootstrap   # Bootstrap cluster end-to-end`,
 		RunE: func(cmd *cobra.Command, args []string) error {

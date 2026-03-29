@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // newUpdateCommand creates the infra apply subcommand.
@@ -20,7 +22,7 @@ func newUpdateCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update existing infrastructure",
+		Short: "Apply infrastructure changes",
 		Long: `Update existing infrastructure using Pulumi.
 
 Use this for incremental updates to existing infrastructure (e.g., change
@@ -39,8 +41,8 @@ Everything else is managed by ArgoCD via the crawbl-argocd-apps repo.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name (dev, staging, prod)")
-	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region (fra1, nyc1, sfo2)")
+	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
+	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
 	cmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Skip confirmation prompts")
 
 	return cmd
@@ -51,11 +53,11 @@ func runUpdate(ctx context.Context, env, region string, autoApprove bool) error 
 		return err
 	}
 
-	fmt.Printf("Updating infrastructure for environment '%s' in region '%s'\n", env, region)
+	out.Step(style.Infra, "Applying infrastructure changes for environment %q in region %q", env, region)
 
 	if !autoApprove {
 		if !confirmUpdate() {
-			fmt.Println("Update cancelled")
+			out.Warning("Update cancelled")
 			return nil
 		}
 	}
@@ -93,19 +95,21 @@ func validateEnvVars() error {
 }
 
 func confirmUpdate() bool {
-	fmt.Print("Do you want to perform this action? (y/N): ")
+	out.Prompt(style.Warning, "Do you want to perform this action? (y/N): ")
 	var response string
 	fmt.Scanln(&response)
 	return response == "y" || response == "Y"
 }
 
 func printOutputs(result *infra.UpResult) {
-	fmt.Println("\n✓ Apply complete")
+	out.Ln()
+	out.Success("Apply complete")
 	if len(result.Outputs) == 0 {
 		return
 	}
-	fmt.Println("\nOutputs:")
+	out.Ln()
+	out.Step(style.Config, "Outputs:")
 	for name, output := range result.Outputs {
-		fmt.Printf("  %s: %v\n", name, output)
+		out.Infof("%s: %v", name, output)
 	}
 }

@@ -11,20 +11,23 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
 // NewSetupCommand creates the `crawbl setup` command.
 func NewSetupCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Check your machine is ready to work with crawbl-backend",
+		Short: "Verify and prepare your machine for development",
 		Long: `Verifies your development environment and prepares .env configuration.
 
 What it does:
   1. Checks that required tools are installed (Go, Docker, kubectl, etc.)
   2. Creates .env from .env.example if it doesn't exist
 
-After setup completes, run 'make run' to start the orchestrator.`,
+After setup completes, run 'crawbl dev start' to start the orchestrator.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup()
 		},
@@ -37,14 +40,13 @@ After setup completes, run 'make run' to start the orchestrator.`,
 // 1. Verify all required tools are installed
 // 2. Create .env if it doesn't exist
 func runSetup() error {
-	fmt.Println()
-	fmt.Println("🧠 Crawbl Backend Setup")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println()
+	out.Ln()
+	out.Step(style.Setup, "Crawbl Backend Setup")
+	out.Ln()
 
 	// --- Step 1: Check required tools ---
-	fmt.Println("📋 Step 1/2 — Checking required tools...")
-	fmt.Println()
+	out.Step(style.Setup, "Step 1/2: Checking required tools...")
+	out.Ln()
 
 	allFound := true
 	tools := []toolCheck{
@@ -59,57 +61,51 @@ func runSetup() error {
 
 	for _, t := range tools {
 		if checkTool(t) {
-			fmt.Printf("   ✅ %s\n", t.name)
+			out.Step(style.Check, "%s", t.name)
 		} else {
-			fmt.Printf("   ❌ %s — install: %s\n", t.name, t.installHint)
+			out.Step(style.Failure, "%s — install: %s", t.name, t.installHint)
 			allFound = false
 		}
 	}
-	fmt.Println()
+	out.Ln()
 
 	// If anything is missing, suggest mise as the fix.
 	if !allFound {
-		fmt.Println("💡 Install all tools at once with mise:")
-		fmt.Println()
-		fmt.Println("   curl https://mise.run | sh")
-		fmt.Println("   eval \"$(~/.local/bin/mise activate zsh)\"")
-		fmt.Println("   mise install")
-		fmt.Println()
+		out.Step(style.Tip, "Install all tools at once with mise:")
+		out.Infof("curl https://mise.run | sh")
+		out.Infof("eval \"$(~/.local/bin/mise activate zsh)\"")
+		out.Infof("mise install")
+		out.Ln()
 	}
 
 	// --- Step 2: Check/create .env file ---
-	fmt.Println("📝 Step 2/2 — Checking .env file...")
-	fmt.Println()
+	out.Step(style.Config, "Step 2/2: Checking .env file...")
+	out.Ln()
 
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
 		if _, err := os.Stat(".env.example"); err == nil {
 			if err := copyFile(".env.example", ".env"); err != nil {
 				return fmt.Errorf("failed to create .env: %w", err)
 			}
-			fmt.Println("   ✅ Created .env from .env.example")
+			out.Step(style.Check, "Created .env from .env.example")
 		} else {
-			fmt.Println("   ⚠️  No .env.example found — create .env manually")
+			out.Warning("No .env.example found — create .env manually")
 		}
 	} else {
-		fmt.Println("   ✅ .env already exists")
+		out.Step(style.Check, ".env already exists")
 	}
-	fmt.Println()
+	out.Ln()
 
 	// --- Done ---
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("🎉 Ready! Next steps:")
-	fmt.Println()
-	fmt.Println("   1. Source your environment:")
-	fmt.Println("      set -a && source .env && set +a")
-	fmt.Println()
-	fmt.Println("   2. Start everything:")
-	fmt.Println("      make run")
-	fmt.Println()
-	fmt.Println("   3. Verify:")
-	fmt.Println("      curl http://localhost:7171/v1/health")
-	fmt.Println()
-	fmt.Println("   📚 Docs: https://dev.docs.crawbl.com/getting-started")
-	fmt.Println()
+	out.Step(style.Celebrate, "Ready! Next steps:")
+	out.Infof("1. Source your environment:")
+	out.Infof("   set -a && source .env && set +a")
+	out.Infof("2. Start everything:")
+	out.Infof("   crawbl dev start")
+	out.Infof("3. Verify:")
+	out.Infof("   curl http://localhost:7171/v1/health")
+	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")
+	out.Ln()
 
 	return nil
 }

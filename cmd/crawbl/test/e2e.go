@@ -24,7 +24,7 @@ func newE2ECommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "e2e",
-		Short: "Run end-to-end tests against a live orchestrator",
+		Short: "Run end-to-end tests against a live environment",
 		Long: `Run the full orchestrator e2e test suite (Cucumber/godog) against a live environment.
 
 Tests authenticate via X-E2E-Token (gateway mode) or X-Firebase-UID (port-forward mode).
@@ -61,13 +61,13 @@ Database assertions require --database-dsn to connect to the orchestrator's Post
 	}
 
 	cmd.Flags().StringVar(&baseURL, "base-url", "http://localhost:7171", "Orchestrator base URL")
-	cmd.Flags().StringVar(&uid, "uid", "e2e-test-user", "Firebase UID for test user")
-	cmd.Flags().StringVar(&email, "email", "e2e@crawbl.test", "Email for test user")
-	cmd.Flags().StringVar(&name, "name", "E2E Test User", "Display name for test user")
-	cmd.Flags().StringVar(&e2eToken, "e2e-token", os.Getenv("CRAWBL_E2E_TOKEN"), "Shared secret for gateway auth bypass (or set CRAWBL_E2E_TOKEN)")
+	cmd.Flags().StringVar(&uid, "uid", "e2e-test-user", "Firebase UID for the test user")
+	cmd.Flags().StringVar(&email, "email", "e2e@crawbl.test", "Email for the test user")
+	cmd.Flags().StringVar(&name, "name", "E2E Test User", "Display name for the test user")
+	cmd.Flags().StringVar(&e2eToken, "e2e-token", os.Getenv("CRAWBL_E2E_TOKEN"), "Shared secret for gateway auth bypass, or set CRAWBL_E2E_TOKEN")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print detailed test output")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "HTTP request timeout")
-	cmd.Flags().StringVar(&databaseDSN, "database-dsn", os.Getenv("CRAWBL_E2E_DATABASE_DSN"), "Postgres DSN for DB assertions (optional)")
+	cmd.Flags().StringVar(&databaseDSN, "database-dsn", os.Getenv("CRAWBL_E2E_DATABASE_DSN"), "Postgres DSN for database assertions")
 
 	return cmd
 }
