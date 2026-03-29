@@ -19,8 +19,8 @@ type integrationItemResponse struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	IconURL     string `json:"icon_url"`
-	Provider    string `json:"provider"`
-	Category    string `json:"category"`
+	Provider    string `json:"provider,omitempty"`
+	Category    string `json:"category,omitempty"`
 	IsConnected bool   `json:"is_connected"`
 	IsEnabled   bool   `json:"is_enabled"`
 }
