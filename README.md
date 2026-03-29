@@ -16,6 +16,8 @@
 The backend that powers Crawbl. When you open the app and talk to your AI agent,
 this is the server that authenticates you, routes your messages to the right agent,
 and connects your apps (Gmail, Slack, Calendar) so the agent can act on your behalf.
+It also provisions the infrastructure — spinning up isolated AI agent pods for each
+user on Kubernetes, managing their lifecycle, and tearing them down when no longer needed.
 
 > 📚 **Full docs:** [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) · API reference, architecture, runbooks
 
