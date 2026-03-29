@@ -84,6 +84,11 @@ func registerProductSteps(sc *godog.ScenarioContext, tc *testContext) {
 
 	sc.Step(`^user "([^"]*)" deletes their account$`, tc.userDeletesTheirAccount)
 	sc.Step(`^user "([^"]*)" should be marked as deleted in the database$`, tc.userShouldBeMarkedAsDeletedInDatabase)
+
+	sc.Step(`^user "([^"]*)" opens the integrations catalog$`, tc.userOpensIntegrationsCatalog)
+	sc.Step(`^user "([^"]*)" should see tool categories$`, tc.userShouldSeeToolCategories)
+	sc.Step(`^user "([^"]*)" should see tools in the catalog$`, tc.userShouldSeeToolsInCatalog)
+	sc.Step(`^user "([^"]*)" should see integration apps in the catalog$`, tc.userShouldSeeIntegrationAppsInCatalog)
 }
 
 func (tc *testContext) guestChecksServiceHealth() error {
@@ -848,4 +853,73 @@ func abbreviatedBody(body []byte) string {
 		return text[:200]
 	}
 	return text
+}
+
+func (tc *testContext) userOpensIntegrationsCatalog(alias string) error {
+	if _, err := tc.doRequest("GET", "/v1/integrations", alias, nil); err != nil {
+		return err
+	}
+	return tc.assertStatus(200)
+}
+
+func (tc *testContext) userShouldSeeToolCategories(alias string) error {
+	if err := tc.userOpensIntegrationsCatalog(alias); err != nil {
+		return err
+	}
+	categories := gjson.GetBytes(tc.lastBody, "data.categories")
+	if !categories.IsArray() || len(categories.Array()) == 0 {
+		return fmt.Errorf("expected non-empty categories array")
+	}
+	first := categories.Array()[0]
+	for _, field := range []string{"id", "name", "image_url"} {
+		if first.Get(field).String() == "" {
+			return fmt.Errorf("category missing required field %q", field)
+		}
+	}
+	return nil
+}
+
+func (tc *testContext) userShouldSeeToolsInCatalog(alias string) error {
+	if err := tc.userOpensIntegrationsCatalog(alias); err != nil {
+		return err
+	}
+	items := gjson.GetBytes(tc.lastBody, "data.items")
+	if !items.IsArray() || len(items.Array()) == 0 {
+		return fmt.Errorf("expected non-empty items array")
+	}
+	// Verify at least one tool item exists.
+	for _, item := range items.Array() {
+		if item.Get("type").String() == "tool" {
+			// Verify required fields on the first tool found.
+			for _, field := range []string{"name", "description", "icon_url", "category_id"} {
+				if item.Get(field).String() == "" {
+					return fmt.Errorf("tool item missing required field %q", field)
+				}
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("no items with type=tool found")
+}
+
+func (tc *testContext) userShouldSeeIntegrationAppsInCatalog(alias string) error {
+	if err := tc.userOpensIntegrationsCatalog(alias); err != nil {
+		return err
+	}
+	items := gjson.GetBytes(tc.lastBody, "data.items")
+	if !items.IsArray() || len(items.Array()) == 0 {
+		return fmt.Errorf("expected non-empty items array")
+	}
+	// Verify at least one app item exists.
+	for _, item := range items.Array() {
+		if item.Get("type").String() == "app" {
+			for _, field := range []string{"name", "description", "icon_url", "provider", "category_id"} {
+				if item.Get(field).String() == "" {
+					return fmt.Errorf("app item missing required field %q", field)
+				}
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("no items with type=app found")
 }

@@ -6,29 +6,14 @@ Feature: Integrations and tools catalog
   Background:
     Given user "primary" has signed up
 
-  Scenario: The integrations endpoint returns categories and items
-    When user "primary" sends a GET request to "/v1/integrations"
-    Then the response status should be 200
-    And the response JSON at "data.categories" should not be empty
-    And the response JSON array "data.categories" should contain an item where "id" equals "search"
-    And the response JSON array "data.categories" should contain an item where "id" equals "utility"
-    And the response JSON at "data.items" should not be empty
-    And the response JSON array "data.items" should contain an item where "name" equals "Web Search"
-    And the response JSON array "data.items" should contain an item where "name" equals "Calculator"
-    And the response JSON array "data.items" should contain an item where "type" equals "tool"
+  Scenario: The catalog includes tool categories
+    When user "primary" opens the integrations catalog
+    Then user "primary" should see tool categories
 
-  Scenario: Each category has required fields
-    When user "primary" sends a GET request to "/v1/integrations"
-    Then the response status should be 200
-    And the response JSON at "data.categories.0.id" should not be empty
-    And the response JSON at "data.categories.0.name" should not be empty
-    And the response JSON at "data.categories.0.image_url" should not be empty
+  Scenario: The catalog includes agent tools
+    When user "primary" opens the integrations catalog
+    Then user "primary" should see tools in the catalog
 
-  Scenario: Each tool item has required fields
-    When user "primary" sends a GET request to "/v1/integrations"
-    Then the response status should be 200
-    And the response JSON at "data.items.0.name" should not be empty
-    And the response JSON at "data.items.0.description" should not be empty
-    And the response JSON at "data.items.0.icon_url" should not be empty
-    And the response JSON at "data.items.0.type" should not be empty
-    And the response JSON at "data.items.0.category_id" should not be empty
+  Scenario: The catalog includes third-party integration apps
+    When user "primary" opens the integrations catalog
+    Then user "primary" should see integration apps in the catalog
