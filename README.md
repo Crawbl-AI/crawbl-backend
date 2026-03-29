@@ -13,7 +13,9 @@
 
 ---
 
-Sits between the mobile app and per-user [ZeroClaw](https://github.com/Crawbl-AI/crawbl-zeroclaw) agent pods. Handles auth, workspaces, chat proxying, MCP tools, push notifications, integrations, and audit logging.
+The backend that powers Crawbl. When you open the app and talk to your AI agent,
+this is the server that authenticates you, routes your messages to the right agent,
+and connects your apps (Gmail, Slack, Calendar) so the agent can act on your behalf.
 
 > 📚 **Full docs:** [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) · API reference, architecture, runbooks
 
