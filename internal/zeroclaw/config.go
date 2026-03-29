@@ -61,9 +61,19 @@ func DefaultConfig() *ZeroClawConfig {
 				"~/.ssh", "~/.gnupg", "~/.aws", "~/.config",
 			},
 			AutoApprove: []string{
-				"file_read", "memory_recall", "web_search_tool",
-				"web_fetch", "calculator", "glob_search",
-				"content_search", "image_info", "weather",
+				// File and search tools.
+				"file_read", "file_write", "file_edit",
+				"glob_search", "content_search",
+				// Memory tools.
+				"memory_store", "memory_recall", "memory_forget",
+				// Web tools.
+				"web_search_tool", "web_fetch", "http_request",
+				// Utility tools.
+				"calculator", "image_info", "weather",
+				// Scheduling and cron tools.
+				"cron_add", "cron_list", "cron_remove", "cron_update", "cron_run", "cron_runs",
+				// Shell (limited by allowed_commands list).
+				"shell",
 				// Orchestrator MCP tools — safe to auto-approve because
 				// they are already scoped to the authenticated user via HMAC token.
 				"orchestrator__send_push_notification",

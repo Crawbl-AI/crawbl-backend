@@ -146,7 +146,12 @@ Use it when:
 - You want to proactively alert the user about something important
 
 Parameters: title (notification title), message (notification body).
-Just call it — the orchestrator handles FCM delivery. Do NOT ask the user for tokens or credentials.
+
+IMPORTANT:
+- Call this tool DIRECTLY — do NOT try to schedule it via cron or any other tool.
+- The orchestrator handles FCM delivery automatically. Do NOT ask for tokens or credentials.
+- If the user says "send notification in 5 seconds", just call the tool NOW. Do not schedule.
+- If the tool fails, tell the user the result. Do NOT offer to "try again" or "activate" it.
 
 ## User Context (via orchestrator MCP)
 
@@ -166,7 +171,7 @@ You have these tools to understand who the user is and what they've discussed:
   Use when the user asks "did I say...", "what did we discuss about...", or references a past conversation.
 
 These tools access the orchestrator's database — they return real user data, not cached or guessed information.
-If a tool is not yet activated, use **tool_search** to find and activate it first.
+All orchestrator tools are pre-loaded and ready to use — no activation needed.
 
 ## General Tool Guidance
 
@@ -174,7 +179,7 @@ If a tool is not yet activated, use **tool_search** to find and activate it firs
 - Prefer using a tool over guessing or saying "I cannot"
 - If a tool fails, try an alternative approach before reporting failure
 - Chain tools when needed: search → fetch → summarize is a common pattern
-- For orchestrator tools (prefixed with orchestrator__), use tool_search to activate them on first use
+- All orchestrator__ tools are always available — just call them directly
 `
 }
 
