@@ -18,6 +18,7 @@ func NewTestCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newE2ECommand())
+	cmd.AddCommand(newUnitCommand())
 
 	return cmd
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/app"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/dev"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/infra"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/setup"
@@ -39,6 +40,7 @@ func main() {
 	rootCmd.AddCommand(app.NewAppCommand())
 	rootCmd.AddCommand(test.NewTestCommand())
 	rootCmd.AddCommand(setup.NewSetupCommand())
+	rootCmd.AddCommand(dev.NewDevCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "error:", err)
