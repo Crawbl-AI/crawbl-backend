@@ -1,8 +1,8 @@
-// Package reaper implements a periodic cleanup job for end-to-end (e2e) test
-// resources. During automated testing, the test harness creates real database
-// users and Kubernetes UserSwarm CRs that must be removed after tests finish.
-// Without the reaper, these resources accumulate indefinitely and pollute the
-// cluster with stale ZeroClaw runtime pods.
+// Package reaper implements a periodic cleanup job that removes stale test users
+// and orphaned agent pods. It runs as a Kubernetes CronJob with two phases:
+// Phase 1 targets e2e test users (subject starts with "e2e-") older than MaxAge.
+// Phase 2 is a universal safety net that removes ANY UserSwarm CR whose owning
+// user no longer exists — regardless of how that user was created or deleted.
 //
 // # What the reaper cleans up
 //

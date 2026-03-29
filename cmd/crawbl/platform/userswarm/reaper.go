@@ -19,14 +19,16 @@ func newReaperCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "reaper",
-		Short: "Clean up orphaned e2e test resources",
-		Long: `Delete stale e2e test users and their UserSwarm CRs from the dev cluster.
+		Short: "Clean up stale test users and orphaned agent pods",
+		Long: `Two-phase cleanup job for the dev cluster:
 
-The reaper finds users whose subject starts with "e2e-" and whose created_at
-is older than --max-age, then deletes their UserSwarm CRs (triggering operator
-cleanup of all child resources) and soft-deletes the user record.
+Phase 1: Finds users whose subject starts with "e2e-" and whose created_at
+is older than --max-age, deletes their UserSwarm CRs (triggering teardown
+of all agent pods, PVCs, and Services) and soft-deletes the user record.
 
-It also scans for orphaned UserSwarm CRs whose owning user no longer exists.
+Phase 2: Scans ALL UserSwarm CRs cluster-wide and deletes any whose owning
+user no longer exists or has been soft-deleted. This is a universal safety
+net that catches orphans from any source, not just e2e tests.
 
 Designed to run as a Kubernetes CronJob using the crawbl-platform image.`,
 		Example: `  # Dry run — see what would be cleaned up

@@ -57,8 +57,8 @@ All secrets in `.env` — copy from `.env.example` and `source .env` before runn
 | 🌐 | **Orchestrator** | Mobile-facing HTTP API + MCP server |
 | 🔄 | **Webhook** | Builds and manages per-user AI agent pods |
 | 🔐 | **Auth Filter** | Verifies user identity before requests reach the API |
-| 🧹 | **Reaper** | Cleans up stale e2e test resources |
-| 🏗️ | **Infra** | Pulumi IaC (cluster bootstrap only) |
+| 🧹 | **Reaper** | Cleans up stale test users + orphaned agent pods |
+| 🏗️ | **Infra** | Pulumi IaC for DOKS cluster + ArgoCD |
 
 ## 🗂️ Structure
 
@@ -74,7 +74,7 @@ internal/
 ├── userswarm/                  # 🔄 K8s lifecycle
 │   ├── client/                 #    CR management
 │   ├── webhook/                #    Metacontroller sync
-│   └── reaper/                 #    E2E cleanup
+│   └── reaper/                 #    Stale user + orphan pod cleanup
 ├── zeroclaw/                   # 🧠 Agent runtime config
 ├── pkg/                        # 📦 Shared packages
 │   ├── firebase/               #    FCM push
