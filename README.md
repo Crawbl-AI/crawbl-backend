@@ -47,18 +47,36 @@
 ## 🚀 Quick Start
 
 ```bash
-# First time? One command sets up everything:
+# 1. Check your machine has everything needed:
 go run ./cmd/crawbl setup
 
-# Then start the orchestrator:
+# 2. Source environment and start the stack:
 set -a && source .env && set +a
-make run
+crawbl dev start
 
-# Verify it works:
+# 3. Verify:
 curl http://localhost:7171/v1/health
 ```
 
-`crawbl setup` checks your tools, creates `.env`, starts Postgres, and runs migrations. Use `--skip-docker` for a tools-only check.
+## 🛠️ CLI
+
+Everything is managed through the `crawbl` CLI — no Makefile needed.
+
+```
+crawbl setup                  # Check tools + create .env
+crawbl dev start [--clean]    # Start Postgres + orchestrator
+crawbl dev stop               # Stop containers
+crawbl dev reset              # Wipe database + stop
+crawbl dev migrate            # Run migrations only
+crawbl dev fmt                # Format code
+crawbl dev lint [--fix]       # Run linter
+crawbl dev verify             # fmt + lint + test (pre-push)
+crawbl test unit              # Go unit tests
+crawbl test e2e               # E2E against dev cluster
+crawbl app build <component>  # Build Docker images
+crawbl infra plan             # Preview infra changes
+crawbl infra update           # Apply infra changes
+```
 
 ## 📦 Components
 
