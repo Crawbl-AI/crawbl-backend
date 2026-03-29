@@ -594,6 +594,45 @@ var DefaultAgents = []DefaultAgentBlueprint{
 	},
 }
 
+// ---------------------------------------------------------------------------
+// Agent Tools
+// ---------------------------------------------------------------------------
+
+// ToolCategory groups tools by their function for display in the mobile app.
+type ToolCategory string
+
+const (
+	ToolCategorySearch       ToolCategory = "search"
+	ToolCategoryFiles        ToolCategory = "files"
+	ToolCategoryMemory       ToolCategory = "memory"
+	ToolCategoryScheduling   ToolCategory = "scheduling"
+	ToolCategoryNotification ToolCategory = "notification"
+	ToolCategoryContext      ToolCategory = "context"
+	ToolCategoryUtility      ToolCategory = "utility"
+	ToolCategoryIntegration  ToolCategory = "integration"
+	ToolCategoryShell        ToolCategory = "shell"
+)
+
+// AgentTool represents a tool available to the ZeroClaw agent.
+type AgentTool struct {
+	// Name is the tool's identifier as registered in ZeroClaw (e.g. "web_search_tool").
+	Name string
+	// DisplayName is a human-readable name for the mobile UI (e.g. "Web Search").
+	DisplayName string
+	// Description explains what the tool does.
+	Description string
+	// Category groups the tool for UI organization.
+	Category ToolCategory
+	// Enabled indicates whether the tool is currently active for this workspace.
+	Enabled bool
+	// Toggleable indicates whether the user can enable/disable this tool.
+	// Default tools (Toggleable=false) are always on and cannot be turned off.
+	Toggleable bool
+	// RequiresSetup indicates whether the tool needs additional configuration
+	// (e.g. OAuth connection) before it can be used.
+	RequiresSetup bool
+}
+
 // Mention represents an @-mention of an agent in a swarm message.
 type Mention struct {
 	AgentID   string `json:"agent_id"`
