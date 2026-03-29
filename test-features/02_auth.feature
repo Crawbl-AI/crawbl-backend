@@ -1,27 +1,20 @@
-Feature: Authentication
+Feature: Account access
   As a mobile app user
-  I need to sign up and sign in
-  So I can access the platform
+  I need to create an account once and come back later without duplicate setup
+  So I can get into my workspace quickly
 
-  # All auth scenarios use the shared primary user (1 UserSwarm for all).
+  Scenario: Signing up creates the account and default workspace
+    When user "primary" signs up
+    Then user "primary" should exist in the database
+    And user "primary" should have one workspace in the database
+    And user "primary" should have a single default workspace
 
-  Scenario: New user sign-up creates account and default workspace
-    Given the primary test user
-    When user "primary" sends a POST request to "/v1/auth/sign-up"
-    Then the response status should be 204
-    And the database should have a user with subject "primary"
-    And the database should have 1 workspace for subject "primary"
-    When user "primary" sends a GET request to "/v1/workspaces"
-    Then the response status should be 200
-    And the response JSON at "data" should be an array of length 1
+  Scenario: Existing user can sign in again
+    Given user "primary" has signed up
+    When user "primary" signs in
+    Then user "primary" should see their default profile details
 
-  Scenario: Existing user can sign in
-    Given the primary test user has signed up
-    When user "primary" sends a POST request to "/v1/auth/sign-in"
-    Then the response status should be 204
-
-  Scenario: Sign-up is idempotent
-    Given the primary test user has signed up
-    When user "primary" sends a POST request to "/v1/auth/sign-up"
-    Then the response status should be 204
-    And the database should have 1 workspace for subject "primary"
+  Scenario: Signing up again does not duplicate the default workspace
+    Given user "primary" has signed up
+    When user "primary" signs up
+    Then user "primary" should have one workspace in the database

@@ -4,7 +4,7 @@
 
 [tools]
 go = "1.25.8"
-kubectl = "1.32"
+kubectl = "1.32.13"
 helm = "3.7"
 doctl = "1.152"
 awscli = "2.34.19"

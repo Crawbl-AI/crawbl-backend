@@ -12,14 +12,16 @@ import (
 
 func newE2ECommand() *cobra.Command {
 	var (
-		baseURL     string
-		uid         string
-		email       string
-		name        string
-		e2eToken    string
-		verbose     bool
-		timeout     time.Duration
-		databaseDSN string
+		baseURL             string
+		uid                 string
+		email               string
+		name                string
+		e2eToken            string
+		verbose             bool
+		timeout             time.Duration
+		runtimeReadyTimeout time.Duration
+		runtimePollInterval time.Duration
+		databaseDSN         string
 	)
 
 	cmd := &cobra.Command{
@@ -40,14 +42,16 @@ Database assertions require --database-dsn to connect to the orchestrator's Post
     --database-dsn "postgres://user:pass@host:5432/crawbl?sslmode=disable&search_path=orchestrator"`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg := &e2e.Config{
-				BaseURL:     baseURL,
-				UID:         uid,
-				Email:       email,
-				Name:        name,
-				E2EToken:    e2eToken,
-				Verbose:     verbose,
-				Timeout:     timeout,
-				DatabaseDSN: databaseDSN,
+				BaseURL:             baseURL,
+				UID:                 uid,
+				Email:               email,
+				Name:                name,
+				E2EToken:            e2eToken,
+				Verbose:             verbose,
+				Timeout:             timeout,
+				RuntimeReadyTimeout: runtimeReadyTimeout,
+				RuntimePollInterval: runtimePollInterval,
+				DatabaseDSN:         databaseDSN,
 			}
 
 			results := e2e.Run(cfg)
@@ -67,6 +71,8 @@ Database assertions require --database-dsn to connect to the orchestrator's Post
 	cmd.Flags().StringVar(&e2eToken, "e2e-token", os.Getenv("CRAWBL_E2E_TOKEN"), "Shared secret for gateway auth bypass, or set CRAWBL_E2E_TOKEN")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print detailed test output")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "HTTP request timeout")
+	cmd.Flags().DurationVar(&runtimeReadyTimeout, "runtime-ready-timeout", 3*time.Minute, "How long to wait for a workspace runtime to become ready before chat scenarios fail")
+	cmd.Flags().DurationVar(&runtimePollInterval, "runtime-poll-interval", 2*time.Second, "How often to poll workspace runtime readiness during chat scenarios")
 	cmd.Flags().StringVar(&databaseDSN, "database-dsn", os.Getenv("CRAWBL_E2E_DATABASE_DSN"), "Postgres DSN for database assertions")
 
 	return cmd

@@ -1,17 +1,12 @@
-Feature: Health and public endpoints
-  As a client application
-  I need to check server health and read legal documents
-  Before authenticating
+Feature: Public service checks
+  As someone opening the app for the first time
+  I need to know the service is alive and the public documents are reachable
+  Before I sign in
 
-  Scenario: Health check returns online status
-    When I send a GET request to "/v1/health" without auth
-    Then the response status should be 200
-    And the response JSON at "data.online" should equal "true"
+  Scenario: Anyone can verify the service is online
+    When the guest checks the service health
+    Then the service should report online
 
-  Scenario: Public legal documents are available
-    When I send a GET request to "/v1/legal" without auth
-    Then the response status should be 200
-    And the response JSON at "data.terms_of_service" should contain "crawbl.com"
-    And the response JSON at "data.privacy_policy" should contain "crawbl.com"
-    And the response JSON at "data.terms_of_service_version" should not be empty
-    And the response JSON at "data.privacy_policy_version" should not be empty
+  Scenario: Anyone can read the legal documents before signing in
+    When the guest reads the public legal documents
+    Then the public legal documents should be available

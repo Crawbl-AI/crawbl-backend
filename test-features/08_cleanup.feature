@@ -1,25 +1,17 @@
 Feature: Account deletion
-  As a user
-  I need to delete my account
-  And have my data marked as deleted
+  As a user leaving the product
+  I want my account to be marked deleted and treated differently afterwards
+  So cleanup is deliberate and visible
 
-  # Uses the "frank" suite-level user for destructive deletion tests.
-  # Frank is re-signed-up at the start to ensure a clean state.
-
-  Scenario: Delete account with reason
+  Scenario: A user can delete their account
     Given an extra test user "frank"
     And user "frank" has signed up
-    When user "frank" sends a DELETE request to "/v1/auth/delete" with JSON:
-      """
-      {"reason": "e2e-cleanup", "description": "automated test cleanup"}
-      """
-    Then the response status should be 204
-    And the database user "frank" should have deleted_at set
-    And the database user "frank" should have is_deleted "true"
+    When user "frank" deletes their account
+    Then user "frank" should be marked as deleted in the database
 
-  Scenario: Deleted user profile shows deleted flag
+  Scenario: A deleted account no longer behaves like an active profile
     Given an extra test user "frank"
     And user "frank" has signed up
     And user "frank" has deleted their account
-    When user "frank" sends a GET request to "/v1/users/profile"
-    Then the response status should be one of "200,403"
+    When user "frank" opens their profile
+    Then the deleted account should no longer behave like an active user

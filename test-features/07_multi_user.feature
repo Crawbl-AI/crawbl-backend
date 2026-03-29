@@ -1,78 +1,42 @@
 Feature: Multi-user isolation
   As the platform
-  I must ensure users cannot see each other's data
-  And each user has isolated workspaces, conversations, and messages
+  I must keep each user's workspace private and independent
+  So one account can never see or damage another account's data
 
-  # Multi-user scenarios use extra users (max 2 additional per scenario).
-  # These are cleaned up after each scenario.
-
-  Scenario: Two users have separate workspaces
+  Scenario: Two users receive different default workspaces
     Given an extra test user "frank"
     And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
-    When user "frank" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "frank_workspace"
-    When user "grace" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "grace_workspace"
-    Then the saved "frank_workspace" should not equal the saved "grace_workspace"
+    Then users "frank" and "grace" should have different default workspaces
 
-  Scenario: User cannot access another user's workspace
+  Scenario: A user cannot open another user's workspace
     Given an extra test user "frank"
     And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
-    When user "frank" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "frank_workspace"
-    When user "grace" sends a GET request to "/v1/workspaces/{frank_workspace}"
-    Then the response status should be 404
+    When user "grace" opens user "frank"'s default workspace
+    Then the request should be rejected as not found
 
-  Scenario: User cannot list another user's agents
+  Scenario: A user cannot open another user's agents
     Given an extra test user "frank"
     And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
-    When user "frank" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "frank_workspace"
-    When user "grace" sends a GET request to "/v1/workspaces/{frank_workspace}/agents"
-    Then the response status should be 404
+    When user "grace" opens user "frank"'s agents
+    Then the request should be rejected as not found
 
-  Scenario: User cannot list another user's conversations
+  Scenario: A user cannot open another user's conversations
     Given an extra test user "frank"
     And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
-    When user "frank" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "frank_workspace"
-    When user "grace" sends a GET request to "/v1/workspaces/{frank_workspace}/conversations"
-    Then the response status should be 404
+    When user "grace" opens user "frank"'s conversations
+    Then the request should be rejected as not found
 
-  Scenario: Deleting one user does not affect another
+  Scenario: Deleting one account does not affect another active user
     Given an extra test user "frank"
     And an extra test user "grace"
     And user "frank" has signed up
     And user "grace" has signed up
-    When user "frank" sends a DELETE request to "/v1/auth/delete" with JSON:
-      """
-      {"reason": "e2e-test", "description": "multi-user isolation test"}
-      """
-    Then the response status should be 204
-    When user "grace" sends a GET request to "/v1/users/profile"
-    Then the response status should be 200
-    And the response JSON at "data.is_deleted" should equal "false"
-
-  Scenario: Each user gets their own set of agents
-    Given an extra test user "frank"
-    And an extra test user "grace"
-    And user "frank" has signed up
-    And user "grace" has signed up
-    When user "frank" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "frank_workspace"
-    When user "grace" sends a GET request to "/v1/workspaces"
-    And I save "data.0.id" as "grace_workspace"
-    When user "frank" sends a GET request to "/v1/workspaces/{frank_workspace}/agents"
-    Then the response status should be 200
-    And the response JSON at "data" should be an array of length 2
-    When user "grace" sends a GET request to "/v1/workspaces/{grace_workspace}/agents"
-    Then the response status should be 200
-    And the response JSON at "data" should be an array of length 2
+    Then deleting user "frank" should not affect user "grace"

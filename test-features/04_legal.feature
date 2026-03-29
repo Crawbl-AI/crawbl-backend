@@ -1,31 +1,15 @@
-Feature: Legal agreement acceptance
+Feature: Legal acceptance
   As a mobile app user
-  I must accept terms of service and privacy policy
-  Before I can fully use the platform
+  I need to review and accept the current legal documents
+  Before I fully use the product
 
   Background:
-    Given the primary test user has signed up
+    Given user "primary" has signed up
 
-  Scenario: Legal status shows acceptance state
-    When user "primary" sends a GET request to "/v1/users/legal"
-    Then the response status should be 200
-    And the response JSON at "data.terms_of_service_version" should not be empty
-    And the response JSON at "data.privacy_policy_version" should not be empty
+  Scenario: The app can show the current legal versions
+    When user "primary" opens their legal status
+    Then user "primary" should see the current legal versions
 
-  Scenario: Accept terms of service
-    When user "primary" sends a POST request to "/v1/users/legal/accept" with JSON:
-      """
-      {"terms_of_service_version": "v1"}
-      """
-    Then the response status should be 204
-    When user "primary" sends a GET request to "/v1/users/legal"
-    Then the response JSON at "data.has_agreed_with_terms" should equal "true"
-
-  Scenario: Accept privacy policy
-    When user "primary" sends a POST request to "/v1/users/legal/accept" with JSON:
-      """
-      {"privacy_policy_version": "v1"}
-      """
-    Then the response status should be 204
-    When user "primary" sends a GET request to "/v1/users/legal"
-    Then the response JSON at "data.has_agreed_with_privacy_policy" should equal "true"
+  Scenario: The user can accept the current legal documents
+    When user "primary" accepts the current legal documents
+    Then user "primary" should show accepted legal documents

@@ -32,14 +32,16 @@ import (
 
 // Config holds the configuration for an e2e test run.
 type Config struct {
-	BaseURL     string
-	UID         string
-	Email       string
-	Name        string
-	E2EToken    string
-	Verbose     bool
-	Timeout     time.Duration
-	DatabaseDSN string
+	BaseURL             string
+	UID                 string
+	Email               string
+	Name                string
+	E2EToken            string
+	Verbose             bool
+	Timeout             time.Duration
+	RuntimeReadyTimeout time.Duration
+	RuntimePollInterval time.Duration
+	DatabaseDSN         string
 }
 
 // Results holds the aggregate outcome of a test run.
@@ -186,6 +188,7 @@ type testContext struct {
 	dbConn *dbr.Connection
 	users  map[string]*testUser
 	saved  map[string]string
+	state  map[string]*userJourneyState
 	// Current response state.
 	lastStatus int
 	lastBody   []byte
@@ -200,12 +203,24 @@ type testUser struct {
 	signedUp bool // track if this user has signed up in the current suite run
 }
 
+type userJourneyState struct {
+	workspaceID          string
+	workspaceName        string
+	currentConversation  string
+	swarmConversationID  string
+	agentIDsByRole       map[string]string
+	agentNamesByRole     map[string]string
+	conversationIDsByKey map[string]string
+	pushToken            string
+}
+
 func newTestContext(cfg *Config, users *suiteUsers) *testContext {
 	tc := &testContext{
 		cfg:   cfg,
 		http:  &http.Client{Timeout: cfg.Timeout},
 		users: make(map[string]*testUser),
 		saved: make(map[string]string),
+		state: make(map[string]*userJourneyState),
 	}
 
 	// All 3 users are available in every scenario.
@@ -247,4 +262,5 @@ func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
 	registerUserSteps(sc, tc)
 	registerAssertionSteps(sc, tc)
 	registerStateSteps(sc, tc)
+	registerProductSteps(sc, tc)
 }

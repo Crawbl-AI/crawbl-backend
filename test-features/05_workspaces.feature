@@ -1,30 +1,23 @@
-Feature: Workspace management
-  As a signed-up user
-  I need to view my workspaces and their agents
-  So I can start using the swarm
+Feature: Default workspace setup
+  As a newly signed-up user
+  I want a workspace that already has the basics prepared
+  So I can start using the product without manual setup
 
   Background:
-    Given the primary test user has signed up
+    Given user "primary" has signed up
 
-  Scenario: Default workspace is created on sign-up
-    When user "primary" sends a GET request to "/v1/workspaces"
-    Then the response status should be 200
-    And the response JSON at "data" should be an array of length 1
-    And the response JSON at "data.0.name" should equal "My Swarm"
-    And the response JSON at "data.0.runtime.status" should not be empty
-    And I save "data.0.id" as "workspace_id"
+  Scenario: The user sees a single default workspace
+    When user "primary" opens their workspace list
+    Then user "primary" should have a single default workspace
 
-  Scenario: Get single workspace by ID
-    Given user "primary" has a workspace saved as "workspace_id"
-    When user "primary" sends a GET request to "/v1/workspaces/{workspace_id}"
-    Then the response status should be 200
-    And the response JSON at "data.id" should equal the saved "workspace_id"
-    And the response JSON at "data.name" should equal "My Swarm"
+  Scenario: The default workspace exposes runtime details
+    When user "primary" opens their default workspace
+    Then user "primary" should see runtime details for their default workspace
 
-  Scenario: Workspace has default agents
-    Given user "primary" has a workspace saved as "workspace_id"
-    When user "primary" sends a GET request to "/v1/workspaces/{workspace_id}/agents"
-    Then the response status should be 200
-    And the response JSON at "data" should be an array of length 2
-    And the response JSON array "data" should contain an item where "role" equals "researcher"
-    And the response JSON array "data" should contain an item where "role" equals "writer"
+  Scenario: The default workspace includes the built-in agents
+    When user "primary" opens the agents in their default workspace
+    Then user "primary" should see the default agents
+
+  Scenario: The default workspace includes swarm and direct conversations
+    When user "primary" opens the conversations in their default workspace
+    Then user "primary" should see the default conversations
