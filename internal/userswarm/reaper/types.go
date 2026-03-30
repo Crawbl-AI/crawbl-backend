@@ -64,6 +64,17 @@ type Config struct {
 	// but skip every mutating operation (database UPDATE and Kubernetes DELETE).
 	// Result counters are still populated so the caller can see what would happen.
 	DryRun bool
+
+	// DigitalOceanToken is used to list and delete orphaned CSI block volumes.
+	// When empty, volume cleanup is skipped and only database / UserSwarm cleanup
+	// runs. This keeps local dry-runs simple while allowing the in-cluster CronJob
+	// to reclaim leaked DO volumes automatically.
+	DigitalOceanToken string
+
+	// OrphanVolumeMinAge is the minimum age an unattached DO volume must reach
+	// before the reaper considers it a leak candidate. This avoids racing very
+	// recent CSI operations while still cleaning up billing leaks quickly.
+	OrphanVolumeMinAge time.Duration
 }
 
 // staleUser holds the minimal set of fields the reaper needs to process a
@@ -105,6 +116,10 @@ type Result struct {
 	// SwarmsReaped is the total number of UserSwarm CRs that were deleted from
 	// the cluster, counting both user-owned swarms and orphaned swarms.
 	SwarmsReaped int
+
+	// VolumesReaped is the total number of orphaned DigitalOcean block volumes
+	// deleted (or that would be deleted in dry-run mode).
+	VolumesReaped int
 
 	// Errors is the count of non-fatal errors encountered during the run.
 	// The reaper continues processing remaining users/swarms even when

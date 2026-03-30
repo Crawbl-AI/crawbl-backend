@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,8 +23,9 @@ func NewSetupCommand() *cobra.Command {
 		Long: `Verifies your development environment and prepares .env configuration.
 
 What it does:
-  1. Checks that required tools are installed (Go, Docker, kubectl, etc.)
-  2. Creates .env from .env.example if it doesn't exist
+  1. Installs repo-managed tools with mise (when available)
+  2. Checks that required tools are installed (Go, Docker, kubectl, etc.)
+  3. Creates .env from .env.example if it doesn't exist
 
 After setup completes, run './crawbl dev start' to start the orchestrator.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -36,16 +36,38 @@ After setup completes, run './crawbl dev start' to start the orchestrator.`,
 	return cmd
 }
 
-// runSetup runs the two-step setup process:
-// 1. Verify all required tools are installed
-// 2. Create .env if it doesn't exist
+// runSetup runs the three-step setup process:
+// 1. Install repo-managed tools when mise is available
+// 2. Verify all required tools are installed
+// 3. Create .env if it doesn't exist
 func runSetup() error {
 	out.Ln()
 	out.Step(style.Setup, "Crawbl Backend Setup")
 	out.Ln()
 
-	// --- Step 1: Check required tools ---
-	out.Step(style.Setup, "Step 1/2: Checking required tools...")
+	// --- Step 1: Install repo-managed tools ---
+	out.Step(style.Setup, "Step 1/3: Installing repo-managed tools...")
+	out.Ln()
+
+	if fileExists(".mise.toml") {
+		if commandExists("mise") {
+			out.Step(style.Running, "Running mise install...")
+			if err := runCmd("mise", "install"); err != nil {
+				out.Warning("mise install failed: %v", err)
+			} else {
+				out.Step(style.Check, "Installed tool versions from .mise.toml")
+			}
+		} else {
+			out.Step(style.Warning, "mise not found — repo-managed tools skipped")
+			out.Infof("Install: https://mise.jdx.dev  then rerun: ./crawbl setup")
+		}
+	} else {
+		out.Step(style.Check, "No .mise.toml found, skipping")
+	}
+	out.Ln()
+
+	// --- Step 2: Check required tools ---
+	out.Step(style.Setup, "Step 2/3: Checking required tools...")
 	out.Ln()
 
 	allFound := true
@@ -78,8 +100,8 @@ func runSetup() error {
 		out.Ln()
 	}
 
-	// --- Step 2: Check/create .env file ---
-	out.Step(style.Config, "Step 2/2: Checking .env file...")
+	// --- Step 3: Check/create .env file ---
+	out.Step(style.Config, "Step 3/3: Checking .env file...")
 	out.Ln()
 
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
@@ -119,13 +141,29 @@ type toolCheck struct {
 	installHint string // How to install if missing
 }
 
-// checkTool runs the check command and returns true if the tool exists.
+// checkTool runs the check command via sh so shell operators (||, redirects) work.
 func checkTool(t toolCheck) bool {
-	parts := strings.Fields(t.checkCmd)
-	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd := exec.Command("sh", "-c", t.checkCmd)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
+}
+
+func commandExists(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func runCmd(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // copyFile copies src to dst.

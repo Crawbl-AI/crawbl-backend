@@ -20,6 +20,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
@@ -42,10 +43,10 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 	}
 
 	srv := &Server{
-		db:               opts.DB,
-		logger:           opts.Logger,
-		authService:      opts.AuthService,
-		workspaceService: opts.WorkspaceService,
+		db:                 opts.DB,
+		logger:             opts.Logger,
+		authService:        opts.AuthService,
+		workspaceService:   opts.WorkspaceService,
 		chatService:        opts.ChatService,
 		integrationService: opts.IntegrationService,
 		httpMiddleware:     opts.HTTPMiddleware,
@@ -91,6 +92,31 @@ func (s *Server) ListenAndServe() error {
 		return err
 	}
 	return nil
+}
+
+// Run ties the HTTP server lifecycle to a caller-provided context.
+//
+// This keeps signal handling outside the package while still giving the server
+// one obvious entrypoint for "start now, then shut down gracefully when the
+// command context is canceled".
+func (s *Server) Run(ctx context.Context, shutdownTimeout time.Duration) error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := s.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		return <-errCh
+	}
 }
 
 // Shutdown gracefully stops the HTTP server, allowing in-flight requests

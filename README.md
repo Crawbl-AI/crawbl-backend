@@ -82,6 +82,7 @@ Everything is managed through the `./crawbl` launcher or the thin root `Makefile
 This repo ships a versioned `pre-push` hook in `.githooks/pre-push`.
 
 - `make setup` installs the hook automatically
+- `make post-clone` runs the one-time post-clone bootstrap (or re-runs it with `--force`)
 - `make hooks` re-installs it if your Git config was reset
 - the hook runs `make ci-check`
 - `make ci-check` runs unit tests plus local and linux/amd64 `crawbl` builds to catch the same local-safe failures CI would catch later

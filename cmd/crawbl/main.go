@@ -5,7 +5,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -70,6 +73,9 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	rootCmd.SetUsageTemplate(rootUsageTemplate)
 	rootCmd.AddGroup(
 		&cobra.Group{ID: groupDevelopment, Title: "Development Commands:"},
@@ -102,7 +108,7 @@ func main() {
 
 	rootCmd.AddCommand(platformCmd, infraCmd, appCmd, testCmd, setupCmd, devCmd)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		out.Fail("%v", err)
 		os.Exit(1)
 	}

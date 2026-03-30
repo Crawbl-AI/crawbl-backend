@@ -2,6 +2,7 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -32,7 +33,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
-	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -45,8 +45,8 @@ func NewOrchestratorCommand() *cobra.Command {
 		Use:   "orchestrator",
 		Short: "Start the orchestrator HTTP API server",
 		Long:  "Start the Crawbl orchestrator API server, realtime layer, runtime client, and embedded MCP server.",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return runServer()
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runServer(cmd.Context())
 		},
 	}
 
@@ -55,7 +55,7 @@ func NewOrchestratorCommand() *cobra.Command {
 	return cmd
 }
 
-func runServer() error {
+func runServer(ctx context.Context) error {
 	logLevel := slog.LevelInfo
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
 	case "debug":
@@ -102,7 +102,7 @@ func runServer() error {
 		IntegrationService: integrationService,
 	})
 
-	return backendruntime.RunUntilSignal(srv.ListenAndServe, srv.Shutdown, shutdownTimeout)
+	return srv.Run(ctx, shutdownTimeout)
 }
 
 func envOrDefault(key, fallback string) string {

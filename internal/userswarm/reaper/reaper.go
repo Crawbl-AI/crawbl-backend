@@ -9,6 +9,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
 	_ "github.com/lib/pq"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -136,6 +137,13 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	orphaned, errs := reapOrphanedSwarms(ctx, k8sClient, sess, logger, cfg.DryRun)
 	result.SwarmsReaped += orphaned
 	result.Errors += errs
+
+	// Phase 3: sweep DigitalOcean block volumes that no longer have a backing
+	// PV. This catches leaked CSI volumes after PVC/PV teardown drift or after
+	// a cluster was recreated and the old k8s-tagged volumes were left behind.
+	volumesReaped, volumeErrs := reapOrphanedVolumes(ctx, k8sClient, logger, cfg)
+	result.VolumesReaped += volumesReaped
+	result.Errors += volumeErrs
 
 	return result, nil
 }
@@ -341,6 +349,8 @@ func buildK8sClient() (client.Client, error) {
 	utilruntime.Must(crawblv1alpha1.AddToScheme(scheme))
 	// Register core meta types (ObjectMeta, TypeMeta) required by all K8s objects.
 	utilruntime.Must(metav1.AddMetaToScheme(scheme))
+	// Register core API objects so the reaper can list PersistentVolumes.
+	utilruntime.Must(corev1.AddToScheme(scheme))
 
 	restConfig, err := config.GetConfig()
 	if err != nil {
