@@ -132,7 +132,6 @@ func buildZeroClawContainer(sw *crawblv1alpha1.UserSwarm, port int32, secretName
 			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/SOUL.md", SubPath: "SOUL.md", ReadOnly: true},
 			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/IDENTITY.md", SubPath: "IDENTITY.md", ReadOnly: true},
 			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/TOOLS.md", SubPath: "TOOLS.md", ReadOnly: true},
-			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/AGENTS.md", SubPath: "AGENTS.md", ReadOnly: true},
 		},
 		ReadinessProbe: healthProbe,
 		LivenessProbe:  healthProbe,

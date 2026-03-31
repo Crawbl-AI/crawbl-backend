@@ -64,8 +64,8 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		SessionID: conversation.ID,
 	}
 	if responder != nil {
-		sendOpts.AgentID = responder.Role
-		sendOpts.SystemPrompt = responder.SystemPrompt
+		sendOpts.AgentID = responder.Slug
+		// system_prompt no longer sent — ZeroClaw reads it from config.toml [agents.<slug>]
 	}
 	replyText, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 

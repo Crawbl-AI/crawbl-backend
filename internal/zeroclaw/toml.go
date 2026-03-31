@@ -102,12 +102,32 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, mcpCfg ..
 		cfg.MCP = *mcpCfg[0]
 	}
 
+	// Step 3b: Populate delegate agents from operator config.
+	// Provider and model are required by ZeroClaw's Rust deserializer —
+	// fill from workspace defaults if the operator YAML omits them.
+	if len(zc.Agents) > 0 {
+		cfg.Agents = make(map[string]DelegateAgentConfig, len(zc.Agents))
+		for name, agent := range zc.Agents {
+			if !isValidAgentName(name) {
+				return "", fmt.Errorf("invalid agent name %q in operator config", name)
+			}
+			cfg.Agents[name] = DelegateAgentConfig{
+				Provider:     cfg.DefaultProvider,
+				Model:        cfg.DefaultModel,
+				SystemPrompt: agent.SystemPrompt,
+				Agentic:      agent.Agentic,
+				AllowedTools: agent.AllowedTools,
+				SkillsDir:    fmt.Sprintf("agents/%s", name),
+			}
+		}
+	}
+
 	// Step 4: Apply raw TOML overrides (escape hatch for anything not in the spec).
 	if err := fileutil.ApplyTOMLOverrides(&cfg, sw.Spec.Config.TOMLOverrides); err != nil {
 		return "", err
 	}
 
-	// Step 4: Encode as TOML.
+	// Step 5: Encode as TOML.
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
 		return "", fmt.Errorf("encode zeroclaw bootstrap config: %w", err)

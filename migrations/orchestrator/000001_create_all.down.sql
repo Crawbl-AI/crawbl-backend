@@ -1,3 +1,8 @@
+DROP TABLE IF EXISTS integration_connections;
+DROP TABLE IF EXISTS mcp_audit_logs;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS conversations;
+DROP TABLE IF EXISTS agents;
 DROP TABLE IF EXISTS user_push_tokens;
 DROP TABLE IF EXISTS user_preferences;
 DROP TABLE IF EXISTS workspaces;

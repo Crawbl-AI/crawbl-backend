@@ -331,3 +331,33 @@ autonomy:
 # Any TOML key NOT in the above list is owned by ZeroClaw and is never
 # overwritten by the operator merge (safe for user customisation).
 # ==============================================================================
+
+# ==============================================================================
+# agents  (map[string]ZeroClawAgent)
+#
+# Defines delegate agents available in every ZeroClaw runtime.
+# Maps to [agents.<name>] TOML sections in config.toml.
+# The base agent (Manager) is defined by SOUL.md, not here.
+#
+# Provider and model are filled from defaults if omitted.
+# skills_directory is auto-set to "agents/<name>" by BuildConfigTOML.
+#
+# Operator-managed: the [agents] section is fully replaced on each reconcile
+# (unlike other sections which are merged key-by-key).
+# ==============================================================================
+agents:
+  wally:
+    systemPrompt: "You are Wally, a versatile assistant agent in the Crawbl swarm. You handle research, writing, analysis, and general help. Be resourceful, thorough, and friendly."
+    agentic: true
+    allowedTools:
+      - web_search
+      - web_fetch
+      - file_read
+      - file_write
+      - memory_recall
+      - memory_store
+      - orchestrator__send_push_notification
+      - orchestrator__get_user_profile
+      - orchestrator__get_workspace_info
+      - orchestrator__list_conversations
+      - orchestrator__search_past_messages

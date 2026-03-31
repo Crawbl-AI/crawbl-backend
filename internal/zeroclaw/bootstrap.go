@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 
@@ -89,40 +90,58 @@ func EnsureManagedConfig(bootstrapPath, livePath string) error {
 // Merge logic
 // ---------------------------------------------------------------------------
 
-// mergeManaged copies operator-managed keys from bootstrap into live.
-// Non-managed keys in live are preserved untouched.
-//
-// For root-level keys: copy directly.
-// For section keys (e.g. "autonomy.level"): ensure the section exists in live,
-// then copy individual keys within it.
+// mergeManaged applies operator-managed values from bootstrap into live.
+// Non-managed keys in live are preserved untouched (ZeroClaw-owned state).
 func mergeManaged(live, bootstrap map[string]any) {
-	for section, keys := range managedKeys {
-		if section == "" {
-			// Root-level keys.
-			for _, key := range keys {
-				if val, ok := bootstrap[key]; ok {
-					live[key] = val
-				}
+	for _, ms := range managedSections {
+		switch ms.strategy {
+		case replaceSection:
+			replaceFullSection(live, bootstrap, ms.section)
+		case mergeKeys:
+			mergeSectionKeys(live, bootstrap, ms)
+		}
+	}
+}
+
+// replaceFullSection overwrites an entire TOML section from bootstrap.
+// If bootstrap doesn't have the section, it's removed from live.
+// Used for sections like "agents" where the operator defines the complete set.
+func replaceFullSection(live, bootstrap map[string]any, section string) {
+	if val, ok := bootstrap[section]; ok {
+		live[section] = val
+	} else {
+		delete(live, section)
+	}
+}
+
+// mergeSectionKeys copies individual operator-managed keys from bootstrap into live.
+// Keys not in the managed list are left untouched in live.
+// When section is empty, keys are treated as root-level TOML keys.
+func mergeSectionKeys(live, bootstrap map[string]any, ms managedSection) {
+	// Root-level keys (no section nesting).
+	if ms.section == "" {
+		for _, key := range ms.keys {
+			if val, ok := bootstrap[key]; ok {
+				live[key] = val
 			}
-			continue
 		}
+		return
+	}
 
-		// Section-level keys.
-		srcSection, ok := bootstrap[section].(map[string]any)
-		if !ok {
-			continue
-		}
+	// Nested section keys — ensure both source and destination exist.
+	srcSection, ok := bootstrap[ms.section].(map[string]any)
+	if !ok {
+		return
+	}
+	dstSection, ok := live[ms.section].(map[string]any)
+	if !ok {
+		dstSection = map[string]any{}
+		live[ms.section] = dstSection
+	}
 
-		dstSection, ok := live[section].(map[string]any)
-		if !ok {
-			dstSection = map[string]any{}
-			live[section] = dstSection
-		}
-
-		for _, key := range keys {
-			if val, ok := srcSection[key]; ok {
-				dstSection[key] = val
-			}
+	for _, key := range ms.keys {
+		if val, ok := srcSection[key]; ok {
+			dstSection[key] = val
 		}
 	}
 }
@@ -142,4 +161,57 @@ func resolveAPIKey(doc map[string]any) {
 	}
 }
 
+// EnsureAgentSkills writes per-agent personality files to the PVC.
+// Each agent gets a directory at {workspace}/agents/{name}/ containing
+// markdown skill files that ZeroClaw loads via the skills_directory config.
+//
+// Files are overwritten on every boot (operator-managed content).
+func EnsureAgentSkills(workspaceDir string, agentFiles map[string]map[string]string) error {
+	for agentName, files := range agentFiles {
+		if !isValidAgentName(agentName) {
+			return fmt.Errorf("invalid agent name %q: must match [a-z0-9][a-z0-9_-]*", agentName)
+		}
+		agentDir := filepath.Join(workspaceDir, "agents", agentName)
+		if err := os.MkdirAll(agentDir, 0o755); err != nil {
+			return fmt.Errorf("create agent dir %s: %w", agentName, err)
+		}
+		for filename, content := range files {
+			if !isValidFileName(filename) {
+				return fmt.Errorf("invalid file name %q for agent %s", filename, agentName)
+			}
+			path := filepath.Join(agentDir, filename)
+			if err := fileutil.WriteAtomically(path, []byte(content), 0o644); err != nil {
+				return fmt.Errorf("write %s/%s: %w", agentName, filename, err)
+			}
+		}
+	}
+	return nil
+}
+
+// isValidAgentName checks that an agent name is a safe filesystem identifier.
+// Prevents path traversal via names like "../../etc".
+func isValidAgentName(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return name[0] != '-' && name[0] != '_'
+}
+
+// isValidFileName checks that a file name contains no path separators or traversal.
+func isValidFileName(name string) bool {
+	if len(name) == 0 || len(name) > 255 {
+		return false
+	}
+	for _, c := range name {
+		if c == '/' || c == '\\' || c == 0 {
+			return false
+		}
+	}
+	return name != "." && name != ".."
+}
 

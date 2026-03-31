@@ -88,6 +88,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 		_, err = sess.Update("agents").
 			Set("name", row.Name).
 			Set("role", row.Role).
+			Set("slug", row.Slug).
 			Set("avatar_url", row.AvatarURL).
 			Set("system_prompt", row.SystemPrompt).
 			Set("sort_order", row.SortOrder).
@@ -107,6 +108,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 		Pair("workspace_id", row.WorkspaceID).
 		Pair("name", row.Name).
 		Pair("role", row.Role).
+		Pair("slug", row.Slug).
 		Pair("avatar_url", row.AvatarURL).
 		Pair("system_prompt", row.SystemPrompt).
 		Pair("sort_order", row.SortOrder).
@@ -118,6 +120,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 			_, err = sess.Update("agents").
 				Set("name", row.Name).
 				Set("role", row.Role).
+				Set("slug", row.Slug).
 				Set("avatar_url", row.AvatarURL).
 				Set("sort_order", row.SortOrder).
 				Set("updated_at", row.UpdatedAt).

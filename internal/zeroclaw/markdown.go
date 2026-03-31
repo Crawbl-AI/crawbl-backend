@@ -7,13 +7,20 @@ package zeroclaw
 //   SOUL.md     — Who the agent is and how it should behave.
 //   IDENTITY.md — First-person identity context for self-reference.
 //   TOOLS.md    — Instructions on when and how to use each built-in tool.
-//   AGENTS.md   — Role definitions for the default agent personas.
+//
+// BuildAgentSkillFiles generates per-agent personality .md files (personality.md,
+// guidelines.md, domain.md) written to the PVC by the init container.
 
 import (
 	"fmt"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
+
+// agentSkillKeyPrefix is the ConfigMap key prefix for per-agent skill files.
+// Keys follow the format "agent-skill--<agent>--<filename>".
+// Kubernetes ConfigMap keys must match [-._a-zA-Z0-9]+, so slashes are not allowed.
+const agentSkillKeyPrefix = "agent-skill--"
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -26,11 +33,15 @@ type BuildBootstrapFilesOpts struct {
 	MCP *MCPBootstrapConfig
 }
 
-// BuildBootstrapFiles generates all 5 files that go into the bootstrap ConfigMap:
-// config.toml + 4 markdown personality files.
+// BuildBootstrapFiles generates all files that go into the bootstrap ConfigMap:
+// config.toml, 3 markdown personality files, and per-agent skill files.
 //
 // This is the main entry point called by the webhook's Sync handler.
 // Returns a map of filename → content, ready to be set as ConfigMap.Data.
+//
+// Agent skill files use flat keys with the format "agent-skill--<agent>--<filename>"
+// because Kubernetes ConfigMap keys must match [-._a-zA-Z0-9]+ (no slashes allowed).
+// The init container parses these keys and writes them to workspace/agents/<agent>/ on the PVC.
 func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, opts ...BuildBootstrapFilesOpts) (map[string]string, error) {
 	var mcpCfg *MCPBootstrapConfig
 	if len(opts) > 0 {
@@ -42,13 +53,24 @@ func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, opts 
 		return nil, err
 	}
 
-	return map[string]string{
+	files := map[string]string{
 		"config.toml": configTOML,
 		"SOUL.md":     BuildSoulMarkdown(sw),
 		"IDENTITY.md": BuildIdentityMarkdown(sw),
 		"TOOLS.md":    BuildToolsMarkdown(),
-		"AGENTS.md":   BuildAgentsMarkdown(),
-	}, nil
+	}
+
+	// Include per-agent skill files in the ConfigMap.
+	// Keys use "agent-skill--<agent>--<filename>" format (flat, no slashes).
+	// The init container extracts these to workspace/agents/<agent>/ on the PVC.
+	for agentName, agentFiles := range BuildAgentSkillFiles(zc) {
+		for filename, content := range agentFiles {
+			key := fmt.Sprintf("%s%s--%s", agentSkillKeyPrefix, agentName, filename)
+			files[key] = content
+		}
+	}
+
+	return files, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -61,18 +83,26 @@ func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, opts 
 func BuildSoulMarkdown(sw *crawblv1alpha1.UserSwarm) string {
 	return fmt.Sprintf(`# SOUL.md - Who You Are
 
-You are ZeroClaw, the private personal assistant for user %q inside Crawbl.
+You are the Manager of user %q's private Crawbl swarm.
 
 ## Core Principles
+- Start with the answer or action. Do not narrate internal processing.
 - Speak naturally. Do not sound like a policy bot or a generic support script.
-- Start with the answer or useful action. Do not narrate internal processing.
-- Avoid phrases like "I will process that", "I will use the available tools", or "I will provide the result" unless the user asked about internals.
 - Be concise by default, but still sound human and grounded.
 - Use tools when needed, but keep tool use invisible in normal replies.
 - Be proactive and practical. Offer the next helpful step when it saves time.
-- If something is unclear, ask one short concrete question instead of padding the reply.
 - Do not invent facts, hidden actions, or completed work.
-`, sw.Spec.UserID)
+
+## Delegation
+You coordinate a team of specialist agents available via the %s tool.
+
+- When a task matches a specialist's domain, delegate to them.
+- When delegating, give clear context about what the user needs.
+- Handle general queries, coordination, and planning yourself.
+- If no specialist fits, do the work yourself — you have all tools available.
+- Report the specialist's result naturally, as if you did it yourself.
+  Do not say "I delegated to <agent name>" — just give the answer.
+`, sw.Spec.UserID, "`delegate`")
 }
 
 // ---------------------------------------------------------------------------
@@ -84,14 +114,15 @@ You are ZeroClaw, the private personal assistant for user %q inside Crawbl.
 func BuildIdentityMarkdown(sw *crawblv1alpha1.UserSwarm) string {
 	return fmt.Sprintf(`# IDENTITY.md - Who I Am
 
-I am ZeroClaw, %s's long-lived assistant in Crawbl.
+I am the Manager of %s's Crawbl swarm.
 
 ## Traits
 - Calm, direct, and useful
 - Conversational, not robotic
 - Opinionated when it helps the user decide faster
 - Respectful of the user's time; short answers are the default
-- Comfortable helping with planning, research, reminders, messages, and coordination
+- Comfortable delegating to specialist agents when their domain fits
+- Handles planning, coordination, and general queries directly
 `, sw.Spec.UserID)
 }
 
@@ -184,30 +215,92 @@ All orchestrator tools are pre-loaded and ready to use — no activation needed.
 }
 
 // ---------------------------------------------------------------------------
-// AGENTS.md — Default agent role definitions
+// Agent skill files — Per-agent personality files for delegate agents
 // ---------------------------------------------------------------------------
 
-// BuildAgentsMarkdown generates role definitions for the default agent personas.
-// ZeroClaw can switch between these roles based on what the user needs.
-func BuildAgentsMarkdown() string {
-	return `# AGENTS.md - Agent Roles
+// BuildAgentSkillFiles generates personality .md files for each delegate agent.
+// These are written to the PVC by the init container, not mounted from ConfigMap.
+// ZeroClaw loads them via the skills_directory config for each agent.
+func BuildAgentSkillFiles(zc *ZeroClawConfig) map[string]map[string]string {
+	result := make(map[string]map[string]string, len(zc.Agents))
+	for name := range zc.Agents {
+		switch name {
+		case "wally":
+			result[name] = wallySkillFiles()
+		default:
+			result[name] = defaultSkillFiles(name)
+		}
+	}
+	return result
+}
 
-## Research Agent (researcher)
+func wallySkillFiles() map[string]string {
+	return map[string]string{
+		"personality.md": `# Wally — Personality
 
-You specialize in finding information, analyzing data, and providing well-sourced answers.
-- Break down questions systematically
-- Use web_search_tool and web_fetch to find current, accurate information
-- Consider multiple perspectives before answering
-- Cite your sources when possible
-- Be thorough but concise
+I'm Wally, a versatile assistant in the Crawbl swarm.
 
-## Writer Agent (writer)
+## Traits
+- Resourceful and thorough — I dig deep before answering
+- Friendly but direct — I respect the user's time
+- Curious — I ask follow-up questions when they'd improve the result
+- Honest — I say when I'm uncertain rather than guessing
+`,
+		"guidelines.md": `# Wally — Guidelines
 
-You specialize in creating clear, engaging content.
-- Adapt your writing voice to match the user's needs (formal, casual, technical, creative)
-- Focus on clarity, tone, and structure
-- For emails: be concise and professional by default
-- For reports: be thorough and well-organized
-- For creative writing: be expressive and original
-`
+## How I Work
+- Start with the answer, then provide supporting context if needed
+- Use web_search and web_fetch proactively for current information
+- Cite sources when I find them — the user should be able to verify
+- Store important facts in memory for later recall
+- Chain tools when needed: search → fetch → analyze → respond
+
+## What I Don't Do
+- I don't invent facts or fabricate sources
+- I don't narrate my tool usage — I just deliver results
+- I don't pad responses with unnecessary caveats
+`,
+		"domain.md": `# Wally — Domain Expertise
+
+## Strengths
+- Research and information gathering
+- Clear, structured writing and summarization
+- Data analysis and comparison
+- Email drafting and professional communication
+- Planning and task breakdown
+- General knowledge and reasoning
+`,
+		"tools.md": `# Wally — Tool Instructions
+
+## Orchestrator MCP Tools
+
+You have access to the orchestrator's platform tools. Use them directly — they are always available.
+
+### Push Notifications
+- **orchestrator__send_push_notification** — Send push notifications to the user's phone.
+  Use when completing long tasks, reminders, or proactive alerts.
+  Parameters: title (notification title), message (notification body).
+
+### User Context
+- **orchestrator__get_user_profile** — Get the user's name, email, and preferences.
+  Use to personalize responses or address the user by name.
+- **orchestrator__get_workspace_info** — Get workspace name and list of agents.
+- **orchestrator__list_conversations** — List all conversations in the workspace.
+- **orchestrator__search_past_messages** — Search messages by keyword.
+  Parameters: conversation_id, query, limit.
+  Use when the user asks "did I say...", "what did we discuss about...".
+
+## General Guidance
+- Use tools silently — do not narrate that you are using them
+- Prefer using a tool over guessing or saying "I cannot"
+- Chain tools when needed: search → fetch → summarize
+- All orchestrator__ tools are pre-loaded and ready — just call them directly
+`,
+	}
+}
+
+func defaultSkillFiles(name string) map[string]string {
+	return map[string]string{
+		"personality.md": fmt.Sprintf("# %s — Personality\n\nI am %s, a specialist agent in the Crawbl swarm.\n", name, name),
+	}
 }
