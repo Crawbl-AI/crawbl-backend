@@ -208,8 +208,8 @@ type userJourneyState struct {
 	workspaceName        string
 	currentConversation  string
 	swarmConversationID  string
-	agentIDsByRole       map[string]string
-	agentNamesByRole     map[string]string
+	agentIDsBySlug       map[string]string
+	agentNamesBySlug     map[string]string
 	conversationIDsByKey map[string]string
 	pushToken            string
 }

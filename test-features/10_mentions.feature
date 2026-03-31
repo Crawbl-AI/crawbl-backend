@@ -8,14 +8,8 @@ Feature: Agent mentions in the swarm chat
     And user "primary" opens their default workspace
     And user "primary" waits until their assistant is ready
 
-  Scenario: Mentioning the researcher routes the reply to the researcher
-    When user "primary" mentions the "researcher" agent in the swarm conversation saying "Say you are ready in four words."
+  Scenario: Mentioning Wally routes the reply to Wally
+    When user "primary" mentions the "wally" agent in the swarm conversation saying "Say you are ready in four words."
     Then the assistant reply should succeed
     And the assistant reply should contain text
-    And the assistant reply should come from the "researcher" agent
-
-  Scenario: Mentioning the writer routes the reply to the writer
-    When user "primary" mentions the "writer" agent in the swarm conversation saying "Say you are ready in four words."
-    Then the assistant reply should succeed
-    And the assistant reply should contain text
-    And the assistant reply should come from the "writer" agent
+    And the assistant reply should come from the "wally" agent

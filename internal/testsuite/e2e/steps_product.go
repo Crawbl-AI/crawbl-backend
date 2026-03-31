@@ -391,13 +391,10 @@ func (tc *testContext) userShouldSeeDefaultAgents(alias string) error {
 	if err := tc.userOpensAgents(alias); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayLength("data", 2); err != nil {
+	if err := tc.assertJSONArrayLength("data", 1); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayContainsItem("data", "role", "researcher"); err != nil {
-		return err
-	}
-	return tc.assertJSONArrayContainsItem("data", "role", "writer")
+	return tc.assertJSONArrayContainsItem("data", "slug", "wally")
 }
 
 func (tc *testContext) userOpensConversations(alias string) error {
@@ -418,16 +415,13 @@ func (tc *testContext) userShouldSeeDefaultConversations(alias string) error {
 	if err := tc.userOpensConversations(alias); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayLength("data", 3); err != nil {
+	if err := tc.assertJSONArrayLength("data", 2); err != nil {
 		return err
 	}
 	if err := tc.assertJSONArrayContainsItem("data", "type", "swarm"); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayContainsItem("data", "title", "Research"); err != nil {
-		return err
-	}
-	return tc.assertJSONArrayContainsItem("data", "title", "Writer")
+	return tc.assertJSONArrayContainsItem("data", "title", "Wally")
 }
 
 func (tc *testContext) userOpensSwarmConversation(alias string) error {
@@ -466,7 +460,7 @@ func (tc *testContext) userOpensDirectConversation(alias, role string) error {
 }
 
 func (tc *testContext) currentConversationShouldBelongToAgent(role string) error {
-	return tc.assertJSONEquals("data.agent.role", normalizeKey(role))
+	return tc.assertJSONEquals("data.agent.slug", normalizeKey(role))
 }
 
 func (tc *testContext) userOpensMessagesInCurrentConversation(alias string) error {
@@ -512,8 +506,8 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 	}
 	state := tc.userState(alias)
 	normalizedRole := normalizeKey(role)
-	agentID := state.agentIDsByRole[normalizedRole]
-	agentName := state.agentNamesByRole[normalizedRole]
+	agentID := state.agentIDsBySlug[normalizedRole]
+	agentName := state.agentNamesBySlug[normalizedRole]
 	if agentID == "" || agentName == "" {
 		return fmt.Errorf("no agent found for role %q", role)
 	}
@@ -562,7 +556,7 @@ func (tc *testContext) assistantReplyShouldComeFromAgent() error {
 }
 
 func (tc *testContext) assistantReplyShouldComeFromSpecificAgent(role string) error {
-	return tc.assertJSONEquals("data.agent.role", normalizeKey(role))
+	return tc.assertJSONEquals("data.agent.slug", normalizeKey(role))
 }
 
 func (tc *testContext) guestRequestsProfile() error {
@@ -722,8 +716,8 @@ func (tc *testContext) userState(alias string) *userJourneyState {
 		return state
 	}
 	state = &userJourneyState{
-		agentIDsByRole:       make(map[string]string),
-		agentNamesByRole:     make(map[string]string),
+		agentIDsBySlug:       make(map[string]string),
+		agentNamesBySlug:     make(map[string]string),
 		conversationIDsByKey: make(map[string]string),
 	}
 	tc.state[alias] = state
@@ -740,7 +734,7 @@ func (tc *testContext) ensureDefaultWorkspace(alias string) error {
 
 func (tc *testContext) ensureAgentCatalog(alias string) error {
 	state := tc.userState(alias)
-	if len(state.agentIDsByRole) > 0 {
+	if len(state.agentIDsBySlug) > 0 {
 		return nil
 	}
 	return tc.userOpensAgents(alias)
@@ -768,14 +762,14 @@ func (tc *testContext) captureDefaultWorkspace(alias string) error {
 func (tc *testContext) captureAgents(alias string) error {
 	state := tc.userState(alias)
 	for _, item := range gjson.GetBytes(tc.lastBody, "data").Array() {
-		role := normalizeKey(item.Get("role").String())
-		if role == "" {
+		slug := normalizeKey(item.Get("slug").String())
+		if slug == "" {
 			continue
 		}
-		state.agentIDsByRole[role] = item.Get("id").String()
-		state.agentNamesByRole[role] = item.Get("name").String()
+		state.agentIDsBySlug[slug] = item.Get("id").String()
+		state.agentNamesBySlug[slug] = item.Get("name").String()
 	}
-	if len(state.agentIDsByRole) == 0 {
+	if len(state.agentIDsBySlug) == 0 {
 		return fmt.Errorf("no agents returned for %q", alias)
 	}
 	return nil
@@ -790,7 +784,7 @@ func (tc *testContext) captureConversations(alias string) error {
 		}
 		convType := normalizeKey(item.Get("type").String())
 		titleKey := normalizeKey(item.Get("title").String())
-		agentRole := normalizeKey(item.Get("agent.role").String())
+		agentSlug := normalizeKey(item.Get("agent.slug").String())
 		if convType == "swarm" {
 			state.swarmConversationID = convID
 			state.conversationIDsByKey["swarm"] = convID
@@ -798,8 +792,8 @@ func (tc *testContext) captureConversations(alias string) error {
 		if titleKey != "" {
 			state.conversationIDsByKey[titleKey] = convID
 		}
-		if agentRole != "" {
-			state.conversationIDsByKey[agentRole] = convID
+		if agentSlug != "" {
+			state.conversationIDsByKey[agentSlug] = convID
 		}
 	}
 	if state.swarmConversationID == "" {
