@@ -354,6 +354,16 @@ const (
 	RuntimeStateFailed RuntimeState = "failed"
 )
 
+// AgentRole constants define the swarm hierarchy roles.
+const (
+	// AgentRoleSubAgent is a delegate agent under the Manager.
+	AgentRoleSubAgent = "sub-agent"
+
+	// AgentRoleManager is the swarm orchestrator (base agent, defined by SOUL.md).
+	// Not stored in the database — exists as ZeroClaw's base agent.
+	AgentRoleManager = "manager"
+)
+
 // Agent represents an AI agent within a workspace swarm.
 // Each workspace can have multiple agents with different roles.
 type Agent struct {
@@ -366,8 +376,12 @@ type Agent struct {
 	// Name is the display name of the agent.
 	Name string `json:"name"`
 
-	// Role describes the agent's functional role (e.g., "researcher", "writer").
+	// Role describes the agent's role in the swarm hierarchy (e.g., "sub-agent", "manager").
 	Role string `json:"role"`
+
+	// Slug is the ZeroClaw routing identifier for this agent.
+	// Matches the [agents.<slug>] key in config.toml and is sent as agent_id in the webhook.
+	Slug string `json:"slug"`
 
 	// AvatarURL is the URL to the agent's avatar image.
 	AvatarURL string `json:"avatar"`
@@ -573,7 +587,10 @@ type DefaultAgentBlueprint struct {
 	// Name is the display name of the agent.
 	Name string
 
-	// Role is the functional role of the agent.
+	// Slug is the ZeroClaw routing identifier.
+	Slug string
+
+	// Role is the swarm hierarchy role.
 	Role string
 
 	// SystemPrompt is the LLM system message for this agent's personality.
@@ -583,14 +600,10 @@ type DefaultAgentBlueprint struct {
 // DefaultAgents is the list of agents created by default in new workspaces.
 var DefaultAgents = []DefaultAgentBlueprint{
 	{
-		Name:         "Research",
-		Role:         "researcher",
-		SystemPrompt: "You are a Research agent in the Crawbl swarm. Your specialty is finding information, analyzing data, and providing well-sourced answers. Be thorough and cite your reasoning. When asked a question, break it down systematically, consider multiple perspectives, and deliver clear, evidence-based responses.",
-	},
-	{
-		Name:         "Writer",
-		Role:         "writer",
-		SystemPrompt: "You are a Writer agent in the Crawbl swarm. Your specialty is creating clear, engaging content — from emails to reports to creative writing. Focus on clarity, tone, and style. Adapt your writing voice to match the user's needs, whether formal, casual, technical, or creative.",
+		Name:         "Wally",
+		Slug:         "wally",
+		Role:         AgentRoleSubAgent,
+		SystemPrompt: "You are Wally, a versatile assistant agent in the Crawbl swarm. You handle research, writing, analysis, and general help. Be resourceful, thorough, and friendly.",
 	},
 }
 

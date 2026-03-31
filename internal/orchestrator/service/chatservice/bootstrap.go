@@ -42,14 +42,14 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 		return nil, mErr
 	}
 
-	agentsByRole := make(map[string]*orchestrator.Agent, len(agents))
+	agentsBySlug := make(map[string]*orchestrator.Agent, len(agents))
 	for _, agent := range agents {
-		agentsByRole[agent.Role] = agent
+		agentsBySlug[agent.Slug] = agent
 	}
 
 	missing := false
 	for _, blueprint := range s.defaultAgents {
-		if agentsByRole[blueprint.Role] == nil {
+		if agentsBySlug[blueprint.Slug] == nil {
 			missing = true
 			break
 		}
@@ -64,20 +64,21 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 			return nil, mErr
 		}
 
-		freshByRole := make(map[string]*orchestrator.Agent, len(freshAgents))
+		freshBySlug := make(map[string]*orchestrator.Agent, len(freshAgents))
 		for _, agent := range freshAgents {
-			freshByRole[agent.Role] = agent
+			freshBySlug[agent.Slug] = agent
 		}
 
 		now := time.Now().UTC()
 		for idx, blueprint := range s.defaultAgents {
-			agent := freshByRole[blueprint.Role]
+			agent := freshBySlug[blueprint.Slug]
 			if agent == nil {
 				agent = &orchestrator.Agent{
 					ID:           uuid.NewString(),
 					WorkspaceID:  workspace.ID,
 					Name:         blueprint.Name,
 					Role:         blueprint.Role,
+					Slug:         blueprint.Slug,
 					SystemPrompt: blueprint.SystemPrompt,
 					AvatarURL:    orchestrator.DefaultAgentAvatarURL,
 					CreatedAt:    now,
@@ -86,6 +87,7 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 			} else {
 				agent.Name = blueprint.Name
 				agent.Role = blueprint.Role
+				agent.Slug = blueprint.Slug
 				agent.SystemPrompt = blueprint.SystemPrompt
 				agent.AvatarURL = orchestrator.DefaultAgentAvatarURL
 				agent.UpdatedAt = now
@@ -94,7 +96,7 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 			if mErr := s.agentRepo.Save(ctx, tx, agent, idx); mErr != nil {
 				return nil, mErr
 			}
-			freshByRole[blueprint.Role] = agent
+			freshBySlug[blueprint.Slug] = agent
 		}
 
 		return s.agentRepo.ListByWorkspaceID(ctx, tx, workspace.ID)

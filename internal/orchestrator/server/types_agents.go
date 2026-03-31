@@ -14,6 +14,9 @@ type agentResponse struct {
 	// Role is the functional role or specialty of the agent (e.g., "assistant", "analyst").
 	Role string `json:"role"`
 
+	// Slug is the unique routing identifier for the agent.
+	Slug string `json:"slug"`
+
 	// Avatar is the URL to the agent's avatar image.
 	Avatar string `json:"avatar"`
 
@@ -32,7 +35,8 @@ func toAgentResponse(agent *orchestrator.Agent) agentResponse {
 		ID:        agent.ID,
 		Name:      agent.Name,
 		Role:      agent.Role,
+		Slug:      agent.Slug,
 		Avatar:    agent.AvatarURL,
-		Status: string(agent.Status),
+		Status:    string(agent.Status),
 	}
 }

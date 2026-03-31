@@ -225,8 +225,10 @@ type AgentRow struct {
 	WorkspaceID string `db:"workspace_id"`
 	// Name is the display name of the agent.
 	Name string `db:"name"`
-	// Role is the role or specialty of the agent (e.g., "assistant", "specialist").
+	// Role is the swarm hierarchy role (e.g., "sub-agent", "manager").
 	Role string `db:"role"`
+	// Slug is the ZeroClaw routing identifier.
+	Slug string `db:"slug"`
 	// AvatarURL is the URL to the agent's avatar image.
 	AvatarURL string `db:"avatar_url"`
 	// SystemPrompt is the LLM system message for this agent's personality.
@@ -252,6 +254,7 @@ func NewAgentRow(agent *orchestrator.Agent, sortOrder int) *AgentRow {
 		WorkspaceID:  agent.WorkspaceID,
 		Name:         agent.Name,
 		Role:         agent.Role,
+		Slug:         agent.Slug,
 		AvatarURL:    agent.AvatarURL,
 		SystemPrompt: agent.SystemPrompt,
 		SortOrder:    sortOrder,
@@ -267,6 +270,7 @@ func (r *AgentRow) ToDomain() *orchestrator.Agent {
 		WorkspaceID:  r.WorkspaceID,
 		Name:         r.Name,
 		Role:         r.Role,
+		Slug:         r.Slug,
 		AvatarURL:    r.AvatarURL,
 		SystemPrompt: r.SystemPrompt,
 		CreatedAt:    r.CreatedAt,

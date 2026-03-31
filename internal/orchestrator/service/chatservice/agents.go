@@ -47,10 +47,8 @@ func resolveResponder(conversation *orchestrator.Conversation, agents []*orchest
 		}
 	}
 
-	// 3. Default — first agent
-	if len(agents) > 0 {
-		return agents[0]
-	}
+	// 3. Swarm with no mention — return nil.
+	//    The base agent (Manager) handles it via the webhook with no agent_id.
 	return nil
 }
 

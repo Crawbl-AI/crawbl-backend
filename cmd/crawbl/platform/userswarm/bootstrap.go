@@ -1,6 +1,7 @@
 package userswarm
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -16,6 +17,7 @@ func newBootstrapCommand() *cobra.Command {
 		bootstrapConfigPath string
 		liveConfigPath      string
 		workspacePath       string
+		zeroClawConfigPath  string
 	)
 
 	cmd := &cobra.Command{
@@ -29,13 +31,28 @@ func newBootstrapCommand() *cobra.Command {
 			if err := os.MkdirAll(workspacePath, workspaceDirPerm); err != nil {
 				return err
 			}
-			return zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath)
+			if err := zeroclaw.EnsureManagedConfig(bootstrapConfigPath, liveConfigPath); err != nil {
+				return err
+			}
+
+			// Write per-agent personality files to the PVC.
+			zcConfig, err := zeroclaw.LoadConfig(zeroClawConfigPath)
+			if err != nil {
+				return fmt.Errorf("load zeroclaw config: %w", err)
+			}
+			agentFiles := zeroclaw.BuildAgentSkillFiles(zcConfig)
+			if err := zeroclaw.EnsureAgentSkills(workspacePath, agentFiles); err != nil {
+				return fmt.Errorf("ensure agent skills: %w", err)
+			}
+
+			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&bootstrapConfigPath, "bootstrap-config", "/bootstrap/config.toml", "Path to the rendered bootstrap config.toml")
 	cmd.Flags().StringVar(&liveConfigPath, "live-config", "/zeroclaw-data/.zeroclaw/config.toml", "Path to the live PVC-backed ZeroClaw config.toml")
 	cmd.Flags().StringVar(&workspacePath, "workspace", "/zeroclaw-data/workspace", "Path to the PVC-backed ZeroClaw workspace")
+	cmd.Flags().StringVar(&zeroClawConfigPath, "zeroclaw-config", "/bootstrap/zeroclaw.yaml", "Path to operator ZeroClaw config for agent skill generation")
 
 	return cmd
 }

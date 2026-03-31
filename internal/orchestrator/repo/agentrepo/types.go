@@ -13,6 +13,7 @@ var agentColumns = []string{
 	"workspace_id",
 	"name",
 	"role",
+	"slug",
 	"avatar_url",
 	"system_prompt",
 	"sort_order",

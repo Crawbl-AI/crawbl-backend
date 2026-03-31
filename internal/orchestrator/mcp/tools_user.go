@@ -106,6 +106,7 @@ func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInpu
 				ID:   a.ID,
 				Name: a.Name,
 				Role: a.Role,
+				Slug: a.Slug,
 			})
 		}
 

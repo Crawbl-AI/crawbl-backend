@@ -20,6 +20,7 @@ type ZeroClawConfig struct {
 	WebFetch    ZeroClawWebFetch    `yaml:"webFetch"`
 	WebSearch   ZeroClawWebSearch   `yaml:"webSearch"`
 	Autonomy    ZeroClawAutonomy    `yaml:"autonomy"`
+	Agents      map[string]ZeroClawAgent `yaml:"agents,omitempty"`
 }
 
 // ZeroClawDefaults controls global provider behavior: temperature, timeouts, retries.
@@ -55,6 +56,14 @@ type ZeroClawAutonomy struct {
 	AutoApprove     []string `yaml:"autoApprove"`
 }
 
+// ZeroClawAgent defines a delegate agent in the operator config.
+// Maps to [agents.<name>] TOML sections in ZeroClaw's config.toml.
+type ZeroClawAgent struct {
+	SystemPrompt string   `yaml:"systemPrompt"`
+	Agentic      bool     `yaml:"agentic"`
+	AllowedTools []string `yaml:"allowedTools,omitempty"`
+}
+
 // ---------------------------------------------------------------------------
 // Defaults
 // ---------------------------------------------------------------------------
@@ -88,6 +97,7 @@ type BootstrapConfig struct {
 	Gateway            GatewayConfig     `toml:"gateway"`
 	Reliability        Reliability       `toml:"reliability"`
 	MCP                MCPBootstrapConfig `toml:"mcp"`
+	Agents             map[string]DelegateAgentConfig `toml:"agents,omitempty"`
 }
 
 // MCPBootstrapConfig controls ZeroClaw's MCP client connections.
@@ -159,6 +169,17 @@ type Reliability struct {
 	ModelFallbacks  map[string][]string `toml:"model_fallbacks"`
 }
 
+// DelegateAgentConfig defines a sub-agent in ZeroClaw's native delegate system.
+// Maps to ZeroClaw's Rust DelegateAgentConfig in src/config/schema.rs.
+type DelegateAgentConfig struct {
+	Provider     string   `toml:"provider"`
+	Model        string   `toml:"model,omitempty"`
+	SystemPrompt string   `toml:"system_prompt,omitempty"`
+	Agentic      bool     `toml:"agentic"`
+	AllowedTools []string `toml:"allowed_tools,omitempty"`
+	SkillsDir    string   `toml:"skills_directory,omitempty"`
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap constants and vars
 // ---------------------------------------------------------------------------
@@ -166,16 +187,42 @@ type Reliability struct {
 // configFilePerm is the permission for the live config file (owner read/write only).
 const configFilePerm = 0o600
 
-// managedKeys are the TOML keys the operator controls. Any key NOT listed here
-// belongs to ZeroClaw and is never overwritten by the merge.
-var managedKeys = map[string][]string{
-	"":             {"default_provider", "default_model", "default_temperature"},
-	"autonomy":     {"level", "workspace_only", "allowed_commands", "forbidden_paths", "auto_approve", "always_ask"},
-	"http_request": {"enabled", "allowed_domains", "max_response_size", "timeout_secs", "allow_private_hosts"},
-	"web_fetch":    {"enabled", "allowed_domains", "blocked_domains", "max_response_size", "timeout_secs"},
-	"web_search":   {"enabled", "provider", "brave_api_key", "searxng_instance_url", "max_results", "timeout_secs"},
-	"gateway":      {"port", "host", "allow_public_bind", "require_pairing"},
-	"mcp":          {"enabled", "deferred_loading", "servers"},
+// mergeStrategy defines how a TOML section is merged during bootstrap.
+type mergeStrategy int
+
+const (
+	// mergeKeys copies only the listed keys from bootstrap into live.
+	// Keys not in the list are preserved in live (ZeroClaw-owned).
+	mergeKeys mergeStrategy = iota
+
+	// replaceSection replaces the entire section from bootstrap.
+	// Used when the operator defines the complete set of entries.
+	replaceSection
+)
+
+// managedSection describes an operator-controlled TOML section and how to merge it.
+type managedSection struct {
+	// section is the TOML section name. Empty string means root-level keys.
+	section string
+
+	// strategy determines whether to merge individual keys or replace the whole section.
+	strategy mergeStrategy
+
+	// keys lists the individual keys to merge (only used with mergeKeys strategy).
+	keys []string
+}
+
+// managedSections defines all operator-controlled TOML sections and their merge behavior.
+// Any key or section NOT listed here belongs to ZeroClaw and is never overwritten.
+var managedSections = []managedSection{
+	{section: "", strategy: mergeKeys, keys: []string{"default_provider", "default_model", "default_temperature"}},
+	{section: "autonomy", strategy: mergeKeys, keys: []string{"level", "workspace_only", "allowed_commands", "forbidden_paths", "auto_approve", "always_ask"}},
+	{section: "http_request", strategy: mergeKeys, keys: []string{"enabled", "allowed_domains", "max_response_size", "timeout_secs", "allow_private_hosts"}},
+	{section: "web_fetch", strategy: mergeKeys, keys: []string{"enabled", "allowed_domains", "blocked_domains", "max_response_size", "timeout_secs"}},
+	{section: "web_search", strategy: mergeKeys, keys: []string{"enabled", "provider", "brave_api_key", "searxng_instance_url", "max_results", "timeout_secs"}},
+	{section: "gateway", strategy: mergeKeys, keys: []string{"port", "host", "allow_public_bind", "require_pairing"}},
+	{section: "mcp", strategy: mergeKeys, keys: []string{"enabled", "deferred_loading", "servers"}},
+	{section: "agents", strategy: replaceSection},
 }
 
 // apiKeyEnvVars is the priority-ordered list of environment variables checked
