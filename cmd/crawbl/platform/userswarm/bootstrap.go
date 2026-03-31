@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -17,7 +18,7 @@ func newBootstrapCommand() *cobra.Command {
 		bootstrapConfigPath string
 		liveConfigPath      string
 		workspacePath       string
-		zeroClawConfigPath  string
+		bootstrapDir        string
 	)
 
 	cmd := &cobra.Command{
@@ -35,14 +36,17 @@ func newBootstrapCommand() *cobra.Command {
 				return err
 			}
 
-			// Write per-agent personality files to the PVC.
-			zcConfig, err := zeroclaw.LoadConfig(zeroClawConfigPath)
+			// Extract agent skill files from the ConfigMap mount.
+			// Files are stored as "agent-skill--<agent>--<filename>" keys in the ConfigMap,
+			// which Kubernetes mounts as files with those names under the bootstrap dir.
+			agentFiles, err := readAgentSkillFiles(bootstrapDir)
 			if err != nil {
-				return fmt.Errorf("load zeroclaw config: %w", err)
+				return fmt.Errorf("read agent skill files: %w", err)
 			}
-			agentFiles := zeroclaw.BuildAgentSkillFiles(zcConfig)
-			if err := zeroclaw.EnsureAgentSkills(workspacePath, agentFiles); err != nil {
-				return fmt.Errorf("ensure agent skills: %w", err)
+			if len(agentFiles) > 0 {
+				if err := zeroclaw.EnsureAgentSkills(workspacePath, agentFiles); err != nil {
+					return fmt.Errorf("ensure agent skills: %w", err)
+				}
 			}
 
 			return nil
@@ -52,7 +56,41 @@ func newBootstrapCommand() *cobra.Command {
 	cmd.Flags().StringVar(&bootstrapConfigPath, "bootstrap-config", "/bootstrap/config.toml", "Path to the rendered bootstrap config.toml")
 	cmd.Flags().StringVar(&liveConfigPath, "live-config", "/zeroclaw-data/.zeroclaw/config.toml", "Path to the live PVC-backed ZeroClaw config.toml")
 	cmd.Flags().StringVar(&workspacePath, "workspace", "/zeroclaw-data/workspace", "Path to the PVC-backed ZeroClaw workspace")
-	cmd.Flags().StringVar(&zeroClawConfigPath, "zeroclaw-config", "/bootstrap/zeroclaw.yaml", "Path to operator ZeroClaw config for agent skill generation")
+	cmd.Flags().StringVar(&bootstrapDir, "bootstrap-dir", "/bootstrap", "Path to the mounted bootstrap ConfigMap directory")
 
 	return cmd
+}
+
+// readAgentSkillFiles scans the bootstrap ConfigMap mount for agent skill files.
+// Files are stored with keys like "agent-skill--wally--personality.md" in the ConfigMap,
+// which Kubernetes mounts as files with those names under the volume mount path.
+// Returns a map of agent name -> filename -> content.
+func readAgentSkillFiles(bootstrapDir string) (map[string]map[string]string, error) {
+	entries, err := os.ReadDir(bootstrapDir)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]map[string]string)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-skill--") {
+			continue
+		}
+		// Parse "agent-skill--wally--personality.md" -> agent="wally", file="personality.md"
+		trimmed := strings.TrimPrefix(entry.Name(), "agent-skill--")
+		parts := strings.SplitN(trimmed, "--", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		agentName, filename := parts[0], parts[1]
+		content, err := os.ReadFile(filepath.Join(bootstrapDir, entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read agent skill %s: %w", entry.Name(), err)
+		}
+		if result[agentName] == nil {
+			result[agentName] = make(map[string]string)
+		}
+		result[agentName][filename] = string(content)
+	}
+	return result, nil
 }

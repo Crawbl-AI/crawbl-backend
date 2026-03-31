@@ -168,11 +168,17 @@ func resolveAPIKey(doc map[string]any) {
 // Files are overwritten on every boot (operator-managed content).
 func EnsureAgentSkills(workspaceDir string, agentFiles map[string]map[string]string) error {
 	for agentName, files := range agentFiles {
+		if !isValidAgentName(agentName) {
+			return fmt.Errorf("invalid agent name %q: must match [a-z0-9][a-z0-9_-]*", agentName)
+		}
 		agentDir := filepath.Join(workspaceDir, "agents", agentName)
 		if err := os.MkdirAll(agentDir, 0o755); err != nil {
 			return fmt.Errorf("create agent dir %s: %w", agentName, err)
 		}
 		for filename, content := range files {
+			if !isValidFileName(filename) {
+				return fmt.Errorf("invalid file name %q for agent %s", filename, agentName)
+			}
 			path := filepath.Join(agentDir, filename)
 			if err := fileutil.WriteAtomically(path, []byte(content), 0o644); err != nil {
 				return fmt.Errorf("write %s/%s: %w", agentName, filename, err)
@@ -180,5 +186,32 @@ func EnsureAgentSkills(workspaceDir string, agentFiles map[string]map[string]str
 		}
 	}
 	return nil
+}
+
+// isValidAgentName checks that an agent name is a safe filesystem identifier.
+// Prevents path traversal via names like "../../etc".
+func isValidAgentName(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return name[0] != '-' && name[0] != '_'
+}
+
+// isValidFileName checks that a file name contains no path separators or traversal.
+func isValidFileName(name string) bool {
+	if len(name) == 0 || len(name) > 255 {
+		return false
+	}
+	for _, c := range name {
+		if c == '/' || c == '\\' || c == 0 {
+			return false
+		}
+	}
+	return name != "." && name != ".."
 }
 

@@ -108,6 +108,9 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, mcpCfg ..
 	if len(zc.Agents) > 0 {
 		cfg.Agents = make(map[string]DelegateAgentConfig, len(zc.Agents))
 		for name, agent := range zc.Agents {
+			if !isValidAgentName(name) {
+				return "", fmt.Errorf("invalid agent name %q in operator config", name)
+			}
 			cfg.Agents[name] = DelegateAgentConfig{
 				Provider:     cfg.DefaultProvider,
 				Model:        cfg.DefaultModel,
@@ -124,7 +127,7 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, mcpCfg ..
 		return "", err
 	}
 
-	// Step 4: Encode as TOML.
+	// Step 5: Encode as TOML.
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
 		return "", fmt.Errorf("encode zeroclaw bootstrap config: %w", err)

@@ -14,7 +14,7 @@
 //	types.go     — All shared types, constants, and variables
 //	config.go    — Operator-side YAML loading
 //	toml.go      — Per-user TOML config generation (config.toml for the ConfigMap)
-//	markdown.go  — Markdown template builders (SOUL.md, IDENTITY.md, TOOLS.md, AGENTS.md)
+//	markdown.go  — Markdown template builders (SOUL.md, IDENTITY.md, TOOLS.md) and agent skill files
 //	bootstrap.go — Init container logic: merge operator-managed keys into PVC live config
 package zeroclaw
 

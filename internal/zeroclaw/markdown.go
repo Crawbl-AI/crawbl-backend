@@ -17,6 +17,11 @@ import (
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 )
 
+// agentSkillKeyPrefix is the ConfigMap key prefix for per-agent skill files.
+// Keys follow the format "agent-skill--<agent>--<filename>".
+// Kubernetes ConfigMap keys must match [-._a-zA-Z0-9]+, so slashes are not allowed.
+const agentSkillKeyPrefix = "agent-skill--"
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -28,11 +33,15 @@ type BuildBootstrapFilesOpts struct {
 	MCP *MCPBootstrapConfig
 }
 
-// BuildBootstrapFiles generates all 4 files that go into the bootstrap ConfigMap:
-// config.toml + 3 markdown personality files.
+// BuildBootstrapFiles generates all files that go into the bootstrap ConfigMap:
+// config.toml, 3 markdown personality files, and per-agent skill files.
 //
 // This is the main entry point called by the webhook's Sync handler.
 // Returns a map of filename → content, ready to be set as ConfigMap.Data.
+//
+// Agent skill files use flat keys with the format "agent-skill--<agent>--<filename>"
+// because Kubernetes ConfigMap keys must match [-._a-zA-Z0-9]+ (no slashes allowed).
+// The init container parses these keys and writes them to workspace/agents/<agent>/ on the PVC.
 func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, opts ...BuildBootstrapFilesOpts) (map[string]string, error) {
 	var mcpCfg *MCPBootstrapConfig
 	if len(opts) > 0 {
@@ -44,12 +53,24 @@ func BuildBootstrapFiles(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, opts 
 		return nil, err
 	}
 
-	return map[string]string{
+	files := map[string]string{
 		"config.toml": configTOML,
 		"SOUL.md":     BuildSoulMarkdown(sw),
 		"IDENTITY.md": BuildIdentityMarkdown(sw),
 		"TOOLS.md":    BuildToolsMarkdown(),
-	}, nil
+	}
+
+	// Include per-agent skill files in the ConfigMap.
+	// Keys use "agent-skill--<agent>--<filename>" format (flat, no slashes).
+	// The init container extracts these to workspace/agents/<agent>/ on the PVC.
+	for agentName, agentFiles := range BuildAgentSkillFiles(zc) {
+		for filename, content := range agentFiles {
+			key := fmt.Sprintf("%s%s--%s", agentSkillKeyPrefix, agentName, filename)
+			files[key] = content
+		}
+	}
+
+	return files, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -93,14 +114,15 @@ You coordinate a team of specialist agents available via the %s tool.
 func BuildIdentityMarkdown(sw *crawblv1alpha1.UserSwarm) string {
 	return fmt.Sprintf(`# IDENTITY.md - Who I Am
 
-I am ZeroClaw, %s's long-lived assistant in Crawbl.
+I am the Manager of %s's Crawbl swarm.
 
 ## Traits
 - Calm, direct, and useful
 - Conversational, not robotic
 - Opinionated when it helps the user decide faster
 - Respectful of the user's time; short answers are the default
-- Comfortable helping with planning, research, reminders, messages, and coordination
+- Comfortable delegating to specialist agents when their domain fits
+- Handles planning, coordination, and general queries directly
 `, sw.Spec.UserID)
 }
 
