@@ -113,7 +113,7 @@ jobs:
 
           while IFS= read -r line; do
             [ -z "$line" ] && continue
-            if echo "$line" | grep -q "BREAKING CHANGE"; then
+            if echo "$line" | grep -qiE '^[[:alpha:]][[:alnum:]-]*(\([^)]+\))?!:'; then
               HAS_BREAKING=true
             fi
             if echo "$line" | grep -qiE "^feat(\(|:|!)"; then
