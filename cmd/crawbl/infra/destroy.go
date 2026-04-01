@@ -70,15 +70,21 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 		return fmt.Errorf("failed to create stack: %w", err)
 	}
 
-	// Before destroying the cluster, delete all LoadBalancer Services.
-	// DigitalOcean's cloud controller creates LBs outside Pulumi's state
-	// when K8s LoadBalancer Services are provisioned (e.g. by Envoy Gateway).
-	// If we destroy the cluster with LBs still attached, they become orphaned
+	// Before destroying the cluster, delete all LoadBalancer Services and PersistentVolumeClaims.
+	// DigitalOcean's cloud controller creates LBs and volumes outside Pulumi's state
+	// when K8s LoadBalancer Services or PVCs are provisioned.
+	// If we destroy the cluster with these resources still attached, they become orphaned
 	// in the DO account and must be cleaned up manually.
 	out.Step(style.Delete, "Cleaning up LoadBalancer Services before cluster destroy...")
 	if err := deleteLoadBalancerServices(ctx); err != nil {
 		out.Warning("Failed to clean up LoadBalancers: %v", err)
 		out.Warning("Proceeding anyway — check for orphaned load balancers in the DO console")
+	}
+
+	out.Step(style.Delete, "Cleaning up PersistentVolumeClaims before cluster destroy...")
+	if err := deletePersistentVolumeClaims(ctx); err != nil {
+		out.Warning("Failed to clean up PersistentVolumeClaims: %v", err)
+		out.Warning("Proceeding anyway — check for orphaned volumes in the DO console")
 	}
 
 	if err := stack.Destroy(ctx); err != nil {
@@ -135,10 +141,126 @@ func deleteLoadBalancerServices(ctx context.Context) error {
 		return nil
 	}
 
-	// Wait for DO cloud controller to deprovision LBs.
-	out.Step(style.Waiting, "Waiting 30s for %d LoadBalancer(s) to deprovision...", lbCount)
-	time.Sleep(30 * time.Second)
-	return nil
+	// Wait for LoadBalancers to be fully deleted (DO cloud controller deprovisions them).
+	out.Step(style.Waiting, "Waiting for %d LoadBalancer(s) to terminate...", lbCount)
+	return waitForLoadBalancerDeletion(ctx, clientset)
+}
+
+// waitForLoadBalancerDeletion polls until all LoadBalancer Services are deleted.
+func waitForLoadBalancerDeletion(ctx context.Context, clientset *kubernetes.Clientset) error {
+	const (
+		pollInterval = 5 * time.Second
+		timeout      = 5 * time.Minute
+	)
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return fmt.Errorf("timeout waiting for LoadBalancers to terminate after %v", timeout)
+		case <-ticker.C:
+			svcs, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("list services: %w", err)
+			}
+			lbCount := 0
+			for i := range svcs.Items {
+				if svcs.Items[i].Spec.Type == corev1.ServiceTypeLoadBalancer {
+					lbCount++
+				}
+			}
+			if lbCount == 0 {
+				out.Success("All LoadBalancers terminated")
+				return nil
+			}
+			out.Infof("Waiting... %d LoadBalancer(s) still terminating", lbCount)
+		}
+	}
+}
+
+// deletePersistentVolumeClaims finds and deletes all PVCs across all namespaces,
+// then waits for the DO cloud controller to deprovision the associated volumes.
+func deletePersistentVolumeClaims(ctx context.Context) error {
+	// Build a K8s client from the default kubeconfig.
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+
+	restConfig, err := kubeConfig.ClientConfig()
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create k8s client: %w", err)
+	}
+
+	// List all PVCs across all namespaces.
+	pvcs, err := clientset.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("list PVCs: %w", err)
+	}
+
+	var pvcCount int
+	for i := range pvcs.Items {
+		pvc := &pvcs.Items[i]
+		out.Infof("Deleting PersistentVolumeClaim %s/%s...", pvc.Namespace, pvc.Name)
+		if err := clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(ctx, pvc.Name, metav1.DeleteOptions{}); err != nil {
+			out.Warning("Failed to delete PVC %s/%s: %v", pvc.Namespace, pvc.Name, err)
+			continue
+		}
+		pvcCount++
+	}
+
+	if pvcCount == 0 {
+		out.Infof("No PersistentVolumeClaims found")
+		return nil
+	}
+
+	// Wait for PVCs to be fully deleted (DO cloud controller deprovisions volumes).
+	out.Step(style.Waiting, "Waiting for %d PVC(s) to terminate...", pvcCount)
+	return waitForPVCDeletion(ctx, clientset)
+}
+
+// waitForPVCDeletion polls until all PVCs are deleted or times out.
+func waitForPVCDeletion(ctx context.Context, clientset *kubernetes.Clientset) error {
+	const (
+		pollInterval = 5 * time.Second
+		timeout      = 5 * time.Minute
+	)
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return fmt.Errorf("timeout waiting for PVCs to terminate after %v", timeout)
+		case <-ticker.C:
+			pvcs, err := clientset.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("list PVCs: %w", err)
+			}
+			if len(pvcs.Items) == 0 {
+				out.Success("All PVCs terminated")
+				return nil
+			}
+			out.Infof("Waiting... %d PVC(s) still terminating", len(pvcs.Items))
+		}
+	}
 }
 
 func confirmDestroy() bool {

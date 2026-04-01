@@ -58,6 +58,8 @@ flowchart LR
 make setup
 
 # 2. Source environment and start the stack:
+# NOTE: All crawbl CLI commands requiring environment variables (from .env)
+# should be run with: set -a && source .env && set +a <command>
 set -a && source .env && set +a
 ./crawbl dev start
 
