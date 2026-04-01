@@ -1,23 +1,7 @@
 # NOTE: NOT TESTED YET ON PRODUCTION
 # Deploy to Production
 #
-# Full pipeline: build → infra drift check → update ArgoCD → E2E tests → rollback on failure
-#
-# Trigger: manual workflow_dispatch only (production deployments are explicit)
-#
-# Flow:
-#   1. build          — Compile Go binary and build Docker images
-#   2. infra-drift    — Run Pulumi plan to detect infrastructure drift
-#   3. update-argocd  — Update crawbl-argocd-apps with new image tags
-#   4. e2e-test       — Run E2E tests against production
-#   5. rollback-argocd — (only on e2e failure) Restore previous image tags
-#
-# Uses reusable workflows from:
-#   - .github/workflows/reusable-build.yml
-#   - .github/workflows/reusable-infra-drift-check.yml
-#   - .github/workflows/reusable-update-argocd.yml
-#   - .github/workflows/reusable-e2e-test.yml
-#   - .github/workflows/reusable-rollback-argocd.yml
+# Thin wrapper around the shared deployment pipeline.
 name: Deploy to Production
 
 on:
@@ -44,80 +28,30 @@ on:
         default: 'https://api.crawbl.com'
         type: string
 
-# Prevent concurrent production deployments
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build: Compile binary and push Docker images
-  # ---------------------------------------------------------------------------
-  build:
-    uses: ./.github/workflows/reusable-build.yml
-    with:
-      registry: registry.digitalocean.com/crawbl
-      push-images: true
-    secrets:
-      digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # Infra Drift Check: Verify Pulumi state matches actual infra
-  # ---------------------------------------------------------------------------
-  infra-drift-check:
-    uses: ./.github/workflows/reusable-infra-drift-check.yml
-    needs: [build]
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
     with:
       environment: ${{ inputs.environment }}
       region: ${{ inputs.region }}
+      cluster-name: ${{ inputs.cluster-name }}
+      base-url: ${{ inputs.base-url }}
+      registry: registry.digitalocean.com/crawbl
+      push-images: true
+      e2e-timeout: 30s
+      rollback-on-e2e-failure: true
     secrets:
-      pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
       aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       aws-region: ${{ secrets.AWS_REGION }}
       argocd-ssh-private-key: ${{ secrets.ARGOCD_SSH_PRIVATE_KEY }}
       digitalocean-vpc-id: ${{ secrets.DIGITALOCEAN_VPC_ID }}
       digitalocean-project-name: ${{ secrets.DIGITALOCEAN_PROJECT_NAME }}
-
-  # ---------------------------------------------------------------------------
-  # Update ArgoCD: Patch crawbl-argocd-apps with new image tags
-  # ---------------------------------------------------------------------------
-  update-argocd:
-    uses: ./.github/workflows/reusable-update-argocd.yml
-    needs: [build, infra-drift-check]
-    with:
-      image-tag: ${{ needs.build.outputs.semver-tag }}
-    secrets:
       argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # E2E Tests: Verify deployment against production
-  # ---------------------------------------------------------------------------
-  e2e-test:
-    uses: ./.github/workflows/reusable-e2e-test.yml
-    needs: [build, update-argocd]
-    with:
-      image-tag: ${{ needs.build.outputs.semver-tag }}
-      base-url: ${{ inputs.base-url }}
-      cluster-name: ${{ inputs.cluster-name }}
-      timeout: 30s
-    secrets:
-      digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # Rollback: Restore previous tags if E2E fails
-  # TODO: NEEDS TO BETTER AS DB MIGRATIONS AREN'T ROLLBACKEND FOR EXAMPLE
-  # ---------------------------------------------------------------------------
-  rollback-argocd:
-    uses: ./.github/workflows/reusable-rollback-argocd.yml
-    needs: [build, update-argocd, e2e-test]
-    if: always() && needs.e2e-test.result == 'failure'
-    with:
-      prev-orchestrator-tag: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}
-      prev-auth-filter-tag: ${{ needs.update-argocd.outputs.prev-auth-filter-tag }}
-      prev-platform-tag: ${{ needs.update-argocd.outputs.prev-platform-tag }}
-      failed-tag: ${{ needs.build.outputs.semver-tag }}
-    secrets:
-      argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}

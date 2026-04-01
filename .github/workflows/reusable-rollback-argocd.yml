@@ -54,7 +54,7 @@ jobs:
           echo "  auth-filter:  ${{ inputs.prev-auth-filter-tag }}"
           echo "  platform:     ${{ inputs.prev-platform-tag }}"
 
-          git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
+          git clone --depth 1 "https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git" /tmp/argocd-apps
           cd /tmp/argocd-apps
 
           export IMAGE_TAG="${{ inputs.prev-orchestrator-tag }}"

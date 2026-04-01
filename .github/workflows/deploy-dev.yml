@@ -1,22 +1,6 @@
 # Deploy to Dev
 #
-# Full pipeline: compile Go binary → build Docker images → update ArgoCD manifests → E2E tests
-#
-# Trigger: every push to main, or manual workflow_dispatch.
-#
-# Flow:
-#   1. build          — Compile Go binary and build Docker images (with semver from conventional commits)
-#   2. infra-drift    — Run Pulumi plan to detect infrastructure drift
-#   3. update-argocd  — Update crawbl-argocd-apps with new image tags
-#   4. e2e-test       — Run E2E tests against dev cluster
-#   5. rollback-argocd — (only on e2e failure) Restore previous image tags
-#
-# Uses reusable workflows from:
-#   - .github/workflows/reusable-build.yml
-#   - .github/workflows/reusable-infra-drift-check.yml
-#   - .github/workflows/reusable-update-argocd.yml
-#   - .github/workflows/reusable-e2e-test.yml
-#   - .github/workflows/reusable-rollback-argocd.yml
+# Thin wrapper around the shared deployment pipeline.
 name: Deploy to Dev
 
 on:
@@ -24,66 +8,30 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Fixed group name "deploy-dev" means all runs (push AND workflow_dispatch) share one queue.
-# cancel-in-progress: false means queued runs wait instead of being cancelled — important on
-# main where we never want to skip a deploy silently.
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Build: Compile binary and push Docker images
-  # ---------------------------------------------------------------------------
-  build:
-    uses: ./.github/workflows/reusable-build.yml
-    with:
-      registry: registry.digitalocean.com/crawbl
-      push-images: true
-    secrets:
-      digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # Infra Drift Check: Verify Pulumi state matches actual infra
-  # ---------------------------------------------------------------------------
-  infra-drift-check:
-    uses: ./.github/workflows/reusable-infra-drift-check.yml
-    needs: [build]
+  deploy:
+    uses: ./.github/workflows/reusable-deploy.yml
     with:
       environment: dev
       region: fra1
+      cluster-name: crawbl-dev
+      base-url: https://dev.api.crawbl.com
+      registry: registry.digitalocean.com/crawbl
+      push-images: true
+      e2e-timeout: 15s
+      rollback-on-e2e-failure: true
     secrets:
-      pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
       aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       aws-region: ${{ secrets.AWS_REGION }}
       argocd-ssh-private-key: ${{ secrets.ARGOCD_SSH_PRIVATE_KEY }}
       digitalocean-vpc-id: ${{ secrets.DIGITALOCEAN_VPC_ID }}
       digitalocean-project-name: ${{ secrets.DIGITALOCEAN_PROJECT_NAME }}
-
-  # ---------------------------------------------------------------------------
-  # Update ArgoCD: Patch crawbl-argocd-apps with new image tags
-  # ---------------------------------------------------------------------------
-  update-argocd:
-    uses: ./.github/workflows/reusable-update-argocd.yml
-    needs: [build, infra-drift-check]
-    with:
-      image-tag: ${{ needs.build.outputs.semver-tag }}
-    secrets:
       argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # E2E Tests: Verify deployment against dev cluster
-  # ---------------------------------------------------------------------------
-  e2e-test:
-    uses: ./.github/workflows/reusable-e2e-test.yml
-    needs: [build, update-argocd]
-    with:
-      image-tag: ${{ needs.build.outputs.semver-tag }}
-      base-url: https://dev.api.crawbl.com
-      cluster-name: crawbl-dev
-      timeout: 15s
-    secrets:
-      digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}

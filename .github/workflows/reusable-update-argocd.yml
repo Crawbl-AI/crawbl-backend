@@ -19,11 +19,6 @@ on:
         description: 'Image tag to deploy (e.g., v0.2.0)'
         required: true
         type: string
-      capture-rollback-tags:
-        description: 'Whether to capture current tags for rollback (default: true)'
-        required: false
-        default: true
-        type: boolean
     outputs:
       prev-orchestrator-tag:
         description: 'Previous orchestrator tag (for rollback)'
@@ -54,16 +49,18 @@ jobs:
           IMAGE_TAG: ${{ inputs.image-tag }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
+          git clone --depth 1 "https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git" /tmp/argocd-apps
           cd /tmp/argocd-apps
 
           # Capture current tags BEFORE overwriting — these are the rollback targets.
           PREV_ORCH=$(yq '.image.tag' components/orchestrator/chart/values.yaml)
           PREV_AUTH=$(grep -oP 'envoy-auth-filter:\K[^ "]+' components/envoy-gateway/resources/envoy-extension-policy.yaml | head -1)
           PREV_PLATFORM=$(grep -oP 'crawbl-platform:\K[^ "]+' components/metacontroller/resources/userswarm-webhook.yaml | head -1)
-          echo "orchestrator=${PREV_ORCH}" >> "$GITHUB_OUTPUT"
-          echo "auth-filter=${PREV_AUTH}" >> "$GITHUB_OUTPUT"
-          echo "platform=${PREV_PLATFORM}" >> "$GITHUB_OUTPUT"
+          {
+            echo "orchestrator=${PREV_ORCH}"
+            echo "auth-filter=${PREV_AUTH}"
+            echo "platform=${PREV_PLATFORM}"
+          } >> "$GITHUB_OUTPUT"
           echo "Previous tags: orchestrator=${PREV_ORCH} auth-filter=${PREV_AUTH} platform=${PREV_PLATFORM}"
 
           echo "Updating orchestrator image to ${IMAGE_TAG}"

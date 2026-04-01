@@ -27,6 +27,7 @@ on:
         type: boolean
     outputs:
       semver-tag:
+        description: 'Calculated semver tag (e.g., v0.2.0)'
         value: ${{ jobs.build.outputs.semver-tag }}
     secrets:
       digitalocean-token:
@@ -37,7 +38,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     outputs:
       semver-tag: ${{ steps.calc-version.outputs.new-tag }}
     steps:
@@ -61,7 +62,8 @@ jobs:
 
       - name: Build crawbl binary
         run: |
-          export GOMAXPROCS="$(nproc)"
+          GOMAXPROCS="$(nproc)"
+          export GOMAXPROCS
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
             -o crawbl ./cmd/crawbl
@@ -84,12 +86,13 @@ jobs:
       - name: Calculate version from conventional commits
         id: calc-version
         run: |
+          LATEST_TAG=""
           LATEST_TAG=$(git tag -l "v*" --sort=-v:refname 2>/dev/null | head -n1)
 
           if [ -z "$LATEST_TAG" ]; then
             echo "No existing semver tag found, starting from v0.1.0"
-            echo "new-tag=v0.1.0" >> $GITHUB_OUTPUT
-            echo "latest-tag=v0.1.0" >> $GITHUB_OUTPUT
+            echo "new-tag=v0.1.0" >> "$GITHUB_OUTPUT"
+            echo "latest-tag=v0.1.0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -98,6 +101,7 @@ jobs:
           VERSION="${LATEST_TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
+          COMMITS=""
           COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null)
           echo "Commits since ${LATEST_TAG}:"
           echo "${COMMITS}"
@@ -137,22 +141,8 @@ jobs:
           echo "  feat: ${HAS_FEAT}, breaking: ${HAS_BREAKING}"
           echo "  ${LATEST_TAG} → ${NEW_TAG}"
 
-          echo "new-tag=${NEW_TAG}" >> $GITHUB_OUTPUT
-          echo "latest-tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
-
-      - name: Create and push git tag
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git tag -a "${{ steps.calc-version.outputs.new-tag }}" -m "Release ${{ steps.calc-version.outputs.new-tag }}"
-          git push origin "${{ steps.calc-version.outputs.new-tag }}"
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.calc-version.outputs.new-tag }}
-          name: Release ${{ steps.calc-version.outputs.new-tag }}
-          generate_release_notes: true
+          echo "new-tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "latest-tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push platform image
         if: inputs.push-images

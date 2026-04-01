@@ -1,0 +1,127 @@
+# Reusable Deployment Pipeline
+#
+# Orchestrates build, infra drift check, ArgoCD update, E2E validation,
+# and optional rollback for a target environment.
+name: Reusable Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Pulumi environment name'
+        required: true
+        type: string
+      region:
+        description: 'Cloud region'
+        required: true
+        type: string
+      cluster-name:
+        description: 'Kubernetes cluster name'
+        required: true
+        type: string
+      base-url:
+        description: 'API base URL for E2E tests'
+        required: true
+        type: string
+      registry:
+        description: 'Docker registry URL'
+        required: false
+        default: 'registry.digitalocean.com/crawbl'
+        type: string
+      push-images:
+        description: 'Whether to push images during the build'
+        required: false
+        default: true
+        type: boolean
+      e2e-timeout:
+        description: 'Per-request timeout passed to the E2E CLI'
+        required: false
+        default: '15s'
+        type: string
+      rollback-on-e2e-failure:
+        description: 'Whether to roll back ArgoCD tags when E2E fails'
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      semver-tag:
+        description: 'Image tag produced by the build'
+        value: ${{ jobs.build.outputs.semver-tag }}
+    secrets:
+      digitalocean-token:
+        required: true
+      pulumi-access-token:
+        required: true
+      aws-access-key-id:
+        required: true
+      aws-secret-access-key:
+        required: true
+      aws-region:
+        required: true
+      argocd-ssh-private-key:
+        required: true
+      digitalocean-vpc-id:
+        required: false
+      digitalocean-project-name:
+        required: false
+      argocd-repo-token:
+        required: true
+      e2e-token:
+        required: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      registry: ${{ inputs.registry }}
+      push-images: ${{ inputs.push-images }}
+    secrets:
+      digitalocean-token: ${{ secrets.digitalocean-token }}
+
+  infra-drift-check:
+    uses: ./.github/workflows/reusable-infra-drift-check.yml
+    needs: [build]
+    with:
+      environment: ${{ inputs.environment }}
+      region: ${{ inputs.region }}
+    secrets:
+      pulumi-access-token: ${{ secrets.pulumi-access-token }}
+      digitalocean-token: ${{ secrets.digitalocean-token }}
+      aws-access-key-id: ${{ secrets.aws-access-key-id }}
+      aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+      aws-region: ${{ secrets.aws-region }}
+      argocd-ssh-private-key: ${{ secrets.argocd-ssh-private-key }}
+      digitalocean-vpc-id: ${{ secrets.digitalocean-vpc-id }}
+      digitalocean-project-name: ${{ secrets.digitalocean-project-name }}
+
+  update-argocd:
+    uses: ./.github/workflows/reusable-update-argocd.yml
+    needs: [build, infra-drift-check]
+    with:
+      image-tag: ${{ needs.build.outputs.semver-tag }}
+    secrets:
+      argocd-repo-token: ${{ secrets.argocd-repo-token }}
+
+  e2e-test:
+    uses: ./.github/workflows/reusable-e2e-test.yml
+    needs: [build, update-argocd]
+    with:
+      image-tag: ${{ needs.build.outputs.semver-tag }}
+      base-url: ${{ inputs.base-url }}
+      cluster-name: ${{ inputs.cluster-name }}
+      timeout: ${{ inputs.e2e-timeout }}
+    secrets:
+      digitalocean-token: ${{ secrets.digitalocean-token }}
+      e2e-token: ${{ secrets.e2e-token }}
+
+  rollback-argocd:
+    if: ${{ always() && inputs.rollback-on-e2e-failure && needs.e2e-test.result == 'failure' }}
+    uses: ./.github/workflows/reusable-rollback-argocd.yml
+    needs: [build, update-argocd, e2e-test]
+    with:
+      prev-orchestrator-tag: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}
+      prev-auth-filter-tag: ${{ needs.update-argocd.outputs.prev-auth-filter-tag }}
+      prev-platform-tag: ${{ needs.update-argocd.outputs.prev-platform-tag }}
+      failed-tag: ${{ needs.build.outputs.semver-tag }}
+    secrets:
+      argocd-repo-token: ${{ secrets.argocd-repo-token }}
