@@ -76,13 +76,32 @@ func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 	}
 
 	now := time.Now().UTC()
-	return s.workspaceRepo.Save(ctx, opts.Sess, &orchestrator.Workspace{
+	workspace := &orchestrator.Workspace{
 		ID:        uuid.NewString(),
 		UserID:    opts.UserID,
 		Name:      orchestrator.DefaultWorkspaceName,
 		CreatedAt: now,
 		UpdatedAt: now,
-	})
+	}
+	if mErr := s.workspaceRepo.Save(ctx, opts.Sess, workspace); mErr != nil {
+		return mErr
+	}
+
+	// Eagerly provision the UserSwarm runtime so agents are online by the
+	// time the user reaches the workspace screen.
+	if _, rErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		UserID:          opts.UserID,
+		WorkspaceID:     workspace.ID,
+		WaitForVerified: false,
+	}); rErr != nil {
+		s.logger.Warn("eager runtime provisioning failed",
+			slog.String("workspace_id", workspace.ID),
+			slog.String("user_id", opts.UserID),
+			slog.String("error", rErr.Error()),
+		)
+	}
+
+	return nil
 }
 
 // ListByUserID retrieves all workspaces for a given user with runtime status attached.
