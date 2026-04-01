@@ -1,14 +1,14 @@
-# Deploy to Dev
+# Deploy to Production
 #
-# Full pipeline: compile Go binary → build Docker images → update ArgoCD manifests → E2E tests
+# Full pipeline: build → infra drift check → update ArgoCD → E2E tests → rollback on failure
 #
-# Trigger: every push to main, or manual workflow_dispatch.
+# Trigger: manual workflow_dispatch only (production deployments are explicit)
 #
 # Flow:
-#   1. build          — Compile Go binary and build Docker images (with semver from conventional commits)
+#   1. build          — Compile Go binary and build Docker images
 #   2. infra-drift    — Run Pulumi plan to detect infrastructure drift
 #   3. update-argocd  — Update crawbl-argocd-apps with new image tags
-#   4. e2e-test       — Run E2E tests against dev cluster
+#   4. e2e-test       — Run E2E tests against production
 #   5. rollback-argocd — (only on e2e failure) Restore previous image tags
 #
 # Uses reusable workflows from:
@@ -17,21 +17,38 @@
 #   - .github/workflows/reusable-update-argocd.yml
 #   - .github/workflows/reusable-e2e-test.yml
 #   - .github/workflows/reusable-rollback-argocd.yml
-name: Deploy to Dev
+name: Deploy to Production
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Pulumi environment (e.g., prod, staging)'
+        required: true
+        default: 'prod'
+        type: string
+      region:
+        description: 'Cloud region (e.g., fra1, nyc1)'
+        required: true
+        default: 'fra1'
+        type: string
+      cluster-name:
+        description: 'Kubernetes cluster name'
+        required: true
+        default: 'crawbl-prod'
+        type: string
+      base-url:
+        description: 'Production API base URL'
+        required: true
+        default: 'https://api.crawbl.com'
+        type: string
 
 env:
   DOCR_REGISTRY: registry.digitalocean.com/crawbl
 
-# Fixed group name "deploy-dev" means all runs (push AND workflow_dispatch) share one queue.
-# cancel-in-progress: false means queued runs wait instead of being cancelled — important on
-# main where we never want to skip a deploy silently.
+# Prevent concurrent production deployments
 concurrency:
-  group: deploy-dev
+  group: deploy-prod
   cancel-in-progress: false
 
 jobs:
@@ -53,8 +70,8 @@ jobs:
     uses: ./.github/workflows/reusable-infra-drift-check.yml
     needs: [build]
     with:
-      environment: dev
-      region: fra1
+      environment: ${{ inputs.environment }}
+      region: ${{ inputs.region }}
     secrets:
       pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
@@ -77,16 +94,16 @@ jobs:
       argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # E2E Tests: Verify deployment against dev cluster
+  # E2E Tests: Verify deployment against production
   # ---------------------------------------------------------------------------
   e2e-test:
     uses: ./.github/workflows/reusable-e2e-test.yml
     needs: [update-argocd]
     with:
       image-tag: ${{ needs.build.outputs.semver-tag }}
-      base-url: https://dev.api.crawbl.com
-      cluster-name: crawbl-dev
-      timeout: 15s
+      base-url: ${{ inputs.base-url }}
+      cluster-name: ${{ inputs.cluster-name }}
+      timeout: 30s
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}

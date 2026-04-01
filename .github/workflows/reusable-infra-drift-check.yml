@@ -1,0 +1,100 @@
+# Reusable Infrastructure Drift Check Workflow
+#
+# Run Pulumi plan to detect infrastructure drift before deploying.
+#
+# Usage:
+#   jobs:
+#     drift-check:
+#       uses: ./workflows/reusable-infra-drift-check.yml
+#       needs: [build]
+#       with:
+#         environment: dev
+#         region: fra1
+#       secrets:
+#         pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+#         digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+#         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#         aws-region: ${{ secrets.AWS_REGION }}
+#         argocd-ssh-private-key: ${{ secrets.ARGOCD_SSH_PRIVATE_KEY }}
+#         digitalocean-vpc-id: ${{ secrets.DIGITALOCEAN_VPC_ID }}
+#         digitalocean-project-name: ${{ secrets.DIGITALOCEAN_PROJECT_NAME }}
+name: Reusable Infra Drift Check
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Pulumi environment name (e.g., dev, staging, prod)'
+        required: false
+        default: 'dev'
+        type: string
+      region:
+        description: 'Cloud region (e.g., fra1, nyc1, sfo2)'
+        required: false
+        default: 'fra1'
+        type: string
+    secrets:
+      pulumi-access-token:
+        required: true
+      digitalocean-token:
+        required: true
+      aws-access-key-id:
+        required: true
+      aws-secret-access-key:
+        required: true
+      aws-region:
+        required: true
+      argocd-ssh-private-key:
+        required: true
+      digitalocean-vpc-id:
+        required: false
+      digitalocean-project-name:
+        required: false
+
+jobs:
+  infra-drift-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: crawbl-binary
+
+      - name: Make binary executable
+        run: chmod +x crawbl
+
+      - name: Check for infrastructure drift
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.pulumi-access-token }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.digitalocean-token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.aws-secret-access-key }}
+          AWS_REGION: ${{ secrets.aws-region }}
+          ARGOCD_SSH_PRIVATE_KEY: ${{ secrets.argocd-ssh-private-key }}
+          DIGITALOCEAN_VPC_ID: ${{ secrets.digitalocean-vpc-id }}
+          DIGITALOCEAN_PROJECT_NAME: ${{ secrets.digitalocean-project-name }}
+        run: |
+          RESULT=$(./crawbl infra plan --json 2>&1 | tail -1)
+          echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
+
+          ERROR=$(echo "$RESULT" | jq -r '.error // empty' 2>/dev/null)
+          if [ -n "$ERROR" ]; then
+            echo "::error::Infra preview failed: ${ERROR}"
+            exit 1
+          fi
+
+          HAS_DRIFT=$(echo "$RESULT" | jq -r '.hasDrift' 2>/dev/null)
+          if [ "$HAS_DRIFT" = "true" ]; then
+            CREATES=$(echo "$RESULT" | jq -r '.creates' 2>/dev/null)
+            UPDATES=$(echo "$RESULT" | jq -r '.updates' 2>/dev/null)
+            DELETES=$(echo "$RESULT" | jq -r '.deletes' 2>/dev/null)
+            echo "::error::Infrastructure drift detected: ${CREATES} to create, ${UPDATES} to update, ${DELETES} to delete"
+            echo "Fix the drift with 'crawbl infra update' before deploying."
+            exit 1
+          else
+            echo "No infrastructure drift detected."
+          fi

@@ -1,0 +1,89 @@
+# Reusable Update ArgoCD Workflow
+#
+# Update crawbl-argocd-apps with new image tags.
+#
+# Usage:
+#   jobs:
+#     update-argocd:
+#       uses: ./workflows/reusable-update-argocd.yml
+#       needs: [build, infra-drift-check]
+#       with:
+#         image-tag: v0.2.0
+#         argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}
+name: Reusable Update ArgoCD
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: 'Image tag to deploy (e.g., v0.2.0)'
+        required: true
+        type: string
+      capture-rollback-tags:
+        description: 'Whether to capture current tags for rollback (default: true)'
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      prev-orchestrator-tag:
+        description: 'Previous orchestrator tag (for rollback)'
+        value: ${{ jobs.update-argocd.outputs.prev-orchestrator-tag }}
+      prev-auth-filter-tag:
+        description: 'Previous auth-filter tag (for rollback)'
+        value: ${{ jobs.update-argocd.outputs.prev-auth-filter-tag }}
+      prev-platform-tag:
+        description: 'Previous platform tag (for rollback)'
+        value: ${{ jobs.update-argocd.outputs.prev-platform-tag }}
+    secrets:
+      argocd-repo-token:
+        required: true
+
+jobs:
+  update-argocd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      prev-orchestrator-tag: ${{ steps.capture-tags.outputs.orchestrator }}
+      prev-auth-filter-tag: ${{ steps.capture-tags.outputs.auth-filter }}
+      prev-platform-tag: ${{ steps.capture-tags.outputs.platform }}
+    steps:
+      - name: Update ArgoCD apps with new image tags
+        id: capture-tags
+        env:
+          GH_PAT: ${{ secrets.argocd-repo-token }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          git clone --depth 1 https://x-access-token:${GH_PAT}@github.com/Crawbl-AI/crawbl-argocd-apps.git /tmp/argocd-apps
+          cd /tmp/argocd-apps
+
+          # Capture current tags BEFORE overwriting — these are the rollback targets.
+          PREV_ORCH=$(yq '.image.tag' components/orchestrator/chart/values.yaml)
+          PREV_AUTH=$(grep -oP 'envoy-auth-filter:\K[^ "]+' components/envoy-gateway/resources/envoy-extension-policy.yaml | head -1)
+          PREV_PLATFORM=$(grep -oP 'crawbl-platform:\K[^ "]+' components/metacontroller/resources/userswarm-webhook.yaml | head -1)
+          echo "orchestrator=${PREV_ORCH}" >> "$GITHUB_OUTPUT"
+          echo "auth-filter=${PREV_AUTH}" >> "$GITHUB_OUTPUT"
+          echo "platform=${PREV_PLATFORM}" >> "$GITHUB_OUTPUT"
+          echo "Previous tags: orchestrator=${PREV_ORCH} auth-filter=${PREV_AUTH} platform=${PREV_PLATFORM}"
+
+          echo "Updating orchestrator image to ${IMAGE_TAG}"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values.yaml
+
+          echo "Updating auth-filter to ${IMAGE_TAG}"
+          sed -i "s|registry.digitalocean.com/crawbl/envoy-auth-filter:[^ ]*|registry.digitalocean.com/crawbl/envoy-auth-filter:${IMAGE_TAG}|g" \
+            components/envoy-gateway/resources/envoy-extension-policy.yaml
+
+          echo "Updating webhook + reaper images to ${IMAGE_TAG}"
+          sed -i "s|registry.digitalocean.com/crawbl/crawbl-platform:[^ ]*|registry.digitalocean.com/crawbl/crawbl-platform:${IMAGE_TAG}|g" \
+            components/metacontroller/resources/userswarm-webhook.yaml \
+            components/metacontroller/resources/e2e-reaper-cronjob.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "deploy: update images to ${IMAGE_TAG}
+
+          Source: crawbl-backend@${COMMIT_SHA::7}
+          Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          git push

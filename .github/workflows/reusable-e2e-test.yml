@@ -1,0 +1,103 @@
+# Reusable E2E Test Workflow
+#
+# Run E2E tests against the deployed cluster.
+#
+# Usage:
+#   jobs:
+#     e2e-test:
+#       uses: ./workflows/reusable-e2e-test.yml
+#       needs: [update-argocd]
+#       with:
+#         image-tag: v0.2.0
+#         base-url: https://dev.api.crawbl.com
+#         cluster-name: crawbl-dev
+#       secrets:
+#         digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+#         e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}
+name: Reusable E2E Test
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: 'Expected image tag to wait for'
+        required: true
+        type: string
+      base-url:
+        description: 'Base URL for the API'
+        required: false
+        default: 'https://dev.api.crawbl.com'
+        type: string
+      cluster-name:
+        description: 'Kubernetes cluster name'
+        required: false
+        default: 'crawbl-dev'
+        type: string
+      test-uid-suffix:
+        description: 'Suffix for test user ID (for uniqueness)'
+        required: false
+        default: ''
+        type: string
+      timeout:
+        description: 'Per-request timeout in seconds'
+        required: false
+        default: '15s'
+        type: string
+    secrets:
+      digitalocean-token:
+        required: true
+      e2e-token:
+        required: true
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: crawbl-binary
+
+      - name: Make binary executable
+        run: chmod +x crawbl
+
+      - name: Install doctl and configure kubectl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.digitalocean-token }}
+
+      - name: Save kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ inputs.cluster-name }}
+
+      - name: Wait for ArgoCD sync
+        run: |
+          echo "Polling for image tag ${{ inputs.image-tag }}..."
+          for i in $(seq 1 90); do
+            CURRENT=$(kubectl get deployment orchestrator -n backend \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
+            if echo "${CURRENT}" | grep -q "${inputs.image-tag}"; then
+              echo "ArgoCD synced: ${CURRENT}"
+              kubectl rollout status deployment/orchestrator -n backend --timeout=180s
+              echo "Rollout complete."
+              exit 0
+            fi
+            echo "  attempt ${i}/90: image=${CURRENT}"
+            sleep 5
+          done
+          echo "WARNING: Timed out waiting for ${{ inputs.image-tag }}"
+
+      - name: Run e2e tests
+        env:
+          CRAWBL_E2E_TOKEN: ${{ secrets.e2e-token }}
+          UID_SUFFIX: ${{ inputs.test-uid-suffix != '' && inputs.test-uid-suffix || format('ci-{0}', github.run_id) }}
+        run: |
+          exec ./crawbl test e2e \
+            --base-url ${{ inputs.base-url }} \
+            --e2e-token "${CRAWBL_E2E_TOKEN}" \
+            --uid "ci-e2e-${UID_SUFFIX}" \
+            --email "ci-e2e-${UID_SUFFIX}@crawbl.test" \
+            --timeout ${{ inputs.timeout }} \
+            -v

@@ -1,0 +1,163 @@
+# Reusable Build Workflow
+#
+# Build Go binary and Docker images, calculate semver from conventional commits.
+#
+# Usage:
+#   jobs:
+#     build:
+#       uses: ./workflows/reusable-build.yml
+#       with:
+#         registry: registry.digitalocean.com/crawbl
+#       secrets:
+#         digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+name: Reusable Build
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        description: 'Docker registry URL'
+        required: false
+        default: 'registry.digitalocean.com/crawbl'
+        type: string
+      push-images:
+        description: 'Whether to push images (default: true)'
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      semver-tag:
+        description: 'Calculated semver tag (e.g., v0.2.0)'
+        value: ${{ jobs.build.outputs.semver-tag }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      semver-tag: ${{ steps.calc-version.outputs.new-tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-${{ runner.os }}-${{ hashFiles('cmd/**/*.go', 'internal/**/*.go', 'api/**/*.go') }}
+          restore-keys: |
+            go-build-${{ runner.os }}-
+
+      - name: Build crawbl binary
+        run: |
+          export GOMAXPROCS="$(nproc)"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
+            -o crawbl ./cmd/crawbl
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawbl-binary
+          path: crawbl
+          retention-days: 1
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker registry
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1200
+
+      - name: Calculate version from conventional commits
+        id: calc-version
+        run: |
+          LATEST_TAG=$(git tag -l "v*" --sort=-v:refname 2>/dev/null | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing semver tag found, starting from v0.1.0"
+            LATEST_TAG="v0.1.0"
+          fi
+          echo "Latest tag: ${LATEST_TAG}"
+
+          VERSION="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null)
+          echo "Commits since last tag:"
+          echo "${COMMITS}"
+          echo ""
+
+          BUMP="patch"
+          HAS_BREAKING=false
+          HAS_FEAT=false
+
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if echo "$line" | grep -q "BREAKING CHANGE"; then
+              HAS_BREAKING=true
+            fi
+            if echo "$line" | grep -qiE "^feat(\(|:|!)"; then
+              HAS_FEAT=true
+            fi
+          done <<< "$COMMITS"
+
+          if [ "$HAS_BREAKING" = true ]; then
+            BUMP="major"
+          elif [ "$HAS_FEAT" = true ]; then
+            BUMP="minor"
+          else
+            BUMP="patch"
+          fi
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo ""
+          echo "Version bump: ${BUMP}"
+          echo "  feat: ${HAS_FEAT}, breaking: ${HAS_BREAKING}"
+          echo "  ${LATEST_TAG} → ${NEW_TAG}"
+
+          echo "new-tag=${NEW_TAG}" >> $GITHUB_OUTPUT
+          echo "latest-tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Build and push platform image
+        if: inputs.push-images
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/platform.dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ inputs.registry }}/crawbl-platform:${{ steps.calc-version.outputs.new-tag }}
+            ${{ inputs.registry }}/crawbl-platform:latest
+          cache-from: type=gha,scope=crawbl-platform
+          cache-to: type=gha,mode=max,scope=crawbl-platform
+
+      - name: Build and push auth filter
+        if: inputs.push-images
+        uses: docker/build-push-action@v6
+        with:
+          context: cmd/envoy-auth-filter
+          file: dockerfiles/envoy-auth-filter.dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ inputs.registry }}/envoy-auth-filter:${{ steps.calc-version.outputs.new-tag }}
+            ${{ inputs.registry }}/envoy-auth-filter:latest
+          cache-from: type=gha,scope=envoy-auth-filter
+          cache-to: type=gha,mode=max,scope=envoy-auth-filter
