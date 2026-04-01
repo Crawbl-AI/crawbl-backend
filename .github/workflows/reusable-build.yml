@@ -79,7 +79,7 @@ jobs:
       - name: Login to Docker registry
         uses: digitalocean/action-doctl@v2
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          token: ${{ secrets.digitalocean-token }}
       - run: doctl registry login --expiry-seconds 1200
 
       - name: Calculate version from conventional commits
