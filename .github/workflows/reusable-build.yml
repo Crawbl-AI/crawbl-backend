@@ -32,6 +32,10 @@ on:
     secrets:
       digitalocean-token:
         required: true
+      github-token:
+        description: 'GitHub token for creating releases'
+        required: false
+        default: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   build:
@@ -155,7 +159,7 @@ jobs:
           name: Release ${{ steps.calc-version.outputs.new-tag }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.github-token }}
 
       - name: Build and push platform image
         if: inputs.push-images
