@@ -198,12 +198,6 @@ func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 
 // handleListModels returns the list of available LLM models.
 func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
-	_, mErr := s.currentUserFromRequest(r)
-	if mErr != nil {
-		httpserver.WriteErrorResponse(w, httpStatusForError(mErr), merrors.PublicMessage(mErr))
-		return
-	}
-
 	models := make([]agentModelResponse, 0, len(orchestrator.AvailableModels))
 	for _, m := range orchestrator.AvailableModels {
 		models = append(models, agentModelResponse{
