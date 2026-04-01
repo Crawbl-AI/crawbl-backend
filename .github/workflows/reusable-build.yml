@@ -32,7 +32,7 @@ on:
     secrets:
       digitalocean-token:
         required: true
-      github-token:
+      github_token:
         description: 'GitHub token for creating releases'
         required: false
 
@@ -152,14 +152,14 @@ jobs:
           git push origin "${{ steps.calc-version.outputs.new-tag }}"
 
       - name: Create GitHub release
-        if: secrets.github-token != ''
+        if: secrets.github_token != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.calc-version.outputs.new-tag }}
           name: Release ${{ steps.calc-version.outputs.new-tag }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.github-token }}
+          GITHUB_TOKEN: ${{ secrets.github_token }}
 
       - name: Build and push platform image
         if: inputs.push-images
