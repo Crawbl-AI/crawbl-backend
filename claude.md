@@ -93,6 +93,35 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 4. Hosted LLM provider integration
 5. Read-first integrations, then ask-before-write flows
 
+## GitHub Actions CI/CD
+
+### Workflow Validation
+
+Use [`actionlint`](https://github.com/rhysd/actionlint) to validate workflow YAML before pushing:
+
+```bash
+# Install (macOS)
+brew install actionlint
+
+# Validate all workflows
+actionlint .github/workflows/
+
+# Validate specific workflow
+actionlint .github/workflows/deploy-dev.yml
+```
+
+Common issues actionlint catches:
+- Missing `needs` declarations when accessing `needs.*.outputs.*`
+- Undefined secrets in reusable workflows (`workflow_call` must declare all secrets)
+- Shellcheck issues in `run` scripts
+- Expression syntax errors
+
+### Pipeline Overview
+
+- `deploy-dev.yml` — Auto-triggers on push to `main`, manual `workflow_dispatch`
+- `deploy-prod.yml` — Manual trigger only (production deployments are explicit)
+- Reusable workflows: `reusable-build.yml`, `reusable-infra-drift-check.yml`, `reusable-update-argocd.yml`, `reusable-e2e-test.yml`, `reusable-rollback-argocd.yml`
+
 ## E2E Testing Against the Dev Cluster
 
 The e2e suite (`crawbl test e2e`) runs godog/Gherkin tests against a live orchestrator. Two modes:

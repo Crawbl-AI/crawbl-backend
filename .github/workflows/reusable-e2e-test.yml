@@ -74,11 +74,12 @@ jobs:
 
       - name: Wait for ArgoCD sync
         run: |
-          echo "Polling for image tag ${{ inputs.image-tag }}..."
+          IMAGE_TAG="${{ inputs.image-tag }}"
+          echo "Polling for image tag ${IMAGE_TAG}..."
           for i in $(seq 1 90); do
             CURRENT=$(kubectl get deployment orchestrator -n backend \
               -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)
-            if echo "${CURRENT}" | grep -q "${inputs.image-tag}"; then
+            if echo "${CURRENT}" | grep -q "${IMAGE_TAG}"; then
               echo "ArgoCD synced: ${CURRENT}"
               kubectl rollout status deployment/orchestrator -n backend --timeout=180s
               echo "Rollout complete."
@@ -87,7 +88,7 @@ jobs:
             echo "  attempt ${i}/90: image=${CURRENT}"
             sleep 5
           done
-          echo "WARNING: Timed out waiting for ${{ inputs.image-tag }}"
+          echo "WARNING: Timed out waiting for ${IMAGE_TAG}"
 
       - name: Run e2e tests
         env:
