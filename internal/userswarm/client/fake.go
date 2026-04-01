@@ -79,14 +79,16 @@ func (c *fakeClient) DeleteRuntime(_ context.Context, _ string) *merrors.Error {
 // Returns ErrInvalidInput if the required fields are missing, matching the
 // validation behaviour of the real userSwarmClient so tests that exercise the
 // validation path work against either implementation.
-func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) (string, *merrors.Error) {
+func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error) {
 	// Mirror the same nil/empty guards as the real implementation so the fake
 	// is a faithful stand-in for validation testing.
 	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
-		return "", merrors.ErrInvalidInput
+		return nil, merrors.ErrInvalidInput
 	}
 
-	// Echo the message back with the prefix so the caller can see it was
-	// processed.  The real implementation would return the agent's LLM response.
-	return fmt.Sprintf("%s: %s", c.replyPrefix, opts.Message), nil
+	// Echo the message back as a single manager turn so the caller can see it
+	// was processed.  The real implementation returns turns from ZeroClaw agents.
+	return []AgentTurn{
+		{AgentID: "manager", Text: fmt.Sprintf("%s: %s", c.replyPrefix, opts.Message)},
+	}, nil
 }

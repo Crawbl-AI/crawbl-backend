@@ -391,7 +391,10 @@ func (tc *testContext) userShouldSeeDefaultAgents(alias string) error {
 	if err := tc.userOpensAgents(alias); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayLength("data", 2); err != nil {
+	if err := tc.assertJSONArrayLength("data", 3); err != nil {
+		return err
+	}
+	if err := tc.assertJSONArrayContainsItem("data", "slug", "manager"); err != nil {
 		return err
 	}
 	if err := tc.assertJSONArrayContainsItem("data", "slug", "wally"); err != nil {
@@ -545,24 +548,24 @@ func (tc *testContext) assistantReplyShouldSucceed() error {
 }
 
 func (tc *testContext) assistantReplyShouldContainText() error {
-	return tc.assertJSONNotEmpty("data.content.text")
+	return tc.assertJSONNotEmpty("data.0.content.text")
 }
 
 func (tc *testContext) assistantReplyShouldComeFromAgent() error {
-	if err := tc.assertJSONEquals("data.role", "agent"); err != nil {
+	if err := tc.assertJSONEquals("data.0.role", "agent"); err != nil {
 		return err
 	}
-	if err := tc.assertJSONNotEmpty("data.agent.id"); err != nil {
+	if err := tc.assertJSONNotEmpty("data.0.agent.id"); err != nil {
 		return err
 	}
-	if err := tc.assertJSONNotEmpty("data.agent.name"); err != nil {
+	if err := tc.assertJSONNotEmpty("data.0.agent.name"); err != nil {
 		return err
 	}
-	return tc.assertJSONNotEmpty("data.agent.role")
+	return tc.assertJSONNotEmpty("data.0.agent.role")
 }
 
 func (tc *testContext) assistantReplyShouldComeFromSpecificAgent(role string) error {
-	return tc.assertJSONEquals("data.agent.slug", normalizeKey(role))
+	return tc.assertJSONEquals("data.0.agent.slug", normalizeKey(role))
 }
 
 func (tc *testContext) guestRequestsProfile() error {

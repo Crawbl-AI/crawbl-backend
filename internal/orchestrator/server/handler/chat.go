@@ -160,7 +160,7 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		message, mErr := c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
+		replyMsgs, mErr := c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
 			Sess:           c.NewSession(),
 			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
@@ -180,6 +180,10 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.ToMessageResponse(message))
+		response := make([]dto.MessageResponse, 0, len(replyMsgs))
+		for _, msg := range replyMsgs {
+			response = append(response, dto.ToMessageResponse(msg))
+		}
+		WriteSuccess(w, http.StatusOK, response)
 	}
 }

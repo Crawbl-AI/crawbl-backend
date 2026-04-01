@@ -200,16 +200,16 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 // This form is resolvable from any pod in the cluster, including the orchestrator.
 //
 //nolint:cyclop
-func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (string, *merrors.Error) {
+func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error) {
 	// Basic nil/empty guards.
 	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
-		return "", merrors.ErrInvalidInput
+		return nil, merrors.ErrInvalidInput
 	}
 	// The Runtime must be Verified (Ready condition = true) and must have the
 	// service coordinates we need to build the URL.  If either is missing the
 	// pod is not ready to accept traffic yet.
 	if !opts.Runtime.Verified || strings.TrimSpace(opts.Runtime.RuntimeNamespace) == "" || strings.TrimSpace(opts.Runtime.ServiceName) == "" {
-		return "", merrors.ErrRuntimeNotReady
+		return nil, merrors.ErrRuntimeNotReady
 	}
 
 	// Build the request body.  AgentID and SystemPrompt use pointer fields so
@@ -223,7 +223,7 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (str
 	}
 	payload, err := json.Marshal(&webhookReq)
 	if err != nil {
-		return "", merrors.WrapStdServerError(err, "encode runtime webhook request")
+		return nil, merrors.WrapStdServerError(err, "encode runtime webhook request")
 	}
 
 	// Build the in-cluster webhook URL using the Service name and namespace
@@ -233,7 +233,7 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (str
 	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/webhook", opts.Runtime.ServiceName, opts.Runtime.RuntimeNamespace, c.config.Port)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return "", merrors.WrapStdServerError(err, "build runtime webhook request")
+		return nil, merrors.WrapStdServerError(err, "build runtime webhook request")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	// Forward the session ID so ZeroClaw can maintain conversation context across
@@ -247,30 +247,41 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) (str
 	// construction time (defaultHTTPTimeout), so this will not block forever.
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", merrors.WrapStdServerError(err, "send runtime webhook request")
+		return nil, merrors.WrapStdServerError(err, "send runtime webhook request")
 	}
 	// Always drain and close the response body to prevent connection leaks.
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", merrors.WrapStdServerError(err, "read runtime webhook response")
+		return nil, merrors.WrapStdServerError(err, "read runtime webhook response")
 	}
 
 	// A non-200 status means ZeroClaw rejected the request or encountered an
 	// internal error.  We include the body in the error so operators can see
 	// what ZeroClaw said without needing to tail pod logs.
 	if resp.StatusCode != http.StatusOK {
-		return "", merrors.WrapStdServerError(fmt.Errorf("runtime webhook returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body))), "runtime webhook failed")
+		return nil, merrors.WrapStdServerError(fmt.Errorf("runtime webhook returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body))), "runtime webhook failed")
 	}
 
-	// Decode the JSON response envelope and return just the text content.
+	// Decode the JSON response envelope and return the agent turns.
 	var webhookResp webhookResponse
 	if err := json.Unmarshal(body, &webhookResp); err != nil {
-		return "", merrors.WrapStdServerError(err, "decode runtime webhook response")
+		return nil, merrors.WrapStdServerError(err, "decode runtime webhook response")
 	}
 
-	return webhookResp.Response, nil
+	// Filter out empty turns.
+	var turns []AgentTurn
+	for _, t := range webhookResp.Turns {
+		if strings.TrimSpace(t.Text) != "" {
+			turns = append(turns, t)
+		}
+	}
+	if len(turns) == 0 {
+		return nil, merrors.WrapStdServerError(fmt.Errorf("empty response from runtime"), "runtime returned no turns")
+	}
+
+	return turns, nil
 }
 
 // getRuntimeState reads the current UserSwarm CR from the cluster and converts

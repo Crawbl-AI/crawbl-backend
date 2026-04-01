@@ -412,9 +412,10 @@ type ChatService interface {
 
 	// SendMessage creates a new message in a conversation. Uses LocalID for
 	// idempotency, allowing clients to safely retry on network failures.
+	// Returns the agent reply messages (one per agent turn) on success.
 	//
-	// Returns the created Message on success, or a merrors.Error on failure.
-	SendMessage(ctx context.Context, opts *SendMessageOpts) (*orchestrator.Message, *merrors.Error)
+	// Returns the created Messages on success, or a merrors.Error on failure.
+	SendMessage(ctx context.Context, opts *SendMessageOpts) ([]*orchestrator.Message, *merrors.Error)
 
 	// GetWorkspaceSummary retrieves aggregate workspace data including agent count
 	// and the most recent message preview. The caller must verify workspace ownership

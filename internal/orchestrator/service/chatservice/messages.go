@@ -9,15 +9,16 @@ import (
 	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-// SendMessage sends a user message and returns the agent's reply.
-// Agent routing: conversation's agent > first @-mentioned agent > default.
-func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) (*orchestrator.Message, *merrors.Error) {
+// SendMessage sends a user message and returns the agent replies.
+// For swarm conversations, multiple agents may respond (group discussion).
+// For per-agent conversations, exactly one agent responds.
+func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -51,23 +52,18 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	// Route to the correct agent for the ZeroClaw webhook.
 	responder := resolveResponder(conversation, agents, opts.Mentions)
 
-	// For display: attribute the reply to an agent even for swarm messages.
-	// The Manager delegates to sub-agents internally; we surface the primary
-	// agent as the responder since the webhook doesn't report which sub-agent
-	// actually handled the request.
-	displayResponder := responder
-	if displayResponder == nil && len(agents) > 0 {
-		displayResponder = agents[0]
+	// Build slug->agent lookup for resolving turn attribution.
+	agentBySlug := make(map[string]*orchestrator.Agent, len(agents))
+	for _, agent := range agents {
+		agentBySlug[agent.Slug] = agent
 	}
 
-	// Signal agent is processing
-	if displayResponder != nil {
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, displayResponder.ID, string(orchestrator.AgentStatusBusy))
-		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, displayResponder.ID, true)
-	}
+	// Signal agents as processing.
+	// For swarm: signal all agents (we don't know which will respond).
+	// For per-agent: signal only the target agent.
+	typingAgents := s.startTyping(ctx, opts.WorkspaceID, conversation, agents, responder)
 
-	// Call ZeroClaw — use the original responder for webhook routing.
-	// nil means the Manager (base agent) handles the message.
+	// Call ZeroClaw.
 	sendOpts := &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   opts.Content.Text,
@@ -76,43 +72,59 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	if responder != nil {
 		sendOpts.AgentID = responder.Slug
 	}
-	replyText, mErr := s.runtimeClient.SendText(ctx, sendOpts)
+	turns, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 
-	// Signal agent is done
-	if displayResponder != nil {
-		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, displayResponder.ID, false)
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, displayResponder.ID, string(orchestrator.AgentStatusOnline))
-	}
+	// Clear typing indicators.
+	s.stopTyping(ctx, opts.WorkspaceID, conversation, typingAgents)
 
 	if mErr != nil {
-		if displayResponder != nil {
-			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, displayResponder.ID, string(orchestrator.AgentStatusError))
+		for _, agent := range typingAgents {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
 		}
 		return nil, mErr
 	}
 
-	// Persist messages — use displayResponder so swarm replies have agent metadata.
-	return s.persistMessagePair(ctx, opts, conversation, agents, displayResponder, replyText)
+	// Persist user message + N reply messages in a single transaction.
+	return s.persistMessages(ctx, opts, conversation, agents, agentBySlug, turns)
 }
 
-// persistMessagePair saves the user message + agent reply in a transaction.
-func (s *service) persistMessagePair(
+// startTyping emits typing indicators and returns the agents that were signaled.
+func (s *service) startTyping(ctx context.Context, workspaceID string, conversation *orchestrator.Conversation, agents []*orchestrator.Agent, responder *orchestrator.Agent) []*orchestrator.Agent {
+	if conversation.Type == orchestrator.ConversationTypeSwarm {
+		for _, agent := range agents {
+			s.broadcaster.EmitAgentStatus(ctx, workspaceID, agent.ID, string(orchestrator.AgentStatusBusy))
+			s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, agent.ID, true)
+		}
+		return agents
+	}
+	if responder != nil {
+		s.broadcaster.EmitAgentStatus(ctx, workspaceID, responder.ID, string(orchestrator.AgentStatusBusy))
+		s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, responder.ID, true)
+		return []*orchestrator.Agent{responder}
+	}
+	return nil
+}
+
+// stopTyping clears typing indicators for the given agents.
+func (s *service) stopTyping(ctx context.Context, workspaceID string, conversation *orchestrator.Conversation, agents []*orchestrator.Agent) {
+	for _, agent := range agents {
+		s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, agent.ID, false)
+		s.broadcaster.EmitAgentStatus(ctx, workspaceID, agent.ID, string(orchestrator.AgentStatusOnline))
+	}
+}
+
+// persistMessages saves the user message and all agent reply messages atomically.
+func (s *service) persistMessages(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
 	agents []*orchestrator.Agent,
-	responder *orchestrator.Agent,
-	replyText string,
-) (*orchestrator.Message, *merrors.Error) {
+	agentBySlug map[string]*orchestrator.Agent,
+	turns []userswarmclient.AgentTurn,
+) ([]*orchestrator.Message, *merrors.Error) {
 	now := time.Now().UTC()
-	replyAt := now.Add(time.Millisecond)
 
-	var replyAgentID *string
-	if responder != nil {
-		replyAgentID = &responder.ID
-	}
-
-	userMessage := &orchestrator.Message{
+	userMsg := &orchestrator.Message{
 		ID:             uuid.NewString(),
 		ConversationID: conversation.ID,
 		Role:           orchestrator.MessageRoleUser,
@@ -123,51 +135,66 @@ func (s *service) persistMessagePair(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	replyMessage := &orchestrator.Message{
-		ID:             uuid.NewString(),
-		ConversationID: conversation.ID,
-		Role:           orchestrator.MessageRoleAgent,
-		Content: orchestrator.MessageContent{
-			Type: orchestrator.MessageContentTypeText,
-			Text: replyText,
-		},
-		Status:      orchestrator.MessageStatusDelivered,
-		AgentID:     replyAgentID,
-		Attachments: []orchestrator.Attachment{},
-		CreatedAt:   replyAt,
-		UpdatedAt:   replyAt,
+
+	replies := make([]*orchestrator.Message, 0, len(turns))
+	for i, turn := range turns {
+		replyAt := now.Add(time.Millisecond * time.Duration(i+1))
+		var agentID *string
+		if agent := agentBySlug[turn.AgentID]; agent != nil {
+			agentID = &agent.ID
+		}
+		replies = append(replies, &orchestrator.Message{
+			ID:             uuid.NewString(),
+			ConversationID: conversation.ID,
+			Role:           orchestrator.MessageRoleAgent,
+			Content: orchestrator.MessageContent{
+				Type: orchestrator.MessageContentTypeText,
+				Text: turn.Text,
+			},
+			Status:      orchestrator.MessageStatusDelivered,
+			AgentID:     agentID,
+			Attachments: []orchestrator.Attachment{},
+			CreatedAt:   replyAt,
+			UpdatedAt:   replyAt,
+		})
 	}
 
-	conversation.UpdatedAt = replyAt
-	conversation.LastMessage = replyMessage
+	last := replies[len(replies)-1]
+	conversation.UpdatedAt = last.CreatedAt
+	conversation.LastMessage = last
 
 	if _, mErr := database.WithTransaction(opts.Sess, "send chat message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
-		if mErr := s.messageRepo.Save(ctx, tx, userMessage); mErr != nil {
+		if mErr := s.messageRepo.Save(ctx, tx, userMsg); mErr != nil {
 			return nil, mErr
 		}
-		if mErr := s.messageRepo.Save(ctx, tx, replyMessage); mErr != nil {
-			return nil, mErr
+		for _, reply := range replies {
+			if mErr := s.messageRepo.Save(ctx, tx, reply); mErr != nil {
+				return nil, mErr
+			}
 		}
 		if mErr := s.conversationRepo.Save(ctx, tx, conversation); mErr != nil {
 			return nil, mErr
 		}
-		return replyMessage, nil
+		return last, nil
 	}); mErr != nil {
 		return nil, mErr
 	}
 
+	// Attach agent objects for the response.
 	agentByID := mapAgentsByID(agents)
-	if replyAgentID != nil {
-		replyMessage.Agent = agentByID[*replyAgentID]
-	}
-	if userMessage.AgentID != nil {
-		userMessage.Agent = agentByID[*userMessage.AgentID]
+	for _, reply := range replies {
+		if reply.AgentID != nil {
+			reply.Agent = agentByID[*reply.AgentID]
+		}
 	}
 
-	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMessage)
-	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, replyMessage)
+	// Broadcast all messages via Socket.IO.
+	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMsg)
+	for _, reply := range replies {
+		s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, reply)
+	}
 
-	return replyMessage, nil
+	return replies, nil
 }
 
 // stringPtr returns a pointer to a trimmed string, or nil if empty.

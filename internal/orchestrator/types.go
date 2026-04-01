@@ -360,7 +360,7 @@ const (
 	AgentRoleSubAgent = "sub-agent"
 
 	// AgentRoleManager is the swarm orchestrator (base agent, defined by SOUL.md).
-	// Not stored in the database — exists as ZeroClaw's base agent.
+	// Stored in the database. Does not get a per-agent conversation.
 	AgentRoleManager = "manager"
 )
 
@@ -703,10 +703,25 @@ type DefaultAgentBlueprint struct {
 // DefaultAgents is the list of agents created by default in new workspaces.
 var DefaultAgents = []DefaultAgentBlueprint{
 	{
+		Name:         "Manager",
+		Slug:         "manager",
+		Role:         AgentRoleManager,
+		SystemPrompt: "You are the Manager. Coordinate your team. Be brief and action-oriented. Delegate immediately without asking for confirmation.",
+		Description:  "Your swarm coordinator. Delegates tasks and manages the team.",
+		AllowedTools: []string{
+			"web_search_tool", "web_fetch", "file_read", "file_write",
+			"memory_recall", "memory_store", "delegate",
+			"orchestrator__send_push_notification",
+			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+			"orchestrator__create_agent_history",
+		},
+	},
+	{
 		Name:         "Wally",
 		Slug:         "wally",
 		Role:         AgentRoleSubAgent,
-		SystemPrompt: "You are Wally, a versatile assistant agent in the Crawbl swarm. You handle research, writing, analysis, and general help. Be resourceful, thorough, and friendly.",
+		SystemPrompt: "You are Wally. Be helpful, direct, and brief. Answer in 1-3 sentences. Only elaborate when asked.",
 		Description:  "A versatile assistant that handles research, writing, analysis, and general help.",
 		AllowedTools: []string{
 			"web_search_tool", "web_fetch", "file_read", "file_write",
@@ -720,7 +735,7 @@ var DefaultAgents = []DefaultAgentBlueprint{
 		Name:         "Eve",
 		Slug:         "eve",
 		Role:         AgentRoleSubAgent,
-		SystemPrompt: "You are Eve, a creative and communication specialist in the Crawbl swarm. You handle content creation, email drafting, brainstorming, summarization, and presentation prep. Be clear, imaginative, and polished.",
+		SystemPrompt: "You are Eve. Be creative, clear, and concise. Draft content efficiently. Don't over-explain.",
 		Description:  "A creative and communication specialist that handles content creation, email drafting, brainstorming, summarization, and presentation prep.",
 		AllowedTools: []string{
 			"web_search_tool", "web_fetch", "file_read", "file_write",

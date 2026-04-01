@@ -111,6 +111,7 @@ actionlint .github/workflows/deploy-dev.yml
 ```
 
 Common issues actionlint catches:
+
 - Missing `needs` declarations when accessing `needs.*.outputs.*`
 - Undefined secrets in reusable workflows (`workflow_call` must declare all secrets)
 - Shellcheck issues in `run` scripts
@@ -143,40 +144,16 @@ crawbl test e2e \
   --verbose --runtime-ready-timeout 4m
 ```
 
+## Deleting a user in dev cluster/db
+
+If asked to delete a user from Cluster, App or Database
+
+0. Delete a user from dev DB by port-forwarding db from `backend` namespace
+1. Find a userswarm that is used by user in K8s `userswarms` namespace.
+2. You can find it by checking annotations/labels on the userswarm CR.
+3. Delete a userswarm.
+
 Get the postgres password: `kubectl get secret backend-postgresql-auth -n backend -o jsonpath='{.data.postgres-password}' | base64 -d`
-
-### Wiping the DB and re-running migrations
-
-When migrations get out of sync and can't be fixed manually, wipe and recreate (only on dev cluster/env):
-
-```bash
-# 1. Connect to postgres via port-forward
-PGPASSWORD='<PG_PASSWORD>' psql -h localhost -p 5432 -U postgres -d crawbl
-
-# 2. Drop and recreate the schema
-DROP SCHEMA orchestrator CASCADE;
-CREATE SCHEMA orchestrator;
-
-# 3. Fix ownership (critical — orchestrator uses 'crawbl' user, not 'postgres')
-ALTER SCHEMA orchestrator OWNER TO crawbl;
-GRANT ALL ON SCHEMA orchestrator TO crawbl;
-GRANT ALL ON ALL TABLES IN SCHEMA orchestrator TO crawbl;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA orchestrator TO crawbl;
-ALTER DEFAULT PRIVILEGES IN SCHEMA orchestrator GRANT ALL ON TABLES TO crawbl;
-ALTER DEFAULT PRIVILEGES IN SCHEMA orchestrator GRANT ALL ON SEQUENCES TO crawbl;
-
-# 4. Run migrations locally
-CRAWBL_DATABASE_HOST=localhost CRAWBL_DATABASE_PORT=5432 \
-CRAWBL_DATABASE_NAME=crawbl CRAWBL_DATABASE_SCHEMA=orchestrator \
-CRAWBL_DATABASE_SSLMODE=disable CRAWBL_DATABASE_USER=postgres \
-CRAWBL_DATABASE_PASSWORD='<PG_PASSWORD>' \
-go run ./cmd/crawbl platform orchestrator migrate --svc=orchestrator
-
-# 5. Restart orchestrator to pick up the clean DB
-kubectl rollout restart deployment/orchestrator -n backend
-```
-
-**Critical gotcha**: If you recreate the schema with `postgres` user but skip the `ALTER SCHEMA ... OWNER TO crawbl` step, every orchestrator request returns 500 with no error in logs. The `crawbl` DB user cannot access objects owned by `postgres`.
 
 ### CI pipeline (deploy-dev.yml)
 

@@ -64,11 +64,18 @@ type webhookRequest struct {
 	SystemPrompt *string `json:"system_prompt,omitempty"`
 }
 
+// AgentTurn represents a single agent's contribution in a multi-agent response.
+type AgentTurn struct {
+	AgentID string `json:"agent_id"`
+	Text    string `json:"text"`
+}
+
 // webhookResponse is the JSON body returned by the ZeroClaw pod after it has
-// processed the message through the agent pipeline.  Response contains the
-// agent's plain-text reply that is surfaced back to the mobile client.
+// processed the message through the agent pipeline.  Turns contains the
+// ordered list of agent contributions that are surfaced back to the mobile client.
 type webhookResponse struct {
-	Response string `json:"response"`
+	Turns []AgentTurn `json:"turns"`
+	Model string      `json:"model,omitempty"`
 }
 
 // fakeClient is the test/local-dev implementation of Client.  It never touches
@@ -280,11 +287,11 @@ type Client interface {
 	EnsureRuntime(ctx context.Context, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error)
 
 	// SendText forwards a chat message to the running ZeroClaw pod via its
-	// /webhook HTTP endpoint and returns the agent's text response.
+	// /webhook HTTP endpoint and returns the agent turns.
 	//
 	// The caller must first call EnsureRuntime (with WaitForVerified=true) to
 	// guarantee the pod is healthy before calling SendText.
-	SendText(ctx context.Context, opts *SendTextOpts) (string, *merrors.Error)
+	SendText(ctx context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error)
 
 	// DeleteRuntime removes the UserSwarm CR for a workspace, triggering
 	// the operator to clean up all child resources (StatefulSet, PVC, etc.).

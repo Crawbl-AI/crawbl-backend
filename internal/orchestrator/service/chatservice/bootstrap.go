@@ -138,6 +138,9 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 
 	allPresent := hasSwarm
 	for _, agent := range agents {
+		if agent.Role == orchestrator.AgentRoleManager {
+			continue
+		}
 		if !agentConvs[agent.ID] {
 			allPresent = false
 			break
@@ -169,6 +172,9 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 		}
 
 		for _, agent := range agents {
+			if agent.Role == orchestrator.AgentRoleManager {
+				continue // Manager uses the swarm conversation, not a dedicated one
+			}
 			if agentConvs[agent.ID] {
 				continue
 			}
