@@ -354,8 +354,9 @@ func toUserProfileResponse(user *orchestrator.User) *userProfileResponse {
 //   - userID: The user's unique identifier
 //   - trigger: Description of the operation that triggered seeding (for logging)
 func (s *Server) seedWorkspaceRuntime(ctx context.Context, userID, trigger string) {
-	_, mErr := s.workspaceService.ListByUserID(ctx, &orchestratorservice.ListWorkspacesOpts{
-		Sess:   s.newSession(),
+	sess := s.newSession()
+	workspaces, mErr := s.workspaceService.ListByUserID(ctx, &orchestratorservice.ListWorkspacesOpts{
+		Sess:   sess,
 		UserID: userID,
 	})
 	if mErr != nil {
@@ -364,6 +365,24 @@ func (s *Server) seedWorkspaceRuntime(ctx context.Context, userID, trigger strin
 			"user_id", userID,
 			"error", mErr.Error(),
 		)
+		return
+	}
+
+	// Eagerly bootstrap default agents and conversations for each workspace
+	// so the mobile app sees correct agent counts immediately.
+	for _, ws := range workspaces {
+		if _, mErr := s.chatService.ListAgents(ctx, &orchestratorservice.ListAgentsOpts{
+			Sess:        s.newSession(),
+			UserID:      userID,
+			WorkspaceID: ws.ID,
+		}); mErr != nil {
+			s.logger.Warn("failed to bootstrap workspace agents",
+				"trigger", trigger,
+				"user_id", userID,
+				"workspace_id", ws.ID,
+				"error", mErr.Error(),
+			)
+		}
 	}
 }
 

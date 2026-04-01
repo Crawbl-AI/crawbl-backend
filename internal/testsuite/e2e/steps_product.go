@@ -391,10 +391,13 @@ func (tc *testContext) userShouldSeeDefaultAgents(alias string) error {
 	if err := tc.userOpensAgents(alias); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayLength("data", 1); err != nil {
+	if err := tc.assertJSONArrayLength("data", 2); err != nil {
 		return err
 	}
-	return tc.assertJSONArrayContainsItem("data", "slug", "wally")
+	if err := tc.assertJSONArrayContainsItem("data", "slug", "wally"); err != nil {
+		return err
+	}
+	return tc.assertJSONArrayContainsItem("data", "slug", "eve")
 }
 
 func (tc *testContext) userOpensConversations(alias string) error {
@@ -415,13 +418,16 @@ func (tc *testContext) userShouldSeeDefaultConversations(alias string) error {
 	if err := tc.userOpensConversations(alias); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayLength("data", 2); err != nil {
+	if err := tc.assertJSONArrayLength("data", 3); err != nil {
 		return err
 	}
 	if err := tc.assertJSONArrayContainsItem("data", "type", "swarm"); err != nil {
 		return err
 	}
-	return tc.assertJSONArrayContainsItem("data", "title", "Wally")
+	if err := tc.assertJSONArrayContainsItem("data", "title", "Wally"); err != nil {
+		return err
+	}
+	return tc.assertJSONArrayContainsItem("data", "title", "Eve")
 }
 
 func (tc *testContext) userOpensSwarmConversation(alias string) error {

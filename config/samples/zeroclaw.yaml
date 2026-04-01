@@ -361,3 +361,18 @@ agents:
       - orchestrator__get_workspace_info
       - orchestrator__list_conversations
       - orchestrator__search_past_messages
+  eve:
+    systemPrompt: "You are Eve, a creative and communication specialist in the Crawbl swarm. You handle content creation, email drafting, brainstorming, summarization, and presentation prep. Be clear, imaginative, and polished."
+    agentic: true
+    allowedTools:
+      - web_search
+      - web_fetch
+      - file_read
+      - file_write
+      - memory_recall
+      - memory_store
+      - orchestrator__send_push_notification
+      - orchestrator__get_user_profile
+      - orchestrator__get_workspace_info
+      - orchestrator__list_conversations
+      - orchestrator__search_past_messages
