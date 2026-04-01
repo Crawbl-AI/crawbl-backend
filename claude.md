@@ -180,7 +180,7 @@ Get the postgres password: `kubectl get secret backend-postgresql-auth -n backen
   - `GET /v1/workspaces/{workspaceId}/conversations`
   - `GET /v1/workspaces/{workspaceId}/conversations/{id}`
   - `GET /v1/workspaces/{workspaceId}/conversations/{id}/messages`
-  - `POST /v1/workspaces/{workspaceId}/conversations/{id}/messages`
+  - `POST /v1/workspaces/{workspaceId}/conversations/{id}/messages` — returns `[]*Message` (multi-agent turns)
   - `GET /v1/models`
   - `GET /v1/agents/{id}`
   - `GET /v1/agents/{id}/details`
