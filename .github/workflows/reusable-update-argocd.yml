@@ -27,13 +27,13 @@ on:
     outputs:
       prev-orchestrator-tag:
         description: 'Previous orchestrator tag (for rollback)'
-        value: ${{ jobs.update-argocd.outputs.orchestrator }}
+        value: ${{ jobs.update-argocd.outputs.prev-orchestrator-tag }}
       prev-auth-filter-tag:
         description: 'Previous auth-filter tag (for rollback)'
-        value: ${{ jobs.update-argocd.outputs.auth-filter }}
+        value: ${{ jobs.update-argocd.outputs.prev-auth-filter-tag }}
       prev-platform-tag:
         description: 'Previous platform tag (for rollback)'
-        value: ${{ jobs.update-argocd.outputs.platform }}
+        value: ${{ jobs.update-argocd.outputs.prev-platform-tag }}
     secrets:
       argocd-repo-token:
         required: true
