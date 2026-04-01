@@ -39,6 +39,7 @@ func registerRoutes(s *Server) http.Handler {
 	router.Route("/v1", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck(h))
 		r.Get("/legal", handler.Legal(h))
+		r.Get("/models", handler.ListModels(h))
 
 		r.Group(func(r chi.Router) {
 			r.Use(httpserver.AuthMiddleware(s.httpMiddleware, s.logger))
@@ -65,7 +66,6 @@ func registerRoutes(s *Server) http.Handler {
 			r.Get("/agents/{id}/history", handler.GetAgentHistory(h))
 			r.Get("/agents/{id}/settings", handler.GetAgentSettings(h))
 			r.Get("/agents/{id}/tools", handler.GetAgentTools(h))
-			r.Get("/models", handler.ListModels(h))
 		})
 	})
 
