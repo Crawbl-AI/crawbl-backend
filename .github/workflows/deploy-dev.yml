@@ -128,6 +128,34 @@ jobs:
           cache-from: type=gha,scope=envoy-auth-filter
           cache-to: type=gha,mode=max,scope=envoy-auth-filter
 
+      # ---------------------------------------------------------------------------
+      # Create and push git tag for this release
+      # This creates a lightweight tag at the current commit so we have
+      # a permanent record of each version deployed to DOCR.
+      # ---------------------------------------------------------------------------
+      - name: Create release tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push git tag
+        env:
+          IMAGE_TAG: v0.1.${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create annotated tag with release info
+          git tag -a "${IMAGE_TAG}" -m "Release ${IMAGE_TAG}
+
+          Deployed at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          Commit: ${COMMIT_SHA}
+          Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          # Push tag (force to update if tag exists from a previous failed run)
+          git push origin "${IMAGE_TAG}" --force
+
   # ---------------------------------------------------------------------------
   # Infrastructure drift check: verify Pulumi state matches actual infra.
   # Runs BEFORE update-argocd so we detect drift before pushing new tags.
