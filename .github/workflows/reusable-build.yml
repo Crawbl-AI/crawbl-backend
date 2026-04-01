@@ -152,6 +152,7 @@ jobs:
           git push origin "${{ steps.calc-version.outputs.new-tag }}"
 
       - name: Create GitHub release
+        if: secrets.github-token != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.calc-version.outputs.new-tag }}
