@@ -60,6 +60,7 @@ jobs:
       push-images: true
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # Infra Drift Check: Verify Pulumi state matches actual infra
@@ -108,6 +109,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Rollback: Restore previous tags if E2E fails
+  # TODO: NEEDS TO BETTER AS DB MIGRATIONS AREN'T ROLLBACKEND FOR EXAMPLE
   # ---------------------------------------------------------------------------
   rollback-argocd:
     uses: ./.github/workflows/reusable-rollback-argocd.yml

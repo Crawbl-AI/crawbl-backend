@@ -42,6 +42,7 @@ jobs:
       push-images: true
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # Infra Drift Check: Verify Pulumi state matches actual infra
@@ -87,18 +88,3 @@ jobs:
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}
-
-  # ---------------------------------------------------------------------------
-  # Rollback: Restore previous tags if E2E fails
-  # ---------------------------------------------------------------------------
-  rollback-argocd:
-    uses: ./.github/workflows/reusable-rollback-argocd.yml
-    needs: [build, update-argocd, e2e-test]
-    if: always() && needs.e2e-test.result == 'failure'
-    with:
-      prev-orchestrator-tag: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}
-      prev-auth-filter-tag: ${{ needs.update-argocd.outputs.prev-auth-filter-tag }}
-      prev-platform-tag: ${{ needs.update-argocd.outputs.prev-platform-tag }}
-      failed-tag: ${{ needs.build.outputs.semver-tag }}
-    secrets:
-      argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}

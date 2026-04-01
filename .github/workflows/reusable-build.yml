@@ -35,7 +35,6 @@ on:
       github-token:
         description: 'GitHub token for creating releases'
         required: false
-        default: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   build:
