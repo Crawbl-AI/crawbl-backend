@@ -23,6 +23,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 
 ## Rules
 
+- WHEN RUNNING COMMANDS OR WAITING FOR INPUT OR WAITING FOR SOMETHING, NEVER SLEEP FOR MORE THAN 10 SECONDS
 - Treat this service as the control plane, not a thin API wrapper
 - Long-term, keep LLM provider credentials in the backend, not in ZeroClaw pods
 - Runtime secrets are injected via ESO-managed Kubernetes Secrets (envSecretRef); provider key brokering will move fully behind the orchestrator later
