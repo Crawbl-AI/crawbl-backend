@@ -123,12 +123,3 @@ type Server struct {
 	cfg *Config
 }
 
-// healthCheckResponse represents the server health status returned by the health endpoint.
-// This is used by load balancers and monitoring systems to verify server availability.
-type healthCheckResponse struct {
-	// Online indicates whether the server is operational.
-	Online bool `json:"online"`
-
-	// Version is the current server version string.
-	Version string `json:"version"`
-}

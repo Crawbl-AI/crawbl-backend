@@ -1,4 +1,4 @@
-package server
+package dto
 
 import (
 	"time"
@@ -6,9 +6,9 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
-// agentResponse represents an AI agent in API responses.
+// AgentResponse represents an AI agent in API responses.
 // Agents are individual swarm members that users can interact with through conversations.
-type agentResponse struct {
+type AgentResponse struct {
 	// ID is the unique identifier for the agent.
 	ID string `json:"id"`
 
@@ -28,14 +28,14 @@ type agentResponse struct {
 	Status string `json:"status"`
 }
 
-// toAgentResponse converts a domain Agent to the API response format.
+// ToAgentResponse converts a domain Agent to the API response format.
 // Returns an empty response if the agent pointer is nil.
-func toAgentResponse(agent *orchestrator.Agent) agentResponse {
+func ToAgentResponse(agent *orchestrator.Agent) AgentResponse {
 	if agent == nil {
-		return agentResponse{}
+		return AgentResponse{}
 	}
 
-	return agentResponse{
+	return AgentResponse{
 		ID:     agent.ID,
 		Name:   agent.Name,
 		Role:   agent.Role,
@@ -45,8 +45,8 @@ func toAgentResponse(agent *orchestrator.Agent) agentResponse {
 	}
 }
 
-// agentDetailResponse is the full agent profile returned by GET /v1/agents/{id}/details.
-type agentDetailResponse struct {
+// AgentDetailResponse is the full agent profile returned by GET /v1/agents/{id}/details.
+type AgentDetailResponse struct {
 	ID          string             `json:"id"`
 	WorkspaceID string             `json:"workspace_id"`
 	Name        string             `json:"name"`
@@ -58,63 +58,83 @@ type agentDetailResponse struct {
 	AvatarURL   string             `json:"avatar_url"`
 	Status      string             `json:"status"`
 	SortOrder   int                `json:"sort_order"`
-	Stats       agentStatsResponse `json:"stats"`
+	Stats       AgentStatsResponse `json:"stats"`
 }
 
-type agentStatsResponse struct {
+// AgentStatsResponse contains aggregate statistics for an agent.
+type AgentStatsResponse struct {
 	TotalMessages int `json:"total_messages"`
 }
 
-type agentToolResponse struct {
+// AgentToolResponse represents a tool available to an agent.
+type AgentToolResponse struct {
 	Name        string                    `json:"name"`
 	DisplayName string                    `json:"display_name"`
 	Description string                    `json:"description"`
-	Category    agentToolCategoryResponse `json:"category"`
+	Category    AgentToolCategoryResponse `json:"category"`
 	IconURL     string                    `json:"icon_url"`
 }
 
-type agentToolCategoryResponse struct {
+// AgentToolCategoryResponse represents the category of an agent tool.
+type AgentToolCategoryResponse struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	ImageURL string `json:"image_url"`
 }
 
-type agentModelResponse struct {
+// AgentModelResponse represents an LLM model available to an agent.
+type AgentModelResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-type agentSettingsResponse struct {
-	Model          agentModelResponse    `json:"model"`
+// AgentSettingsResponse represents the settings for an agent.
+type AgentSettingsResponse struct {
+	Model          AgentModelResponse    `json:"model"`
 	ResponseLength string                `json:"response_length"`
-	Prompts        []agentPromptResponse `json:"prompts"`
+	Prompts        []AgentPromptResponse `json:"prompts"`
 }
 
-type agentPromptResponse struct {
+// AgentPromptResponse represents a prompt configured for an agent.
+type AgentPromptResponse struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Content     string `json:"content"`
 }
 
-type agentHistoryItemResponse struct {
+// AgentHistoryItemResponse represents a single item in an agent's conversation history.
+type AgentHistoryItemResponse struct {
 	ConversationID string  `json:"conversation_id"`
 	Title          string  `json:"title"`
 	Subtitle       string  `json:"subtitle"`
 	CreatedAt      *string `json:"created_at"`
 }
 
-type offsetPaginationResponse struct {
+// AgentHistoryResponse is the response envelope for GET /v1/agents/{id}/history.
+type AgentHistoryResponse struct {
+	Items      []AgentHistoryItemResponse `json:"items"`
+	Pagination OffsetPaginationResponse   `json:"pagination"`
+}
+
+// AgentToolsResponse is the response envelope for GET /v1/agents/{id}/tools.
+type AgentToolsResponse struct {
+	Data       []AgentToolResponse      `json:"data"`
+	Pagination OffsetPaginationResponse `json:"pagination"`
+}
+
+// OffsetPaginationResponse provides offset-based pagination metadata.
+type OffsetPaginationResponse struct {
 	Total   int  `json:"total"`
 	Limit   int  `json:"limit"`
 	Offset  int  `json:"offset"`
 	HasNext bool `json:"has_next"`
 }
 
-// toAgentDetailResponse converts a domain AgentDetails to the API response format.
-func toAgentDetailResponse(d *orchestrator.AgentDetails) agentDetailResponse {
-	resp := agentDetailResponse{
+// ToAgentDetailResponse converts a domain AgentDetails to the API response format.
+func ToAgentDetailResponse(d *orchestrator.AgentDetails) AgentDetailResponse {
+	resp := AgentDetailResponse{
 		ID:          d.ID,
 		WorkspaceID: d.WorkspaceID,
 		Name:        d.Name,
@@ -125,7 +145,7 @@ func toAgentDetailResponse(d *orchestrator.AgentDetails) agentDetailResponse {
 		AvatarURL:   d.AvatarURL,
 		Status:      string(d.Status),
 		SortOrder:   d.SortOrder,
-		Stats: agentStatsResponse{
+		Stats: AgentStatsResponse{
 			TotalMessages: d.Stats.TotalMessages,
 		},
 	}
@@ -136,13 +156,13 @@ func toAgentDetailResponse(d *orchestrator.AgentDetails) agentDetailResponse {
 	return resp
 }
 
-// toAgentToolResponse converts a domain AgentTool to the API response format.
-func toAgentToolResponse(t orchestrator.AgentTool) agentToolResponse {
-	return agentToolResponse{
+// ToAgentToolResponse converts a domain AgentTool to the API response format.
+func ToAgentToolResponse(t orchestrator.AgentTool) AgentToolResponse {
+	return AgentToolResponse{
 		Name:        t.Name,
 		DisplayName: t.DisplayName,
 		Description: t.Description,
-		Category: agentToolCategoryResponse{
+		Category: AgentToolCategoryResponse{
 			ID:       t.Category.ID,
 			Name:     t.Category.Name,
 			ImageURL: t.Category.ImageURL,

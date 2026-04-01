@@ -1,10 +1,10 @@
-package server
+package dto
 
 import "time"
 
-// authDeleteRequest represents the request body for account deletion.
+// AuthDeleteRequest represents the request body for account deletion.
 // Users must provide a reason and optional description when deleting their account.
-type authDeleteRequest struct {
+type AuthDeleteRequest struct {
 	// Reason is the primary reason for account deletion.
 	Reason string `json:"reason"`
 
@@ -12,22 +12,22 @@ type authDeleteRequest struct {
 	Description string `json:"description"`
 }
 
-// savePushTokenRequest represents the request body for saving a FCM push token.
+// SavePushTokenRequest represents the request body for saving a FCM push token.
 // The token is used to send push notifications to the user's device.
-type savePushTokenRequest struct {
+type SavePushTokenRequest struct {
 	// PushToken is the Firebase Cloud Messaging device token for push notifications.
 	PushToken string `json:"push_token"`
 }
 
-// savePushTokenResponse indicates the result of saving a push token.
-type savePushTokenResponse struct {
+// SavePushTokenResponse indicates the result of saving a push token.
+type SavePushTokenResponse struct {
 	// Success indicates whether the token was saved successfully.
 	Success bool `json:"success"`
 }
 
-// userPreferencesResponse represents user preference settings in API responses.
+// UserPreferencesResponse represents user preference settings in API responses.
 // These control platform appearance and behavior for the user.
-type userPreferencesResponse struct {
+type UserPreferencesResponse struct {
 	// PlatformTheme is the user's preferred UI theme (e.g., "light", "dark", "auto").
 	PlatformTheme string `json:"platform_theme"`
 
@@ -38,9 +38,9 @@ type userPreferencesResponse struct {
 	CurrencyCode string `json:"currency_code"`
 }
 
-// userSubscriptionResponse represents subscription details in user profile responses.
+// UserSubscriptionResponse represents subscription details in user profile responses.
 // Free tier users receive default values for name and code fields.
-type userSubscriptionResponse struct {
+type UserSubscriptionResponse struct {
 	// Name is the display name of the subscription tier (e.g., "Freemium", "Pro").
 	Name string `json:"name"`
 
@@ -51,9 +51,9 @@ type userSubscriptionResponse struct {
 	ExpiresAt *time.Time `json:"expires_at"`
 }
 
-// userProfileResponse contains the complete user profile for API responses.
+// UserProfileResponse contains the complete user profile for API responses.
 // Includes account details, preferences, subscription status, and legal acceptance state.
-type userProfileResponse struct {
+type UserProfileResponse struct {
 	// Email is the user's registered email address.
 	Email string `json:"email"`
 
@@ -94,15 +94,15 @@ type userProfileResponse struct {
 	HasAgreedWithPrivacyPolicy bool `json:"has_agreed_with_privacy_policy"`
 
 	// Preferences contains user customization settings.
-	Preferences userPreferencesResponse `json:"preferences"`
+	Preferences UserPreferencesResponse `json:"preferences"`
 
 	// Subscription contains the user's current subscription details.
-	Subscription userSubscriptionResponse `json:"subscription"`
+	Subscription UserSubscriptionResponse `json:"subscription"`
 }
 
-// userUpdatePreferencesRequest represents updatable preference fields.
+// UserUpdatePreferencesRequest represents updatable preference fields.
 // All fields are optional; only provided fields will be updated.
-type userUpdatePreferencesRequest struct {
+type UserUpdatePreferencesRequest struct {
 	// PlatformTheme is the new preferred UI theme.
 	PlatformTheme *string `json:"platform_theme"`
 
@@ -113,9 +113,9 @@ type userUpdatePreferencesRequest struct {
 	CurrencyCode *string `json:"currency_code"`
 }
 
-// userUpdateRequest represents the request body for updating user profile.
+// UserUpdateRequest represents the request body for updating user profile.
 // All fields are optional; only provided fields will be modified.
-type userUpdateRequest struct {
+type UserUpdateRequest struct {
 	// Nickname is the new display name.
 	Nickname *string `json:"nickname"`
 
@@ -129,15 +129,15 @@ type userUpdateRequest struct {
 	CountryCode *string `json:"country_code"`
 
 	// DateOfBirth is the new birth date.
-	DateOfBirth *dateTime `json:"date_of_birth"`
+	DateOfBirth *DateTime `json:"date_of_birth"`
 
 	// Preferences contains updatable preference settings.
-	Preferences *userUpdatePreferencesRequest `json:"preferences"`
+	Preferences *UserUpdatePreferencesRequest `json:"preferences"`
 }
 
-// userLegalResponse combines legal documents with the user's acceptance status.
+// UserLegalResponse combines legal documents with the user's acceptance status.
 // Used to display legal documents and show which ones the user has agreed to.
-type userLegalResponse struct {
+type UserLegalResponse struct {
 	// TermsOfService is the full text of the terms of service.
 	TermsOfService string `json:"terms_of_service"`
 
@@ -157,9 +157,9 @@ type userLegalResponse struct {
 	HasAgreedWithPrivacyPolicy bool `json:"has_agreed_with_privacy_policy"`
 }
 
-// userLegalAcceptRequest represents the request body for accepting legal documents.
+// UserLegalAcceptRequest represents the request body for accepting legal documents.
 // Users must specify which versions they are accepting.
-type userLegalAcceptRequest struct {
+type UserLegalAcceptRequest struct {
 	// TermsOfServiceVersion is the version of terms of service being accepted.
 	TermsOfServiceVersion *string `json:"terms_of_service_version"`
 

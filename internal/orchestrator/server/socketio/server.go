@@ -1,11 +1,10 @@
-// Package server — socketio.go sets up the Socket.IO server for real-time WebSocket communication.
+// Package socketio sets up the Socket.IO server for real-time WebSocket communication.
 //
 // It handles:
 //   - Socket.IO server creation with optional Redis adapter for cross-pod fan-out
 //   - Authentication via Envoy-forwarded claim headers (X-Firebase-UID/Email/Name)
 //   - Workspace room join/leave on connect/disconnect
-//   - SocketIOBroadcaster that implements realtime.Broadcaster
-package server
+package socketio
 
 import (
 	"context"
@@ -22,14 +21,13 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
-// NewSocketIOServer creates and configures a Socket.IO server with authentication
+// NewServer creates and configures a Socket.IO server with authentication
 // middleware, workspace room management, and Redis adapter for cross-pod event fan-out.
 //
-// The returned server is ready to be mounted as an http.Handler via SocketIOHandler.
-func NewSocketIOServer(cfg *SocketIOConfig) *socket.Server {
+// The returned server is ready to be mounted as an http.Handler via Handler.
+func NewServer(cfg *Config) *socket.Server {
 	if cfg == nil {
 		panic("socketio config is required")
 	}
@@ -211,73 +209,11 @@ func parseWorkspaceIDs(args []any) []string {
 	return ids
 }
 
-// SocketIOHandler returns an http.Handler that serves the Socket.IO engine.
+// Handler returns an http.Handler that serves the Socket.IO engine.
 // Mount this on your HTTP server or router at the appropriate path (typically "/socket.io/").
-func SocketIOHandler(io *socket.Server) http.Handler {
+func Handler(io *socket.Server) http.Handler {
 	return io.ServeHandler(nil)
 }
-
-// ---------------------------------------------------------------------------
-// SocketIOBroadcaster — implements realtime.Broadcaster
-// ---------------------------------------------------------------------------
-
-// NewSocketIOBroadcaster creates a Broadcaster backed by the given Socket.IO server.
-func NewSocketIOBroadcaster(io *socket.Server, logger *slog.Logger) *SocketIOBroadcaster {
-	return &SocketIOBroadcaster{
-		io:     io,
-		logger: logger,
-	}
-}
-
-// Compile-time interface satisfaction check.
-var _ realtime.Broadcaster = (*SocketIOBroadcaster)(nil)
-
-// EmitToWorkspace sends a named event with payload to all clients in a workspace room.
-func (b *SocketIOBroadcaster) EmitToWorkspace(_ context.Context, workspaceID string, event string, data any) {
-	room := socket.Room(workspaceRoomPrefix + workspaceID)
-	if err := b.io.Of(socketNamespace, nil).To(room).Emit(event, data); err != nil {
-		b.logger.Error("socketio broadcast: emit failed",
-			"event", event,
-			"workspace_id", workspaceID,
-			"error", err.Error(),
-		)
-	}
-}
-
-// EmitMessageNew emits a message.new event for a newly created message.
-func (b *SocketIOBroadcaster) EmitMessageNew(ctx context.Context, workspaceID string, data any) {
-	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageNew, realtime.MessageEventPayload{
-		Message: data,
-	})
-}
-
-// EmitMessageUpdated emits a message.updated event for a modified message.
-func (b *SocketIOBroadcaster) EmitMessageUpdated(ctx context.Context, workspaceID string, data any) {
-	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageUpdated, realtime.MessageEventPayload{
-		Message: data,
-	})
-}
-
-// EmitAgentTyping emits an agent.typing event indicating whether an agent is typing.
-func (b *SocketIOBroadcaster) EmitAgentTyping(ctx context.Context, workspaceID string, conversationID, agentID string, isTyping bool) {
-	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentTyping, realtime.AgentTypingPayload{
-		ConversationID: conversationID,
-		AgentID:        agentID,
-		IsTyping:       isTyping,
-	})
-}
-
-// EmitAgentStatus emits an agent.status event when an agent's availability changes.
-func (b *SocketIOBroadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string) {
-	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentStatus, realtime.AgentStatusPayload{
-		AgentID: agentID,
-		Status:  status,
-	})
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 // principalSubjectFromSocket extracts the principal subject stored in socket.Data()
 // by the auth middleware. Returns empty string if unavailable.

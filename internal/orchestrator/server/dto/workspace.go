@@ -1,10 +1,10 @@
-package server
+package dto
 
 import "time"
 
-// workspaceResponse represents a workspace in API responses.
+// WorkspaceResponse represents a workspace in API responses.
 // Workspaces are the primary organizational unit for user data and swarm instances.
-type workspaceResponse struct {
+type WorkspaceResponse struct {
 	// ID is the unique identifier for the workspace.
 	ID string `json:"id"`
 
@@ -19,12 +19,12 @@ type workspaceResponse struct {
 
 	// Runtime contains the swarm runtime status if the workspace has been provisioned.
 	// May be nil if the runtime has not yet been created.
-	Runtime *workspaceRuntimeResponse `json:"runtime,omitempty"`
+	Runtime *WorkspaceRuntimeResponse `json:"runtime,omitempty"`
 }
 
-// workspaceRuntimeResponse represents the swarm runtime status for a workspace.
+// WorkspaceRuntimeResponse represents the swarm runtime status for a workspace.
 // This information allows clients to determine when a workspace is ready for use.
-type workspaceRuntimeResponse struct {
+type WorkspaceRuntimeResponse struct {
 	// Status is the current operational status of the runtime (e.g., "running", "pending", "failed").
 	Status string `json:"status"`
 
@@ -39,11 +39,11 @@ type workspaceRuntimeResponse struct {
 	TotalAgents int `json:"total_agents"`
 
 	// LastMessagePreview is a preview of the most recent message across all workspace conversations.
-	LastMessagePreview *lastMessagePreviewResponse `json:"last_message_preview,omitempty"`
+	LastMessagePreview *LastMessagePreviewResponse `json:"last_message_preview,omitempty"`
 }
 
-// lastMessagePreviewResponse represents a preview of the most recent message in a workspace.
-type lastMessagePreviewResponse struct {
+// LastMessagePreviewResponse represents a preview of the most recent message in a workspace.
+type LastMessagePreviewResponse struct {
 	// Text is the message text content.
 	Text string `json:"text"`
 

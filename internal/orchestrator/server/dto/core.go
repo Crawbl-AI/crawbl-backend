@@ -1,14 +1,15 @@
-// Package server provides HTTP handlers and types.
-package server
+// Package dto provides request/response types and domain-to-DTO mapper functions
+// for the orchestrator HTTP API.
+package dto
 
 import "time"
 
 // minJSONQuotedStringLen is the minimum length for a JSON quoted string (must contain at least "").
 const minJSONQuotedStringLen = 2
 
-// legalResponse contains the platform's legal documents for unauthenticated access.
+// LegalResponse contains the platform's legal documents for unauthenticated access.
 // This is used before user registration to display terms of service and privacy policy.
-type legalResponse struct {
+type LegalResponse struct {
 	// TermsOfService is the full text of the terms of service document.
 	TermsOfService string `json:"terms_of_service"`
 
@@ -22,22 +23,22 @@ type legalResponse struct {
 	PrivacyPolicyVersion string `json:"privacy_policy_version"`
 }
 
-// dateTime is a custom time type that handles multiple date format parsing in JSON.
+// DateTime is a custom time type that handles multiple date format parsing in JSON.
 // It supports RFC3339 format and a custom milliseconds format for compatibility
 // with various client date/time representations.
-type dateTime struct {
+type DateTime struct {
 	// Time is the underlying time value after successful parsing.
 	time.Time
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling for dateTime.
+// UnmarshalJSON implements custom JSON unmarshaling for DateTime.
 // It handles three cases:
 //   - JSON null value: returns without error, leaving time as zero value
 //   - Empty or short strings: returns without error, leaving time as zero value
 //   - Valid date strings: parses using RFC3339 or custom milliseconds format
 //
 // This flexible parsing supports clients that may send dates in different formats.
-func (d *dateTime) UnmarshalJSON(value []byte) error {
+func (d *DateTime) UnmarshalJSON(value []byte) error {
 	raw := string(value)
 	if raw == "null" {
 		return nil
@@ -63,4 +64,14 @@ func (d *dateTime) UnmarshalJSON(value []byte) error {
 	}
 
 	return err
+}
+
+// HealthCheckResponse represents the server health status returned by the health endpoint.
+// This is used by load balancers and monitoring systems to verify server availability.
+type HealthCheckResponse struct {
+	// Online indicates whether the server is operational.
+	Online bool `json:"online"`
+
+	// Version is the current server version string.
+	Version string `json:"version"`
 }

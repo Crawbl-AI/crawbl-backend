@@ -28,6 +28,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
@@ -285,13 +286,13 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 	}
 	logger.Info("redis connected", slog.String("addr", redisCfg.Addr))
 
-	io := server.NewSocketIOServer(&server.SocketIOConfig{
+	io := socketio.NewServer(&socketio.Config{
 		Logger:      logger,
 		RedisClient: redisclient.Unwrap(rc),
 	})
 
-	broadcaster := server.NewSocketIOBroadcaster(io, logger)
-	handler := server.SocketIOHandler(io)
+	broadcaster := socketio.NewBroadcaster(io, logger)
+	handler := socketio.Handler(io)
 
 	cleanup := func() {
 		io.Close(nil)
