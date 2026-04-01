@@ -1,3 +1,4 @@
+# NOTE: NOT TESTED YET ON PRODUCTION
 # Deploy to Production
 #
 # Full pipeline: build → infra drift check → update ArgoCD → E2E tests → rollback on failure
@@ -43,9 +44,6 @@ on:
         default: 'https://api.crawbl.com'
         type: string
 
-env:
-  DOCR_REGISTRY: registry.digitalocean.com/crawbl
-
 # Prevent concurrent production deployments
 concurrency:
   group: deploy-prod
@@ -58,7 +56,7 @@ jobs:
   build:
     uses: ./.github/workflows/reusable-build.yml
     with:
-      registry: ${{ env.DOCR_REGISTRY }}
+      registry: registry.digitalocean.com/crawbl
       push-images: true
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}

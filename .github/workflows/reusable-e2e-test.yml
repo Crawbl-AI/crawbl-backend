@@ -41,7 +41,7 @@ on:
       timeout:
         description: 'Per-request timeout in seconds'
         required: false
-        default: '15s'
+        default: '15'
         type: string
     secrets:
       digitalocean-token:
