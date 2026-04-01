@@ -91,6 +91,27 @@ This repo ships a versioned `pre-push` hook in `.githooks/pre-push`.
 
 The hook does not run the live E2E suite because that depends on the shared dev cluster and takes longer than a normal push gate should. Lint stays available as an explicit manual check with `./crawbl dev lint`.
 
+### GitHub Actions Validation
+
+Use [`actionlint`](https://github.com/rhysd/actionlint) to validate workflow YAML before pushing:
+
+```bash
+# Install (macOS)
+brew install actionlint
+
+# Validate all workflows
+actionlint .github/workflows/
+
+# Validate specific workflow
+actionlint .github/workflows/deploy-dev.yml
+```
+
+Common issues actionlint catches:
+- Missing `needs` declarations when accessing `needs.*.outputs.*`
+- Undefined secrets in reusable workflows
+- Shellcheck issues in `run` scripts
+- Expression syntax errors
+
 ## 📦 Components
 
 | | Component | What it does |
