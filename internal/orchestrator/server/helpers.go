@@ -90,6 +90,12 @@ func registerRoutes(s *Server) http.Handler {
 			r.Get("/integrations", s.handleIntegrationsList)
 			r.Post("/integrations/connect", s.handleIntegrationConnect)
 			r.Post("/integrations/callback", s.handleIntegrationCallback)
+			r.Get("/models", s.handleListModels)
+			r.Get("/agents/{id}", s.handleGetAgent)
+			r.Get("/agents/{id}/details", s.handleGetAgentDetails)
+			r.Get("/agents/{id}/history", s.handleGetAgentHistory)
+			r.Get("/agents/{id}/settings", s.handleGetAgentSettings)
+			r.Get("/agents/{id}/tools", s.handleAgentTools)
 		})
 	})
 

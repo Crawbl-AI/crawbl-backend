@@ -54,6 +54,9 @@ type NewServerOpts struct {
 	// ChatService handles conversations, messages, and agent interactions.
 	ChatService orchestratorservice.ChatService
 
+	// AgentService handles agent details, settings, tools, and history retrieval.
+	AgentService orchestratorservice.AgentService
+
 	// HTTPMiddleware contains authentication and request middleware configuration.
 	HTTPMiddleware *httpserver.MiddlewareConfig
 
@@ -100,6 +103,9 @@ type Server struct {
 
 	// chatService handles conversations, messages, and agent interactions.
 	chatService orchestratorservice.ChatService
+
+	// agentService handles agent details, settings, tools, and history retrieval.
+	agentService orchestratorservice.AgentService
 
 	// httpMiddleware contains authentication and request processing middleware.
 	httpMiddleware *httpserver.MiddlewareConfig

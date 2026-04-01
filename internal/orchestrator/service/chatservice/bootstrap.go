@@ -8,8 +8,10 @@ import (
 	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
@@ -22,6 +24,17 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 
 	agents, mErr := s.ensureDefaultAgents(ctx, sess, workspace)
 	if mErr != nil {
+		return nil, nil, nil, mErr
+	}
+
+	// Seed tools catalog, agent settings, and prompts.
+	if mErr := s.ensureDefaultTools(ctx, sess); mErr != nil {
+		return nil, nil, nil, mErr
+	}
+	if mErr := s.ensureDefaultAgentSettings(ctx, sess, agents); mErr != nil {
+		return nil, nil, nil, mErr
+	}
+	if mErr := s.ensureDefaultAgentPrompts(ctx, sess, agents); mErr != nil {
 		return nil, nil, nil, mErr
 	}
 
@@ -80,6 +93,7 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 					Role:         blueprint.Role,
 					Slug:         blueprint.Slug,
 					SystemPrompt: blueprint.SystemPrompt,
+					Description:  blueprint.Description,
 					AvatarURL:    orchestrator.DefaultAgentAvatarURL,
 					CreatedAt:    now,
 					UpdatedAt:    now,
@@ -89,6 +103,7 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 				agent.Role = blueprint.Role
 				agent.Slug = blueprint.Slug
 				agent.SystemPrompt = blueprint.SystemPrompt
+				agent.Description = blueprint.Description
 				agent.AvatarURL = orchestrator.DefaultAgentAvatarURL
 				agent.UpdatedAt = now
 			}
@@ -173,4 +188,112 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 
 		return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
 	})
+}
+
+// ensureDefaultTools seeds the tool catalog from the zeroclaw package.
+// This is idempotent — the repo's Seed method uses ON CONFLICT DO UPDATE.
+func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.SessionRunner) *merrors.Error {
+	catalog := zeroclaw.DefaultToolCatalog()
+	rows := make([]orchestratorrepo.ToolRow, 0, len(catalog))
+	now := time.Now().UTC()
+	for idx, tool := range catalog {
+		rows = append(rows, orchestratorrepo.ToolRow{
+			Name:        tool.Name,
+			DisplayName: tool.DisplayName,
+			Description: tool.Description,
+			Category:    string(tool.Category),
+			IconURL:     tool.IconURL,
+			SortOrder:   idx,
+			CreatedAt:   now,
+		})
+	}
+	return s.toolsRepo.Seed(ctx, sess, rows)
+}
+
+// ensureDefaultAgentSettings seeds default settings for each agent that lacks a row.
+func (s *service) ensureDefaultAgentSettings(ctx context.Context, sess orchestratorrepo.SessionRunner, agents []*orchestrator.Agent) *merrors.Error {
+	now := time.Now().UTC()
+	for _, agent := range agents {
+		existing, mErr := s.agentSettingsRepo.GetByAgentID(ctx, sess, agent.ID)
+		if mErr != nil {
+			return mErr
+		}
+		if existing != nil {
+			continue // already seeded
+		}
+
+		// Find allowed tools from blueprint.
+		var allowedTools []string
+		for _, bp := range s.defaultAgents {
+			if bp.Slug == agent.Slug {
+				allowedTools = bp.AllowedTools
+				break
+			}
+		}
+
+		if mErr := s.agentSettingsRepo.Save(ctx, sess, &orchestratorrepo.AgentSettingsRow{
+			AgentID:        agent.ID,
+			Model:          orchestrator.DefaultAgentModel,
+			ResponseLength: string(orchestrator.ResponseLengthAuto),
+			AllowedTools:   allowedTools,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}); mErr != nil {
+			return mErr
+		}
+	}
+	return nil
+}
+
+// ensureDefaultAgentPrompts seeds IDENTITY.md, TOOLS.md, and SOUL.md for each agent
+// that has no prompts yet.
+func (s *service) ensureDefaultAgentPrompts(ctx context.Context, sess orchestratorrepo.SessionRunner, agents []*orchestrator.Agent) *merrors.Error {
+	now := time.Now().UTC()
+	for _, agent := range agents {
+		existing, mErr := s.agentPromptsRepo.ListByAgentID(ctx, sess, agent.ID)
+		if mErr != nil {
+			return mErr
+		}
+		if len(existing) > 0 {
+			continue // already seeded
+		}
+
+		defaults := []orchestratorrepo.AgentPromptRow{
+			{
+				ID:          uuid.NewString(),
+				AgentID:     agent.ID,
+				Name:        "IDENTITY.md",
+				Description: "Agent personality and identity",
+				Content:     agent.SystemPrompt,
+				SortOrder:   0,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			},
+			{
+				ID:          uuid.NewString(),
+				AgentID:     agent.ID,
+				Name:        "TOOLS.md",
+				Description: "Available tools and usage guide",
+				Content:     "",
+				SortOrder:   1,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			},
+			{
+				ID:          uuid.NewString(),
+				AgentID:     agent.ID,
+				Name:        "SOUL.md",
+				Description: "Core behavioral directives",
+				Content:     "",
+				SortOrder:   2,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			},
+		}
+
+		if mErr := s.agentPromptsRepo.BulkSave(ctx, sess, defaults); mErr != nil {
+			return mErr
+		}
+	}
+	return nil
 }

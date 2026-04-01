@@ -122,6 +122,27 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, mcpCfg ..
 		}
 	}
 
+	// Step 3c: Apply per-user agent overrides from the CR spec.
+	// These come from the orchestrator's agent_settings table and let users
+	// customise model, allowed tools, etc. per agent without changing the
+	// operator-level defaults. Only agents that already exist in the operator
+	// config are overridden — we do not create new agents from user settings.
+	if cfg.Agents != nil && sw.Spec.Config.Agents != nil {
+		for slug, override := range sw.Spec.Config.Agents {
+			agent, exists := cfg.Agents[slug]
+			if !exists {
+				continue
+			}
+			if override.Model != "" {
+				agent.Model = override.Model
+			}
+			if len(override.AllowedTools) > 0 {
+				agent.AllowedTools = override.AllowedTools
+			}
+			cfg.Agents[slug] = agent
+		}
+	}
+
 	// Step 4: Apply raw TOML overrides (escape hatch for anything not in the spec).
 	if err := fileutil.ApplyTOMLOverrides(&cfg, sw.Spec.Config.TOMLOverrides); err != nil {
 		return "", err

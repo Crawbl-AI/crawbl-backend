@@ -220,6 +220,20 @@ type EnsureRuntimeOpts struct {
 	// Sign-up and sign-in flows set this to false and let the mobile client poll;
 	// message-send flows that need the pod alive set this to true.
 	WaitForVerified bool
+
+	// AgentSettings carries per-agent configuration overrides from the
+	// orchestrator database.  The key is the agent slug (e.g. "wally", "eve").
+	// These are written into the UserSwarm CR's spec.config.agents map so they
+	// flow through to the ZeroClaw config.toml via the webhook.
+	AgentSettings map[string]AgentSettingsOverride
+}
+
+// AgentSettingsOverride holds per-agent config that flows into the CR spec.
+// Each field corresponds to a column in the orchestrator's agent_settings table.
+type AgentSettingsOverride struct {
+	Model          string
+	ResponseLength string
+	AllowedTools   []string
 }
 
 // SendTextOpts carries the parameters for SendText.  All fields except

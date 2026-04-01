@@ -204,6 +204,12 @@ kubectl rollout restart deployment/orchestrator -n backend
   - `GET /v1/workspaces/{workspaceId}/conversations/{id}`
   - `GET /v1/workspaces/{workspaceId}/conversations/{id}/messages`
   - `POST /v1/workspaces/{workspaceId}/conversations/{id}/messages`
+  - `GET /v1/models`
+  - `GET /v1/agents/{id}`
+  - `GET /v1/agents/{id}/details`
+  - `GET /v1/agents/{id}/history`
+  - `GET /v1/agents/{id}/settings`
+  - `GET /v1/agents/{id}/tools`
 - The minimal local verification path is `make test-e2e-one FILE=01_orchestrator_smoke.yml`
 - `POST /v1/auth/sign-up` and `POST /v1/auth/sign-in` should best-effort seed the default workspace `UserSwarm` without waiting for `Verified=True`
 - Mobile should poll `GET /v1/workspaces` or `GET /v1/workspaces/{id}` for `runtime.status` / `runtime.verified` while the first swarm is provisioning

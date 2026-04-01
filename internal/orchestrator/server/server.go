@@ -48,6 +48,7 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		authService:        opts.AuthService,
 		workspaceService:   opts.WorkspaceService,
 		chatService:        opts.ChatService,
+		agentService:       opts.AgentService,
 		integrationService: opts.IntegrationService,
 		httpMiddleware:     opts.HTTPMiddleware,
 		broadcaster:        broadcaster,
@@ -157,6 +158,9 @@ func validateNewServer(config *Config, opts *NewServerOpts) {
 	}
 	if opts.ChatService == nil {
 		panic("chat service is required")
+	}
+	if opts.AgentService == nil {
+		panic("agent service is required")
 	}
 	if opts.HTTPMiddleware == nil {
 		panic("http middleware config is required")

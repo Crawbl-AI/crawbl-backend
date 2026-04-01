@@ -40,11 +40,20 @@ type UserSwarmStorageSpec struct {
 }
 
 type UserSwarmConfigSpec struct {
-	DefaultProvider    string              `json:"defaultProvider,omitempty"`
-	DefaultModel       string              `json:"defaultModel,omitempty"`
-	DefaultTemperature *float64            `json:"defaultTemperature,omitempty"`
-	TOMLOverrides      string              `json:"tomlOverrides,omitempty"`
-	EnvSecretRef       *UserSwarmSecretRef `json:"envSecretRef,omitempty"`
+	DefaultProvider    string                                `json:"defaultProvider,omitempty"`
+	DefaultModel       string                                `json:"defaultModel,omitempty"`
+	DefaultTemperature *float64                              `json:"defaultTemperature,omitempty"`
+	TOMLOverrides      string                                `json:"tomlOverrides,omitempty"`
+	EnvSecretRef       *UserSwarmSecretRef                   `json:"envSecretRef,omitempty"`
+	Agents             map[string]UserSwarmAgentConfigSpec    `json:"agents,omitempty"`
+}
+
+// UserSwarmAgentConfigSpec holds per-agent configuration overrides.
+// Key in the parent map is the agent slug (e.g., "wally", "eve").
+type UserSwarmAgentConfigSpec struct {
+	Model          string   `json:"model,omitempty"`
+	ResponseLength string   `json:"responseLength,omitempty"`
+	AllowedTools   []string `json:"allowedTools,omitempty"`
 }
 
 type UserSwarmSecretRef struct {
@@ -149,6 +158,22 @@ func (in *UserSwarmConfigSpec) DeepCopyInto(out *UserSwarmConfigSpec) {
 	}
 	if in.EnvSecretRef != nil {
 		out.EnvSecretRef = &UserSwarmSecretRef{Name: in.EnvSecretRef.Name}
+	}
+	if in.Agents != nil {
+		out.Agents = make(map[string]UserSwarmAgentConfigSpec, len(in.Agents))
+		for key, val := range in.Agents {
+			var outVal UserSwarmAgentConfigSpec
+			val.DeepCopyInto(&outVal)
+			out.Agents[key] = outVal
+		}
+	}
+}
+
+func (in *UserSwarmAgentConfigSpec) DeepCopyInto(out *UserSwarmAgentConfigSpec) {
+	*out = *in
+	if in.AllowedTools != nil {
+		out.AllowedTools = make([]string, len(in.AllowedTools))
+		copy(out.AllowedTools, in.AllowedTools)
 	}
 }
 

@@ -382,6 +382,20 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 		sw.Spec.Config.EnvSecretRef = &crawblv1alpha1.UserSwarmSecretRef{Name: secretName}
 	}
 
+	// Apply per-agent settings overrides from the orchestrator DB.
+	// These flow through to the webhook's BuildConfigTOML where they override
+	// the operator-level agent defaults before the final TOML is generated.
+	if len(opts.AgentSettings) > 0 {
+		sw.Spec.Config.Agents = make(map[string]crawblv1alpha1.UserSwarmAgentConfigSpec, len(opts.AgentSettings))
+		for slug, settings := range opts.AgentSettings {
+			sw.Spec.Config.Agents[slug] = crawblv1alpha1.UserSwarmAgentConfigSpec{
+				Model:          settings.Model,
+				ResponseLength: settings.ResponseLength,
+				AllowedTools:   settings.AllowedTools,
+			}
+		}
+	}
+
 	return sw
 }
 

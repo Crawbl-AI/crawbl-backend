@@ -18,13 +18,18 @@ import (
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentpromptsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentsettingsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
+	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
@@ -81,10 +86,24 @@ func runServer(ctx context.Context) error {
 
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
 	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
-	chatService := chatservice.New(workspaceRepo, agentRepo, conversationRepo, messageRepo, runtimeClient, broadcaster)
+	toolsRepo := toolsrepo.New()
+	agentSettingsRepo := agentsettingsrepo.New()
+	agentPromptsRepo := agentpromptsrepo.New()
+	agentHistoryRepo := agenthistoryrepo.New()
+
+	chatService := chatservice.New(
+		workspaceRepo, agentRepo, conversationRepo, messageRepo,
+		toolsRepo, agentSettingsRepo, agentPromptsRepo, agentHistoryRepo,
+		runtimeClient, broadcaster,
+	)
+	agentService := agentservice.New(
+		workspaceRepo, agentRepo,
+		toolsRepo, agentSettingsRepo, agentPromptsRepo, agentHistoryRepo,
+		runtimeClient,
+	)
 	integrationService := integrationservice.New(logger)
 
-	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo)
+	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -94,6 +113,7 @@ func runServer(ctx context.Context) error {
 		AuthService:        authService,
 		WorkspaceService:   workspaceService,
 		ChatService:        chatService,
+		AgentService:       agentService,
 		HTTPMiddleware:     httpMiddleware,
 		Broadcaster:        broadcaster,
 		SocketIOHandler:    socketIOHandler,
@@ -213,6 +233,7 @@ func buildMCPHandler(
 	agentRepo orchestratorrepo.AgentRepo,
 	conversationRepo orchestratorrepo.ConversationRepo,
 	messageRepo orchestratorrepo.MessageRepo,
+	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
 ) http.Handler {
 	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
 	if signingKey == "" {
@@ -241,6 +262,7 @@ func buildMCPHandler(
 		AgentRepo:        agentRepo,
 		ConversationRepo: conversationRepo,
 		MessageRepo:      messageRepo,
+		AgentHistoryRepo: agentHistoryRepo,
 		SigningKey:       signingKey,
 		FCM:              fcm,
 	})

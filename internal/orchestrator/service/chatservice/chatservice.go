@@ -13,6 +13,10 @@ func New(
 	agentRepo agentRepo,
 	conversationRepo conversationRepo,
 	messageRepo messageRepo,
+	toolsRepo toolsRepo,
+	agentSettingsRepo agentSettingsRepo,
+	agentPromptsRepo agentPromptsRepo,
+	agentHistoryRepo agentHistoryRepo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
 ) orchestratorservice.ChatService {
@@ -28,6 +32,18 @@ func New(
 	if messageRepo == nil {
 		panic("chat service message repo cannot be nil")
 	}
+	if toolsRepo == nil {
+		panic("chat service tools repo cannot be nil")
+	}
+	if agentSettingsRepo == nil {
+		panic("chat service agent settings repo cannot be nil")
+	}
+	if agentPromptsRepo == nil {
+		panic("chat service agent prompts repo cannot be nil")
+	}
+	if agentHistoryRepo == nil {
+		panic("chat service agent history repo cannot be nil")
+	}
 	if runtimeClient == nil {
 		panic("chat service runtime client cannot be nil")
 	}
@@ -36,12 +52,16 @@ func New(
 	}
 
 	return &service{
-		workspaceRepo:    workspaceRepo,
-		agentRepo:        agentRepo,
-		conversationRepo: conversationRepo,
-		messageRepo:      messageRepo,
-		runtimeClient:    runtimeClient,
-		broadcaster:      broadcaster,
-		defaultAgents:    append([]orchestrator.DefaultAgentBlueprint(nil), orchestrator.DefaultAgents...),
+		workspaceRepo:     workspaceRepo,
+		agentRepo:         agentRepo,
+		conversationRepo:  conversationRepo,
+		messageRepo:       messageRepo,
+		toolsRepo:         toolsRepo,
+		agentSettingsRepo: agentSettingsRepo,
+		agentPromptsRepo:  agentPromptsRepo,
+		agentHistoryRepo:  agentHistoryRepo,
+		runtimeClient:     runtimeClient,
+		broadcaster:       broadcaster,
+		defaultAgents:     append([]orchestrator.DefaultAgentBlueprint(nil), orchestrator.DefaultAgents...),
 	}
 }

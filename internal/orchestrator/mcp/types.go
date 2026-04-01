@@ -41,6 +41,7 @@ type Deps struct {
 	ConversationRepo orchestratorrepo.ConversationRepo
 	MessageRepo      orchestratorrepo.MessageRepo
 	AgentRepo        orchestratorrepo.AgentRepo
+	AgentHistoryRepo orchestratorrepo.AgentHistoryRepo
 	SigningKey        string
 	FCM              *firebase.FCMClient // nil = push notifications disabled
 }
@@ -193,6 +194,24 @@ type messageRow struct {
 	Role      string    `db:"role"`
 	Content   string    `db:"content"`
 	CreatedAt time.Time `db:"created_at"`
+}
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — agent history
+// ---------------------------------------------------------------------------
+
+// createAgentHistoryInput is the input for the create_agent_history tool.
+type createAgentHistoryInput struct {
+	AgentSlug      string `json:"agent_slug"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Title          string `json:"title"`
+	Subtitle       string `json:"subtitle,omitempty"`
+}
+
+// createAgentHistoryOutput is the output for the create_agent_history tool.
+type createAgentHistoryOutput struct {
+	Created bool   `json:"created"`
+	Info    string `json:"info"`
 }
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -233,6 +235,8 @@ type AgentRow struct {
 	AvatarURL string `db:"avatar_url"`
 	// SystemPrompt is the LLM system message for this agent's personality.
 	SystemPrompt string `db:"system_prompt"`
+	// Description is a short human-readable summary of the agent's purpose.
+	Description string `db:"description"`
 	// SortOrder is the display order of the agent within its workspace.
 	SortOrder int `db:"sort_order"`
 	// CreatedAt is the timestamp when the agent was created.
@@ -257,6 +261,7 @@ func NewAgentRow(agent *orchestrator.Agent, sortOrder int) *AgentRow {
 		Slug:         agent.Slug,
 		AvatarURL:    agent.AvatarURL,
 		SystemPrompt: agent.SystemPrompt,
+		Description:  agent.Description,
 		SortOrder:    sortOrder,
 		CreatedAt:    agent.CreatedAt,
 		UpdatedAt:    agent.UpdatedAt,
@@ -273,6 +278,7 @@ func (r *AgentRow) ToDomain() *orchestrator.Agent {
 		Slug:         r.Slug,
 		AvatarURL:    r.AvatarURL,
 		SystemPrompt: r.SystemPrompt,
+		Description:  r.Description,
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
 	}
@@ -468,6 +474,10 @@ type AgentRepo interface {
 	ListByWorkspaceID(ctx context.Context, sess SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error)
 	// GetByID retrieves a specific agent by ID, verifying workspace membership.
 	GetByID(ctx context.Context, sess SessionRunner, workspaceID, agentID string) (*orchestrator.Agent, *merrors.Error)
+	// GetByIDGlobal retrieves a specific agent by ID without workspace filtering.
+	GetByIDGlobal(ctx context.Context, sess SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error)
+	// CountMessagesByAgentID counts the total number of messages attributed to an agent.
+	CountMessagesByAgentID(ctx context.Context, sess SessionRunner, agentID string) (int, *merrors.Error)
 	// Save persists agent data with a specified sort order.
 	Save(ctx context.Context, sess SessionRunner, agent *orchestrator.Agent, sortOrder int) *merrors.Error
 }
@@ -504,4 +514,74 @@ type MessageRepo interface {
 	GetLatestByConversationID(ctx context.Context, sess SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error)
 	// Save persists message data, creating a new record or updating an existing one.
 	Save(ctx context.Context, sess SessionRunner, message *orchestrator.Message) *merrors.Error
+}
+
+// ToolsRepo defines the repository interface for tool catalog operations.
+type ToolsRepo interface {
+	List(ctx context.Context, sess SessionRunner, limit, offset int, category string) ([]orchestrator.AgentTool, *merrors.Error)
+	Count(ctx context.Context, sess SessionRunner, category string) (int, *merrors.Error)
+	GetByNames(ctx context.Context, sess SessionRunner, names []string) ([]orchestrator.AgentTool, *merrors.Error)
+	Seed(ctx context.Context, sess SessionRunner, tools []ToolRow) *merrors.Error
+}
+
+// AgentSettingsRepo defines the repository interface for agent settings operations.
+type AgentSettingsRepo interface {
+	GetByAgentID(ctx context.Context, sess SessionRunner, agentID string) (*AgentSettingsRow, *merrors.Error)
+	Save(ctx context.Context, sess SessionRunner, row *AgentSettingsRow) *merrors.Error
+}
+
+// AgentPromptsRepo defines the repository interface for agent prompt operations.
+type AgentPromptsRepo interface {
+	ListByAgentID(ctx context.Context, sess SessionRunner, agentID string) ([]AgentPromptRow, *merrors.Error)
+	BulkSave(ctx context.Context, sess SessionRunner, rows []AgentPromptRow) *merrors.Error
+}
+
+// AgentHistoryRepo defines the repository interface for agent history operations.
+type AgentHistoryRepo interface {
+	ListByAgentID(ctx context.Context, sess SessionRunner, agentID string, limit, offset int) ([]AgentHistoryRow, *merrors.Error)
+	CountByAgentID(ctx context.Context, sess SessionRunner, agentID string) (int, *merrors.Error)
+	Create(ctx context.Context, sess SessionRunner, row *AgentHistoryRow) *merrors.Error
+}
+
+// ToolRow represents a database row for the tools table.
+type ToolRow struct {
+	Name        string    `db:"name"`
+	DisplayName string    `db:"display_name"`
+	Description string    `db:"description"`
+	Category    string    `db:"category"`
+	IconURL     string    `db:"icon_url"`
+	SortOrder   int       `db:"sort_order"`
+	CreatedAt   time.Time `db:"created_at"`
+}
+
+// AgentSettingsRow represents a database row for the agent_settings table.
+type AgentSettingsRow struct {
+	AgentID        string         `db:"agent_id"`
+	Model          string         `db:"model"`
+	ResponseLength string         `db:"response_length"`
+	AllowedTools   pq.StringArray `db:"allowed_tools"`
+	CreatedAt      time.Time      `db:"created_at"`
+	UpdatedAt      time.Time      `db:"updated_at"`
+}
+
+// AgentPromptRow represents a database row for the agent_prompts table.
+type AgentPromptRow struct {
+	ID          string    `db:"id"`
+	AgentID     string    `db:"agent_id"`
+	Name        string    `db:"name"`
+	Description string    `db:"description"`
+	Content     string    `db:"content"`
+	SortOrder   int       `db:"sort_order"`
+	CreatedAt   time.Time `db:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"`
+}
+
+// AgentHistoryRow represents a database row for the agent_history table.
+type AgentHistoryRow struct {
+	ID             string    `db:"id"`
+	AgentID        string    `db:"agent_id"`
+	ConversationID *string   `db:"conversation_id"`
+	Title          string    `db:"title"`
+	Subtitle       string    `db:"subtitle"`
+	CreatedAt      time.Time `db:"created_at"`
 }

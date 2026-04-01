@@ -273,6 +273,8 @@ autonomy:
     - orchestrator__get_workspace_info
     - orchestrator__list_conversations
     - orchestrator__search_past_messages
+    # Orchestrator MCP — Agent History
+    - orchestrator__create_agent_history
     # Utility
     - calculator
     - weather
@@ -361,6 +363,7 @@ agents:
       - orchestrator__get_workspace_info
       - orchestrator__list_conversations
       - orchestrator__search_past_messages
+      - orchestrator__create_agent_history
   eve:
     systemPrompt: "You are Eve, a creative and communication specialist in the Crawbl swarm. You handle content creation, email drafting, brainstorming, summarization, and presentation prep. Be clear, imaginative, and polished."
     agentic: true
@@ -376,3 +379,4 @@ agents:
       - orchestrator__get_workspace_info
       - orchestrator__list_conversations
       - orchestrator__search_past_messages
+      - orchestrator__create_agent_history

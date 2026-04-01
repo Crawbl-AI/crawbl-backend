@@ -232,6 +232,64 @@ type GetWorkspaceSummaryOpts struct {
 	WorkspaceID string
 }
 
+// GetAgentOpts contains the parameters for retrieving a single agent by ID.
+type GetAgentOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the requesting user.
+	UserID string
+	// AgentID is the unique identifier of the agent to retrieve.
+	AgentID string
+}
+
+// GetAgentDetailsOpts contains the parameters for retrieving full agent details.
+type GetAgentDetailsOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the requesting user.
+	UserID string
+	// AgentID is the unique identifier of the agent to retrieve.
+	AgentID string
+}
+
+// GetAgentHistoryOpts contains the parameters for retrieving agent history.
+type GetAgentHistoryOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the requesting user.
+	UserID string
+	// AgentID is the unique identifier of the agent.
+	AgentID string
+	// Limit specifies the maximum number of history items to return.
+	Limit int
+	// Offset specifies the number of items to skip for pagination.
+	Offset int
+}
+
+// GetAgentSettingsOpts contains the parameters for retrieving agent settings.
+type GetAgentSettingsOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the requesting user.
+	UserID string
+	// AgentID is the unique identifier of the agent.
+	AgentID string
+}
+
+// GetAgentToolsOpts contains the parameters for retrieving an agent's tools.
+type GetAgentToolsOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the requesting user.
+	UserID string
+	// AgentID is the unique identifier of the agent.
+	AgentID string
+	// Limit specifies the maximum number of tools to return.
+	Limit int
+	// Offset specifies the number of tools to skip for pagination.
+	Offset int
+}
+
 // WorkspaceBootstrapper defines the interface for workspace initialization.
 // Implementations are responsible for creating the default workspace and
 // associated resources for a new user.
@@ -364,6 +422,40 @@ type ChatService interface {
 	//
 	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
 	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
+}
+
+// AgentService defines the interface for agent-specific operations.
+// Handles agent details, settings, tools, and history retrieval.
+type AgentService interface {
+	// GetAgent retrieves a single agent by ID with runtime status enrichment.
+	// Verifies the requesting user owns the agent's workspace.
+	//
+	// Returns the Agent on success, or a merrors.Error on failure.
+	GetAgent(ctx context.Context, opts *GetAgentOpts) (*orchestrator.Agent, *merrors.Error)
+
+	// GetAgentDetails retrieves full agent details including stats.
+	// Verifies the requesting user owns the agent's workspace.
+	//
+	// Returns AgentDetails on success, or a merrors.Error on failure.
+	GetAgentDetails(ctx context.Context, opts *GetAgentDetailsOpts) (*orchestrator.AgentDetails, *merrors.Error)
+
+	// GetAgentHistory retrieves paginated conversation history for an agent.
+	// Verifies the requesting user owns the agent's workspace.
+	//
+	// Returns a slice of AgentHistoryItem with pagination on success, or a merrors.Error on failure.
+	GetAgentHistory(ctx context.Context, opts *GetAgentHistoryOpts) ([]orchestrator.AgentHistoryItem, *orchestrator.OffsetPagination, *merrors.Error)
+
+	// GetAgentSettings retrieves model and prompt settings for an agent.
+	// Verifies the requesting user owns the agent's workspace.
+	//
+	// Returns AgentSettings on success, or a merrors.Error on failure.
+	GetAgentSettings(ctx context.Context, opts *GetAgentSettingsOpts) (*orchestrator.AgentSettings, *merrors.Error)
+
+	// GetAgentTools retrieves the tools assigned to an agent with pagination.
+	// Verifies the requesting user owns the agent's workspace.
+	//
+	// Returns a ToolPage on success, or a merrors.Error on failure.
+	GetAgentTools(ctx context.Context, opts *GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error)
 }
 
 // ---------------------------------------------------------------------------

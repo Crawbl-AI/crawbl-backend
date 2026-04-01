@@ -236,4 +236,10 @@ func registerTools(server *sdkmcp.Server, deps *Deps) {
 		Name:        "search_past_messages",
 		Description: "Search through past messages in a conversation by keyword. Use to recall what the user discussed before.",
 	}, newSearchMessagesHandler(deps))
+
+	// Agent history
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "create_agent_history",
+		Description: "Create a conversation history entry for a delegate agent. Use this when you delegate significant work to an agent and want to record it as a notable event in their history. Do not create entries for every message — only for important tasks, completions, or milestones.",
+	}, newCreateAgentHistoryHandler(deps))
 }

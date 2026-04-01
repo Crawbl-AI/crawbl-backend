@@ -91,6 +91,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 			Set("slug", row.Slug).
 			Set("avatar_url", row.AvatarURL).
 			Set("system_prompt", row.SystemPrompt).
+			Set("description", row.Description).
 			Set("sort_order", row.SortOrder).
 			Set("updated_at", row.UpdatedAt).
 			Where("id = ?", row.ID).
@@ -111,6 +112,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 		Pair("slug", row.Slug).
 		Pair("avatar_url", row.AvatarURL).
 		Pair("system_prompt", row.SystemPrompt).
+		Pair("description", row.Description).
 		Pair("sort_order", row.SortOrder).
 		Pair("created_at", row.CreatedAt).
 		Pair("updated_at", row.UpdatedAt).
@@ -122,6 +124,7 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 				Set("role", row.Role).
 				Set("slug", row.Slug).
 				Set("avatar_url", row.AvatarURL).
+				Set("description", row.Description).
 				Set("sort_order", row.SortOrder).
 				Set("updated_at", row.UpdatedAt).
 				Where("id = ?", row.ID).
@@ -135,4 +138,46 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 	}
 
 	return nil
+}
+
+// GetByIDGlobal retrieves a specific agent by its ID without workspace filtering.
+// Returns ErrAgentNotFound if the agent does not exist.
+// Returns ErrInvalidInput if sess is nil or agentID is empty.
+func (r *agentRepo) GetByIDGlobal(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(agentID) == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	var row orchestratorrepo.AgentRow
+	err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
+		From("agents").
+		Where("id = ?", agentID).
+		LoadOneContext(ctx, &row)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return nil, merrors.ErrAgentNotFound
+		}
+		return nil, merrors.WrapStdServerError(err, "select agent by id global")
+	}
+
+	return row.ToDomain(), nil
+}
+
+// CountMessagesByAgentID counts the total number of messages attributed to an agent.
+// Returns ErrInvalidInput if sess is nil or agentID is empty.
+func (r *agentRepo) CountMessagesByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(agentID) == "" {
+		return 0, merrors.ErrInvalidInput
+	}
+
+	var count int
+	err := sess.Select("COUNT(*)").
+		From("messages").
+		Where("agent_id = ?", agentID).
+		LoadOneContext(ctx, &count)
+	if err != nil {
+		return 0, merrors.WrapStdServerError(err, "count messages by agent id")
+	}
+
+	return count, nil
 }

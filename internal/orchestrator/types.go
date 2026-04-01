@@ -392,11 +392,108 @@ type Agent struct {
 	// SystemPrompt is the LLM system message for this agent's personality.
 	SystemPrompt string `json:"system_prompt,omitempty"`
 
+	// Description is a short human-readable summary of the agent's purpose.
+	Description string `json:"description"`
+
 	// CreatedAt is the timestamp when the agent was created.
 	CreatedAt time.Time `json:"created_at"`
 
 	// UpdatedAt is the timestamp when the agent was last modified.
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// AgentTool represents a tool with full metadata from the tools DB table.
+type AgentTool struct {
+	Name        string
+	DisplayName string
+	Description string
+	Category    AgentToolCategory
+	IconURL     string
+}
+
+// AgentToolCategory groups tools by function for display.
+type AgentToolCategory struct {
+	ID       string
+	Name     string
+	ImageURL string
+}
+
+// AgentModelDef describes an available LLM model.
+type AgentModelDef struct {
+	ID          string
+	Name        string
+	Description string
+}
+
+// DefaultAgentModel is the model ID assigned to new agents.
+// "auto" means the platform selects the best model (currently gpt-5-mini, future: AWS Bedrock routing).
+const DefaultAgentModel = "auto"
+
+// AvailableModels is the registry of models users can choose from.
+var AvailableModels = []AgentModelDef{
+	{ID: "auto", Name: "Auto", Description: "Platform selects the best model automatically"},
+	{ID: "gpt-5-mini", Name: "GPT-5 Mini", Description: "Fast and efficient model for everyday tasks"},
+}
+
+// ResponseLength represents the response verbosity preference.
+type ResponseLength string
+
+const (
+	ResponseLengthAuto   ResponseLength = "auto"
+	ResponseLengthShort  ResponseLength = "short"
+	ResponseLengthMedium ResponseLength = "medium"
+	ResponseLengthLong   ResponseLength = "long"
+)
+
+// AgentDetails is the full agent profile with stats.
+// Tools are served separately via GET /v1/agents/{id}/tools.
+type AgentDetails struct {
+	Agent
+	Description string
+	SortOrder   int
+	Stats       AgentStats
+}
+
+// AgentStats contains aggregate metrics for an agent.
+type AgentStats struct {
+	TotalMessages int
+}
+
+// AgentSettings contains the agent's model configuration and prompts.
+type AgentSettings struct {
+	Model          AgentModelDef
+	ResponseLength ResponseLength
+	Prompts        []AgentPrompt
+}
+
+// AgentPrompt represents a customizable agent prompt file.
+type AgentPrompt struct {
+	ID          string
+	Name        string
+	Description string
+	Content     string
+}
+
+// AgentHistoryItem represents a conversation summary for an agent.
+type AgentHistoryItem struct {
+	ConversationID string
+	Title          string
+	Subtitle       string
+	CreatedAt      *time.Time
+}
+
+// OffsetPagination contains offset-based pagination metadata.
+type OffsetPagination struct {
+	Total   int
+	Limit   int
+	Offset  int
+	HasNext bool
+}
+
+// ToolPage represents a paginated list of tools.
+type ToolPage struct {
+	Data       []AgentTool
+	Pagination OffsetPagination
 }
 
 // Conversation represents a chat conversation between a user and agents.
@@ -595,6 +692,12 @@ type DefaultAgentBlueprint struct {
 
 	// SystemPrompt is the LLM system message for this agent's personality.
 	SystemPrompt string
+
+	// Description is a short human-readable summary of the agent's purpose.
+	Description string
+
+	// AllowedTools is the list of tool name strings this agent is permitted to use.
+	AllowedTools []string
 }
 
 // DefaultAgents is the list of agents created by default in new workspaces.
@@ -604,12 +707,28 @@ var DefaultAgents = []DefaultAgentBlueprint{
 		Slug:         "wally",
 		Role:         AgentRoleSubAgent,
 		SystemPrompt: "You are Wally, a versatile assistant agent in the Crawbl swarm. You handle research, writing, analysis, and general help. Be resourceful, thorough, and friendly.",
+		Description:  "A versatile assistant that handles research, writing, analysis, and general help.",
+		AllowedTools: []string{
+			"web_search_tool", "web_fetch", "file_read", "file_write",
+			"memory_recall", "memory_store",
+			"orchestrator__send_push_notification",
+			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+		},
 	},
 	{
 		Name:         "Eve",
 		Slug:         "eve",
 		Role:         AgentRoleSubAgent,
 		SystemPrompt: "You are Eve, a creative and communication specialist in the Crawbl swarm. You handle content creation, email drafting, brainstorming, summarization, and presentation prep. Be clear, imaginative, and polished.",
+		Description:  "A creative and communication specialist that handles content creation, email drafting, brainstorming, summarization, and presentation prep.",
+		AllowedTools: []string{
+			"web_search_tool", "web_fetch", "file_read", "file_write",
+			"memory_recall", "memory_store",
+			"orchestrator__send_push_notification",
+			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+		},
 	},
 }
 

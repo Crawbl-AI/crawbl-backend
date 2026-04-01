@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS agents (
     slug TEXT NOT NULL,
     avatar_url TEXT NOT NULL DEFAULT '',
     system_prompt TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
@@ -64,6 +65,41 @@ CREATE TABLE IF NOT EXISTS agents (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_workspace_slug ON agents(workspace_id, slug);
 CREATE INDEX IF NOT EXISTS idx_agents_workspace_id ON agents(workspace_id);
+
+-- Tools catalog
+CREATE TABLE IF NOT EXISTS tools (
+    name TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL,
+    icon_url TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Agent settings
+CREATE TABLE IF NOT EXISTS agent_settings (
+    agent_id UUID PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+    model TEXT NOT NULL DEFAULT 'auto',
+    response_length TEXT NOT NULL DEFAULT 'auto',
+    allowed_tools TEXT[] NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+-- Agent prompts
+CREATE TABLE IF NOT EXISTS agent_prompts (
+    id UUID PRIMARY KEY,
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_prompts_agent_id ON agent_prompts(agent_id);
 
 -- Conversations
 CREATE TABLE IF NOT EXISTS conversations (
@@ -79,6 +115,18 @@ CREATE TABLE IF NOT EXISTS conversations (
 
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace_id ON conversations(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_workspace_type ON conversations(workspace_id, type);
+
+-- Agent history (Manager-created events)
+CREATE TABLE IF NOT EXISTS agent_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    conversation_id UUID NULL REFERENCES conversations(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    subtitle TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_history_agent_id ON agent_history(agent_id, created_at DESC);
 
 -- Messages
 CREATE TABLE IF NOT EXISTS messages (
@@ -96,6 +144,7 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created_at ON messages(conversation_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_local_id ON messages(local_id);
+CREATE INDEX IF NOT EXISTS idx_messages_agent_id ON messages(agent_id);
 
 -- MCP audit log
 CREATE TABLE IF NOT EXISTS mcp_audit_logs (
