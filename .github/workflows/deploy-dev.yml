@@ -78,7 +78,7 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e-test:
     uses: ./.github/workflows/reusable-e2e-test.yml
-    needs: [update-argocd]
+    needs: [build, update-argocd]
     with:
       image-tag: ${{ needs.build.outputs.semver-tag }}
       base-url: https://dev.api.crawbl.com
@@ -93,7 +93,7 @@ jobs:
   # ---------------------------------------------------------------------------
   rollback-argocd:
     uses: ./.github/workflows/reusable-rollback-argocd.yml
-    needs: [update-argocd, e2e-test]
+    needs: [build, update-argocd, e2e-test]
     if: always() && needs.e2e-test.result == 'failure'
     with:
       prev-orchestrator-tag: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}

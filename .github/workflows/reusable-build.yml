@@ -29,6 +29,9 @@ on:
       semver-tag:
         description: 'Calculated semver tag (e.g., v0.2.0)'
         value: ${{ jobs.build.outputs.semver-tag }}
+    secrets:
+      digitalocean-token:
+        required: true
 
 jobs:
   build:
