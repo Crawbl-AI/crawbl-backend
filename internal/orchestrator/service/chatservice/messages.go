@@ -48,16 +48,26 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		agent.Status = statusForRuntime(runtimeState)
 	}
 
-	// Route to the correct agent
+	// Route to the correct agent for the ZeroClaw webhook.
 	responder := resolveResponder(conversation, agents, opts.Mentions)
 
-	// Signal agent is processing
-	if responder != nil {
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, responder.ID, string(orchestrator.AgentStatusBusy))
-		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, responder.ID, true)
+	// For display: attribute the reply to an agent even for swarm messages.
+	// The Manager delegates to sub-agents internally; we surface the primary
+	// agent as the responder since the webhook doesn't report which sub-agent
+	// actually handled the request.
+	displayResponder := responder
+	if displayResponder == nil && len(agents) > 0 {
+		displayResponder = agents[0]
 	}
 
-	// Call ZeroClaw
+	// Signal agent is processing
+	if displayResponder != nil {
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, displayResponder.ID, string(orchestrator.AgentStatusBusy))
+		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, displayResponder.ID, true)
+	}
+
+	// Call ZeroClaw — use the original responder for webhook routing.
+	// nil means the Manager (base agent) handles the message.
 	sendOpts := &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   opts.Content.Text,
@@ -65,25 +75,24 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	}
 	if responder != nil {
 		sendOpts.AgentID = responder.Slug
-		// system_prompt no longer sent — ZeroClaw reads it from config.toml [agents.<slug>]
 	}
 	replyText, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 
 	// Signal agent is done
-	if responder != nil {
-		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, responder.ID, false)
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, responder.ID, string(orchestrator.AgentStatusOnline))
+	if displayResponder != nil {
+		s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, displayResponder.ID, false)
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, displayResponder.ID, string(orchestrator.AgentStatusOnline))
 	}
 
 	if mErr != nil {
-		if responder != nil {
-			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, responder.ID, string(orchestrator.AgentStatusError))
+		if displayResponder != nil {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, displayResponder.ID, string(orchestrator.AgentStatusError))
 		}
 		return nil, mErr
 	}
 
-	// Persist messages
-	return s.persistMessagePair(ctx, opts, conversation, agents, responder, replyText)
+	// Persist messages — use displayResponder so swarm replies have agent metadata.
+	return s.persistMessagePair(ctx, opts, conversation, agents, displayResponder, replyText)
 }
 
 // persistMessagePair saves the user message + agent reply in a transaction.
