@@ -86,25 +86,21 @@ jobs:
         id: calc-version
         run: |
           LATEST_TAG=$(git tag -l "v*" --sort=-v:refname 2>/dev/null | head -n1)
-          TAG_EXISTS=false
+
           if [ -z "$LATEST_TAG" ]; then
             echo "No existing semver tag found, starting from v0.1.0"
-            LATEST_TAG="v0.1.0"
-            TAG_EXISTS=false
-          else
-            TAG_EXISTS=true
+            echo "new-tag=v0.1.0" >> $GITHUB_OUTPUT
+            echo "latest-tag=v0.1.0" >> $GITHUB_OUTPUT
+            exit 0
           fi
-          echo "Latest tag: ${LATEST_TAG} (exists: ${TAG_EXISTS})"
+
+          echo "Latest tag: ${LATEST_TAG}"
 
           VERSION="${LATEST_TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
-          if [ "$TAG_EXISTS" = true ]; then
-            COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null)
-          else
-            COMMITS=$(git log --pretty=format:"%s" 2>/dev/null)
-          fi
-          echo "Commits since last tag:"
+          COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null)
+          echo "Commits since ${LATEST_TAG}:"
           echo "${COMMITS}"
           echo ""
 
