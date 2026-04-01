@@ -24,9 +24,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  DOCR_REGISTRY: registry.digitalocean.com/crawbl
-
 # Fixed group name "deploy-dev" means all runs (push AND workflow_dispatch) share one queue.
 # cancel-in-progress: false means queued runs wait instead of being cancelled — important on
 # main where we never want to skip a deploy silently.
@@ -41,7 +38,7 @@ jobs:
   build:
     uses: ./.github/workflows/reusable-build.yml
     with:
-      registry: ${{ env.DOCR_REGISTRY }}
+      registry: registry.digitalocean.com/crawbl
       push-images: true
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
