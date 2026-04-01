@@ -24,9 +24,6 @@ on:
         required: false
         default: true
         type: boolean
-    secrets:
-      argocd-repo-token:
-        required: true
     outputs:
       prev-orchestrator-tag:
         description: 'Previous orchestrator tag (for rollback)'
@@ -37,6 +34,9 @@ on:
       prev-platform-tag:
         description: 'Previous platform tag (for rollback)'
         value: ${{ jobs.update-argocd.outputs.prev-platform-tag }}
+    secrets:
+      argocd-repo-token:
+        required: true
 
 jobs:
   update-argocd:
