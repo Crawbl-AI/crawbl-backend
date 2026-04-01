@@ -194,13 +194,9 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 }
 
 // ListModels returns the list of available LLM models.
+// This is a public endpoint — no auth required (loaded by DictService before login).
 func ListModels(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, mErr := c.CurrentUser(r); mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
 		models := make([]dto.AgentModelResponse, 0, len(orchestrator.AvailableModels))
 		for _, m := range orchestrator.AvailableModels {
 			models = append(models, dto.AgentModelResponse{
