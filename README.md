@@ -141,6 +141,19 @@ api/                            # 📐 Kubernetes CRD types
 
 See [`config/README.md`](config/README.md) for the complete reference of every env var and hardcoded default.
 
+## 🐳 Manual ZeroClaw Build
+
+CI is slow — use this to build and push the ZeroClaw image directly.
+
+```bash
+# From crawbl-zeroclaw/
+docker build --platform linux/amd64 --target release -t registry.digitalocean.com/crawbl/zeroclaw:<tag> .
+doctl registry login
+docker push registry.digitalocean.com/crawbl/zeroclaw:<tag>
+```
+
+> After pushing, manually update the image tag in `crawbl-argocd-apps` — CI does this automatically but manual builds skip it.
+
 ## 🔗 Related
 
 | | Repo | |
