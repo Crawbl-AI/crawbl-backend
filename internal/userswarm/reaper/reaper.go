@@ -79,10 +79,9 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 
 	if len(users) == 0 {
 		logger.Info("no stale e2e users found")
-		return result, nil
+	} else {
+		logger.Info("found stale e2e users", "count", len(users), "cutoff", cutoff.Format(time.RFC3339))
 	}
-
-	logger.Info("found stale e2e users", "count", len(users), "cutoff", cutoff.Format(time.RFC3339))
 
 	// Phase 1: process each stale user in turn.
 	for _, user := range users {
