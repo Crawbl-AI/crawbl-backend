@@ -82,10 +82,7 @@ func (s *service) sendDirectMessage(
 		Message:   opts.Content.Text,
 		SessionID: conversation.ID,
 	}
-	if primaryResponder != nil {
-		sendOpts.AgentID = primaryResponder.Slug
-		sendOpts.SystemPrompt = agentSystemPrompt(primaryResponder, s.defaultAgents, agents)
-	}
+	sendOpts.AgentID = targetAgentID(primaryResponder)
 	turns, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 
 	s.stopTyping(ctx, opts.WorkspaceID, conversation, typingAgents)
@@ -95,6 +92,11 @@ func (s *service) sendDirectMessage(
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
 		}
 		return nil, mErr
+	}
+
+	replySpecs := buildReplySpecs(turns, agentBySlug, primaryResponder)
+	if len(replySpecs) == 0 {
+		return nil, merrors.NewServerErrorText("runtime returned no visible turns")
 	}
 
 	// Persist user message + agent replies atomically.
@@ -112,12 +114,12 @@ func (s *service) sendDirectMessage(
 		UpdatedAt:      now,
 	}
 
-	replies := make([]*orchestrator.Message, 0, len(turns))
-	for i, turn := range turns {
+	replies := make([]*orchestrator.Message, 0, len(replySpecs))
+	for i, spec := range replySpecs {
 		replyAt := now.Add(time.Millisecond * time.Duration(i+1))
 		var agentID *string
-		if agent := agentBySlug[turn.AgentID]; agent != nil {
-			agentID = &agent.ID
+		if spec.agent != nil {
+			agentID = &spec.agent.ID
 		}
 		replies = append(replies, &orchestrator.Message{
 			ID:             uuid.NewString(),
@@ -125,7 +127,7 @@ func (s *service) sendDirectMessage(
 			Role:           orchestrator.MessageRoleAgent,
 			Content: orchestrator.MessageContent{
 				Type: orchestrator.MessageContentTypeText,
-				Text: turn.Text,
+				Text: spec.text,
 			},
 			Status:      orchestrator.MessageStatusDelivered,
 			AgentID:     agentID,
@@ -224,6 +226,7 @@ func (s *service) sendSwarmMessage(
 
 		// 3. Check for inline manager response.
 		if len(decision.Agents) == 1 && decision.Agents[0] == "manager" && decision.Response != nil && managerAgent != nil {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, managerAgent.ID, string(orchestrator.AgentStatusOnline))
 			reply, mErr := s.persistAgentMessage(ctx, opts, conversation, managerAgent, *decision.Response, agentByID)
 			if mErr != nil {
 				return nil, mErr
@@ -276,8 +279,8 @@ func (s *service) executeParallel(
 	agentByID map[string]*orchestrator.Agent,
 ) ([]*orchestrator.Message, *merrors.Error) {
 	type agentResult struct {
-		reply *orchestrator.Message
-		err   *merrors.Error
+		replies []*orchestrator.Message
+		err     *merrors.Error
 	}
 	results := make([]agentResult, len(targetAgents))
 	var wg sync.WaitGroup
@@ -286,8 +289,8 @@ func (s *service) executeParallel(
 	for i, agent := range targetAgents {
 		go func(idx int, agent *orchestrator.Agent) {
 			defer wg.Done()
-			reply, err := s.callAgent(ctx, opts, conversation, runtimeState, agent, agents, agentByID, "")
-			results[idx] = agentResult{reply: reply, err: err}
+			replies, err := s.callAgent(ctx, opts, conversation, runtimeState, agent, agentByID, "")
+			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}
 
@@ -296,9 +299,10 @@ func (s *service) executeParallel(
 	var replies []*orchestrator.Message
 	var lastErr *merrors.Error
 	for _, r := range results {
-		if r.reply != nil {
-			replies = append(replies, r.reply)
-		} else if r.err != nil {
+		if len(r.replies) > 0 {
+			replies = append(replies, r.replies...)
+		}
+		if r.err != nil {
 			lastErr = r.err
 		}
 	}
@@ -340,14 +344,18 @@ func (s *service) executeSequential(
 				"\n\nReact to their responses if relevant, or add your own perspective. Say [SILENT] if nothing to add."
 		}
 
-		reply, err := s.callAgent(ctx, opts, conversation, runtimeState, agent, agents, agentByID, discussionContext)
+		agentReplies, err := s.callAgent(ctx, opts, conversation, runtimeState, agent, agentByID, discussionContext)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		if reply != nil {
+		for _, reply := range agentReplies {
 			replies = append(replies, reply)
-			priorResponses = append(priorResponses, "- "+agent.Name+": "+reply.Content.Text)
+			speaker := agent.Name
+			if reply.Agent != nil {
+				speaker = reply.Agent.Name
+			}
+			priorResponses = append(priorResponses, "- "+speaker+": "+reply.Content.Text)
 		}
 	}
 
@@ -365,23 +373,17 @@ func (s *service) callAgent(
 	conversation *orchestrator.Conversation,
 	runtimeState *orchestrator.RuntimeStatus,
 	agent *orchestrator.Agent,
-	agents []*orchestrator.Agent,
 	agentByID map[string]*orchestrator.Agent,
 	extraContext string,
-) (*orchestrator.Message, *merrors.Error) {
+) ([]*orchestrator.Message, *merrors.Error) {
 	// Emit thinking status.
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 
-	prompt := agentSystemPrompt(agent, s.defaultAgents, agents)
-	if extraContext != "" {
-		prompt += extraContext
-	}
-
 	turns, callErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
-		Runtime:      runtimeState,
-		Message:      opts.Content.Text,
-		SessionID:    conversation.ID + ":" + agent.Slug,
-		SystemPrompt: prompt,
+		Runtime:   runtimeState,
+		Message:   runtimeMessage(opts.Content.Text, extraContext),
+		SessionID: conversation.ID,
+		AgentID:   targetAgentID(agent),
 	})
 
 	if callErr != nil {
@@ -391,18 +393,7 @@ func (s *service) callAgent(
 
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline))
 
-	// Collect text from the first turn.
-	var text string
-	if len(turns) > 0 {
-		text = strings.TrimSpace(turns[0].Text)
-	}
-	// Silence is valid — agent chose not to respond.
-	if text == "" || text == "[SILENT]" {
-		return nil, nil
-	}
-
-	// Persist and broadcast.
-	return s.persistAgentMessage(ctx, opts, conversation, agent, text, agentByID)
+	return s.persistAgentTurns(ctx, opts, conversation, turns, agent, agentByID)
 }
 
 // persistUserMessage saves the user message in its own transaction and
@@ -497,6 +488,122 @@ func (s *service) persistAgentMessage(
 
 	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, reply)
 	return reply, nil
+}
+
+type replySpec struct {
+	agent *orchestrator.Agent
+	text  string
+}
+
+func buildReplySpecs(turns []userswarmclient.AgentTurn, agentBySlug map[string]*orchestrator.Agent, fallbackAgent *orchestrator.Agent) []replySpec {
+	specs := make([]replySpec, 0, len(turns))
+	for _, turn := range turns {
+		text := strings.TrimSpace(turn.Text)
+		if text == "" || text == "[SILENT]" {
+			continue
+		}
+
+		agent := fallbackAgent
+		if turn.AgentID != "" {
+			if resolved := agentBySlug[turn.AgentID]; resolved != nil {
+				agent = resolved
+			}
+		}
+
+		specs = append(specs, replySpec{
+			agent: agent,
+			text:  text,
+		})
+	}
+	return specs
+}
+
+func (s *service) persistAgentTurns(
+	ctx context.Context,
+	opts *orchestratorservice.SendMessageOpts,
+	conversation *orchestrator.Conversation,
+	turns []userswarmclient.AgentTurn,
+	fallbackAgent *orchestrator.Agent,
+	agentByID map[string]*orchestrator.Agent,
+) ([]*orchestrator.Message, *merrors.Error) {
+	agentBySlug := make(map[string]*orchestrator.Agent, len(agentByID))
+	for _, agent := range agentByID {
+		if agent != nil {
+			agentBySlug[agent.Slug] = agent
+		}
+	}
+
+	replySpecs := buildReplySpecs(turns, agentBySlug, fallbackAgent)
+	if len(replySpecs) == 0 {
+		return nil, nil
+	}
+
+	now := time.Now().UTC()
+	replies := make([]*orchestrator.Message, 0, len(replySpecs))
+	for i, spec := range replySpecs {
+		replyAt := now.Add(time.Millisecond * time.Duration(i+1))
+		var agentID *string
+		if spec.agent != nil {
+			agentID = &spec.agent.ID
+		}
+
+		replies = append(replies, &orchestrator.Message{
+			ID:             uuid.NewString(),
+			ConversationID: conversation.ID,
+			Role:           orchestrator.MessageRoleAgent,
+			Content: orchestrator.MessageContent{
+				Type: orchestrator.MessageContentTypeText,
+				Text: spec.text,
+			},
+			Status:      orchestrator.MessageStatusDelivered,
+			AgentID:     agentID,
+			Attachments: []orchestrator.Attachment{},
+			CreatedAt:   replyAt,
+			UpdatedAt:   replyAt,
+		})
+	}
+
+	convCopy := *conversation
+	convCopy.UpdatedAt = replies[len(replies)-1].CreatedAt
+	convCopy.LastMessage = replies[len(replies)-1]
+
+	if _, mErr := database.WithTransaction(opts.Sess, "persist agent turns", func(tx *dbr.Tx) ([]*orchestrator.Message, *merrors.Error) {
+		for _, reply := range replies {
+			if mErr := s.messageRepo.Save(ctx, tx, reply); mErr != nil {
+				return nil, mErr
+			}
+		}
+		if mErr := s.conversationRepo.Save(ctx, tx, &convCopy); mErr != nil {
+			return nil, mErr
+		}
+		return replies, nil
+	}); mErr != nil {
+		return nil, mErr
+	}
+
+	for _, reply := range replies {
+		if reply.AgentID != nil {
+			reply.Agent = agentByID[*reply.AgentID]
+		}
+		s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, reply)
+	}
+
+	return replies, nil
+}
+
+func runtimeMessage(message, extraContext string) string {
+	trimmed := strings.TrimSpace(message)
+	if extraContext == "" {
+		return trimmed
+	}
+	return trimmed + extraContext
+}
+
+func targetAgentID(agent *orchestrator.Agent) string {
+	if agent == nil || agent.Role == orchestrator.AgentRoleManager {
+		return ""
+	}
+	return agent.Slug
 }
 
 // startTyping emits typing indicators and returns the agents that were signaled.

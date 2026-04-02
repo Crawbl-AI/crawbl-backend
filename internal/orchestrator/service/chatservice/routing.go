@@ -71,8 +71,8 @@ func buildRoutingPrompt(agents []*orchestrator.Agent) string {
 // It injects a routing-only system prompt so Manager acts purely as a dispatcher
 // rather than generating a full answer in this turn.
 //
-// The conversation's SessionID is reused so ZeroClaw can maintain context across
-// the routing turn and the subsequent reply turns.
+// The real conversation SessionID is reused so ZeroClaw keeps one coherent
+// conversation thread for routing and the follow-up agent turns.
 //
 // Falls back to ["manager"] on any parse failure or if all returned slugs are
 // unknown — guarantees the caller always gets at least one valid agent to invoke.
@@ -88,7 +88,7 @@ func (s *service) routeMessage(
 	turns, mErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 		Runtime:      runtimeState,
 		Message:      message,
-		SessionID:    conversationID + ":routing",
+		SessionID:    conversationID,
 		SystemPrompt: routingPrompt,
 	})
 	if mErr != nil {

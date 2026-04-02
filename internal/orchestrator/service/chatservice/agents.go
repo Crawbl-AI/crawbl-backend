@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // ListAgents retrieves all agents for a workspace with current runtime status.
@@ -56,44 +56,6 @@ func resolveResponders(conversation *orchestrator.Conversation, agents []*orches
 
 	// Swarm with no mentions — needs routing via Manager.
 	return nil
-}
-
-// agentSystemPrompt builds the system prompt for an agent by combining its
-// blueprint personality with a dynamic group member list. The group context
-// is appended so agents know who else is in the chat without hardcoding names.
-func agentSystemPrompt(agent *orchestrator.Agent, blueprints []orchestrator.DefaultAgentBlueprint, allAgents []*orchestrator.Agent) string {
-	var base string
-	for _, bp := range blueprints {
-		if bp.Slug == agent.Slug {
-			base = bp.SystemPrompt
-			break
-		}
-	}
-	if base == "" {
-		return ""
-	}
-
-	// Build dynamic group member list (excluding self).
-	var others []string
-	for _, a := range allAgents {
-		if a.ID != agent.ID {
-			others = append(others, a.Name)
-		}
-	}
-
-	// Override the base SOUL.md identity. Without this, the agent thinks
-	// it's the Manager because SOUL.md says "You are the Manager" and
-	// this system_prompt is only appended as extra context.
-	override := "IMPORTANT: Ignore any prior identity. You are NOT the Manager. " + base
-	if agent.Role == orchestrator.AgentRoleManager {
-		override = base // Manager keeps its identity
-	}
-
-	if len(others) == 0 {
-		return override
-	}
-
-	return override + " You are in a group chat with " + strings.Join(others, ", ") + ". You can @mention them naturally."
 }
 
 // mapAgentsBySlugs creates a lookup map from agent slugs to agent objects.
