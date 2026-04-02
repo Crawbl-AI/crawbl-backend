@@ -58,15 +58,33 @@ func resolveResponders(conversation *orchestrator.Conversation, agents []*orches
 	return nil
 }
 
-// agentSystemPrompt returns the system prompt for an agent by matching its slug
-// against the default agent blueprints. Returns empty string if not found.
-func agentSystemPrompt(agent *orchestrator.Agent, blueprints []orchestrator.DefaultAgentBlueprint) string {
+// agentSystemPrompt builds the system prompt for an agent by combining its
+// blueprint personality with a dynamic group member list. The group context
+// is appended so agents know who else is in the chat without hardcoding names.
+func agentSystemPrompt(agent *orchestrator.Agent, blueprints []orchestrator.DefaultAgentBlueprint, allAgents []*orchestrator.Agent) string {
+	var base string
 	for _, bp := range blueprints {
 		if bp.Slug == agent.Slug {
-			return bp.SystemPrompt
+			base = bp.SystemPrompt
+			break
 		}
 	}
-	return ""
+	if base == "" {
+		return ""
+	}
+
+	// Build dynamic group member list (excluding self).
+	var others []string
+	for _, a := range allAgents {
+		if a.ID != agent.ID {
+			others = append(others, a.Name)
+		}
+	}
+	if len(others) == 0 {
+		return base
+	}
+
+	return base + " You are in a group chat with " + strings.Join(others, ", ") + ". You can @mention them naturally."
 }
 
 // mapAgentsBySlugs creates a lookup map from agent slugs to agent objects.

@@ -84,7 +84,7 @@ func (s *service) sendDirectMessage(
 	}
 	if primaryResponder != nil {
 		sendOpts.AgentID = primaryResponder.Slug
-		sendOpts.SystemPrompt = agentSystemPrompt(primaryResponder, s.defaultAgents)
+		sendOpts.SystemPrompt = agentSystemPrompt(primaryResponder, s.defaultAgents, agents)
 	}
 	turns, mErr := s.runtimeClient.SendText(ctx, sendOpts)
 
@@ -259,7 +259,7 @@ func (s *service) sendSwarmMessage(
 				Runtime:      runtimeState,
 				Message:      opts.Content.Text,
 				SessionID:    conversation.ID + ":" + agent.Slug,
-				SystemPrompt: agentSystemPrompt(agent, s.defaultAgents),
+				SystemPrompt: agentSystemPrompt(agent, s.defaultAgents, agents),
 			})
 
 			// Clear typing.
@@ -276,10 +276,11 @@ func (s *service) sendSwarmMessage(
 			// Collect text from all turns for this agent's response.
 			var text string
 			if len(turns) > 0 {
-				text = turns[0].Text
+				text = strings.TrimSpace(turns[0].Text)
 			}
-			if text == "" {
-				results[idx] = agentResult{err: merrors.NewServerErrorText("agent returned empty response")}
+			// Silence is valid — agent chose not to respond. This is normal
+			// group chat behavior; not every agent speaks on every message.
+			if text == "" || text == "[SILENT]" {
 				return
 			}
 
