@@ -80,11 +80,20 @@ func agentSystemPrompt(agent *orchestrator.Agent, blueprints []orchestrator.Defa
 			others = append(others, a.Name)
 		}
 	}
-	if len(others) == 0 {
-		return base
+
+	// Override the base SOUL.md identity. Without this, the agent thinks
+	// it's the Manager because SOUL.md says "You are the Manager" and
+	// this system_prompt is only appended as extra context.
+	override := "IMPORTANT: Ignore any prior identity. You are NOT the Manager. " + base
+	if agent.Role == orchestrator.AgentRoleManager {
+		override = base // Manager keeps its identity
 	}
 
-	return base + " You are in a group chat with " + strings.Join(others, ", ") + ". You can @mention them naturally."
+	if len(others) == 0 {
+		return override
+	}
+
+	return override + " You are in a group chat with " + strings.Join(others, ", ") + ". You can @mention them naturally."
 }
 
 // mapAgentsBySlugs creates a lookup map from agent slugs to agent objects.
