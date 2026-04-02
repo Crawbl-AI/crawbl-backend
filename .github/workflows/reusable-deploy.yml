@@ -114,14 +114,14 @@ jobs:
   #     digitalocean-token: ${{ secrets.digitalocean-token }}
   #     e2e-token: ${{ secrets.e2e-token }}
 
-  rollback-argocd:
-    if: ${{ always() && inputs.rollback-on-e2e-failure && needs.e2e-test.result == 'failure' }}
-    uses: ./.github/workflows/reusable-rollback-argocd.yml
-    needs: [build, update-argocd, e2e-test]
-    with:
-      prev-orchestrator-tag: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}
-      prev-auth-filter-tag: ${{ needs.update-argocd.outputs.prev-auth-filter-tag }}
-      prev-platform-tag: ${{ needs.update-argocd.outputs.prev-platform-tag }}
-      failed-tag: ${{ needs.build.outputs.semver-tag }}
-    secrets:
-      argocd-repo-token: ${{ secrets.argocd-repo-token }}
+  # rollback-argocd:
+  #   if: ${{ always() && inputs.rollback-on-e2e-failure && needs.e2e-test.result == 'failure' }}
+  #   uses: ./.github/workflows/reusable-rollback-argocd.yml
+  #   needs: [build, update-argocd, e2e-test]
+  #   with:
+  #     prev-orchestrator-tag: ${{ needs.update-argocd.outputs.prev-orchestrator-tag }}
+  #     prev-auth-filter-tag: ${{ needs.update-argocd.outputs.prev-auth-filter-tag }}
+  #     prev-platform-tag: ${{ needs.update-argocd.outputs.prev-platform-tag }}
+  #     failed-tag: ${{ needs.build.outputs.semver-tag }}
+  #   secrets:
+  #     argocd-repo-token: ${{ secrets.argocd-repo-token }}
