@@ -10,6 +10,12 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
+type agentLookups struct {
+	byID    map[string]*orchestrator.Agent
+	bySlug  map[string]*orchestrator.Agent
+	manager *orchestrator.Agent
+}
+
 // ListAgents retrieves all agents for a workspace with current runtime status.
 func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
@@ -58,15 +64,22 @@ func resolveResponders(conversation *orchestrator.Conversation, agents []*orches
 	return nil
 }
 
-// mapAgentsBySlugs creates a lookup map from agent slugs to agent objects.
-func mapAgentsBySlugs(agents []*orchestrator.Agent) map[string]*orchestrator.Agent {
-	indexed := make(map[string]*orchestrator.Agent, len(agents))
+func newAgentLookups(agents []*orchestrator.Agent) agentLookups {
+	lookups := agentLookups{
+		byID:   make(map[string]*orchestrator.Agent, len(agents)),
+		bySlug: make(map[string]*orchestrator.Agent, len(agents)),
+	}
 	for _, agent := range agents {
-		if agent != nil {
-			indexed[agent.Slug] = agent
+		if agent == nil {
+			continue
+		}
+		lookups.byID[agent.ID] = agent
+		lookups.bySlug[agent.Slug] = agent
+		if agent.Role == orchestrator.AgentRoleManager {
+			lookups.manager = agent
 		}
 	}
-	return indexed
+	return lookups
 }
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
