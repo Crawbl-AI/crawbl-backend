@@ -26,30 +26,58 @@ func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.List
 	return agents, nil
 }
 
-// resolveResponder determines which agent should respond to a message.
-// Priority: conversation's agent > first mentioned agent > default (first agent).
-func resolveResponder(conversation *orchestrator.Conversation, agents []*orchestrator.Agent, mentions []orchestrator.Mention) *orchestrator.Agent {
-	// 1. Per-agent conversation — use the conversation's agent
+// resolveResponders determines which agents should respond to a swarm message.
+// Returns nil when routing is needed (no mentions, no per-agent conversation).
+func resolveResponders(conversation *orchestrator.Conversation, agents []*orchestrator.Agent, mentions []orchestrator.Mention) []*orchestrator.Agent {
+	// Per-agent conversation — use the conversation's agent.
 	if conversation.AgentID != nil {
 		for _, agent := range agents {
 			if agent.ID == *conversation.AgentID {
-				return agent
+				return []*orchestrator.Agent{agent}
 			}
 		}
 	}
 
-	// 2. Swarm conversation with mentions — use first mentioned agent
+	// Swarm conversation with mentions — resolve ALL mentioned agents.
 	if len(mentions) > 0 {
-		for _, agent := range agents {
-			if agent.ID == mentions[0].AgentID {
-				return agent
+		agentByID := mapAgentsByID(agents)
+		var responders []*orchestrator.Agent
+		seen := make(map[string]bool)
+		for _, m := range mentions {
+			if agent, ok := agentByID[m.AgentID]; ok && !seen[m.AgentID] {
+				responders = append(responders, agent)
+				seen[m.AgentID] = true
 			}
+		}
+		if len(responders) > 0 {
+			return responders
 		}
 	}
 
-	// 3. Swarm with no mention — return nil.
-	//    The base agent (Manager) handles it via the webhook with no agent_id.
+	// Swarm with no mentions — needs routing via Manager.
 	return nil
+}
+
+// agentSystemPrompt returns the system prompt for an agent by matching its slug
+// against the default agent blueprints. Returns empty string if not found.
+func agentSystemPrompt(agent *orchestrator.Agent, blueprints []orchestrator.DefaultAgentBlueprint) string {
+	for _, bp := range blueprints {
+		if bp.Slug == agent.Slug {
+			return bp.SystemPrompt
+		}
+	}
+	return ""
+}
+
+// mapAgentsBySlugs creates a lookup map from agent slugs to agent objects.
+func mapAgentsBySlugs(agents []*orchestrator.Agent) map[string]*orchestrator.Agent {
+	indexed := make(map[string]*orchestrator.Agent, len(agents))
+	for _, agent := range agents {
+		if agent != nil {
+			indexed[agent.Slug] = agent
+		}
+	}
+	return indexed
 }
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
