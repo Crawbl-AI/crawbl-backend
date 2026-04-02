@@ -27,7 +27,7 @@ spec:
   runtime:
     # ZeroClaw image — use digest pinning for reproducibility.
     # Updated via CI when crawbl-argocd-apps values change.
-    image: "registry.digitalocean.com/crawbl/zeroclaw@sha256:84788c94299c032d700237875b900cdd9296425f1af958ade86dcc6f4f307f87"
+    image: "registry.digitalocean.com/crawbl/zeroclaw@sha256:322ac19e3f9051a3d074906031f099944d9485aac2362bb53f0c4c30120d8ac0"
     # "daemon" keeps the pod running between requests (default).
     mode: daemon
     # Gateway port ZeroClaw listens on inside the pod.
