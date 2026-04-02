@@ -13,12 +13,20 @@ import (
 
 // routingDecision is the JSON shape Manager returns when acting as a router.
 // Agents is the ordered list of agent slugs that should respond to this message.
+// Mode controls execution: "parallel" (default) for independent factual answers,
+// "sequential" for discussions where each agent sees prior responses.
 // Response is an optional inline reply: Manager uses it when routing to itself
 // for a short/obvious answer, avoiding a second round-trip to the swarm.
 type routingDecision struct {
 	Agents   []string `json:"agents"`
+	Mode     string   `json:"mode,omitempty"`
 	Response *string  `json:"response,omitempty"`
 }
+
+const (
+	routingModeParallel   = "parallel"
+	routingModeSequential = "sequential"
+)
 
 // buildRoutingPrompt constructs the system prompt injected into Manager's routing
 // turn. The prompt is intentionally narrow: Manager must return ONLY a JSON object
@@ -41,14 +49,20 @@ func buildRoutingPrompt(agents []*orchestrator.Agent) string {
 		fmt.Fprintf(&sb, "- %s: %s\n", a.Slug, a.Description)
 	}
 
+	sb.WriteString("\nExecution modes:\n")
+	sb.WriteString("- \"parallel\": agents respond independently at the same time. Use for factual questions, simple tasks, or when agents don't need to see each other's answers.\n")
+	sb.WriteString("- \"sequential\": agents respond one by one, each seeing prior responses. Use for discussions, opinions, brainstorming, or debates where agents should react to each other.\n")
+
 	sb.WriteString("\nRules:\n")
 	sb.WriteString("1. Return ONLY valid JSON. No explanation, no markdown, no prose.\n")
-	sb.WriteString("2. If one or more sub-agents are the right fit, return: {\"agents\": [\"<slug>\", ...]}\n")
-	sb.WriteString("3. If only Manager should respond, return: {\"agents\": [\"manager\"]}\n")
-	sb.WriteString("4. If routing to manager solo AND the answer is short/obvious, include it inline:\n")
+	sb.WriteString("2. If one or more sub-agents are the right fit, return: {\"agents\": [\"<slug>\", ...], \"mode\": \"parallel\"}\n")
+	sb.WriteString("3. For discussions or opinions, return: {\"agents\": [\"<slug>\", ...], \"mode\": \"sequential\"}\n")
+	sb.WriteString("4. If only Manager should respond, return: {\"agents\": [\"manager\"]}\n")
+	sb.WriteString("5. If routing to manager solo AND the answer is short/obvious, include it inline:\n")
 	sb.WriteString("   {\"agents\": [\"manager\"], \"response\": \"<short answer here>\"}\n")
-	sb.WriteString("5. Do NOT include manager in the agents list together with sub-agents.\n")
-	sb.WriteString("6. Use only the slugs listed above or \"manager\".\n")
+	sb.WriteString("6. Do NOT include manager in the agents list together with sub-agents.\n")
+	sb.WriteString("7. Use only the slugs listed above or \"manager\".\n")
+	sb.WriteString("8. Default to \"sequential\" for opinions/discussions, \"parallel\" for factual/independent tasks.\n")
 
 	return sb.String()
 }

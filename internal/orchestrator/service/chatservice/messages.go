@@ -194,6 +194,8 @@ func (s *service) sendSwarmMessage(
 	responders := resolveResponders(conversation, agents, opts.Mentions)
 
 	var targetAgents []*orchestrator.Agent
+	routingMode := routingModeParallel // default for mentions and fallback
+
 	if responders != nil {
 		targetAgents = responders
 	} else {
@@ -229,7 +231,12 @@ func (s *service) sendSwarmMessage(
 			return []*orchestrator.Message{reply}, nil
 		}
 
-		// 4. Resolve slug strings to agent objects.
+		// 4. Extract execution mode from routing decision.
+		if decision.Mode == routingModeSequential {
+			routingMode = routingModeSequential
+		}
+
+		// 5. Resolve slug strings to agent objects.
 		for _, slug := range decision.Agents {
 			if agent := agentBySlug[slug]; agent != nil {
 				targetAgents = append(targetAgents, agent)
@@ -250,7 +257,24 @@ func (s *service) sendSwarmMessage(
 		}
 	}
 
-	// 5. Fire parallel goroutines per target agent.
+	// 5. Execute agent calls based on mode.
+	if routingMode == routingModeSequential {
+		return s.executeSequential(ctx, opts, conversation, runtimeState, targetAgents, agents, agentByID)
+	}
+	return s.executeParallel(ctx, opts, conversation, runtimeState, targetAgents, agents, agentByID)
+}
+
+// executeParallel fires all agent calls concurrently. Each agent responds
+// independently without seeing other agents' current responses.
+func (s *service) executeParallel(
+	ctx context.Context,
+	opts *orchestratorservice.SendMessageOpts,
+	conversation *orchestrator.Conversation,
+	runtimeState *orchestrator.RuntimeStatus,
+	targetAgents []*orchestrator.Agent,
+	agents []*orchestrator.Agent,
+	agentByID map[string]*orchestrator.Agent,
+) ([]*orchestrator.Message, *merrors.Error) {
 	type agentResult struct {
 		reply *orchestrator.Message
 		err   *merrors.Error
@@ -262,53 +286,13 @@ func (s *service) sendSwarmMessage(
 	for i, agent := range targetAgents {
 		go func(idx int, agent *orchestrator.Agent) {
 			defer wg.Done()
-
-			// Emit thinking status.
-			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
-
-			// Call ZeroClaw — per-agent session to prevent cross-contamination
-			// when agents respond in parallel. Each agent maintains its own
-			// conversation context and doesn't see other agents' current responses.
-			turns, callErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
-				Runtime:      runtimeState,
-				Message:      opts.Content.Text,
-				SessionID:    conversation.ID + ":" + agent.Slug,
-				SystemPrompt: agentSystemPrompt(agent, s.defaultAgents, agents),
-			})
-
-			if callErr != nil {
-				s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
-				results[idx] = agentResult{err: callErr}
-				return
-			}
-
-			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline))
-
-			// Collect text from all turns for this agent's response.
-			var text string
-			if len(turns) > 0 {
-				text = strings.TrimSpace(turns[0].Text)
-			}
-			// Silence is valid — agent chose not to respond. This is normal
-			// group chat behavior; not every agent speaks on every message.
-			if text == "" || text == "[SILENT]" {
-				return
-			}
-
-			// Persist this agent's reply independently.
-			reply, persistErr := s.persistAgentMessage(ctx, opts, conversation, agent, text, agentByID)
-			if persistErr != nil {
-				results[idx] = agentResult{err: persistErr}
-				return
-			}
-
-			results[idx] = agentResult{reply: reply}
+			reply, err := s.callAgent(ctx, opts, conversation, runtimeState, agent, agents, agentByID, "")
+			results[idx] = agentResult{reply: reply, err: err}
 		}(i, agent)
 	}
 
 	wg.Wait()
 
-	// 6. Collect successful replies.
 	var replies []*orchestrator.Message
 	var lastErr *merrors.Error
 	for _, r := range results {
@@ -320,14 +304,98 @@ func (s *service) sendSwarmMessage(
 	}
 
 	if len(replies) == 0 && lastErr != nil {
-		// All agents failed with errors (not silence) — return the last error.
 		return nil, lastErr
 	}
-
-	// Empty replies is valid — all agents chose to stay silent.
-	// The user message was already persisted and broadcast; the mobile
-	// sees it like a WhatsApp message that nobody responded to.
 	return replies, nil
+}
+
+// executeSequential calls agents one at a time. Each agent sees the prior
+// agents' responses as context, creating a natural discussion flow where
+// agents react to each other — like people in a WhatsApp group.
+func (s *service) executeSequential(
+	ctx context.Context,
+	opts *orchestratorservice.SendMessageOpts,
+	conversation *orchestrator.Conversation,
+	runtimeState *orchestrator.RuntimeStatus,
+	targetAgents []*orchestrator.Agent,
+	agents []*orchestrator.Agent,
+	agentByID map[string]*orchestrator.Agent,
+) ([]*orchestrator.Message, *merrors.Error) {
+	var replies []*orchestrator.Message
+	var priorResponses []string
+	var lastErr *merrors.Error
+
+	for _, agent := range targetAgents {
+		// Build context from prior responses so this agent can react.
+		var discussionContext string
+		if len(priorResponses) > 0 {
+			discussionContext = "\n\nOther agents have already responded:\n" + strings.Join(priorResponses, "\n") +
+				"\n\nReact to their responses if relevant, or add your own perspective. Say [SILENT] if nothing to add."
+		}
+
+		reply, err := s.callAgent(ctx, opts, conversation, runtimeState, agent, agents, agentByID, discussionContext)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if reply != nil {
+			replies = append(replies, reply)
+			priorResponses = append(priorResponses, "- "+agent.Name+": "+reply.Content.Text)
+		}
+	}
+
+	if len(replies) == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+	return replies, nil
+}
+
+// callAgent handles a single agent's webhook call: emits thinking status,
+// calls ZeroClaw, handles silence, persists and broadcasts the response.
+func (s *service) callAgent(
+	ctx context.Context,
+	opts *orchestratorservice.SendMessageOpts,
+	conversation *orchestrator.Conversation,
+	runtimeState *orchestrator.RuntimeStatus,
+	agent *orchestrator.Agent,
+	agents []*orchestrator.Agent,
+	agentByID map[string]*orchestrator.Agent,
+	extraContext string,
+) (*orchestrator.Message, *merrors.Error) {
+	// Emit thinking status.
+	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+
+	prompt := agentSystemPrompt(agent, s.defaultAgents, agents)
+	if extraContext != "" {
+		prompt += extraContext
+	}
+
+	turns, callErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
+		Runtime:      runtimeState,
+		Message:      opts.Content.Text,
+		SessionID:    conversation.ID + ":" + agent.Slug,
+		SystemPrompt: prompt,
+	})
+
+	if callErr != nil {
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
+		return nil, callErr
+	}
+
+	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline))
+
+	// Collect text from the first turn.
+	var text string
+	if len(turns) > 0 {
+		text = strings.TrimSpace(turns[0].Text)
+	}
+	// Silence is valid — agent chose not to respond.
+	if text == "" || text == "[SILENT]" {
+		return nil, nil
+	}
+
+	// Persist and broadcast.
+	return s.persistAgentMessage(ctx, opts, conversation, agent, text, agentByID)
 }
 
 // persistUserMessage saves the user message in its own transaction and
