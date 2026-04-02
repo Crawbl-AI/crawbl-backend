@@ -58,9 +58,10 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		agentBySlug[agent.Slug] = agent
 	}
 
-	// Signal agents as processing.
-	// For swarm: signal all agents (we don't know which will respond).
-	// For per-agent: signal only the target agent.
+	// Signal the entry-point agent as processing.
+	// For swarm: Manager (or the @mentioned agent) — sub-agents may respond
+	// via delegation, but we only show the entry-point as typing.
+	// For per-agent: the conversation's assigned agent.
 	typingAgents := s.startTyping(ctx, opts.WorkspaceID, conversation, agents, responder)
 
 	// Call ZeroClaw.
@@ -91,11 +92,18 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 // startTyping emits typing indicators and returns the agents that were signaled.
 func (s *service) startTyping(ctx context.Context, workspaceID string, conversation *orchestrator.Conversation, agents []*orchestrator.Agent, responder *orchestrator.Agent) []*orchestrator.Agent {
 	if conversation.Type == orchestrator.ConversationTypeSwarm {
-		for _, agent := range agents {
-			s.broadcaster.EmitAgentStatus(ctx, workspaceID, agent.ID, string(orchestrator.AgentStatusBusy))
-			s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, agent.ID, true)
+		// In swarm mode, only signal the entry-point agent as typing.
+		// Manager (agents[0]) is always the entry point when no @mention.
+		target := responder
+		if target == nil && len(agents) > 0 {
+			target = agents[0]
 		}
-		return agents
+		if target != nil {
+			s.broadcaster.EmitAgentStatus(ctx, workspaceID, target.ID, string(orchestrator.AgentStatusBusy))
+			s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, target.ID, true)
+			return []*orchestrator.Agent{target}
+		}
+		return nil
 	}
 	if responder != nil {
 		s.broadcaster.EmitAgentStatus(ctx, workspaceID, responder.ID, string(orchestrator.AgentStatusBusy))

@@ -109,7 +109,9 @@ func TestBuildConfigTOML_AgentInheritsProviderModel(t *testing.T) {
 
 func TestBuildConfigTOML_NoAgents(t *testing.T) {
 	cfg := DefaultConfig()
-	// Agents is nil by default — no agents section expected.
+	// DefaultConfig now includes default agents; explicitly clear them
+	// to test the "no agents configured" path.
+	cfg.Agents = nil
 
 	sw := minimalSwarm("test-user", 42617)
 
@@ -119,7 +121,7 @@ func TestBuildConfigTOML_NoAgents(t *testing.T) {
 	}
 
 	if strings.Contains(out, "[agents") {
-		t.Errorf("expected no [agents] section when Agents is empty, got:\n%s", out)
+		t.Errorf("expected no [agents] section when Agents is nil, got:\n%s", out)
 	}
 
 	// Also verify empty map produces no agents section.

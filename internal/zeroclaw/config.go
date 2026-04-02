@@ -63,6 +63,32 @@ func DefaultConfig() *ZeroClawConfig {
 			// Derived from the tool catalog in tools.go — single source of truth.
 			AutoApprove: DefaultAutoApproveList(),
 		},
+		Agents: map[string]ZeroClawAgent{
+			"wally": {
+				SystemPrompt: "You are Wally. Be helpful, direct, and brief. Answer in 1-3 sentences. Only elaborate when asked.",
+				Agentic:      true,
+				AllowedTools: []string{
+					"web_search", "web_fetch", "file_read", "file_write",
+					"memory_recall", "memory_store",
+					"orchestrator__send_push_notification",
+					"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+					"orchestrator__list_conversations", "orchestrator__search_past_messages",
+					"orchestrator__create_agent_history",
+				},
+			},
+			"eve": {
+				SystemPrompt: "You are Eve. Be creative, clear, and concise. Draft content efficiently. Don't over-explain.",
+				Agentic:      true,
+				AllowedTools: []string{
+					"web_search", "web_fetch", "file_read", "file_write",
+					"memory_recall", "memory_store",
+					"orchestrator__send_push_notification",
+					"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+					"orchestrator__list_conversations", "orchestrator__search_past_messages",
+					"orchestrator__create_agent_history",
+				},
+			},
+		},
 	}
 }
 
