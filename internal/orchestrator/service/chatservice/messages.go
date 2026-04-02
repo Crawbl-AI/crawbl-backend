@@ -252,12 +252,13 @@ func (s *service) sendSwarmMessage(
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusBusy))
 			s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, agent.ID, true)
 
-			// Call ZeroClaw — shared session, agent-specific system prompt, no AgentID
-			// (shared session means ZeroClaw uses the conversation context).
+			// Call ZeroClaw — per-agent session to prevent cross-contamination
+			// when agents respond in parallel. Each agent maintains its own
+			// conversation context and doesn't see other agents' current responses.
 			turns, callErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 				Runtime:      runtimeState,
 				Message:      opts.Content.Text,
-				SessionID:    conversation.ID,
+				SessionID:    conversation.ID + ":" + agent.Slug,
 				SystemPrompt: agentSystemPrompt(agent, s.defaultAgents),
 			})
 
