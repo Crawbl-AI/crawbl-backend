@@ -77,7 +77,7 @@ func buildBootstrapContainer(bootstrapImage, secretName string) corev1.Container
 	container := corev1.Container{
 		Name:            "bootstrap-config",
 		Image:           bootstrapImage,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/crawbl", "platform", "userswarm", "bootstrap"},
 		Args: []string{
 			"--bootstrap-config=/bootstrap/config.toml",
