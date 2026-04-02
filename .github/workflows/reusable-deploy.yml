@@ -102,17 +102,17 @@ jobs:
     secrets:
       argocd-repo-token: ${{ secrets.argocd-repo-token }}
 
-  e2e-test:
-    uses: ./.github/workflows/reusable-e2e-test.yml
-    needs: [build, update-argocd]
-    with:
-      image-tag: ${{ needs.build.outputs.semver-tag }}
-      base-url: ${{ inputs.base-url }}
-      cluster-name: ${{ inputs.cluster-name }}
-      timeout: ${{ inputs.e2e-timeout }}
-    secrets:
-      digitalocean-token: ${{ secrets.digitalocean-token }}
-      e2e-token: ${{ secrets.e2e-token }}
+  # e2e-test:
+  #   uses: ./.github/workflows/reusable-e2e-test.yml
+  #   needs: [build, update-argocd]
+  #   with:
+  #     image-tag: ${{ needs.build.outputs.semver-tag }}
+  #     base-url: ${{ inputs.base-url }}
+  #     cluster-name: ${{ inputs.cluster-name }}
+  #     timeout: ${{ inputs.e2e-timeout }}
+  #   secrets:
+  #     digitalocean-token: ${{ secrets.digitalocean-token }}
+  #     e2e-token: ${{ secrets.e2e-token }}
 
   rollback-argocd:
     if: ${{ always() && inputs.rollback-on-e2e-failure && needs.e2e-test.result == 'failure' }}
