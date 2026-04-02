@@ -88,7 +88,7 @@ func (s *service) routeMessage(
 	turns, mErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 		Runtime:      runtimeState,
 		Message:      message,
-		SessionID:    conversationID,
+		SessionID:    conversationID + ":routing",
 		SystemPrompt: routingPrompt,
 	})
 	if mErr != nil {
