@@ -325,11 +325,18 @@ func (s *service) executeSequential(
 	var priorResponses []string
 	var lastErr *merrors.Error
 
+	const maxPriorContext = 3 // keep only the last N responses to avoid bloating the context window
+
 	for _, agent := range targetAgents {
-		// Build context from prior responses so this agent can react.
+		// Build context from recent prior responses so this agent can react.
+		// Cap to the last maxPriorContext entries to avoid eating the context window.
 		var discussionContext string
 		if len(priorResponses) > 0 {
-			discussionContext = "\n\nOther agents have already responded:\n" + strings.Join(priorResponses, "\n") +
+			recent := priorResponses
+			if len(recent) > maxPriorContext {
+				recent = recent[len(recent)-maxPriorContext:]
+			}
+			discussionContext = "\n\nOther agents have already responded:\n" + strings.Join(recent, "\n") +
 				"\n\nReact to their responses if relevant, or add your own perspective. Say [SILENT] if nothing to add."
 		}
 
