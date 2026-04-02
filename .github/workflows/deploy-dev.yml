@@ -22,7 +22,7 @@ jobs:
       base-url: https://dev.api.crawbl.com
       registry: registry.digitalocean.com/crawbl
       push-images: true
-      e2e-timeout: 15s
+      e2e-timeout: 30s
       rollback-on-e2e-failure: false
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}

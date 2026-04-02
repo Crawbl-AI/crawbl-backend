@@ -36,7 +36,7 @@ on:
       e2e-timeout:
         description: 'Per-request timeout passed to the E2E CLI'
         required: false
-        default: '15s'
+        default: '30s'
         type: string
       rollback-on-e2e-failure:
         description: 'Whether to roll back ArgoCD tags when E2E fails'

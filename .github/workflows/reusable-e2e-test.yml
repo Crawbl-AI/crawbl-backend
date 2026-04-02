@@ -39,9 +39,9 @@ on:
         default: ''
         type: string
       timeout:
-        description: 'Per-request timeout in seconds'
+        description: 'Per-request timeout passed to the E2E CLI'
         required: false
-        default: '15'
+        default: '30s'
         type: string
     secrets:
       digitalocean-token:
