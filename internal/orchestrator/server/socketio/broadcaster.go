@@ -46,19 +46,15 @@ func (b *Broadcaster) EmitMessageUpdated(ctx context.Context, workspaceID string
 	})
 }
 
-// EmitAgentTyping emits an agent.typing event indicating whether an agent is typing.
-func (b *Broadcaster) EmitAgentTyping(ctx context.Context, workspaceID string, conversationID, agentID string, isTyping bool) {
-	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentTyping, realtime.AgentTypingPayload{
-		ConversationID: conversationID,
-		AgentID:        agentID,
-		IsTyping:       isTyping,
-	})
-}
-
-// EmitAgentStatus emits an agent.status event when an agent's availability changes.
-func (b *Broadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string) {
-	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentStatus, realtime.AgentStatusPayload{
+// EmitAgentStatus emits an agent.status event. Optional conversationID ties
+// the status to a specific conversation (e.g. "reading", "thinking").
+func (b *Broadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string, conversationID ...string) {
+	payload := realtime.AgentStatusPayload{
 		AgentID: agentID,
 		Status:  status,
-	})
+	}
+	if len(conversationID) > 0 {
+		payload.ConversationID = conversationID[0]
+	}
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentStatus, payload)
 }

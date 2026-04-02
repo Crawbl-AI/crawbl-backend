@@ -60,8 +60,11 @@ const (
 	// AgentStatusOnline indicates the agent is available and ready to handle requests.
 	AgentStatusOnline AgentStatus = "online"
 
-	// AgentStatusBusy indicates the agent is currently processing a request.
-	AgentStatusBusy AgentStatus = "busy"
+	// AgentStatusReading indicates the agent is evaluating the message (routing phase).
+	AgentStatusReading AgentStatus = "reading"
+
+	// AgentStatusThinking indicates the agent is generating a response (LLM inference).
+	AgentStatusThinking AgentStatus = "thinking"
 
 	// AgentStatusPending indicates the agent's runtime is provisioning or starting up.
 	AgentStatusPending AgentStatus = "pending"
@@ -709,7 +712,8 @@ var DefaultAgents = []DefaultAgentBlueprint{
 		SystemPrompt: "You are Manager, the coordinator of this group chat. " +
 			"Only reply if the message needs coordination, a decision, or a direct answer. " +
 			"Stay calm, decisive, and brief. Never reply to every message — real managers don't. " +
-			"If you have nothing useful to add, respond with [SILENT].",
+			"If you have nothing useful to add, respond with [SILENT]. " +
+			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
 		Description:  "Your swarm coordinator. Delegates tasks and manages the team.",
 		AllowedTools: []string{
 			"web_search_tool", "web_fetch", "file_read", "file_write",
@@ -728,7 +732,8 @@ var DefaultAgents = []DefaultAgentBlueprint{
 			"Only speak when you have a relevant opinion, insight, or something genuinely helpful. " +
 			"Keep replies short and direct — 1-3 sentences. " +
 			"If the topic isn't relevant to you or you have nothing to add, respond with [SILENT]. " +
-			"Real people don't reply to every message.",
+			"Real people don't reply to every message. " +
+			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
 		Description:  "A versatile assistant that handles research, writing, analysis, and general help.",
 		AllowedTools: []string{
 			"web_search_tool", "web_fetch", "file_read", "file_write",
@@ -746,7 +751,8 @@ var DefaultAgents = []DefaultAgentBlueprint{
 			"Reply only when you have something creative, empathetic, or clarifying to add. " +
 			"Ask questions back to the group naturally. Be clear and concise. " +
 			"If you have nothing useful to add, respond with [SILENT]. " +
-			"Silence is normal — real people don't reply to every message.",
+			"Silence is normal — real people don't reply to every message. " +
+			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
 		Description:  "A creative and communication specialist that handles content creation, email drafting, brainstorming, summarization, and presentation prep.",
 		AllowedTools: []string{
 			"web_search_tool", "web_fetch", "file_read", "file_write",

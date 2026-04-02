@@ -182,7 +182,7 @@ func (s *service) sendSwarmMessage(
 	runtimeState *orchestrator.RuntimeStatus,
 ) ([]*orchestrator.Message, *merrors.Error) {
 	// 1. Persist user message first so it's visible immediately.
-	userMsg, mErr := s.persistUserMessage(ctx, opts, conversation)
+	_, mErr := s.persistUserMessage(ctx, opts, conversation)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -197,7 +197,19 @@ func (s *service) sendSwarmMessage(
 	if responders != nil {
 		targetAgents = responders
 	} else {
-		// No mentions — ask Manager to route.
+		// No mentions — ask the manager-role agent to route.
+		// Show it as reading during routing so the mobile has feedback.
+		var managerAgent *orchestrator.Agent
+		for _, a := range agents {
+			if a.Role == orchestrator.AgentRoleManager {
+				managerAgent = a
+				break
+			}
+		}
+		if managerAgent != nil {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, managerAgent.ID, string(orchestrator.AgentStatusReading), conversation.ID)
+		}
+
 		decision, routeErr := s.routeMessage(ctx, runtimeState, conversation.ID, opts.Content.Text, agents)
 		if routeErr != nil {
 			slog.WarnContext(ctx, "swarm routing failed, falling back to manager",
@@ -209,8 +221,7 @@ func (s *service) sendSwarmMessage(
 		}
 
 		// 3. Check for inline manager response.
-		if len(decision.Agents) == 1 && decision.Agents[0] == "manager" && decision.Response != nil {
-			managerAgent := agentBySlug["manager"]
+		if len(decision.Agents) == 1 && decision.Agents[0] == "manager" && decision.Response != nil && managerAgent != nil {
 			reply, mErr := s.persistAgentMessage(ctx, opts, conversation, managerAgent, *decision.Response, agentByID)
 			if mErr != nil {
 				return nil, mErr
@@ -227,11 +238,15 @@ func (s *service) sendSwarmMessage(
 
 		// Safety net: if all slugs were invalid, fall back to manager.
 		if len(targetAgents) == 0 {
-			if manager := agentBySlug["manager"]; manager != nil {
-				targetAgents = []*orchestrator.Agent{manager}
+			if managerAgent != nil {
+				targetAgents = []*orchestrator.Agent{managerAgent}
 			} else {
 				return nil, merrors.ErrAgentNotFound
 			}
+		}
+		// Clear Manager's routing typing indicator now that routing is done.
+		if managerAgent != nil {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, managerAgent.ID, string(orchestrator.AgentStatusOnline))
 		}
 	}
 
@@ -248,9 +263,8 @@ func (s *service) sendSwarmMessage(
 		go func(idx int, agent *orchestrator.Agent) {
 			defer wg.Done()
 
-			// Emit typing + busy.
-			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusBusy))
-			s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, agent.ID, true)
+			// Emit thinking status.
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 
 			// Call ZeroClaw — per-agent session to prevent cross-contamination
 			// when agents respond in parallel. Each agent maintains its own
@@ -261,9 +275,6 @@ func (s *service) sendSwarmMessage(
 				SessionID:    conversation.ID + ":" + agent.Slug,
 				SystemPrompt: agentSystemPrompt(agent, s.defaultAgents, agents),
 			})
-
-			// Clear typing.
-			s.broadcaster.EmitAgentTyping(ctx, opts.WorkspaceID, conversation.ID, agent.ID, false)
 
 			if callErr != nil {
 				s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
@@ -308,15 +319,14 @@ func (s *service) sendSwarmMessage(
 		}
 	}
 
-	if len(replies) == 0 {
-		// All agents failed — return the last error encountered.
-		if lastErr != nil {
-			return nil, lastErr
-		}
-		return nil, merrors.NewServerErrorText("all agents failed to respond")
+	if len(replies) == 0 && lastErr != nil {
+		// All agents failed with errors (not silence) — return the last error.
+		return nil, lastErr
 	}
 
-	_ = userMsg // user message already persisted and broadcast
+	// Empty replies is valid — all agents chose to stay silent.
+	// The user message was already persisted and broadcast; the mobile
+	// sees it like a WhatsApp message that nobody responded to.
 	return replies, nil
 }
 
@@ -423,15 +433,13 @@ func (s *service) startTyping(ctx context.Context, workspaceID string, conversat
 			target = agents[0]
 		}
 		if target != nil {
-			s.broadcaster.EmitAgentStatus(ctx, workspaceID, target.ID, string(orchestrator.AgentStatusBusy))
-			s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, target.ID, true)
+			s.broadcaster.EmitAgentStatus(ctx, workspaceID, target.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 			return []*orchestrator.Agent{target}
 		}
 		return nil
 	}
 	if responder != nil {
-		s.broadcaster.EmitAgentStatus(ctx, workspaceID, responder.ID, string(orchestrator.AgentStatusBusy))
-		s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, responder.ID, true)
+		s.broadcaster.EmitAgentStatus(ctx, workspaceID, responder.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 		return []*orchestrator.Agent{responder}
 	}
 	return nil
@@ -439,9 +447,8 @@ func (s *service) startTyping(ctx context.Context, workspaceID string, conversat
 
 // stopTyping clears typing indicators for the given agents.
 // Only used by sendDirectMessage.
-func (s *service) stopTyping(ctx context.Context, workspaceID string, conversation *orchestrator.Conversation, agents []*orchestrator.Agent) {
+func (s *service) stopTyping(ctx context.Context, workspaceID string, _ *orchestrator.Conversation, agents []*orchestrator.Agent) {
 	for _, agent := range agents {
-		s.broadcaster.EmitAgentTyping(ctx, workspaceID, conversation.ID, agent.ID, false)
 		s.broadcaster.EmitAgentStatus(ctx, workspaceID, agent.ID, string(orchestrator.AgentStatusOnline))
 	}
 }

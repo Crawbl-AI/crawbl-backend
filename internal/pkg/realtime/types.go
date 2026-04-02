@@ -15,11 +15,8 @@ type Broadcaster interface {
 	// EmitMessageUpdated emits a message.updated event for a modified message.
 	EmitMessageUpdated(ctx context.Context, workspaceID string, data any)
 
-	// EmitAgentTyping emits an agent.typing event.
-	EmitAgentTyping(ctx context.Context, workspaceID string, conversationID, agentID string, isTyping bool)
-
-	// EmitAgentStatus emits an agent.status event.
-	EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string)
+	// EmitAgentStatus emits an agent.status event with optional conversation context.
+	EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string, conversationID ...string)
 }
 
 // NopBroadcaster is a no-op implementation used when real-time is not configured.
@@ -29,7 +26,6 @@ type NopBroadcaster struct{}
 const (
 	EventMessageNew     = "message.new"
 	EventMessageUpdated = "message.updated"
-	EventAgentTyping    = "agent.typing"
 	EventAgentStatus    = "agent.status"
 )
 
@@ -38,15 +34,11 @@ type MessageEventPayload struct {
 	Message any `json:"message"`
 }
 
-// AgentTypingPayload is the flat payload for agent.typing events.
-type AgentTypingPayload struct {
-	ConversationID string `json:"conversation_id"`
-	AgentID        string `json:"agent_id"`
-	IsTyping       bool   `json:"is_typing"`
-}
-
 // AgentStatusPayload is the flat payload for agent.status events.
+// ConversationID is set when the status is tied to a specific conversation
+// (e.g. "reading", "thinking"). Omitted for workspace-wide statuses like "online".
 type AgentStatusPayload struct {
-	AgentID string `json:"agent_id"`
-	Status  string `json:"status"`
+	AgentID        string `json:"agent_id"`
+	Status         string `json:"status"`
+	ConversationID string `json:"conversation_id,omitempty"`
 }
