@@ -345,7 +345,7 @@ func (s *service) callAgent(
 
 	turns, callErr := s.runtimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
-		Message:   runtimeMessage(opts.Content.Text, extraContext),
+		Message:   runtimeMessage(normalizeRuntimeMessage(opts.Content.Text, opts.Mentions), extraContext),
 		SessionID: conversation.ID,
 		AgentID:   runtimeAgentID(agent),
 	})
@@ -550,6 +550,61 @@ func runtimeMessage(message, extraContext string) string {
 		return trimmed
 	}
 	return trimmed + extraContext
+}
+
+// normalizeRuntimeMessage strips structured @mention spans before forwarding the
+// message to ZeroClaw. The orchestrator has already resolved the target agent,
+// so the runtime should receive only the user instruction rather than mobile
+// chat routing syntax like "@Wally ...".
+func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) string {
+	trimmed := strings.TrimSpace(message)
+	if len(mentions) == 0 || trimmed == "" {
+		return trimmed
+	}
+
+	runes := []rune(message)
+	drop := make([]bool, len(runes))
+
+	for _, mention := range mentions {
+		if mention.Offset < 0 || mention.Length <= 0 || mention.Offset >= len(runes) {
+			continue
+		}
+
+		end := mention.Offset + mention.Length
+		if end > len(runes) {
+			end = len(runes)
+		}
+		for i := mention.Offset; i < end; i++ {
+			drop[i] = true
+		}
+	}
+
+	var out []rune
+	lastWasSpace := false
+	for i, r := range runes {
+		if drop[i] {
+			continue
+		}
+		if r == '\t' || r == '\n' || r == '\r' {
+			r = ' '
+		}
+		if r == ' ' {
+			if lastWasSpace || len(out) == 0 {
+				continue
+			}
+			lastWasSpace = true
+			out = append(out, r)
+			continue
+		}
+		lastWasSpace = false
+		out = append(out, r)
+	}
+
+	normalized := strings.TrimSpace(string(out))
+	if normalized == "" {
+		return trimmed
+	}
+	return normalized
 }
 
 // ZeroClaw treats an empty agent_id as "use the default manager entrypoint".

@@ -71,8 +71,8 @@ func buildRoutingPrompt(agents []*orchestrator.Agent) string {
 // It injects a routing-only system prompt so Manager acts purely as a dispatcher
 // rather than generating a full answer in this turn.
 //
-// The real conversation SessionID is reused so ZeroClaw keeps one coherent
-// conversation thread for routing and the follow-up agent turns.
+// Routing uses a dedicated SessionID suffix so Manager's JSON routing output
+// does not pollute the main swarm conversation history seen by sub-agents.
 //
 // Falls back to ["manager"] on any parse failure or if all returned slugs are
 // unknown — guarantees the caller always gets at least one valid agent to invoke.
