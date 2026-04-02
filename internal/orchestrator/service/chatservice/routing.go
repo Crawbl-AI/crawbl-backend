@@ -48,9 +48,11 @@ func buildRoutingPrompt(agents []*orchestrator.Agent) string {
 	sb.WriteString("1. Return ONLY valid JSON. No explanation, no markdown, no prose.\n")
 	sb.WriteString("2. Simple (one agent answers): {\"type\":\"simple\"}\n")
 	sb.WriteString("3. Group (multiple agents needed): {\"type\":\"group\",\"tasks\":[{\"slug\":\"<agent>\",\"task\":\"<specific task>\"}]}\n")
-	sb.WriteString("4. Default to simple unless the task clearly needs multiple perspectives or skills.\n")
-	sb.WriteString("5. For group: assign a SPECIFIC task to each agent, not the raw user message.\n")
-	sb.WriteString("6. Use only the slugs listed above.\n")
+	sb.WriteString("4. Use GROUP when the user addresses multiple agents — words like \"both\", \"all\", \"them\", \"everyone\", \"team\", \"guys\", \"вы\", \"ребят\", \"команда\", or any plural reference to agents.\n")
+	sb.WriteString("5. Use GROUP when the task naturally benefits from multiple perspectives (research + creative, analysis + writing, etc.).\n")
+	sb.WriteString("6. Use SIMPLE only for straightforward single-skill questions (facts, quick tasks, chat).\n")
+	sb.WriteString("7. For group: assign a SPECIFIC task to each agent, not the raw user message.\n")
+	sb.WriteString("8. Use only the slugs listed above.\n")
 
 	return sb.String()
 }
