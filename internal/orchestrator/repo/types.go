@@ -514,6 +514,10 @@ type MessageRepo interface {
 	GetLatestByConversationID(ctx context.Context, sess SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error)
 	// Save persists message data, creating a new record or updating an existing one.
 	Save(ctx context.Context, sess SessionRunner, message *orchestrator.Message) *merrors.Error
+	// FailStalePending marks all messages with status "pending" created before
+	// the cutoff time as "failed". Returns the number of affected rows.
+	// Used by the background cleanup to handle orphaned streaming placeholders.
+	FailStalePending(ctx context.Context, sess SessionRunner, cutoff time.Time) (int, *merrors.Error)
 }
 
 // ToolsRepo defines the repository interface for tool catalog operations.

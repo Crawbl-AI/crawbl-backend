@@ -70,6 +70,38 @@ func (c *fakeClient) DeleteRuntime(_ context.Context, _ string) *merrors.Error {
 	return nil // no-op for fake client
 }
 
+// SendTextStream returns a channel with a single fake streaming response.
+func (f *fakeClient) SendTextStream(_ context.Context, opts *SendTextOpts) (<-chan StreamChunk, *merrors.Error) {
+	if opts == nil {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	ch := make(chan StreamChunk, 4)
+	go func() {
+		defer close(ch)
+		agentID := opts.AgentID
+		if agentID == "" {
+			agentID = "manager"
+		}
+		text := f.replyPrefix + ": " + opts.Message
+		// Simulate streaming by splitting into chunks.
+		words := strings.Fields(text)
+		for _, word := range words {
+			ch <- StreamChunk{
+				Type:    StreamEventChunk,
+				AgentID: agentID,
+				Delta:   word + " ",
+			}
+		}
+		ch <- StreamChunk{
+			Type:    StreamEventDone,
+			AgentID: agentID,
+			Model:   "fake",
+		}
+	}()
+	return ch, nil
+}
+
 // SendText echoes the input message back to the caller with the configured
 // reply prefix.  No network call is made.
 //

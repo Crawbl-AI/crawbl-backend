@@ -132,6 +132,27 @@ func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orches
 	return message, nil
 }
 
+// FailStalePending marks all messages with status "pending" created before the
+// cutoff time as "failed". Returns the number of affected rows.
+// Returns ErrInvalidInput if sess is nil.
+func (r *messageRepo) FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error) {
+	if sess == nil {
+		return 0, merrors.ErrInvalidInput
+	}
+
+	result, err := sess.Update("messages").
+		Set("status", "failed").
+		Set("updated_at", time.Now().UTC()).
+		Where("status = ? AND created_at < ?", "pending", cutoff).
+		ExecContext(ctx)
+	if err != nil {
+		return 0, merrors.WrapStdServerError(err, "fail stale pending messages")
+	}
+
+	n, _ := result.RowsAffected()
+	return int(n), nil
+}
+
 // Save persists message data to the database.
 // It handles both creating new messages and updating existing ones by checking
 // if a message with the same ID exists first.

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/spf13/cobra"
+	"github.com/zishang520/socket.io/v2/socket"
 
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
@@ -82,7 +83,7 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	broadcaster, socketIOHandler, cleanupRT := buildRealtime(logger, httpMiddleware)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, httpMiddleware)
 	defer cleanupRT()
 
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
@@ -92,10 +93,17 @@ func runServer(ctx context.Context) error {
 	agentPromptsRepo := agentpromptsrepo.New()
 	agentHistoryRepo := agenthistoryrepo.New()
 
+	router := chatservice.NewRouter(chatservice.RouterConfig{
+		APIKey:  strings.TrimSpace(os.Getenv("CRAWBL_ROUTING_API_KEY")),
+		Model:   envOrDefault("CRAWBL_ROUTING_MODEL", "gpt-5-mini"),
+		Timeout: durationFromEnv("CRAWBL_ROUTING_TIMEOUT", 5*time.Second),
+	}, logger)
+
 	chatService := chatservice.New(
+		db,
 		workspaceRepo, agentRepo, conversationRepo, messageRepo,
 		toolsRepo, agentSettingsRepo, agentPromptsRepo, agentHistoryRepo,
-		runtimeClient, broadcaster,
+		runtimeClient, broadcaster, router,
 	)
 	agentService := agentservice.New(
 		workspaceRepo, agentRepo,
@@ -103,6 +111,20 @@ func runServer(ctx context.Context) error {
 		runtimeClient,
 	)
 	integrationService := integrationservice.New(logger)
+
+	// Start background cleanup of orphaned pending messages.
+	chatService.StartPendingMessageCleanup(ctx)
+
+	// Register Socket.IO message.send handler now that services are available.
+	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
+	if ioServer != nil {
+		socketio.RegisterMessageHandler(ioServer, &socketio.Config{
+			Logger:      logger,
+			DB:          db,
+			ChatService: chatService,
+			AuthService: authService,
+		})
+	}
 
 	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo)
 
@@ -271,18 +293,18 @@ func buildMCPHandler(
 	return handler
 }
 
-func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig) (realtime.Broadcaster, http.Handler, func()) {
+func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	addr := strings.TrimSpace(os.Getenv("CRAWBL_REDIS_ADDR"))
 	if addr == "" {
 		logger.Info("realtime disabled: CRAWBL_REDIS_ADDR not set")
-		return realtime.NopBroadcaster{}, nil, func() {}
+		return realtime.NopBroadcaster{}, nil, nil, func() {}
 	}
 
 	redisCfg := redisclient.ConfigFromEnv("CRAWBL_")
 	rc, err := redisclient.New(redisCfg)
 	if err != nil {
 		logger.Error("failed to connect to Redis, falling back to no realtime", "error", err)
-		return realtime.NopBroadcaster{}, nil, func() {}
+		return realtime.NopBroadcaster{}, nil, nil, func() {}
 	}
 	logger.Info("redis connected", slog.String("addr", redisCfg.Addr))
 
@@ -300,5 +322,5 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 	}
 
 	logger.Info("realtime enabled: socket.io + redis")
-	return broadcaster, handler, cleanup
+	return broadcaster, handler, io, cleanup
 }

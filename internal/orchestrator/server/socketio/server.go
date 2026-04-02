@@ -183,6 +183,41 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 	})
 }
 
+// RegisterMessageHandler adds the message.send event handler to the Socket.IO server.
+// This is called separately from NewServer because the ChatService and AuthService
+// are created after the Socket.IO server (which provides the Broadcaster that
+// ChatService depends on — breaking the circular dependency).
+//
+// Registers a second "connection" listener on the /v1 namespace. Socket.IO
+// supports multiple listeners, so this works alongside the existing connection
+// handler that manages workspace subscriptions.
+func RegisterMessageHandler(io *socket.Server, cfg *Config) {
+	if cfg.DB == nil || cfg.ChatService == nil || cfg.AuthService == nil {
+		cfg.Logger.Info("socketio: message.send handler disabled (missing DB, ChatService, or AuthService)")
+		return
+	}
+
+	h := &messageHandler{
+		db:          cfg.DB,
+		chatService: cfg.ChatService,
+		authService: cfg.AuthService,
+		logger:      cfg.Logger,
+	}
+
+	nsp := io.Of(socketNamespace, nil)
+	nsp.On("connection", func(args ...any) {
+		s, ok := args[0].(*socket.Socket)
+		if !ok {
+			return
+		}
+		s.On(eventMessageSend, func(msgArgs ...any) {
+			h.handleMessageSend(s, msgArgs...)
+		})
+	})
+
+	cfg.Logger.Info("socketio: message.send handler registered")
+}
+
 // parseWorkspaceIDs extracts workspace IDs from a workspace.subscribe/unsubscribe event.
 func parseWorkspaceIDs(args []any) []string {
 	if len(args) == 0 {

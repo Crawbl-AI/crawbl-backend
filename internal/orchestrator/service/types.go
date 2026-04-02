@@ -423,6 +423,11 @@ type ChatService interface {
 	//
 	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
 	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
+
+	// StartPendingMessageCleanup launches a background goroutine that periodically
+	// marks stale pending messages as failed. The goroutine stops when ctx is cancelled.
+	// Call this once at server startup.
+	StartPendingMessageCleanup(ctx context.Context)
 }
 
 // AgentService defines the interface for agent-specific operations.

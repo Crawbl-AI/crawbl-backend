@@ -74,6 +74,9 @@ const (
 
 	// AgentStatusOffline indicates the agent is not available.
 	AgentStatusOffline AgentStatus = "offline"
+
+	// AgentStatusWriting indicates the agent is actively streaming a response (first token received).
+	AgentStatusWriting AgentStatus = "writing"
 )
 
 // ConversationType represents the type of conversation in a workspace.

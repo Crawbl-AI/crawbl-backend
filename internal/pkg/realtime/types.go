@@ -17,6 +17,15 @@ type Broadcaster interface {
 
 	// EmitAgentStatus emits an agent.status event with optional conversation context.
 	EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string, conversationID ...string)
+
+	// EmitMessageChunk emits a message.chunk event for a streamed text token.
+	EmitMessageChunk(ctx context.Context, workspaceID string, payload MessageChunkPayload)
+
+	// EmitMessageDone emits a message.done event when streaming is complete.
+	EmitMessageDone(ctx context.Context, workspaceID string, payload MessageDonePayload)
+
+	// EmitAgentTool emits an agent.tool event for tool call activity during streaming.
+	EmitAgentTool(ctx context.Context, workspaceID string, payload AgentToolPayload)
 }
 
 // NopBroadcaster is a no-op implementation used when real-time is not configured.
@@ -41,4 +50,36 @@ type AgentStatusPayload struct {
 	AgentID        string `json:"agent_id"`
 	Status         string `json:"status"`
 	ConversationID string `json:"conversation_id,omitempty"`
+}
+
+// Streaming event names for token-by-token delivery.
+const (
+	EventMessageChunk = "message.chunk"
+	EventMessageDone  = "message.done"
+	EventAgentTool    = "agent.tool"
+)
+
+// MessageChunkPayload is emitted for each streamed text token.
+type MessageChunkPayload struct {
+	MessageID      string `json:"message_id"`
+	ConversationID string `json:"conversation_id"`
+	AgentID        string `json:"agent_id"`
+	Chunk          string `json:"chunk"`
+}
+
+// MessageDonePayload signals stream completion.
+type MessageDonePayload struct {
+	MessageID      string `json:"message_id"`
+	ConversationID string `json:"conversation_id"`
+	AgentID        string `json:"agent_id"`
+	Status         string `json:"status"` // "delivered" or "failed"
+}
+
+// AgentToolPayload reports tool call activity during streaming.
+type AgentToolPayload struct {
+	AgentID        string `json:"agent_id"`
+	ConversationID string `json:"conversation_id"`
+	Tool           string `json:"tool"`
+	Status         string `json:"status"`          // "running" or "done"
+	Query          string `json:"query,omitempty"`
 }

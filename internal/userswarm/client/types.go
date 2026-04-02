@@ -36,6 +36,11 @@ import (
 // but it still prevents goroutine leaks when a pod becomes unresponsive.
 const defaultHTTPTimeout = 90 * time.Second
 
+// defaultStreamHTTPTimeout caps the total duration for a streaming webhook call.
+// Streaming responses are long-lived (agent tool loops can take minutes), so this
+// is much longer than the synchronous webhook timeout.
+const defaultStreamHTTPTimeout = 10 * time.Minute
+
 // readyConditionType is the Kubernetes condition type the UserSwarm operator
 // sets on a UserSwarm CR once the runtime pod is healthy and accepting traffic.
 // Matching by string constant avoids typos when inspecting the condition list.
@@ -48,9 +53,10 @@ const readyConditionType = "Ready"
 //
 // The zero value is not usable; always construct via NewUserSwarmClient.
 type userSwarmClient struct {
-	client     k8sclient.Client
-	config     UserSwarmConfig
-	httpClient *http.Client
+	client           k8sclient.Client
+	config           UserSwarmConfig
+	httpClient       *http.Client
+	httpStreamClient *http.Client
 }
 
 // webhookRequest is the JSON body sent to the ZeroClaw pod's /webhook endpoint.
@@ -76,6 +82,28 @@ type AgentTurn struct {
 type webhookResponse struct {
 	Turns []AgentTurn `json:"turns"`
 	Model string      `json:"model,omitempty"`
+}
+
+// StreamEventType distinguishes text chunks from tool activity and completion.
+type StreamEventType string
+
+const (
+	StreamEventChunk      StreamEventType = "chunk"
+	StreamEventThinking   StreamEventType = "thinking"
+	StreamEventToolCall   StreamEventType = "tool_call"
+	StreamEventToolResult StreamEventType = "tool_result"
+	StreamEventDone       StreamEventType = "done"
+)
+
+// StreamChunk is a single NDJSON line from the ZeroClaw /webhook/stream response.
+type StreamChunk struct {
+	Type    StreamEventType `json:"type"`
+	AgentID string          `json:"agent_id"`
+	Delta   string          `json:"delta,omitempty"`
+	Tool    string          `json:"tool,omitempty"`
+	Args    string          `json:"args,omitempty"`
+	Output  string          `json:"output,omitempty"`
+	Model   string          `json:"model,omitempty"`
 }
 
 // fakeClient is the test/local-dev implementation of Client.  It never touches
@@ -292,6 +320,12 @@ type Client interface {
 	// The caller must first call EnsureRuntime (with WaitForVerified=true) to
 	// guarantee the pod is healthy before calling SendText.
 	SendText(ctx context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error)
+
+	// SendTextStream forwards a chat message to the ZeroClaw pod via its
+	// /webhook/stream endpoint and returns a channel of StreamChunks.
+	// The channel is closed when the stream completes or the context is canceled.
+	// The caller must first call EnsureRuntime (with WaitForVerified=true).
+	SendTextStream(ctx context.Context, opts *SendTextOpts) (<-chan StreamChunk, *merrors.Error)
 
 	// DeleteRuntime removes the UserSwarm CR for a workspace, triggering
 	// the operator to clean up all child resources (StatefulSet, PVC, etc.).

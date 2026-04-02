@@ -58,3 +58,18 @@ func (b *Broadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, a
 	}
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentStatus, payload)
 }
+
+// EmitMessageChunk emits a message.chunk event for a streamed text token.
+func (b *Broadcaster) EmitMessageChunk(ctx context.Context, workspaceID string, payload realtime.MessageChunkPayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageChunk, payload)
+}
+
+// EmitMessageDone emits a message.done event when streaming is complete.
+func (b *Broadcaster) EmitMessageDone(ctx context.Context, workspaceID string, payload realtime.MessageDonePayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageDone, payload)
+}
+
+// EmitAgentTool emits an agent.tool event for tool call activity during streaming.
+func (b *Broadcaster) EmitAgentTool(ctx context.Context, workspaceID string, payload realtime.AgentToolPayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentTool, payload)
+}

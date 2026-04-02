@@ -6,18 +6,24 @@ package chatservice
 
 import (
 	"context"
+	"time"
+
+	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // service implements the orchestratorservice.ChatService interface.
 // It manages workspace bootstrapping, agent provisioning, conversation management,
 // and message handling for the chat subsystem.
 type service struct {
+	// db is the database connection used for background operations such as
+	// the pending-message cleanup goroutine, which runs outside of request scope.
+	db *dbr.Connection
 	// workspaceRepo provides access to workspace data storage.
 	workspaceRepo workspaceRepo
 	// agentRepo provides access to agent data storage.
@@ -38,6 +44,9 @@ type service struct {
 	runtimeClient userswarmclient.Client
 	// broadcaster emits real-time events to connected WebSocket clients.
 	broadcaster realtime.Broadcaster
+	// router classifies messages as simple or group via the Routing LLM.
+	// Nil means routing is disabled (all messages go to Manager).
+	router *Router
 	// defaultAgents contains the blueprint definitions for default agents
 	// that are automatically provisioned for each workspace.
 	defaultAgents []orchestrator.DefaultAgentBlueprint
@@ -87,6 +96,9 @@ type messageRepo interface {
 	GetLatestByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error)
 	// Save persists a message to storage.
 	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error
+	// FailStalePending marks all messages with status "pending" created before
+	// the cutoff time as "failed". Returns the number of affected rows.
+	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
 }
 
 // toolsRepo defines the repository interface for tool catalog operations.

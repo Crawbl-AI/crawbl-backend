@@ -2,11 +2,13 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -85,7 +87,8 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 		config: userswarmCfg,
 		// A single shared http.Client with a timeout is enough here; the runtime
 		// pods are within the same cluster so there is no connection overhead.
-		httpClient: &http.Client{Timeout: defaultHTTPTimeout},
+		httpClient:       &http.Client{Timeout: defaultHTTPTimeout},
+		httpStreamClient: &http.Client{Timeout: defaultStreamHTTPTimeout},
 	}, nil
 }
 
@@ -282,6 +285,99 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 	}
 
 	return turns, nil
+}
+
+// SendTextStream forwards a chat message to the ZeroClaw pod and returns
+// a channel of streaming chunks. The channel is closed when the stream
+// completes or the context is canceled.
+func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts) (<-chan StreamChunk, *merrors.Error) {
+	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+	if !opts.Runtime.Verified {
+		return nil, merrors.ErrRuntimeNotReady
+	}
+	if opts.Runtime.RuntimeNamespace == "" || opts.Runtime.ServiceName == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	port := c.config.Port
+	if port == 0 {
+		port = DefaultRuntimePort
+	}
+
+	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/webhook/stream",
+		opts.Runtime.ServiceName,
+		opts.Runtime.RuntimeNamespace,
+		port,
+	)
+
+	body := webhookRequest{Message: opts.Message}
+	if opts.AgentID != "" {
+		body.AgentID = &opts.AgentID
+	}
+	if opts.SystemPrompt != "" {
+		body.SystemPrompt = &opts.SystemPrompt
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, merrors.NewServerError(err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, merrors.NewServerError(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if opts.SessionID != "" {
+		req.Header.Set("X-Session-Id", opts.SessionID)
+	}
+
+	resp, err := c.httpStreamClient.Do(req)
+	if err != nil {
+		return nil, merrors.NewServerError(err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, merrors.NewServerErrorText(fmt.Sprintf("webhook/stream returned %d", resp.StatusCode))
+	}
+
+	ch := make(chan StreamChunk, 16)
+	go func() {
+		defer close(ch)
+		defer resp.Body.Close()
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+
+			var chunk StreamChunk
+			if err := json.Unmarshal([]byte(line), &chunk); err != nil {
+				continue // skip malformed lines
+			}
+
+			select {
+			case ch <- chunk:
+			case <-ctx.Done():
+				return
+			}
+		}
+		// If the scanner encountered an I/O error (connection drop, buffer overflow),
+		// the channel closes without a "done" chunk — caller treats as stream failure.
+		if err := scanner.Err(); err != nil {
+			slog.Warn("webhook/stream: scanner error",
+				"error", err.Error(),
+				"service", opts.Runtime.ServiceName,
+			)
+		}
+	}()
+
+	return ch, nil
 }
 
 // getRuntimeState reads the current UserSwarm CR from the cluster and converts
