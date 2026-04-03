@@ -42,7 +42,7 @@ func NewRouter(cfg RouterConfig, logger *slog.Logger) *Router {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 15 * time.Second
+		timeout = 60 * time.Second
 	}
 
 	return &Router{
@@ -73,7 +73,7 @@ func (r *Router) Route(ctx context.Context, message string, agents []*orchestrat
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: message},
 		},
-		MaxCompletionTokens: 1024,
+		MaxCompletionTokens: 2048,
 	})
 	if err != nil {
 		r.logger.Warn("routing LLM call failed, falling back to simple",
