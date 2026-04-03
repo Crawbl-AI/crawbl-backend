@@ -308,6 +308,8 @@ type GetAgentMemoriesOpts struct {
 	UserID   string
 	AgentID  string
 	Category string
+	Limit    int
+	Offset   int
 }
 
 // DeleteAgentMemoryOpts contains the parameters for deleting an agent memory.
@@ -316,6 +318,16 @@ type DeleteAgentMemoryOpts struct {
 	UserID  string
 	AgentID string
 	Key     string
+}
+
+// CreateAgentMemoryOpts contains the parameters for creating an agent memory.
+type CreateAgentMemoryOpts struct {
+	Sess     *dbr.Session
+	UserID   string
+	AgentID  string
+	Key      string
+	Content  string
+	Category string
 }
 
 // AgentMemory represents a memory entry from the ZeroClaw runtime.
@@ -505,6 +517,9 @@ type AgentService interface {
 
 	// DeleteAgentMemory removes a specific memory from the agent's ZeroClaw runtime.
 	DeleteAgentMemory(ctx context.Context, opts *DeleteAgentMemoryOpts) *merrors.Error
+
+	// CreateAgentMemory stores a new memory in the agent's ZeroClaw runtime.
+	CreateAgentMemory(ctx context.Context, opts *CreateAgentMemoryOpts) *merrors.Error
 }
 
 // ---------------------------------------------------------------------------

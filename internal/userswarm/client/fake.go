@@ -134,3 +134,8 @@ func (f *fakeClient) ListMemories(_ context.Context, _ *ListMemoriesOpts) ([]Mem
 func (f *fakeClient) DeleteMemory(_ context.Context, _ *DeleteMemoryOpts) *merrors.Error {
 	return nil
 }
+
+// CreateMemory is a no-op for the fake client.
+func (f *fakeClient) CreateMemory(_ context.Context, _ *CreateMemoryOpts) *merrors.Error {
+	return nil
+}

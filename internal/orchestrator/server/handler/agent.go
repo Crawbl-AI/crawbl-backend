@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -8,6 +9,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // GetAgent retrieves a single agent by ID.
@@ -220,20 +222,39 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 		}
 
 		category := r.URL.Query().Get("category")
+		limit := IntQueryParam(r, "limit")
+		if limit == 0 {
+			limit = 20
+		}
+		offset := IntQueryParam(r, "offset")
 
 		memories, mErr := c.AgentService.GetAgentMemories(r.Context(), &orchestratorservice.GetAgentMemoriesOpts{
 			Sess:     c.NewSession(),
 			UserID:   user.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Category: category,
+			Limit:    limit,
+			Offset:   offset,
 		})
 		if mErr != nil {
 			WriteError(w, mErr)
 			return
 		}
 
-		items := make([]dto.AgentMemoryResponse, 0, len(memories))
-		for _, m := range memories {
+		// Slice pagination over the full list from ZeroClaw.
+		total := len(memories)
+		start := offset
+		if start > total {
+			start = total
+		}
+		end := start + limit
+		if end > total {
+			end = total
+		}
+		page := memories[start:end]
+
+		items := make([]dto.AgentMemoryResponse, 0, len(page))
+		for _, m := range page {
 			items = append(items, dto.AgentMemoryResponse{
 				Key:       m.Key,
 				Content:   m.Content,
@@ -243,7 +264,15 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteSuccess(w, http.StatusOK, items)
+		WriteJSON(w, http.StatusOK, dto.AgentMemoriesListResponse{
+			Data: items,
+			Pagination: dto.OffsetPaginationResponse{
+				Total:   total,
+				Limit:   limit,
+				Offset:  offset,
+				HasNext: end < total,
+			},
+		})
 	}
 }
 
@@ -261,6 +290,38 @@ func DeleteAgentMemory(c *Context) http.HandlerFunc {
 			UserID:  user.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Key:     chi.URLParam(r, "key"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// CreateAgentMemory stores a new memory in the agent's ZeroClaw runtime.
+func CreateAgentMemory(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		var body dto.CreateAgentMemoryRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			WriteError(w, merrors.ErrInvalidInput)
+			return
+		}
+
+		mErr = c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
+			Sess:     c.NewSession(),
+			UserID:   user.ID,
+			AgentID:  chi.URLParam(r, "id"),
+			Key:      body.Key,
+			Content:  body.Content,
+			Category: body.Category,
 		})
 		if mErr != nil {
 			WriteError(w, mErr)

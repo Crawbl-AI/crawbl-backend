@@ -121,6 +121,10 @@ type ListMemoriesOpts struct {
 	Runtime *orchestrator.RuntimeStatus
 	// Category optionally filters memories by category (core, daily, conversation).
 	Category string
+	// Limit is the maximum number of entries to return.
+	Limit int
+	// Offset is the number of entries to skip.
+	Offset int
 }
 
 // DeleteMemoryOpts carries parameters for DeleteMemory.
@@ -129,6 +133,18 @@ type DeleteMemoryOpts struct {
 	Runtime *orchestrator.RuntimeStatus
 	// Key is the memory key to delete.
 	Key string
+}
+
+// CreateMemoryOpts carries parameters for CreateMemory.
+type CreateMemoryOpts struct {
+	// Runtime is the current state of the user's swarm.
+	Runtime *orchestrator.RuntimeStatus
+	// Key is the memory key.
+	Key string
+	// Content is the memory content.
+	Content string
+	// Category is the memory category (core, daily, conversation).
+	Category string
 }
 
 // fakeClient is the test/local-dev implementation of Client.  It never touches
@@ -361,4 +377,7 @@ type Client interface {
 
 	// DeleteMemory removes a specific memory entry by key from the ZeroClaw runtime.
 	DeleteMemory(ctx context.Context, opts *DeleteMemoryOpts) *merrors.Error
+
+	// CreateMemory stores a new memory entry in the ZeroClaw runtime.
+	CreateMemory(ctx context.Context, opts *CreateMemoryOpts) *merrors.Error
 }

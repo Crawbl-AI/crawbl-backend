@@ -179,3 +179,16 @@ type AgentMemoryResponse struct {
 	CreatedAt string `json:"created_at,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 }
+
+// AgentMemoriesListResponse is the paginated response for listing agent memories.
+type AgentMemoriesListResponse struct {
+	Data       []AgentMemoryResponse    `json:"data"`
+	Pagination OffsetPaginationResponse `json:"pagination"`
+}
+
+// CreateAgentMemoryRequest is the JSON request body for creating a memory.
+type CreateAgentMemoryRequest struct {
+	Key      string `json:"key"`
+	Content  string `json:"content"`
+	Category string `json:"category,omitempty"`
+}

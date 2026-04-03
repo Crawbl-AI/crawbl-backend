@@ -67,6 +67,7 @@ func registerRoutes(s *Server) http.Handler {
 			r.Get("/agents/{id}/tools", handler.GetAgentTools(h))
 			r.Get("/agents/{id}/memories", handler.GetAgentMemories(h))
 			r.Delete("/agents/{id}/memories/{key}", handler.DeleteAgentMemory(h))
+			r.Post("/agents/{id}/memories", handler.CreateAgentMemory(h))
 		})
 	})
 

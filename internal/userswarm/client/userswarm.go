@@ -611,13 +611,25 @@ func (c *userSwarmClient) ListMemories(ctx context.Context, opts *ListMemoriesOp
 		port = DefaultRuntimePort
 	}
 
-	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/api/memory",
+	baseURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/api/memory",
 		opts.Runtime.ServiceName,
 		opts.Runtime.RuntimeNamespace,
 		port,
 	)
+
+	params := make([]string, 0, 3)
 	if opts.Category != "" {
-		url += "?category=" + opts.Category
+		params = append(params, "category="+opts.Category)
+	}
+	if opts.Limit > 0 {
+		params = append(params, fmt.Sprintf("limit=%d", opts.Limit))
+	}
+	if opts.Offset > 0 {
+		params = append(params, fmt.Sprintf("offset=%d", opts.Offset))
+	}
+	url := baseURL
+	if len(params) > 0 {
+		url += "?" + strings.Join(params, "&")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -648,6 +660,64 @@ func (c *userSwarmClient) ListMemories(ctx context.Context, opts *ListMemoriesOp
 	}
 
 	return result.Entries, nil
+}
+
+// CreateMemory stores a memory entry via the ZeroClaw pod's POST /api/memory endpoint.
+func (c *userSwarmClient) CreateMemory(ctx context.Context, opts *CreateMemoryOpts) *merrors.Error {
+	if opts == nil || opts.Runtime == nil || opts.Key == "" || opts.Content == "" {
+		return merrors.ErrInvalidInput
+	}
+	if !opts.Runtime.Verified {
+		return merrors.ErrRuntimeNotReady
+	}
+	if opts.Runtime.RuntimeNamespace == "" || opts.Runtime.ServiceName == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	port := c.config.Port
+	if port == 0 {
+		port = DefaultRuntimePort
+	}
+
+	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/api/memory",
+		opts.Runtime.ServiceName,
+		opts.Runtime.RuntimeNamespace,
+		port,
+	)
+
+	body := struct {
+		Key      string `json:"key"`
+		Content  string `json:"content"`
+		Category string `json:"category,omitempty"`
+	}{
+		Key:      opts.Key,
+		Content:  opts.Content,
+		Category: opts.Category,
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return merrors.NewServerError(err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return merrors.NewServerError(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "create memory in zeroclaw")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return merrors.NewServerErrorText(fmt.Sprintf("api/memory create returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody))))
+	}
+
+	return nil
 }
 
 // DeleteMemory removes a memory entry by key via the ZeroClaw pod's /api/memory/{key} endpoint.

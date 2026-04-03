@@ -257,6 +257,8 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 	entries, mErr := s.runtimeClient.ListMemories(ctx, &userswarmclient.ListMemoriesOpts{
 		Runtime:  runtimeState,
 		Category: opts.Category,
+		Limit:    opts.Limit,
+		Offset:   opts.Offset,
 	})
 	if mErr != nil {
 		return nil, mErr
@@ -304,6 +306,39 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 	return s.runtimeClient.DeleteMemory(ctx, &userswarmclient.DeleteMemoryOpts{
 		Runtime: runtimeState,
 		Key:     opts.Key,
+	})
+}
+
+// CreateAgentMemory stores a memory in the agent's ZeroClaw runtime.
+func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
+	if opts == nil || opts.Sess == nil || opts.Key == "" || opts.Content == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	if mErr != nil {
+		return mErr
+	}
+
+	_, mErr = s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	if mErr != nil {
+		return mErr
+	}
+
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		UserID:          opts.UserID,
+		WorkspaceID:     agent.WorkspaceID,
+		WaitForVerified: false,
+	})
+	if mErr != nil {
+		return mErr
+	}
+
+	return s.runtimeClient.CreateMemory(ctx, &userswarmclient.CreateMemoryOpts{
+		Runtime:  runtimeState,
+		Key:      opts.Key,
+		Content:  opts.Content,
+		Category: opts.Category,
 	})
 }
 
