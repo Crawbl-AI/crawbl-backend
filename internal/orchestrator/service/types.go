@@ -302,6 +302,31 @@ type GetAgentToolsOpts struct {
 	Offset int
 }
 
+// GetAgentMemoriesOpts contains the parameters for retrieving agent memories.
+type GetAgentMemoriesOpts struct {
+	Sess     *dbr.Session
+	UserID   string
+	AgentID  string
+	Category string
+}
+
+// DeleteAgentMemoryOpts contains the parameters for deleting an agent memory.
+type DeleteAgentMemoryOpts struct {
+	Sess    *dbr.Session
+	UserID  string
+	AgentID string
+	Key     string
+}
+
+// AgentMemory represents a memory entry from the ZeroClaw runtime.
+type AgentMemory struct {
+	Key       string `json:"key"`
+	Content   string `json:"content"`
+	Category  string `json:"category,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
 // WorkspaceBootstrapper defines the interface for workspace initialization.
 // Implementations are responsible for creating the default workspace and
 // associated resources for a new user.
@@ -474,6 +499,12 @@ type AgentService interface {
 	//
 	// Returns a ToolPage on success, or a merrors.Error on failure.
 	GetAgentTools(ctx context.Context, opts *GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error)
+
+	// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+	GetAgentMemories(ctx context.Context, opts *GetAgentMemoriesOpts) ([]AgentMemory, *merrors.Error)
+
+	// DeleteAgentMemory removes a specific memory from the agent's ZeroClaw runtime.
+	DeleteAgentMemory(ctx context.Context, opts *DeleteAgentMemoryOpts) *merrors.Error
 }
 
 // ---------------------------------------------------------------------------

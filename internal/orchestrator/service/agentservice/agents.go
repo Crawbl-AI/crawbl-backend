@@ -229,6 +229,84 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 	}, nil
 }
 
+// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
+	if opts == nil || opts.Sess == nil {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	_, mErr = s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		UserID:          opts.UserID,
+		WorkspaceID:     agent.WorkspaceID,
+		WaitForVerified: false,
+	})
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	entries, mErr := s.runtimeClient.ListMemories(ctx, &userswarmclient.ListMemoriesOpts{
+		Runtime:  runtimeState,
+		Category: opts.Category,
+	})
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	memories := make([]orchestratorservice.AgentMemory, 0, len(entries))
+	for _, e := range entries {
+		memories = append(memories, orchestratorservice.AgentMemory{
+			Key:       e.Key,
+			Content:   e.Content,
+			Category:  e.Category,
+			CreatedAt: e.CreatedAt,
+			UpdatedAt: e.UpdatedAt,
+		})
+	}
+
+	return memories, nil
+}
+
+// DeleteAgentMemory removes a memory from the agent's ZeroClaw runtime.
+func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
+	if opts == nil || opts.Sess == nil || opts.Key == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	if mErr != nil {
+		return mErr
+	}
+
+	_, mErr = s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	if mErr != nil {
+		return mErr
+	}
+
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		UserID:          opts.UserID,
+		WorkspaceID:     agent.WorkspaceID,
+		WaitForVerified: false,
+	})
+	if mErr != nil {
+		return mErr
+	}
+
+	return s.runtimeClient.DeleteMemory(ctx, &userswarmclient.DeleteMemoryOpts{
+		Runtime: runtimeState,
+		Key:     opts.Key,
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

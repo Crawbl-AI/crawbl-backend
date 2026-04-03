@@ -106,6 +106,31 @@ type StreamChunk struct {
 	Model   string          `json:"model,omitempty"`
 }
 
+// MemoryEntry represents a single memory item from ZeroClaw's memory store.
+type MemoryEntry struct {
+	Key       string `json:"key"`
+	Content   string `json:"content"`
+	Category  string `json:"category,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// ListMemoriesOpts carries parameters for ListMemories.
+type ListMemoriesOpts struct {
+	// Runtime is the current state of the user's swarm.
+	Runtime *orchestrator.RuntimeStatus
+	// Category optionally filters memories by category (core, daily, conversation).
+	Category string
+}
+
+// DeleteMemoryOpts carries parameters for DeleteMemory.
+type DeleteMemoryOpts struct {
+	// Runtime is the current state of the user's swarm.
+	Runtime *orchestrator.RuntimeStatus
+	// Key is the memory key to delete.
+	Key string
+}
+
 // fakeClient is the test/local-dev implementation of Client.  It never touches
 // Kubernetes or any real pod — it just echoes messages back with a configurable
 // prefix.  This makes it safe to run the orchestrator locally without a cluster.
@@ -330,4 +355,10 @@ type Client interface {
 	// DeleteRuntime removes the UserSwarm CR for a workspace, triggering
 	// the operator to clean up all child resources (StatefulSet, PVC, etc.).
 	DeleteRuntime(ctx context.Context, workspaceID string) *merrors.Error
+
+	// ListMemories retrieves all memories from the ZeroClaw runtime's memory store.
+	ListMemories(ctx context.Context, opts *ListMemoriesOpts) ([]MemoryEntry, *merrors.Error)
+
+	// DeleteMemory removes a specific memory entry by key from the ZeroClaw runtime.
+	DeleteMemory(ctx context.Context, opts *DeleteMemoryOpts) *merrors.Error
 }

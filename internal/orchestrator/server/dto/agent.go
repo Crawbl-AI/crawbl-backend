@@ -170,3 +170,12 @@ func ToAgentToolResponse(t orchestrator.AgentTool) AgentToolResponse {
 		IconURL: t.IconURL,
 	}
 }
+
+// AgentMemoryResponse is the JSON response for a single memory entry.
+type AgentMemoryResponse struct {
+	Key       string `json:"key"`
+	Content   string `json:"content"`
+	Category  string `json:"category,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}

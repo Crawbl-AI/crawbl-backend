@@ -63,9 +63,10 @@ func registerRoutes(s *Server) http.Handler {
 			r.Post("/integrations/callback", handler.IntegrationCallback(h))
 			r.Get("/agents/{id}", handler.GetAgent(h))
 			r.Get("/agents/{id}/details", handler.GetAgentDetails(h))
-			r.Get("/agents/{id}/history", handler.GetAgentHistory(h))
 			r.Get("/agents/{id}/settings", handler.GetAgentSettings(h))
 			r.Get("/agents/{id}/tools", handler.GetAgentTools(h))
+			r.Get("/agents/{id}/memories", handler.GetAgentMemories(h))
+			r.Delete("/agents/{id}/memories/{key}", handler.DeleteAgentMemory(h))
 		})
 	})
 

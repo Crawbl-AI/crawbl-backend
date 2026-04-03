@@ -209,3 +209,64 @@ func ListModels(c *Context) http.HandlerFunc {
 		WriteSuccess(w, http.StatusOK, models)
 	}
 }
+
+// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+func GetAgentMemories(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		category := r.URL.Query().Get("category")
+
+		memories, mErr := c.AgentService.GetAgentMemories(r.Context(), &orchestratorservice.GetAgentMemoriesOpts{
+			Sess:     c.NewSession(),
+			UserID:   user.ID,
+			AgentID:  chi.URLParam(r, "id"),
+			Category: category,
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		items := make([]dto.AgentMemoryResponse, 0, len(memories))
+		for _, m := range memories {
+			items = append(items, dto.AgentMemoryResponse{
+				Key:       m.Key,
+				Content:   m.Content,
+				Category:  m.Category,
+				CreatedAt: m.CreatedAt,
+				UpdatedAt: m.UpdatedAt,
+			})
+		}
+
+		WriteSuccess(w, http.StatusOK, items)
+	}
+}
+
+// DeleteAgentMemory removes a specific memory from the agent's ZeroClaw runtime.
+func DeleteAgentMemory(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		mErr = c.AgentService.DeleteAgentMemory(r.Context(), &orchestratorservice.DeleteAgentMemoryOpts{
+			Sess:    c.NewSession(),
+			UserID:  user.ID,
+			AgentID: chi.URLParam(r, "id"),
+			Key:     chi.URLParam(r, "key"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

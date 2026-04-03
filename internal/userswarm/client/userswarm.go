@@ -593,3 +593,102 @@ func isConditionTrue(conditions []metav1.Condition, conditionType string) bool {
 	// Condition not found at all — treat as false (not yet set by the operator).
 	return false
 }
+
+// ListMemories retrieves all memories from the ZeroClaw pod's /api/memory endpoint.
+func (c *userSwarmClient) ListMemories(ctx context.Context, opts *ListMemoriesOpts) ([]MemoryEntry, *merrors.Error) {
+	if opts == nil || opts.Runtime == nil {
+		return nil, merrors.ErrInvalidInput
+	}
+	if !opts.Runtime.Verified {
+		return nil, merrors.ErrRuntimeNotReady
+	}
+	if opts.Runtime.RuntimeNamespace == "" || opts.Runtime.ServiceName == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	port := c.config.Port
+	if port == 0 {
+		port = DefaultRuntimePort
+	}
+
+	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/api/memory",
+		opts.Runtime.ServiceName,
+		opts.Runtime.RuntimeNamespace,
+		port,
+	)
+	if opts.Category != "" {
+		url += "?category=" + opts.Category
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, merrors.NewServerError(err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, merrors.WrapStdServerError(err, "list memories from zeroclaw")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, merrors.WrapStdServerError(err, "read memory list response")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, merrors.NewServerErrorText(fmt.Sprintf("api/memory returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+	}
+
+	var result struct {
+		Entries []MemoryEntry `json:"entries"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, merrors.WrapStdServerError(err, "decode memory list response")
+	}
+
+	return result.Entries, nil
+}
+
+// DeleteMemory removes a memory entry by key via the ZeroClaw pod's /api/memory/{key} endpoint.
+func (c *userSwarmClient) DeleteMemory(ctx context.Context, opts *DeleteMemoryOpts) *merrors.Error {
+	if opts == nil || opts.Runtime == nil || opts.Key == "" {
+		return merrors.ErrInvalidInput
+	}
+	if !opts.Runtime.Verified {
+		return merrors.ErrRuntimeNotReady
+	}
+	if opts.Runtime.RuntimeNamespace == "" || opts.Runtime.ServiceName == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	port := c.config.Port
+	if port == 0 {
+		port = DefaultRuntimePort
+	}
+
+	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/api/memory/%s",
+		opts.Runtime.ServiceName,
+		opts.Runtime.RuntimeNamespace,
+		port,
+		opts.Key,
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return merrors.NewServerError(err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "delete memory from zeroclaw")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return merrors.NewServerErrorText(fmt.Sprintf("api/memory delete returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+	}
+
+	return nil
+}

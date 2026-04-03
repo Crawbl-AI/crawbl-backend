@@ -124,3 +124,13 @@ func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTur
 		{AgentID: "manager", Text: fmt.Sprintf("%s: %s", c.replyPrefix, opts.Message)},
 	}, nil
 }
+
+// ListMemories returns an empty slice for the fake client.
+func (f *fakeClient) ListMemories(_ context.Context, _ *ListMemoriesOpts) ([]MemoryEntry, *merrors.Error) {
+	return []MemoryEntry{}, nil
+}
+
+// DeleteMemory is a no-op for the fake client.
+func (f *fakeClient) DeleteMemory(_ context.Context, _ *DeleteMemoryOpts) *merrors.Error {
+	return nil
+}
