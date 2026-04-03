@@ -192,6 +192,14 @@ make deploy-docs         # Deploy docs only
 make deploy-website      # Deploy website only
 ```
 
+## 📊 Observability
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| VictoriaMetrics | [dev.metrics.crawbl.com](https://dev.metrics.crawbl.com) | Metrics storage + Prometheus-compatible query API |
+| VictoriaLogs | [dev.logs.crawbl.com](https://dev.logs.crawbl.com) | Log storage + query UI |
+| Fluent Bit | cluster-internal | Collects all container logs from every namespace, ships to VictoriaLogs |
+
 ## 🔗 Related
 
 | | Repo | |

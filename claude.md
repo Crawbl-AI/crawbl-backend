@@ -65,6 +65,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 - Add new API surface in small vertical slices, starting from `crawbl-docs/ops/api/api-contract.md`
 - Local backend development should use the Postgres-backed path with `docker-compose.yaml`, `dockerfiles/`, SQL migrations, and `make setup/run`
 - Cluster deployment is managed by ArgoCD via `crawbl-argocd-apps` — Helm charts are vendored there, not in this repo; do not use `crawbl app deploy` for cluster rollouts
+- Observability stack: VictoriaMetrics at `dev.metrics.crawbl.com` (metrics storage + Prometheus-compatible query API), VictoriaLogs at `dev.logs.crawbl.com` (log storage + query UI), Fluent Bit collects all container logs from every namespace and ships them to VictoriaLogs
 - The current dev cluster uses a temporary single-node Bitnami PostgreSQL release in the `backend` namespace; later environments should move to a stronger database posture
 - Reuse patterns from `Skatts/monobackend` where they fit: `internal/pkg/database`, `cmd/migrate`, service Dockerfile, and compose-driven local setup
 - Use the local Docker stack for Venom-based minimal workflow verification; avoid reintroducing manual curl-only verification as the primary path
