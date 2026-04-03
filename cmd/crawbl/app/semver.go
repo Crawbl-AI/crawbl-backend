@@ -9,7 +9,12 @@ import (
 
 // calculateSemver determines the next semantic version tag and logs progress.
 func calculateSemver() (string, error) {
-	result, err := versioning.Calculate()
+	return calculateSemverForRepo("")
+}
+
+// calculateSemverForRepo calculates semver for a specific repo path.
+func calculateSemverForRepo(repoPath string) (string, error) {
+	result, err := versioning.CalculateForRepo(repoPath)
 	if err != nil {
 		return "", err
 	}
@@ -18,14 +23,19 @@ func calculateSemver() (string, error) {
 	return result.Tag, nil
 }
 
-// resolveDeployTag verifies the working tree is clean and pushed, then returns
-// the tag — either the explicit --tag value or an auto-calculated semver.
-func resolveDeployTag(explicit string) (string, error) {
-	if err := gitutil.EnsureCleanAndPushed(); err != nil {
-		return "", err
+// resolveDeployTag returns the tag for a deploy — either the explicit --tag
+// value or an auto-calculated semver. For components that live in crawbl-backend
+// (platform, auth-filter), it also enforces a clean and pushed working tree.
+// External components (docs, website, zeroclaw) skip the git guard since their
+// source lives in separate repos.
+func resolveDeployTag(explicit string, requireClean bool, repoPath string) (string, error) {
+	if requireClean {
+		if err := gitutil.EnsureCleanAndPushed(); err != nil {
+			return "", err
+		}
 	}
 	if explicit != "" {
 		return explicit, nil
 	}
-	return calculateSemver()
+	return calculateSemverForRepo(repoPath)
 }

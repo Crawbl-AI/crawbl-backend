@@ -22,12 +22,26 @@ type Result struct {
 	Bump    string
 }
 
+// gitCmd constructs a git command, optionally scoped to a repo path via -C.
+func gitCmd(repoPath string, args ...string) *exec.Cmd {
+	if repoPath != "" {
+		args = append([]string{"-C", repoPath}, args...)
+	}
+	return exec.Command("git", args...)
+}
+
 // Calculate determines the next semantic version tag based on conventional
 // commits since the last v* tag. This mirrors the logic in deploy-dev.yml.
 func Calculate() (Result, error) {
+	return CalculateForRepo("")
+}
+
+// CalculateForRepo determines the next semantic version tag for the given repo
+// path. An empty repoPath uses the current working directory.
+func CalculateForRepo(repoPath string) (Result, error) {
 	// Find the last semver tag.
 	lastTag := "v0.0.0"
-	describeCmd := exec.Command("git", "describe", "--tags", "--abbrev=0", "--match", "v*")
+	describeCmd := gitCmd(repoPath, "describe", "--tags", "--abbrev=0", "--match", "v*")
 	if output, err := describeCmd.Output(); err == nil {
 		lastTag = strings.TrimSpace(string(output))
 	}
@@ -39,7 +53,7 @@ func Calculate() (Result, error) {
 	}
 
 	// Get commit messages since last tag.
-	logCmd := exec.Command("git", "log", lastTag+"..HEAD", "--pretty=format:%s")
+	logCmd := gitCmd(repoPath, "log", lastTag+"..HEAD", "--pretty=format:%s")
 	logOutput, _ := logCmd.Output()
 
 	bump := "patch"

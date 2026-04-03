@@ -7,13 +7,14 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/argocd"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/release"
 )
 
 func newDeployCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy [component]",
 		Short: "Build, push, and deploy a component",
-		Long:  "Build a Docker image, push to DOCR, and update crawbl-argocd-apps with the new tag.",
+		Long:  "Build a Docker image, push to DOCR, update crawbl-argocd-apps, and create a GitHub release.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
   crawbl app deploy zeroclaw --tag v1.0.0
   crawbl app deploy all --tag v1.0.0`,
@@ -42,6 +43,14 @@ func addDeployFlags(cmd *cobra.Command, tag *string, platform *string, argocdRep
 	cmd.Flags().StringVar(argocdRepo, "argocd-repo", "", "Path to crawbl-argocd-apps (default: sibling dir)")
 }
 
+// checkAllTools verifies all required tools (argocd + release) are present.
+func checkAllTools() error {
+	if err := release.CheckTools(); err != nil {
+		return err
+	}
+	return argocd.CheckTools()
+}
+
 func newDeployPlatformCommand() *cobra.Command {
 	var (
 		tag        string
@@ -56,14 +65,14 @@ func newDeployPlatformCommand() *cobra.Command {
 		Example: `  crawbl app deploy platform --tag v1.0.0
   crawbl app deploy platform --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolvedTag, err := resolveDeployTag(tag)
+			if err := checkAllTools(); err != nil {
+				return err
+			}
+			resolvedTag, err := resolveDeployTag(tag, true, "")
 			if err != nil {
 				return err
 			}
 			tag = resolvedTag
-			if err := argocd.CheckTools(); err != nil {
-				return err
-			}
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -95,7 +104,15 @@ func newDeployPlatformCommand() *cobra.Command {
 			if err := u.UpdatePlatform(); err != nil {
 				return err
 			}
-			return u.CommitAndPush("platform")
+			if err := u.CommitAndPush("platform"); err != nil {
+				return err
+			}
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: rootDir,
+				RepoSlug: "Crawbl-AI/crawbl-backend",
+				Tag:      tag,
+			})
 		},
 	}
 
@@ -117,14 +134,14 @@ func newDeployAuthFilterCommand() *cobra.Command {
 		Example: `  crawbl app deploy auth-filter --tag v1.0.0
   crawbl app deploy auth-filter --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolvedTag, err := resolveDeployTag(tag)
+			if err := checkAllTools(); err != nil {
+				return err
+			}
+			resolvedTag, err := resolveDeployTag(tag, true, "")
 			if err != nil {
 				return err
 			}
 			tag = resolvedTag
-			if err := argocd.CheckTools(); err != nil {
-				return err
-			}
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -153,7 +170,15 @@ func newDeployAuthFilterCommand() *cobra.Command {
 			if err := u.UpdateAuthFilter(); err != nil {
 				return err
 			}
-			return u.CommitAndPush("auth-filter")
+			if err := u.CommitAndPush("auth-filter"); err != nil {
+				return err
+			}
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: rootDir,
+				RepoSlug: "Crawbl-AI/crawbl-backend",
+				Tag:      tag,
+			})
 		},
 	}
 
@@ -176,12 +201,7 @@ func newDeployZeroClawCommand() *cobra.Command {
 		Example: `  crawbl app deploy zeroclaw --tag v1.0.0-crawbl1
   crawbl app deploy zeroclaw --path /custom/path/crawbl-zeroclaw`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolvedTag, err := resolveDeployTag(tag)
-			if err != nil {
-				return err
-			}
-			tag = resolvedTag
-			if err := argocd.CheckTools(); err != nil {
+			if err := checkAllTools(); err != nil {
 				return err
 			}
 
@@ -189,6 +209,12 @@ func newDeployZeroClawCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			resolvedTag, err := resolveDeployTag(tag, false, zeroClawDir)
+			if err != nil {
+				return err
+			}
+			tag = resolvedTag
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildZeroClawImageRepo,
@@ -212,7 +238,15 @@ func newDeployZeroClawCommand() *cobra.Command {
 			if err := u.UpdateZeroClaw(); err != nil {
 				return err
 			}
-			return u.CommitAndPush("zeroclaw")
+			if err := u.CommitAndPush("zeroclaw"); err != nil {
+				return err
+			}
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: zeroClawDir,
+				RepoSlug: "Crawbl-AI/crawbl-zeroclaw",
+				Tag:      tag,
+			})
 		},
 	}
 
@@ -236,12 +270,7 @@ func newDeployDocsCommand() *cobra.Command {
 		Example: `  crawbl app deploy docs --tag v1.0.0
   crawbl app deploy docs --path /custom/path/crawbl-docs`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolvedTag, err := resolveDeployTag(tag)
-			if err != nil {
-				return err
-			}
-			tag = resolvedTag
-			if err := argocd.CheckTools(); err != nil {
+			if err := checkAllTools(); err != nil {
 				return err
 			}
 
@@ -249,6 +278,12 @@ func newDeployDocsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			resolvedTag, err := resolveDeployTag(tag, false, docsDir)
+			if err != nil {
+				return err
+			}
+			tag = resolvedTag
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildDocsImageRepo,
@@ -271,7 +306,15 @@ func newDeployDocsCommand() *cobra.Command {
 			if err := u.UpdateDocs(); err != nil {
 				return err
 			}
-			return u.CommitAndPush("docs")
+			if err := u.CommitAndPush("docs"); err != nil {
+				return err
+			}
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: docsDir,
+				RepoSlug: "Crawbl-AI/crawbl-docs",
+				Tag:      tag,
+			})
 		},
 	}
 
@@ -295,12 +338,7 @@ func newDeployWebsiteCommand() *cobra.Command {
 		Example: `  crawbl app deploy website --tag v1.0.0
   crawbl app deploy website --path /custom/path/crawbl-website`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolvedTag, err := resolveDeployTag(tag)
-			if err != nil {
-				return err
-			}
-			tag = resolvedTag
-			if err := argocd.CheckTools(); err != nil {
+			if err := checkAllTools(); err != nil {
 				return err
 			}
 
@@ -308,6 +346,12 @@ func newDeployWebsiteCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			resolvedTag, err := resolveDeployTag(tag, false, websiteDir)
+			if err != nil {
+				return err
+			}
+			tag = resolvedTag
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildWebsiteImageRepo,
@@ -330,11 +374,20 @@ func newDeployWebsiteCommand() *cobra.Command {
 			if err := u.UpdateWebsite(); err != nil {
 				return err
 			}
-			return u.CommitAndPush("website")
+			if err := u.CommitAndPush("website"); err != nil {
+				return err
+			}
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: websiteDir,
+				RepoSlug: "Crawbl-AI/crawbl-website",
+				Tag:      tag,
+			})
 		},
 	}
 
 	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
+	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-website repo (default: ../crawbl-website)")
 	return cmd
 }
 
@@ -348,25 +401,25 @@ func newDeployAllCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "all",
 		Short: "Deploy all backend components",
-		Long:  "Build, push, and update argocd for platform, auth-filter, docs, and website. ZeroClaw is excluded (deploy separately with 'crawbl app deploy zeroclaw').",
+		Long:  "Build, push, and update argocd for platform and auth-filter. External components (docs, website, zeroclaw) must be deployed individually.",
 		Example: `  crawbl app deploy all --tag v1.0.0
   crawbl app deploy all --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			resolvedTag, err := resolveDeployTag(tag)
+			if err := checkAllTools(); err != nil {
+				return err
+			}
+			resolvedTag, err := resolveDeployTag(tag, true, "")
 			if err != nil {
 				return err
 			}
 			tag = resolvedTag
-			if err := argocd.CheckTools(); err != nil {
-				return err
-			}
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
 				return err
 			}
 
-			// --- Build phase: build all images first ---
+			// --- Build phase ---
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildPlatformImageRepo,
@@ -390,35 +443,7 @@ func newDeployAllCommand() *cobra.Command {
 				return fmt.Errorf("auth-filter build: %w", err)
 			}
 
-			docsDir, err := gitutil.ResolveSiblingRepo("", buildDocsRepoDir)
-			if err != nil {
-				return fmt.Errorf("docs: %w", err)
-			}
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildDocsImageRepo,
-				contextDir: docsDir,
-				tag:        tag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
-				return fmt.Errorf("docs build: %w", err)
-			}
-
-			websiteDir, err := gitutil.ResolveSiblingRepo("", buildWebsiteRepoDir)
-			if err != nil {
-				return fmt.Errorf("website: %w", err)
-			}
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildWebsiteImageRepo,
-				contextDir: websiteDir,
-				tag:        tag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
-				return fmt.Errorf("website build: %w", err)
-			}
-
-			// --- ArgoCD update phase: all updates then one commit ---
+			// --- ArgoCD update phase ---
 
 			repoPath, err := resolveArgocdRepo(argocdRepo)
 			if err != nil {
@@ -438,14 +463,17 @@ func newDeployAllCommand() *cobra.Command {
 			if err := u.UpdateAuthFilter(); err != nil {
 				return err
 			}
-			if err := u.UpdateDocs(); err != nil {
-				return err
-			}
-			if err := u.UpdateWebsite(); err != nil {
+			if err := u.CommitAndPush("all"); err != nil {
 				return err
 			}
 
-			return u.CommitAndPush("all")
+			// --- Tag + release ---
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: rootDir,
+				RepoSlug: "Crawbl-AI/crawbl-backend",
+				Tag:      tag,
+			})
 		},
 	}
 

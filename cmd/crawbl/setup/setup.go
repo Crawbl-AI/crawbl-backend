@@ -79,6 +79,9 @@ func runSetup() error {
 		{"doctl", "doctl version", "mise install doctl"},
 		{"aws", "aws --version", "mise install awscli"},
 		{"pulumi", "pulumi version", "mise install pulumi"},
+		{"yq", "yq --version", "mise install yq  (required for crawbl app deploy)"},
+		{"claude", "claude --version 2>/dev/null || claude --help >/dev/null 2>&1", "https://claude.ai/download"},
+		{"gh", "gh --version", "https://cli.github.com/"},
 	}
 
 	for _, t := range tools {
