@@ -119,7 +119,7 @@ func (s *service) sendSwarmMessage(
 
 	// Clear Manager's reading indicator.
 	if lookups.manager != nil {
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, lookups.manager.ID, string(orchestrator.AgentStatusOnline))
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, lookups.manager.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 	}
 
 	// 4. Branch on routing decision.
@@ -405,7 +405,7 @@ func (s *service) callAgentStreaming(
 		AgentID:        agent.ID,
 		Status:         string(orchestrator.MessageStatusDelivered),
 	})
-	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline))
+	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 
 	if reply == nil {
 		return nil, nil
