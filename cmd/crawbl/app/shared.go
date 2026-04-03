@@ -5,23 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
-
-// getRootDir returns the git repository root directory.
-func getRootDir() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get git root: %w", err)
-	}
-	return strings.TrimSpace(string(output)), nil
-}
 
 // buildOpts holds the common parameters for a docker buildx build.
 type buildOpts struct {
@@ -31,6 +20,7 @@ type buildOpts struct {
 	tag        string
 	platform   string
 	push       bool
+	target     string // Docker build --target stage (empty = default)
 }
 
 // runDockerBuild executes docker buildx build with the given options.
@@ -42,6 +32,10 @@ func runDockerBuild(opts buildOpts) error {
 		"buildx", "build",
 		"--platform", opts.platform,
 		"-t", imageRef,
+	}
+
+	if opts.target != "" {
+		args = append(args, "--target", opts.target)
 	}
 
 	if opts.dockerfile != "" {

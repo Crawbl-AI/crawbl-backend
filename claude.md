@@ -24,6 +24,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 ## Rules
 
 - WHEN RUNNING COMMANDS OR WAITING FOR INPUT OR WAITING FOR SOMETHING, NEVER SLEEP FOR MORE THAN 10 SECONDS
+- Always use the `crawbl` CLI for building, pushing, and deploying images. Prefer `crawbl app build` and `crawbl app deploy` over raw docker/kubectl/yq commands.
 - Treat this service as the control plane, not a thin API wrapper
 - Long-term, keep LLM provider credentials in the backend, not in ZeroClaw pods
 - Runtime secrets are injected via ESO-managed Kubernetes Secrets (envSecretRef); provider key brokering will move fully behind the orchestrator later
@@ -96,33 +97,67 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 
 ## GitHub Actions CI/CD
 
+### Role of CI
+
+CI is a **validation gate**, not the build/deploy pipeline.
+
+On push to `main`, `deploy-dev.yml` runs two parallel jobs:
+- e2e tests against the live dev cluster
+- release tagging
+
+Builds and deployments happen **locally** via `crawbl app deploy`. CI does not build or push images.
+
+### Local Deploy Workflow
+
+Use `crawbl app deploy <component>` to build, push, and deploy a component. The tag is auto-calculated from conventional commits — `--tag` is optional and only needed to override. The working tree must be clean and fully pushed before deploying.
+
+```bash
+# Deploy a single component (tag auto-calculated via semver)
+crawbl app deploy platform
+crawbl app deploy auth-filter
+crawbl app deploy docs
+crawbl app deploy website
+crawbl app deploy zeroclaw   # built/deployed separately
+
+# Deploy all standard components (platform + auth-filter + docs + website; excludes zeroclaw)
+crawbl app deploy all
+
+# Override the auto-calculated tag explicitly
+crawbl app deploy platform --tag v1.2.3
+```
+
+Semver logic: finds the last `v*` tag, scans commits since then — `feat:` triggers a minor bump, `!:` (breaking) triggers a major bump, everything else is a patch bump.
+
+Each `crawbl app deploy` call:
+1. Verifies working tree is clean and pushed
+2. Builds the Docker image locally
+3. Pushes to DOCR (`registry.digitalocean.com/crawbl/`)
+4. Updates the image tag in `crawbl-argocd-apps`
+5. Commits and pushes the ArgoCD apps repo
+6. ArgoCD auto-syncs the new image to the cluster
+
+Makefile shortcuts use auto-semver — no manual tag needed:
+
+```bash
+make deploy-dev        # deploy all standard components
+make deploy-platform
+# etc.
+```
+
+### Workflow Files
+
+- `deploy-dev.yml` — Push to `main`: runs e2e + release tagging only
+- `deploy-prod.yml` — Manual trigger only; still uses the full CI pipeline (unchanged)
+- `reusable-build.yml`, `reusable-deploy.yml`, `reusable-update-argocd.yml` — Kept for reference; no longer called from `deploy-dev.yml`
+
 ### Workflow Validation
 
 Use [`actionlint`](https://github.com/rhysd/actionlint) to validate workflow YAML before pushing:
 
 ```bash
-# Install (macOS)
 brew install actionlint
-
-# Validate all workflows
 actionlint .github/workflows/
-
-# Validate specific workflow
-actionlint .github/workflows/deploy-dev.yml
 ```
-
-Common issues actionlint catches:
-
-- Missing `needs` declarations when accessing `needs.*.outputs.*`
-- Undefined secrets in reusable workflows (`workflow_call` must declare all secrets)
-- Shellcheck issues in `run` scripts
-- Expression syntax errors
-
-### Pipeline Overview
-
-- `deploy-dev.yml` — Auto-triggers on push to `main`, manual `workflow_dispatch`
-- `deploy-prod.yml` — Manual trigger only (production deployments are explicit)
-- Reusable workflows: `reusable-build.yml`, `reusable-infra-drift-check.yml`, `reusable-update-argocd.yml`, `reusable-e2e-test.yml`, `reusable-rollback-argocd.yml`
 
 ## E2E Testing Against the Dev Cluster
 

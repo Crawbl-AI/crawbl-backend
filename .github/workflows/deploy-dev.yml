@@ -1,6 +1,7 @@
 # Deploy to Dev
 #
-# Thin wrapper around the shared deployment pipeline.
+# Lightweight CI gate: validates the already-deployed dev cluster and creates
+# releases. Builds and deployments happen locally via `crawbl app deploy`.
 name: Deploy to Dev
 
 on:
@@ -13,44 +14,86 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    uses: ./.github/workflows/reusable-deploy.yml
-    with:
-      environment: dev
-      region: fra1
-      cluster-name: crawbl-dev
-      base-url: https://dev.api.crawbl.com
-      registry: registry.digitalocean.com/crawbl
-      push-images: true
-      e2e-timeout: 30s
-      rollback-on-e2e-failure: false
-    secrets:
-      digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      pulumi-access-token: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-      aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      aws-region: ${{ secrets.AWS_REGION }}
-      argocd-ssh-private-key: ${{ secrets.ARGOCD_SSH_PRIVATE_KEY }}
-      digitalocean-vpc-id: ${{ secrets.DIGITALOCEAN_VPC_ID }}
-      digitalocean-project-name: ${{ secrets.DIGITALOCEAN_PROJECT_NAME }}
-      argocd-repo-token: ${{ secrets.ARGOCD_APPS_TOKEN }}
-      e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}
+  e2e-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build crawbl CLI
+        run: |
+          mkdir -p .artifacts/bin
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
+            -o .artifacts/bin/crawbl ./cmd/crawbl
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save kubeconfig
+        run: doctl kubernetes cluster kubeconfig save crawbl-dev
+
+      - name: Run E2E tests
+        env:
+          CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
+        run: |
+          ./.artifacts/bin/crawbl test e2e \
+            --base-url https://dev.api.crawbl.com \
+            --e2e-token "$CRAWBL_E2E_TOKEN" \
+            --timeout 30s
 
   release:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    needs: [deploy]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ needs.deploy.outputs.semver-tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Calculate semver tag
+        id: semver
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+
+          BUMP="patch"
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '^[a-z]+(\(.+\))?!:'; then
+              BUMP="major"
+              break
+            elif echo "$line" | grep -qE '^feat(\(.+\))?:'; then
+              if [ "$BUMP" != "major" ]; then
+                BUMP="minor"
+              fi
+            fi
+          done < <(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" 2>/dev/null)
+
+          IFS='.' read -r major minor patch <<< "${LAST_TAG#v}"
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          TAG="v${major}.${minor}.${patch}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Calculated tag: $TAG (bump: $BUMP)"
+
       - name: Create Git tag and GitHub release
+        env:
+          TAG: ${{ steps.semver.outputs.tag }}
         run: |
           if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             git config user.name "github-actions[bot]"

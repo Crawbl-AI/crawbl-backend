@@ -13,7 +13,7 @@ import (
 // init container, runtime container, and the two mounted data sources that
 // become the live ZeroClaw workspace.
 
-func buildRuntimeStatefulSet(sw *crawblv1alpha1.UserSwarm, ns, bootstrapImage string, bootstrapFiles map[string]string) *appsv1.StatefulSet {
+func buildRuntimeStatefulSet(sw *crawblv1alpha1.UserSwarm, ns, bootstrapImage, defaultRuntimeImage string, bootstrapFiles map[string]string) *appsv1.StatefulSet {
 	port := runtimePortFor(sw)
 	secretName := runtimeEnvSecretName(sw)
 	replicas := runtimeReplicaCount(sw)
@@ -34,13 +34,13 @@ func buildRuntimeStatefulSet(sw *crawblv1alpha1.UserSwarm, ns, bootstrapImage st
 						"crawbl.ai/bootstrap-image": kube.ChecksumString(bootstrapImage),
 					},
 				},
-				Spec: buildRuntimePodSpec(sw, port, bootstrapImage, secretName),
+				Spec: buildRuntimePodSpec(sw, port, bootstrapImage, defaultRuntimeImage, secretName),
 			},
 		},
 	}
 }
 
-func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, bootstrapImage, secretName string) corev1.PodSpec {
+func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, bootstrapImage, defaultRuntimeImage, secretName string) corev1.PodSpec {
 	return corev1.PodSpec{
 		ServiceAccountName: runtimeServiceAccountName(sw),
 		SecurityContext: &corev1.PodSecurityContext{
@@ -52,7 +52,7 @@ func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, bootstrapImag
 			SeccompProfile:      &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
 		InitContainers: []corev1.Container{buildBootstrapContainer(bootstrapImage, secretName)},
-		Containers:     []corev1.Container{buildZeroClawContainer(sw, port, secretName)},
+		Containers:     []corev1.Container{buildZeroClawContainer(sw, port, defaultRuntimeImage, secretName)},
 		Volumes: []corev1.Volume{
 			{
 				Name: "data",
@@ -96,7 +96,7 @@ func buildBootstrapContainer(bootstrapImage, secretName string) corev1.Container
 	return container
 }
 
-func buildZeroClawContainer(sw *crawblv1alpha1.UserSwarm, port int32, secretName string) corev1.Container {
+func buildZeroClawContainer(sw *crawblv1alpha1.UserSwarm, port int32, defaultRuntimeImage, secretName string) corev1.Container {
 	healthCommand := []string{"/usr/local/bin/zeroclaw", "status", "--format=exit-code"}
 
 	healthProbe := &corev1.Probe{
@@ -113,7 +113,13 @@ func buildZeroClawContainer(sw *crawblv1alpha1.UserSwarm, port int32, secretName
 		FailureThreshold: 18,
 	}
 
-	image := sw.Spec.Runtime.Image
+	// Webhook-level default takes precedence so that updating the webhook
+	// deployment rolls all swarms forward on the next Metacontroller resync.
+	// Falls back to the CR spec, then to a hardcoded default.
+	image := defaultRuntimeImage
+	if image == "" {
+		image = sw.Spec.Runtime.Image
+	}
 	if image == "" {
 		image = "registry.digitalocean.com/crawbl/zeroclaw:latest"
 	}

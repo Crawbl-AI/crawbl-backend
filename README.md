@@ -76,6 +76,9 @@ Everything is managed through the `./crawbl` launcher or the thin root `Makefile
 ```
 ./crawbl setup                  # Check tools + create .env
 ./crawbl dev start              # Start the full local stack
+./crawbl app build <component>              # Build a container image (tag auto-calculated)
+./crawbl app deploy <component>             # Build, push, update ArgoCD (tag auto-calculated)
+./crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
 ./crawbl --help                 # Check other commands
 ```
 
@@ -146,13 +149,34 @@ See [`config/README.md`](config/README.md) for the complete reference of every e
 CI is slow — use this to build and push the ZeroClaw image directly.
 
 ```bash
-# From crawbl-zeroclaw/
-docker build --platform linux/amd64 --target release -t registry.digitalocean.com/crawbl/zeroclaw:<tag> .
-doctl registry login
-docker push registry.digitalocean.com/crawbl/zeroclaw:<tag>
+# From crawbl-zeroclaw/ — build only:
+crawbl app build zeroclaw --tag <tag>
+
+# Build, push, and update ArgoCD in one step:
+crawbl app deploy zeroclaw --tag <tag>
 ```
 
-> After pushing, manually update the image tag in `crawbl-argocd-apps` — CI does this automatically but manual builds skip it.
+> If you build manually without deploy, update the image tag in `crawbl-argocd-apps` yourself — `deploy` does this automatically.
+
+## 🚢 Deploy
+
+Tag is auto-calculated from conventional commits (`feat:` → minor bump, `!:` → major bump, default → patch). Override with `--tag` if needed. Working tree must be clean and pushed before deploying.
+
+```bash
+crawbl app deploy <component>             # Build, push, update ArgoCD (auto-semver tag)
+crawbl app deploy all                     # Deploy platform + auth-filter + docs + website
+crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
+```
+
+Makefile shortcuts (auto-semver, no manual tag needed):
+
+```bash
+make deploy-dev          # Deploy all standard components
+make deploy-platform     # Deploy platform only
+make deploy-zeroclaw     # Deploy zeroclaw only
+make deploy-docs         # Deploy docs only
+make deploy-website      # Deploy website only
+```
 
 ## 🔗 Related
 

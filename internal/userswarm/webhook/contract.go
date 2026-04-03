@@ -19,8 +19,9 @@ type ListenConfig struct {
 // runtimeConfig is the fully-expanded runtime context used while building the
 // desired child graph for a single UserSwarm.
 type runtimeConfig struct {
-	BootstrapImage string
-	ZeroClawConfig *zeroclaw.ZeroClawConfig
+	BootstrapImage      string
+	DefaultRuntimeImage string
+	ZeroClawConfig      *zeroclaw.ZeroClawConfig
 
 	MCPEndpoint   string
 	MCPSigningKey string

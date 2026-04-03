@@ -74,7 +74,8 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 // configuration used during reconciliation.
 func runtimeConfigFromEnv() *runtimeConfig {
 	return &runtimeConfig{
-		BootstrapImage:   envOrDefault("USERSWARM_BOOTSTRAP_IMAGE", "registry.digitalocean.com/crawbl/crawbl-platform:dev"),
+		BootstrapImage:      envOrDefault("USERSWARM_BOOTSTRAP_IMAGE", "registry.digitalocean.com/crawbl/crawbl-platform:dev"),
+		DefaultRuntimeImage: os.Getenv("ZEROCLAW_DEFAULT_IMAGE"),
 		MCPEndpoint:      os.Getenv("CRAWBL_MCP_ENDPOINT"),
 		MCPSigningKey:    os.Getenv("CRAWBL_MCP_SIGNING_KEY"),
 		BackupBucket:     os.Getenv("USERSWARM_BACKUP_BUCKET"),

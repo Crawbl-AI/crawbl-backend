@@ -37,7 +37,7 @@ func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runt
 		buildWorkspacePVC(swarm, runtimeNamespace),
 		buildHeadlessNetwork(swarm, runtimeNamespace),
 		buildRuntimeNetwork(swarm, runtimeNamespace),
-		buildRuntimeStatefulSet(swarm, runtimeNamespace, cfg.BootstrapImage, bootstrapFiles),
+		buildRuntimeStatefulSet(swarm, runtimeNamespace, cfg.BootstrapImage, cfg.DefaultRuntimeImage, bootstrapFiles),
 	}
 
 	if shouldCreateBackupJob(swarm, cfg) {
