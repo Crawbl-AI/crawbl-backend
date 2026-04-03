@@ -87,10 +87,13 @@ func (r *Router) Route(ctx context.Context, message string, agents []*orchestrat
 		return fallback
 	}
 
-	raw := resp.Choices[0].Message.Content
+	choice := resp.Choices[0]
+	raw := choice.Message.Content
 	r.logger.Info("routing LLM response",
 		"raw", raw,
 		"model", resp.Model,
+		"finish_reason", choice.FinishReason,
+		"refusal", choice.Message.Refusal,
 	)
 
 	return parseRoutingResponse(raw, agents, r.logger)
