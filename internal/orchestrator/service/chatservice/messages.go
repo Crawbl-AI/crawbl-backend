@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -338,6 +339,8 @@ func (s *service) callAgentStreaming(
 	}
 
 	// 4. Read chunks and emit events.
+	streamStart := time.Now()
+	chunkCount := 0
 	var accumulated strings.Builder
 	firstChunk := true
 
@@ -360,6 +363,7 @@ func (s *service) callAgentStreaming(
 				firstChunk = false
 			}
 			accumulated.WriteString(chunk.Delta)
+			chunkCount++
 			s.broadcaster.EmitMessageChunk(ctx, opts.WorkspaceID, realtime.MessageChunkPayload{
 				MessageID:      placeholder.ID,
 				ConversationID: conversation.ID,
@@ -389,9 +393,25 @@ func (s *service) callAgentStreaming(
 		}
 	}
 
+	slog.Info("callAgentStreaming: stream complete",
+		"agent_slug", agent.Slug,
+		"agent_id", agent.ID,
+		"conversation_id", conversation.ID,
+		"chunks", chunkCount,
+		"text_len", accumulated.Len(),
+		"elapsed_ms", time.Since(streamStart).Milliseconds(),
+	)
+
 	// 5. Finalize: update message in DB, emit done, set online.
 	finalText := strings.TrimSpace(accumulated.String())
 	if finalText == "" || finalText == "[SILENT]" {
+		slog.Warn("callAgentStreaming: empty or silent response",
+			"agent_slug", agent.Slug,
+			"agent_id", agent.ID,
+			"conversation_id", conversation.ID,
+			"chunks", chunkCount,
+			"raw_text", finalText,
+		)
 		// Agent had nothing to say — remove placeholder.
 		// For now, mark as delivered with empty text (Flutter filters [SILENT]).
 		finalText = ""

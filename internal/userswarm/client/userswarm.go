@@ -334,6 +334,13 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 		req.Header.Set("X-Session-Id", opts.SessionID)
 	}
 
+	streamStart := time.Now()
+	slog.Info("webhook/stream: request started",
+		"url", url,
+		"agent_id", opts.AgentID,
+		"session_id", opts.SessionID,
+	)
+
 	resp, err := c.httpStreamClient.Do(req)
 	if err != nil {
 		return nil, merrors.NewServerError(err)
@@ -343,6 +350,12 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 		resp.Body.Close()
 		return nil, merrors.NewServerErrorText(fmt.Sprintf("webhook/stream returned %d", resp.StatusCode))
 	}
+
+	slog.Info("webhook/stream: connected",
+		"status", resp.StatusCode,
+		"service", opts.Runtime.ServiceName,
+		"elapsed_ms", time.Since(streamStart).Milliseconds(),
+	)
 
 	ch := make(chan StreamChunk, 16)
 	go func() {
@@ -358,12 +371,21 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 
 			var chunk StreamChunk
 			if err := json.Unmarshal([]byte(line), &chunk); err != nil {
-				continue // skip malformed lines
+				slog.Warn("webhook/stream: malformed NDJSON line",
+					"error", err.Error(),
+					"line", line,
+					"service", opts.Runtime.ServiceName,
+				)
+				continue
 			}
 
 			select {
 			case ch <- chunk:
 			case <-ctx.Done():
+				slog.Warn("webhook/stream: context cancelled during read",
+					"service", opts.Runtime.ServiceName,
+					"agent_id", opts.AgentID,
+				)
 				return
 			}
 		}
@@ -375,6 +397,11 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 				"service", opts.Runtime.ServiceName,
 			)
 		}
+		slog.Info("webhook/stream: stream closed",
+			"service", opts.Runtime.ServiceName,
+			"agent_id", opts.AgentID,
+			"elapsed_ms", time.Since(streamStart).Milliseconds(),
+		)
 	}()
 
 	return ch, nil
