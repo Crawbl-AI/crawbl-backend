@@ -5,14 +5,16 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/blang/semver"
 )
 
 var (
-	breakingRe = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
-	featRe     = regexp.MustCompile(`^feat(\(.+\))?:`)
+	breakingRe  = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
+	featRe      = regexp.MustCompile(`^feat(\(.+\))?:`)
+	crawblTagRe = regexp.MustCompile(`^(v.+)-crawbl\.(\d+)$`)
 )
 
 // Result holds the output of Calculate.
@@ -89,4 +91,31 @@ func CalculateForRepo(repoPath string) (Result, error) {
 
 	tag := "v" + v.String()
 	return Result{Tag: tag, LastTag: lastTag, Bump: bump}, nil
+}
+
+// CalculateForCrawblFork calculates the next tag for the crawbl zeroclaw fork.
+// Tags follow the pattern v<upstream>-crawbl.<N> where N increments per release.
+// Example: v0.6.8-crawbl.1 → v0.6.8-crawbl.2
+func CalculateForCrawblFork(repoPath string) (Result, error) {
+	// Find the last crawbl-suffixed tag.
+	describeCmd := gitCmd(repoPath, "describe", "--tags", "--abbrev=0", "--match", "v*-crawbl*")
+	output, err := describeCmd.Output()
+	if err != nil {
+		return Result{}, fmt.Errorf("no v*-crawbl* tags found — create one manually first (e.g. v0.6.8-crawbl.1)")
+	}
+	lastTag := strings.TrimSpace(string(output))
+
+	// Parse the crawbl suffix: v0.6.8-crawbl.1 → base="v0.6.8", n=1
+	matches := crawblTagRe.FindStringSubmatch(lastTag)
+	if matches == nil {
+		return Result{}, fmt.Errorf("tag %s does not match v*-crawbl.<N> pattern", lastTag)
+	}
+	base := matches[1]
+	n, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return Result{}, fmt.Errorf("invalid crawbl suffix number in %s: %w", lastTag, err)
+	}
+
+	tag := fmt.Sprintf("%s-crawbl.%d", base, n+1)
+	return Result{Tag: tag, LastTag: lastTag, Bump: "crawbl"}, nil
 }

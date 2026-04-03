@@ -14,6 +14,7 @@ type Config struct {
 	RepoPath string // local repo path for git operations
 	RepoSlug string // GitHub owner/repo e.g. "Crawbl-AI/crawbl-backend"
 	Tag      string
+	PrevTag  string // previous tag for changelog link (empty = first release)
 }
 
 // TagAndRelease creates a git tag, pushes it, creates a GitHub release,
@@ -25,7 +26,6 @@ func TagAndRelease(cfg Config) error {
 	tagCmd.Stdout = os.Stdout
 	tagCmd.Stderr = os.Stderr
 	if err := tagCmd.Run(); err != nil {
-		// Tag might already exist if re-running after a partial failure
 		out.Warning("Tag creation failed (may already exist): %v", err)
 	}
 
@@ -38,12 +38,29 @@ func TagAndRelease(cfg Config) error {
 		return fmt.Errorf("push tag: %w", err)
 	}
 
-	// 3. Create GitHub release with auto-generated notes
+	// 3. Get commit log between tags for rich context
+	commitLog := getCommitLog(cfg.RepoPath, cfg.PrevTag, cfg.Tag)
+
+	// 4. Enrich via claude CLI using commit log
+	out.Step(style.Deploy, "Generating release notes via Claude")
+	enriched, err := enrichNotes(commitLog, cfg.Tag, cfg.RepoSlug, cfg.PrevTag)
+	if err != nil {
+		out.Warning("LLM enrichment failed, using commit log as notes: %v", err)
+		enriched = commitLog
+	}
+
+	// 5. Append changelog link
+	if cfg.PrevTag != "" && cfg.PrevTag != "v0.0.0" {
+		enriched += fmt.Sprintf("\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s",
+			cfg.RepoSlug, cfg.PrevTag, cfg.Tag)
+	}
+
+	// 6. Create GitHub release with enriched notes
 	out.Step(style.Deploy, "Creating GitHub release for %s on %s", cfg.Tag, cfg.RepoSlug)
 	createCmd := exec.Command("gh", "release", "create", cfg.Tag,
 		"--repo", cfg.RepoSlug,
 		"--title", "Release "+cfg.Tag,
-		"--generate-notes",
+		"--notes", enriched,
 	)
 	createCmd.Stdout = os.Stdout
 	createCmd.Stderr = os.Stderr
@@ -51,52 +68,70 @@ func TagAndRelease(cfg Config) error {
 		return fmt.Errorf("create release: %w", err)
 	}
 
-	// 4. Fetch the auto-generated notes
-	viewCmd := exec.Command("gh", "release", "view", cfg.Tag,
-		"--repo", cfg.RepoSlug,
-		"--json", "body", "-q", ".body",
-	)
-	rawNotes, err := viewCmd.Output()
-	if err != nil {
-		out.Warning("Could not fetch release notes for enrichment: %v", err)
-		return nil // release was created, enrichment is best-effort
-	}
-
-	// 5. Enrich via claude CLI
-	enriched, err := enrichNotes(string(rawNotes), cfg.Tag)
-	if err != nil {
-		out.Warning("LLM enrichment failed, keeping original notes: %v", err)
-		return nil
-	}
-
-	// 6. Update release with enriched notes
-	out.Step(style.Deploy, "Updating release with enriched notes")
-	editCmd := exec.Command("gh", "release", "edit", cfg.Tag,
-		"--repo", cfg.RepoSlug,
-		"--notes", enriched,
-	)
-	editCmd.Stdout = os.Stdout
-	editCmd.Stderr = os.Stderr
-	if err := editCmd.Run(); err != nil {
-		out.Warning("Failed to update release notes: %v", err)
-	}
-
 	out.Success("Released %s on %s", cfg.Tag, cfg.RepoSlug)
 	return nil
 }
 
-// enrichNotes calls the local claude CLI to rewrite release notes.
-func enrichNotes(rawNotes, tag string) (string, error) {
-	prompt := fmt.Sprintf(`You are writing release notes for version %s of a software project.
-Here are the auto-generated notes from GitHub:
+// getCommitLog returns the formatted commit messages between prevTag and tag.
+func getCommitLog(repoPath, prevTag, tag string) string {
+	var args []string
+	if repoPath != "" {
+		args = append(args, "-C", repoPath)
+	}
+
+	// Range: from prevTag to current HEAD (tag hasn't been fetched yet by git log)
+	logRange := "HEAD"
+	if prevTag != "" && prevTag != "v0.0.0" {
+		logRange = prevTag + "..HEAD"
+	}
+
+	args = append(args, "log", logRange, "--pretty=format:%s (%an)")
+	cmd := exec.Command("git", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// enrichNotes calls the local claude CLI to generate professional release notes
+// from commit messages.
+func enrichNotes(commitLog, tag, repoSlug, prevTag string) (string, error) {
+	if strings.TrimSpace(commitLog) == "" {
+		return "No changes in this release.", nil
+	}
+
+	prompt := fmt.Sprintf(`You are writing release notes for version %s of Crawbl (AI infrastructure platform).
+Repository: %s
+
+Here are the commits included in this release:
 
 %s
 
-Rewrite these into clean, professional release notes. Group changes by: Features, Fixes, Other (skip empty groups).
-Keep it concise. Use markdown bullet points. Don't add anything not in the original notes.
-Start directly with the grouped content, no preamble.`, tag, rawNotes)
+Write clean, professional GitHub release notes with this structure:
 
-	cmd := exec.Command("claude", "-p", prompt, "--model", "haiku")
+## What's New
+- bullet points for new features (skip section if none)
+
+## Improvements
+- bullet points for enhancements (skip section if none)
+
+## Bug Fixes
+- bullet points for fixes (skip section if none)
+
+## Breaking Changes
+- bullet points for breaking changes that require user action (skip section if none)
+
+Rules:
+- One concise line per change, written for end users not developers
+- Group related commits into a single bullet point when they cover the same change
+- Skip trivial changes (typo fixes, formatting, CI config)
+- Do NOT include commit hashes, author names, or PR links
+- Do NOT add a preamble, summary, or closing sentence
+- Start directly with the first ## heading
+- Output raw markdown only`, tag, repoSlug, commitLog)
+
+	cmd := exec.Command("claude", "-p", prompt, "--model", "sonnet")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("claude CLI: %w", err)

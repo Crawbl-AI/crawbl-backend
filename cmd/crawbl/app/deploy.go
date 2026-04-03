@@ -68,11 +68,11 @@ func newDeployPlatformCommand() *cobra.Command {
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolvedTag, err := resolveDeployTag(tag, true, "")
+			resolved, err := resolveDeployTag(tag, true, "")
 			if err != nil {
 				return err
 			}
-			tag = resolvedTag
+			tag = resolved.Tag
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -112,6 +112,7 @@ func newDeployPlatformCommand() *cobra.Command {
 				RepoPath: rootDir,
 				RepoSlug: "Crawbl-AI/crawbl-backend",
 				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
@@ -137,11 +138,11 @@ func newDeployAuthFilterCommand() *cobra.Command {
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolvedTag, err := resolveDeployTag(tag, true, "")
+			resolved, err := resolveDeployTag(tag, true, "")
 			if err != nil {
 				return err
 			}
-			tag = resolvedTag
+			tag = resolved.Tag
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -178,6 +179,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 				RepoPath: rootDir,
 				RepoSlug: "Crawbl-AI/crawbl-backend",
 				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
@@ -197,8 +199,9 @@ func newDeployZeroClawCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "zeroclaw",
 		Short: "Deploy the ZeroClaw agent runtime",
-		Long:  "Build and push the zeroclaw image, then update the image reference in crawbl-argocd-apps.",
-		Example: `  crawbl app deploy zeroclaw --tag v1.0.0-crawbl1
+		Long:  "Build and push the zeroclaw image, then update the image reference in crawbl-argocd-apps. Auto-increments the crawbl fork suffix (e.g. v0.6.8-crawbl.1 → v0.6.8-crawbl.2).",
+		Example: `  crawbl app deploy zeroclaw
+  crawbl app deploy zeroclaw --tag v0.6.8-crawbl.2
   crawbl app deploy zeroclaw --path /custom/path/crawbl-zeroclaw`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := checkAllTools(); err != nil {
@@ -210,11 +213,11 @@ func newDeployZeroClawCommand() *cobra.Command {
 				return err
 			}
 
-			resolvedTag, err := resolveDeployTag(tag, false, zeroClawDir)
+			resolved, err := resolveZeroClawTag(tag, zeroClawDir)
 			if err != nil {
 				return err
 			}
-			tag = resolvedTag
+			tag = resolved.Tag
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildZeroClawImageRepo,
@@ -246,6 +249,7 @@ func newDeployZeroClawCommand() *cobra.Command {
 				RepoPath: zeroClawDir,
 				RepoSlug: "Crawbl-AI/crawbl-zeroclaw",
 				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
@@ -279,11 +283,11 @@ func newDeployDocsCommand() *cobra.Command {
 				return err
 			}
 
-			resolvedTag, err := resolveDeployTag(tag, false, docsDir)
+			resolved, err := resolveDeployTag(tag, false, docsDir)
 			if err != nil {
 				return err
 			}
-			tag = resolvedTag
+			tag = resolved.Tag
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildDocsImageRepo,
@@ -314,6 +318,7 @@ func newDeployDocsCommand() *cobra.Command {
 				RepoPath: docsDir,
 				RepoSlug: "Crawbl-AI/crawbl-docs",
 				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
@@ -347,11 +352,11 @@ func newDeployWebsiteCommand() *cobra.Command {
 				return err
 			}
 
-			resolvedTag, err := resolveDeployTag(tag, false, websiteDir)
+			resolved, err := resolveDeployTag(tag, false, websiteDir)
 			if err != nil {
 				return err
 			}
-			tag = resolvedTag
+			tag = resolved.Tag
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildWebsiteImageRepo,
@@ -382,6 +387,7 @@ func newDeployWebsiteCommand() *cobra.Command {
 				RepoPath: websiteDir,
 				RepoSlug: "Crawbl-AI/crawbl-website",
 				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
@@ -408,11 +414,11 @@ func newDeployAllCommand() *cobra.Command {
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolvedTag, err := resolveDeployTag(tag, true, "")
+			resolved, err := resolveDeployTag(tag, true, "")
 			if err != nil {
 				return err
 			}
-			tag = resolvedTag
+			tag = resolved.Tag
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -473,6 +479,7 @@ func newDeployAllCommand() *cobra.Command {
 				RepoPath: rootDir,
 				RepoSlug: "Crawbl-AI/crawbl-backend",
 				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
