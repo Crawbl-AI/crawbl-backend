@@ -318,9 +318,14 @@ func (s *service) callAgentStreaming(
 		AgentID:   runtimeAgentID(agent),
 	})
 	if mErr != nil {
-		// Update placeholder to failed.
-		s.finalizeStreamMessage(ctx, opts, conversation, placeholder, "", orchestrator.MessageStatusFailed, lookups)
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
+		// Stream failed before any data — delete empty placeholder instead of showing empty failed bubble.
+		slog.Warn("callAgentStreaming: stream failed, deleting placeholder",
+			"agent_slug", agent.Slug,
+			"agent_id", agent.ID,
+			"error", mErr.Error(),
+		)
+		_ = s.messageRepo.DeleteByID(ctx, opts.Sess, placeholder.ID)
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError), conversation.ID)
 		return nil, mErr
 	}
 
@@ -343,6 +348,7 @@ func (s *service) callAgentStreaming(
 	chunkCount := 0
 	var accumulated strings.Builder
 	firstChunk := true
+	streamDone := false
 
 	for chunk := range streamCh {
 		switch chunk.Type {
@@ -389,7 +395,8 @@ func (s *service) callAgentStreaming(
 			})
 
 		case userswarmclient.StreamEventDone:
-			// Done is handled after the loop.
+			// Mark that the stream ended properly.
+			streamDone = true
 		}
 	}
 
@@ -402,23 +409,67 @@ func (s *service) callAgentStreaming(
 		"elapsed_ms", time.Since(streamStart).Milliseconds(),
 	)
 
-	// 5. Finalize: update message in DB, emit done, set online.
+	// 5. Finalize based on what we received.
 	finalText := strings.TrimSpace(accumulated.String())
-	if finalText == "" || finalText == "[SILENT]" {
-		slog.Warn("callAgentStreaming: empty or silent response",
+
+	// Case A: Agent had nothing to say (0 chunks, empty text) — delete placeholder, user never sees it.
+	if finalText == "" && chunkCount == 0 {
+		slog.Warn("callAgentStreaming: agent produced no output, deleting placeholder",
+			"agent_slug", agent.Slug,
+			"agent_id", agent.ID,
+			"conversation_id", conversation.ID,
+		)
+		_ = s.messageRepo.DeleteByID(ctx, opts.Sess, placeholder.ID)
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+		return nil, nil
+	}
+
+	// Case B: Agent responded [SILENT] — save with silent status for Flutter to show a system message.
+	if finalText == "[SILENT]" {
+		slog.Info("callAgentStreaming: agent responded SILENT",
+			"agent_slug", agent.Slug,
+			"agent_id", agent.ID,
+			"conversation_id", conversation.ID,
+		)
+		reply := s.finalizeStreamMessage(ctx, opts, conversation, placeholder, "", orchestrator.MessageStatusSilent, lookups)
+		s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
+			MessageID:      placeholder.ID,
+			ConversationID: conversation.ID,
+			AgentID:        agent.ID,
+			Status:         string(orchestrator.MessageStatusSilent),
+		})
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+		if reply == nil {
+			return nil, nil
+		}
+		return []*orchestrator.Message{reply}, nil
+	}
+
+	// Case D: Partial response (got text but stream didn't complete properly) — save as incomplete.
+	if !streamDone && finalText != "" {
+		slog.Warn("callAgentStreaming: incomplete response (stream ended without done event)",
 			"agent_slug", agent.Slug,
 			"agent_id", agent.ID,
 			"conversation_id", conversation.ID,
 			"chunks", chunkCount,
-			"raw_text", finalText,
+			"text_len", len(finalText),
 		)
-		// Agent had nothing to say — remove placeholder.
-		// For now, mark as delivered with empty text (Flutter filters [SILENT]).
-		finalText = ""
+		reply := s.finalizeStreamMessage(ctx, opts, conversation, placeholder, finalText, orchestrator.MessageStatusIncomplete, lookups)
+		s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
+			MessageID:      placeholder.ID,
+			ConversationID: conversation.ID,
+			AgentID:        agent.ID,
+			Status:         string(orchestrator.MessageStatusIncomplete),
+		})
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+		if reply == nil {
+			return nil, nil
+		}
+		return []*orchestrator.Message{reply}, nil
 	}
 
+	// Case C: Normal response — save with delivered status.
 	reply := s.finalizeStreamMessage(ctx, opts, conversation, placeholder, finalText, orchestrator.MessageStatusDelivered, lookups)
-
 	s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
 		MessageID:      placeholder.ID,
 		ConversationID: conversation.ID,

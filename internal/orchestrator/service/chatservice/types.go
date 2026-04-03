@@ -101,6 +101,8 @@ type messageRepo interface {
 	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
 	// UpdateStatus updates just the status and updated_at of a message by ID.
 	UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
+	// DeleteByID removes a message by its ID. Used to clean up empty failed placeholders.
+	DeleteByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) *merrors.Error
 }
 
 // toolsRepo defines the repository interface for tool catalog operations.

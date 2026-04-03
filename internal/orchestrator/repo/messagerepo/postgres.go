@@ -170,6 +170,20 @@ func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.Se
 	return nil
 }
 
+// DeleteByID removes a message by its ID.
+func (r *messageRepo) DeleteByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) *merrors.Error {
+	if sess == nil || messageID == "" {
+		return merrors.ErrInvalidInput
+	}
+	_, err := sess.DeleteFrom("messages").
+		Where("id = ?", messageID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "delete message by id")
+	}
+	return nil
+}
+
 // Save persists message data to the database.
 // It handles both creating new messages and updating existing ones by checking
 // if a message with the same ID exists first.

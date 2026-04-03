@@ -125,6 +125,12 @@ const (
 
 	// MessageStatusRead indicates the message was read and is being processed by an agent.
 	MessageStatusRead MessageStatus = "read"
+
+	// MessageStatusIncomplete indicates the agent's response was interrupted (partial text received).
+	MessageStatusIncomplete MessageStatus = "incomplete"
+
+	// MessageStatusSilent indicates the agent consciously had nothing to say.
+	MessageStatusSilent MessageStatus = "silent"
 )
 
 // MessageContentType represents the type of content in a message.
