@@ -42,7 +42,7 @@ func NewRouter(cfg RouterConfig, logger *slog.Logger) *Router {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 5 * time.Second
+		timeout = 15 * time.Second
 	}
 
 	return &Router{
