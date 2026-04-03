@@ -323,6 +323,20 @@ func (s *service) callAgentStreaming(
 		return nil, mErr
 	}
 
+	// User message reached ZeroClaw → mark as delivered (once across parallel agents).
+	if opts.UserMessageID != "" && opts.StatusDeliveredOnce != nil {
+		opts.StatusDeliveredOnce.Do(func() {
+			s.broadcaster.EmitMessageStatus(ctx, opts.WorkspaceID, realtime.MessageStatusPayload{
+				MessageID:      opts.UserMessageID,
+				ConversationID: conversation.ID,
+				LocalID:        opts.LocalID,
+				Status:         string(orchestrator.MessageStatusDelivered),
+			})
+			// Update DB so REST API returns "delivered" for historical messages.
+			_ = s.messageRepo.UpdateStatus(ctx, opts.Sess, opts.UserMessageID, orchestrator.MessageStatusDelivered)
+		})
+	}
+
 	// 4. Read chunks and emit events.
 	var accumulated strings.Builder
 	firstChunk := true
@@ -332,6 +346,17 @@ func (s *service) callAgentStreaming(
 		case userswarmclient.StreamEventChunk, userswarmclient.StreamEventThinking:
 			if firstChunk {
 				s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusWriting), conversation.ID)
+				// First token received → mark user message as read (once across parallel agents).
+				if opts.UserMessageID != "" && opts.StatusReadOnce != nil {
+					opts.StatusReadOnce.Do(func() {
+						s.broadcaster.EmitMessageStatus(ctx, opts.WorkspaceID, realtime.MessageStatusPayload{
+							MessageID:      opts.UserMessageID,
+							ConversationID: conversation.ID,
+							LocalID:        opts.LocalID,
+							Status:         string(orchestrator.MessageStatusRead),
+						})
+					})
+				}
 				firstChunk = false
 			}
 			accumulated.WriteString(chunk.Delta)
@@ -443,7 +468,7 @@ func (s *service) persistUserMessage(
 		ConversationID: conversation.ID,
 		Role:           orchestrator.MessageRoleUser,
 		Content:        opts.Content,
-		Status:         orchestrator.MessageStatusDelivered,
+		Status:         orchestrator.MessageStatusSent,
 		LocalID:        stringPtr(opts.LocalID),
 		Attachments:    append([]orchestrator.Attachment(nil), opts.Attachments...),
 		CreatedAt:      now,
@@ -460,6 +485,17 @@ func (s *service) persistUserMessage(
 	}
 
 	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMsg)
+
+	// Notify transport layer (e.g. Socket.IO ack) that user message is persisted.
+	if opts.OnPersisted != nil {
+		opts.OnPersisted(userMsg)
+	}
+
+	// Store user message ID for downstream status tracking.
+	opts.UserMessageID = userMsg.ID
+	opts.StatusDeliveredOnce = &sync.Once{}
+	opts.StatusReadOnce = &sync.Once{}
+
 	return userMsg, nil
 }
 

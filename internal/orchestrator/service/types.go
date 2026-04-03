@@ -13,6 +13,7 @@ package service
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -222,6 +223,17 @@ type SendMessageOpts struct {
 	Attachments []orchestrator.Attachment
 	// Mentions is the list of @-mentioned agents in the message (swarm chat).
 	Mentions []orchestrator.Mention
+	// OnPersisted is called after the user message is saved to DB, before agent processing.
+	// Used by the transport layer to emit early acknowledgement to the sender.
+	OnPersisted func(userMsg *orchestrator.Message)
+	// UserMessageID is set internally after the user message is persisted.
+	// Used downstream to emit status updates for the original user message.
+	UserMessageID string
+	// StatusDeliveredOnce ensures the "delivered" status is emitted only once
+	// when multiple agents process the same user message in parallel.
+	StatusDeliveredOnce *sync.Once
+	// StatusReadOnce ensures the "read" status is emitted only once.
+	StatusReadOnce *sync.Once
 }
 
 // GetWorkspaceSummaryOpts contains options for the GetWorkspaceSummary method.

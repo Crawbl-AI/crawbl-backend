@@ -26,6 +26,9 @@ type Broadcaster interface {
 
 	// EmitAgentTool emits an agent.tool event for tool call activity during streaming.
 	EmitAgentTool(ctx context.Context, workspaceID string, payload AgentToolPayload)
+
+	// EmitMessageStatus emits a message.status event for delivery status transitions.
+	EmitMessageStatus(ctx context.Context, workspaceID string, payload MessageStatusPayload)
 }
 
 // NopBroadcaster is a no-op implementation used when real-time is not configured.
@@ -54,9 +57,10 @@ type AgentStatusPayload struct {
 
 // Streaming event names for token-by-token delivery.
 const (
-	EventMessageChunk = "message.chunk"
-	EventMessageDone  = "message.done"
-	EventAgentTool    = "agent.tool"
+	EventMessageChunk  = "message.chunk"
+	EventMessageDone   = "message.done"
+	EventAgentTool     = "agent.tool"
+	EventMessageStatus = "message.status"
 )
 
 // MessageChunkPayload is emitted for each streamed text token.
@@ -82,4 +86,12 @@ type AgentToolPayload struct {
 	Tool           string `json:"tool"`
 	Status         string `json:"status"`          // "running" or "done"
 	Query          string `json:"query,omitempty"`
+}
+
+// MessageStatusPayload is emitted when a message's delivery status changes.
+type MessageStatusPayload struct {
+	MessageID      string `json:"message_id"`
+	ConversationID string `json:"conversation_id"`
+	LocalID        string `json:"local_id,omitempty"`
+	Status         string `json:"status"` // "sent", "delivered", "read"
 }

@@ -73,3 +73,8 @@ func (b *Broadcaster) EmitMessageDone(ctx context.Context, workspaceID string, p
 func (b *Broadcaster) EmitAgentTool(ctx context.Context, workspaceID string, payload realtime.AgentToolPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentTool, payload)
 }
+
+// EmitMessageStatus emits a message.status event for delivery status transitions.
+func (b *Broadcaster) EmitMessageStatus(ctx context.Context, workspaceID string, payload realtime.MessageStatusPayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageStatus, payload)
+}

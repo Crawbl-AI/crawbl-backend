@@ -518,6 +518,8 @@ type MessageRepo interface {
 	// the cutoff time as "failed". Returns the number of affected rows.
 	// Used by the background cleanup to handle orphaned streaming placeholders.
 	FailStalePending(ctx context.Context, sess SessionRunner, cutoff time.Time) (int, *merrors.Error)
+	// UpdateStatus updates just the status and updated_at of a message by ID.
+	UpdateStatus(ctx context.Context, sess SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
 }
 
 // ToolsRepo defines the repository interface for tool catalog operations.

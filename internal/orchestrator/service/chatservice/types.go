@@ -99,6 +99,8 @@ type messageRepo interface {
 	// FailStalePending marks all messages with status "pending" created before
 	// the cutoff time as "failed". Returns the number of affected rows.
 	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
+	// UpdateStatus updates just the status and updated_at of a message by ID.
+	UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
 }
 
 // toolsRepo defines the repository interface for tool catalog operations.

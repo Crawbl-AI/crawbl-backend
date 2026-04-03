@@ -153,6 +153,23 @@ func (r *messageRepo) FailStalePending(ctx context.Context, sess orchestratorrep
 	return int(n), nil
 }
 
+// UpdateStatus updates just the status and updated_at fields of a message.
+// This is a lightweight alternative to Save for status-only transitions.
+func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error {
+	if sess == nil || messageID == "" {
+		return merrors.ErrInvalidInput
+	}
+	_, err := sess.Update("messages").
+		Set("status", string(status)).
+		Set("updated_at", time.Now().UTC()).
+		Where("id = ?", messageID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "update message status")
+	}
+	return nil
+}
+
 // Save persists message data to the database.
 // It handles both creating new messages and updating existing ones by checking
 // if a message with the same ID exists first.

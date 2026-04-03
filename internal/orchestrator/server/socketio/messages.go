@@ -125,6 +125,8 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 	}
 
 	// Call ChatService — replies are broadcast via message.new events.
+	// OnPersisted fires the ack immediately when the user message is saved to DB,
+	// so the client gets "sent" status without waiting for agent processing.
 	msgs, mErr := h.chatService.SendMessage(ctx, &orchestratorservice.SendMessageOpts{
 		Sess:           sess,
 		UserID:         user.ID,
@@ -134,6 +136,13 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 		Content:        content,
 		Attachments:    attachments,
 		Mentions:       mentions,
+		OnPersisted: func(userMsg *orchestrator.Message) {
+			s.Emit(eventMessageSendAck, messageSendAckPayload{
+				LocalID:   localID,
+				MessageID: userMsg.ID,
+				Status:    "sent",
+			})
+		},
 	})
 	if mErr != nil {
 		h.logger.Error("socketio: message.send failed",
@@ -145,16 +154,9 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 		return
 	}
 
-	// Acknowledge successful dispatch to the sender with the server-generated message ID.
-	var messageID string
-	if len(msgs) > 0 {
-		messageID = msgs[0].ID
-	}
-	s.Emit(eventMessageSendAck, messageSendAckPayload{
-		LocalID:   localID,
-		MessageID: messageID,
-		Status:    "received",
-	})
+	// Agent replies were broadcast via message.new/message.chunk/message.done events.
+	// The ack was already sent via OnPersisted when the user message was saved.
+	_ = msgs
 }
 
 // emitError sends a message.send.error event to the sender socket.

@@ -119,6 +119,12 @@ const (
 
 	// MessageStatusFailed indicates the message failed to deliver.
 	MessageStatusFailed MessageStatus = "failed"
+
+	// MessageStatusSent indicates the message was accepted by the server but not yet delivered to an agent.
+	MessageStatusSent MessageStatus = "sent"
+
+	// MessageStatusRead indicates the message was read and is being processed by an agent.
+	MessageStatusRead MessageStatus = "read"
 )
 
 // MessageContentType represents the type of content in a message.
