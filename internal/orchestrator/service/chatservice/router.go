@@ -73,8 +73,8 @@ func (r *Router) Route(ctx context.Context, message string, agents []*orchestrat
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: message},
 		},
-		MaxTokens:   2048,
-		Temperature: 0,
+		MaxCompletionTokens: 2048,
+		Temperature:         0,
 	})
 	if err != nil {
 		r.logger.Warn("routing LLM call failed, falling back to simple",
