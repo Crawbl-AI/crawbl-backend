@@ -88,7 +88,7 @@ func (r *Router) Route(ctx context.Context, message string, agents []*orchestrat
 	}
 
 	raw := resp.Choices[0].Message.Content
-	r.logger.Debug("routing LLM response",
+	r.logger.Info("routing LLM response",
 		"raw", raw,
 		"model", resp.Model,
 	)
