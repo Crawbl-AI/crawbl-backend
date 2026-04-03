@@ -90,7 +90,25 @@ func CalculateForRepo(repoPath string) (Result, error) {
 	v.Build = nil
 
 	tag := "v" + v.String()
+
+	// If the calculated tag already exists on the remote (e.g. created by a
+	// previous CI run), keep bumping patch until we find a free one.
+	for tagExistsOnRemote(repoPath, tag) {
+		v.Patch++
+		tag = "v" + v.String()
+	}
+
 	return Result{Tag: tag, LastTag: lastTag, Bump: bump}, nil
+}
+
+// tagExistsOnRemote checks if a tag exists on the remote.
+func tagExistsOnRemote(repoPath, tag string) bool {
+	cmd := gitCmd(repoPath, "ls-remote", "--tags", "origin", "refs/tags/"+tag)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(string(output))) > 0
 }
 
 // CalculateForCrawblFork calculates the next tag for the crawbl zeroclaw fork.
@@ -116,6 +134,14 @@ func CalculateForCrawblFork(repoPath string) (Result, error) {
 		return Result{}, fmt.Errorf("invalid crawbl suffix number in %s: %w", lastTag, err)
 	}
 
-	tag := fmt.Sprintf("%s-crawbl.%d", base, n+1)
+	n++
+	tag := fmt.Sprintf("%s-crawbl.%d", base, n)
+
+	// If the tag already exists on remote, keep incrementing.
+	for tagExistsOnRemote(repoPath, tag) {
+		n++
+		tag = fmt.Sprintf("%s-crawbl.%d", base, n)
+	}
+
 	return Result{Tag: tag, LastTag: lastTag, Bump: "crawbl"}, nil
 }
