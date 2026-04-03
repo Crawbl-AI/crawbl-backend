@@ -38,11 +38,11 @@ func NewRouter(cfg RouterConfig, logger *slog.Logger) *Router {
 	}
 	model := cfg.Model
 	if model == "" {
-		model = "gpt-5-mini"
+		model = "gpt-4o-mini"
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 60 * time.Second
+		timeout = 5 * time.Second
 	}
 
 	return &Router{
@@ -73,7 +73,8 @@ func (r *Router) Route(ctx context.Context, message string, agents []*orchestrat
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: message},
 		},
-		MaxCompletionTokens: 2048,
+		MaxTokens:   100,
+		Temperature: 0,
 	})
 	if err != nil {
 		r.logger.Warn("routing LLM call failed, falling back to simple",
