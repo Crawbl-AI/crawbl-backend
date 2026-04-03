@@ -119,7 +119,7 @@ crawbl app deploy docs
 crawbl app deploy website
 crawbl app deploy zeroclaw   # built/deployed separately
 
-# Deploy all standard components (platform + auth-filter + docs + website; excludes zeroclaw)
+# Deploy platform + auth-filter only
 crawbl app deploy all
 
 # Override the auto-calculated tag explicitly
@@ -129,17 +129,22 @@ crawbl app deploy platform --tag v1.2.3
 Semver logic: finds the last `v*` tag, scans commits since then — `feat:` triggers a minor bump, `!:` (breaking) triggers a major bump, everything else is a patch bump.
 
 Each `crawbl app deploy` call:
-1. Verifies working tree is clean and pushed
+1. Verifies working tree is clean and pushed (skipped for docs, website, zeroclaw)
 2. Builds the Docker image locally
 3. Pushes to DOCR (`registry.digitalocean.com/crawbl/`)
-4. Updates the image tag in `crawbl-argocd-apps`
-5. Commits and pushes the ArgoCD apps repo
-6. ArgoCD auto-syncs the new image to the cluster
+4. Updates the image tag in `crawbl-argocd-apps` and pushes
+5. Creates a Git tag (auto-calculated; bumps patch if tag already exists on remote)
+6. Creates a GitHub release with Claude-enriched notes (sonnet model) and a full changelog link
+7. ArgoCD auto-syncs the new image to the cluster
+
+`crawbl app deploy all` deploys platform + auth-filter only. Docs, website, and zeroclaw are deployed individually.
+
+`crawbl setup` verifies required tools: `docker`, `yq`, `gh`, `claude`. `.mise.toml` includes `yq`.
 
 Makefile shortcuts use auto-semver — no manual tag needed:
 
 ```bash
-make deploy-dev        # deploy all standard components
+make deploy-dev        # deploy platform + auth-filter
 make deploy-platform
 # etc.
 ```
