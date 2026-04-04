@@ -311,6 +311,12 @@ func (s *service) callAgentStreaming(
 		}
 
 		// First chunk for this sub-agent — create a new placeholder.
+		slog.Info("callAgentStreaming: new sub-agent stream",
+			"sub_agent_slug", subAgent.Slug,
+			"sub_agent_id", subAgent.ID,
+			"conversation_id", conversation.ID,
+		)
+
 		subNow := time.Now().UTC()
 		subAgentIDPtr := &subAgent.ID
 		subPlaceholder := &orchestrator.Message{
@@ -451,6 +457,11 @@ func (s *service) callAgentStreaming(
 			} else {
 				st := resolveStream(chunk.AgentID)
 				st.done = true
+				slog.Info("callAgentStreaming: sub-agent done event received",
+					"agent_slug", st.agent.Slug,
+					"agent_id", st.agent.ID,
+					"conversation_id", conversation.ID,
+				)
 				// If every stream has received its done event, mark global done.
 				allDone := true
 				for _, st := range streams {
@@ -482,6 +493,40 @@ func (s *service) callAgentStreaming(
 		finalText := strings.TrimSpace(st.accumulated.String())
 		isPrimary := st.agent.ID == agent.ID
 
+		slog.Info("callAgentStreaming: finalizing agent stream",
+			"agent_slug", st.agent.Slug,
+			"agent_id", st.agent.ID,
+			"is_primary", isPrimary,
+			"conversation_id", conversation.ID,
+			"text_len", len(finalText),
+			"chunks", st.chunkCount,
+		)
+
+		// Issue 2: When there are sub-agent streams, strip lines from the primary
+		// (Manager) response that are prefixed with a sub-agent name. Those lines
+		// appear in their own dedicated bubbles, so including them in Manager's
+		// bubble duplicates content.
+		if isPrimary && len(streams) > 1 {
+			lines := strings.Split(finalText, "\n")
+			var managerLines []string
+			for _, line := range lines {
+				isSubAgentLine := false
+				for _, otherSt := range streams {
+					if otherSt.agent.ID != agent.ID {
+						prefix := otherSt.agent.Name + ":"
+						if strings.HasPrefix(strings.TrimSpace(line), prefix) {
+							isSubAgentLine = true
+							break
+						}
+					}
+				}
+				if !isSubAgentLine {
+					managerLines = append(managerLines, line)
+				}
+			}
+			finalText = strings.TrimSpace(strings.Join(managerLines, "\n"))
+		}
+
 		// Determine effective done status for this stream.
 		// If the global stream closed properly (all done events received or legacy
 		// single-agent done), treat every stream as done.
@@ -496,6 +541,18 @@ func (s *service) callAgentStreaming(
 					"conversation_id", conversation.ID,
 				)
 			}
+			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			continue
+		}
+
+		// Case A2: Primary text was entirely sub-agent lines — nothing left after strip.
+		if finalText == "" && st.chunkCount > 0 {
+			slog.Info("callAgentStreaming: primary response was all sub-agent lines after strip, deleting placeholder",
+				"agent_slug", st.agent.Slug,
+				"agent_id", st.agent.ID,
+				"conversation_id", conversation.ID,
+			)
 			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 			continue
@@ -556,6 +613,15 @@ func (s *service) callAgentStreaming(
 		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 		if reply != nil {
 			replies = append(replies, reply)
+		}
+	}
+
+	// Issue 1: Safety sweep — clear all sub-agent statuses to online.
+	// Guards against race conditions in Go map iteration order leaving a
+	// sub-agent (e.g. Wally) stuck in "writing" status on the client.
+	for _, st := range streams {
+		if st.agent.ID != agent.ID {
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 		}
 	}
 
