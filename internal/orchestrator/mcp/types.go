@@ -18,9 +18,19 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
+
+// WorkflowExecutor is the interface the MCP layer needs from the workflow service.
+type WorkflowExecutor interface {
+	ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
+}
 
 // contextKey is a private type for context value keys to avoid collisions.
 type contextKey string
@@ -42,8 +52,13 @@ type Deps struct {
 	MessageRepo      orchestratorrepo.MessageRepo
 	AgentRepo        orchestratorrepo.AgentRepo
 	AgentHistoryRepo orchestratorrepo.AgentHistoryRepo
+	ArtifactRepo     artifactrepo.Repo
 	SigningKey        string
-	FCM              *firebase.FCMClient // nil = push notifications disabled
+	FCM              *firebase.FCMClient    // nil = push notifications disabled
+	RuntimeClient    userswarmclient.Client // nil = agent messaging disabled
+	Broadcaster      realtime.Broadcaster   // nil = no real-time events
+	WorkflowRepo     workflowrepo.Repo      // nil = workflow tools disabled
+	WorkflowService  WorkflowExecutor       // nil = workflow execution disabled
 }
 
 // Config holds MCP server configuration from environment variables.
@@ -212,6 +227,92 @@ type createAgentHistoryInput struct {
 type createAgentHistoryOutput struct {
 	Created bool   `json:"created"`
 	Info    string `json:"info"`
+}
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — send_message_to_agent
+// ---------------------------------------------------------------------------
+
+// sendMessageInput is the typed input for the send_message_to_agent tool.
+type sendMessageInput struct {
+	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the target agent (e.g. 'wally', 'eve')"`
+	Message        string `json:"message" jsonschema:"the message/task to send to the target agent"`
+	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID for context"`
+}
+
+// sendMessageOutput is the result returned to the calling agent.
+type sendMessageOutput struct {
+	Success   bool   `json:"success"`
+	AgentSlug string `json:"agent_slug"`
+	Response  string `json:"response"`
+	MessageID string `json:"message_id"`
+	Error     string `json:"error,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — artifacts
+// ---------------------------------------------------------------------------
+
+type createArtifactInput struct {
+	Title          string `json:"title" jsonschema:"the title of the artifact"`
+	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
+	ContentType    string `json:"content_type,omitempty" jsonschema:"MIME type of the content (default: text/markdown)"`
+	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation to associate the artifact with"`
+	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the agent creating the artifact"`
+}
+
+type createArtifactOutput struct {
+	ArtifactID string `json:"artifact_id,omitempty"`
+	Version    int    `json:"version,omitempty"`
+	Info       string `json:"info"`
+}
+
+type readArtifactInput struct {
+	ArtifactID string `json:"artifact_id" jsonschema:"the ID of the artifact to read"`
+	Version    int    `json:"version,omitempty" jsonschema:"specific version to read (default: latest)"`
+}
+
+type readArtifactOutput struct {
+	ArtifactID  string               `json:"artifact_id"`
+	Title       string               `json:"title"`
+	ContentType string               `json:"content_type"`
+	Content     string               `json:"content"`
+	Version     int                  `json:"version"`
+	Status      string               `json:"status"`
+	Reviews     []artifactReviewBrief `json:"reviews"`
+}
+
+type artifactReviewBrief struct {
+	ReviewerAgentSlug string `json:"reviewer_agent_slug"`
+	Outcome           string `json:"outcome"`
+	Comments          string `json:"comments"`
+	CreatedAt         string `json:"created_at"`
+}
+
+type updateArtifactInput struct {
+	ArtifactID      string `json:"artifact_id" jsonschema:"the ID of the artifact to update"`
+	Content         string `json:"content" jsonschema:"the new content for the artifact"`
+	ChangeSummary   string `json:"change_summary,omitempty" jsonschema:"a brief summary of what changed"`
+	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"for optimistic locking — update fails if current version differs"`
+	AgentSlug       string `json:"agent_slug" jsonschema:"slug of the agent making the update"`
+}
+
+type updateArtifactOutput struct {
+	Version int    `json:"version,omitempty"`
+	Info    string `json:"info"`
+}
+
+type reviewArtifactInput struct {
+	ArtifactID string `json:"artifact_id" jsonschema:"the ID of the artifact to review"`
+	Outcome    string `json:"outcome" jsonschema:"review outcome: approved, changes_requested, or commented"`
+	Comments   string `json:"comments" jsonschema:"review comments explaining the outcome"`
+	Version    int    `json:"version,omitempty" jsonschema:"specific version to review (default: current)"`
+	AgentSlug  string `json:"agent_slug" jsonschema:"slug of the reviewing agent"`
+}
+
+type reviewArtifactOutput struct {
+	Reviewed bool   `json:"reviewed"`
+	Info     string `json:"info"`
 }
 
 // ---------------------------------------------------------------------------

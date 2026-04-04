@@ -23,7 +23,6 @@ func New(
 	agentHistoryRepo agentHistoryRepo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
-	router *Router,
 ) orchestratorservice.ChatService {
 	if db == nil {
 		panic("chat service db cannot be nil")
@@ -71,7 +70,6 @@ func New(
 		agentHistoryRepo:  agentHistoryRepo,
 		runtimeClient:     runtimeClient,
 		broadcaster:       broadcaster,
-		router:            router,
 		defaultAgents:     append([]orchestrator.DefaultAgentBlueprint(nil), orchestrator.DefaultAgents...),
 	}
 }

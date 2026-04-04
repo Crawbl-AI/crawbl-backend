@@ -1,3 +1,15 @@
+-- Multi-agent system tables (reverse dependency order)
+DROP TABLE IF EXISTS memory_triggers;
+DROP TABLE IF EXISTS agent_trigger_executions;
+DROP TABLE IF EXISTS agent_triggers;
+DROP TABLE IF EXISTS workflow_step_executions;
+DROP TABLE IF EXISTS workflow_executions;
+DROP TABLE IF EXISTS workflow_definitions;
+DROP TABLE IF EXISTS artifact_reviews;
+DROP TABLE IF EXISTS artifact_versions;
+DROP TABLE IF EXISTS artifacts;
+DROP TABLE IF EXISTS agent_messages;
+DROP TABLE IF EXISTS agent_delegations;
 DROP TABLE IF EXISTS integration_connections;
 DROP TABLE IF EXISTS mcp_audit_logs;
 DROP TABLE IF EXISTS messages;

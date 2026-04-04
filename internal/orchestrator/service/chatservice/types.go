@@ -44,9 +44,6 @@ type service struct {
 	runtimeClient userswarmclient.Client
 	// broadcaster emits real-time events to connected WebSocket clients.
 	broadcaster realtime.Broadcaster
-	// router classifies messages as simple or group via the Routing LLM.
-	// Nil means routing is disabled (all messages go to Manager).
-	router *Router
 	// defaultAgents contains the blueprint definitions for default agents
 	// that are automatically provisioned for each workspace.
 	defaultAgents []orchestrator.DefaultAgentBlueprint
@@ -103,6 +100,9 @@ type messageRepo interface {
 	UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
 	// DeleteByID removes a message by its ID. Used to clean up empty failed placeholders.
 	DeleteByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) *merrors.Error
+	// ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
+	// Used for building conversation context to inject into agent calls.
+	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
 }
 
 // toolsRepo defines the repository interface for tool catalog operations.

@@ -11,3 +11,8 @@ func (NopBroadcaster) EmitMessageChunk(_ context.Context, _ string, _ MessageChu
 func (NopBroadcaster) EmitMessageDone(_ context.Context, _ string, _ MessageDonePayload)   {}
 func (NopBroadcaster) EmitAgentTool(_ context.Context, _ string, _ AgentToolPayload)          {}
 func (NopBroadcaster) EmitMessageStatus(_ context.Context, _ string, _ MessageStatusPayload) {}
+func (NopBroadcaster) EmitAgentDelegation(_ context.Context, _ string, _ AgentDelegationPayload) {
+}
+func (NopBroadcaster) EmitArtifactUpdated(_ context.Context, _ string, _ ArtifactEventPayload) {}
+func (NopBroadcaster) EmitWorkflowEvent(_ context.Context, _ string, _ string, _ WorkflowEventPayload) {
+}

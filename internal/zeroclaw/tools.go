@@ -83,6 +83,27 @@ var defaultToolCatalog = []ToolDef{
 	{"weather", "Weather", "Get current weather information for any location", CategoryUtility, "https://cdn.crawbl.com/tools/weather.png"},
 	{"image_info", "Image Info", "Analyze and extract information from images", CategoryUtility, "https://cdn.crawbl.com/tools/image-info.png"},
 	{"shell", "Shell Commands", "Run shell commands in the agent's environment", CategoryShell, "https://cdn.crawbl.com/tools/shell.png"},
+
+	// --- Orchestrator MCP: Agent History ---
+	{"orchestrator__create_agent_history", "Agent History", "Record notable events in an agent's history", CategoryIntegration, "https://cdn.crawbl.com/tools/agent-history.png"},
+
+	// --- Delegation ---
+	{"delegate", "Delegate", "Hand off tasks to specialized sub-agents", CategoryIntegration, "https://cdn.crawbl.com/tools/delegate.png"},
+
+	// --- Orchestrator MCP: Agent Communication (Phase 2) ---
+	{"orchestrator__send_message_to_agent", "Agent Message", "Send messages between agents for collaboration", CategoryIntegration, "https://cdn.crawbl.com/tools/agent-message.png"},
+
+	// --- Orchestrator MCP: Artifacts (Phase 3) ---
+	{"orchestrator__create_artifact", "Create Artifact", "Create a shared document or code artifact", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-create.png"},
+	{"orchestrator__read_artifact", "Read Artifact", "Read a shared artifact created by any agent", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-read.png"},
+	{"orchestrator__update_artifact", "Update Artifact", "Update a shared artifact with a new version", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-update.png"},
+	{"orchestrator__review_artifact", "Review Artifact", "Review and approve or request changes on an artifact", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-review.png"},
+
+	// --- Orchestrator MCP: Workflows (Phase 4) ---
+	{"orchestrator__create_workflow", "Create Workflow", "Define a multi-step agent workflow", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-create.png"},
+	{"orchestrator__trigger_workflow", "Start Workflow", "Trigger a defined workflow", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-trigger.png"},
+	{"orchestrator__check_workflow_status", "Workflow Status", "Check the status of a running workflow", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-status.png"},
+	{"orchestrator__list_workflows", "List Workflows", "List all available workflows", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-list.png"},
 }
 
 // DefaultToolCatalog returns the full tool catalog for API responses.

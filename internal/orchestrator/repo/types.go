@@ -522,6 +522,9 @@ type MessageRepo interface {
 	UpdateStatus(ctx context.Context, sess SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
 	// DeleteByID removes a message by its ID.
 	DeleteByID(ctx context.Context, sess SessionRunner, messageID string) *merrors.Error
+	// ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
+	// Used for building conversation context to inject into agent calls.
+	ListRecent(ctx context.Context, sess SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
 }
 
 // ToolsRepo defines the repository interface for tool catalog operations.

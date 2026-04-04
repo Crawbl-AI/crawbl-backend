@@ -2,6 +2,8 @@ package chatservice
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -87,7 +89,7 @@ func (s *service) sendDirectMessage(
 }
 
 // sendSwarmMessage handles swarm group chat: persist user message first,
-// resolve target agents via mentions or Routing LLM, then execute.
+// resolve target agents via mentions or Manager, then execute.
 func (s *service) sendSwarmMessage(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
@@ -103,56 +105,25 @@ func (s *service) sendSwarmMessage(
 
 	lookups := newAgentLookups(agents)
 
-	// 2. Resolve target agents: mentions first, then Routing LLM.
+	// 2. Resolve target agents: mentions first, then Manager.
 	responders := resolveResponders(conversation, agents, opts.Mentions)
 
 	if responders != nil {
-		// Mentions resolved — skip Routing LLM entirely.
+		// Mentions resolved — send directly to mentioned agents (parallel).
 		return s.executeParallel(ctx, opts, conversation, runtimeState, responders, lookups)
 	}
 
-	// 3. No mentions — use Routing LLM (invisible infrastructure switch).
-	if lookups.manager != nil {
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, lookups.manager.ID, string(orchestrator.AgentStatusReading), conversation.ID)
-	}
-
-	decision := s.router.Route(ctx, opts.Content.Text, agents)
-
-	// Clear Manager's reading indicator.
-	if lookups.manager != nil {
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, lookups.manager.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
-	}
-
-	// 4. Branch on routing decision.
-	if decision.Type == routingTypeSimple {
-		// Simple — Manager answers with full ZeroClaw context.
-		if lookups.manager == nil {
-			return nil, merrors.ErrAgentNotFound
-		}
-		return s.callAgentAndPersist(ctx, opts, conversation, runtimeState, lookups.manager, lookups)
-	}
-
-	// Group — resolve task slugs to agent objects, execute in parallel.
-	var targetAgents []*orchestrator.Agent
-	agentTasks := make(map[string]string) // slug -> task
-
-	for _, task := range decision.Tasks {
-		if agent := lookups.bySlug[task.Slug]; agent != nil {
-			targetAgents = append(targetAgents, agent)
-			agentTasks[task.Slug] = task.Task
-		}
-	}
-
-	// Safety net: if all slugs were invalid, fall back to Manager.
-	if len(targetAgents) == 0 {
-		if lookups.manager != nil {
-			return s.callAgentAndPersist(ctx, opts, conversation, runtimeState, lookups.manager, lookups)
-		}
+	// 3. No mentions — send to Manager. Manager has full context (memory,
+	// conversation history, SOUL.md, tools including delegate) and decides
+	// autonomously whether to answer directly or delegate to sub-agents.
+	if lookups.manager == nil {
 		return nil, merrors.ErrAgentNotFound
 	}
 
-	// Execute group — parallel goroutines, each agent gets its specific task.
-	return s.executeGroup(ctx, opts, conversation, runtimeState, targetAgents, agentTasks, lookups)
+	// Build conversation context so Manager sees recent chat history.
+	conversationContext := s.buildConversationContext(ctx, opts.Sess, conversation.ID, lookups, 20)
+
+	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, lookups.manager, lookups, conversationContext)
 }
 
 // executeParallel fires all agent calls concurrently. Each agent responds
@@ -177,70 +148,6 @@ func (s *service) executeParallel(
 		go func(idx int, agent *orchestrator.Agent) {
 			defer wg.Done()
 			replies, err := s.callAgentStreaming(ctx, opts, conversation, runtimeState, agent, lookups, "")
-			results[idx] = agentResult{replies: replies, err: err}
-		}(i, agent)
-	}
-
-	wg.Wait()
-
-	var replies []*orchestrator.Message
-	var lastErr *merrors.Error
-	for _, r := range results {
-		if len(r.replies) > 0 {
-			replies = append(replies, r.replies...)
-		}
-		if r.err != nil {
-			lastErr = r.err
-		}
-	}
-
-	if len(replies) == 0 && lastErr != nil {
-		return nil, lastErr
-	}
-	return replies, nil
-}
-
-// callAgentAndPersist is a convenience wrapper for the simple (Manager) path.
-// Calls a single agent via streaming with no extra context and returns the persisted replies.
-func (s *service) callAgentAndPersist(
-	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
-	runtimeState *orchestrator.RuntimeStatus,
-	agent *orchestrator.Agent,
-	lookups agentLookups,
-) ([]*orchestrator.Message, *merrors.Error) {
-	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, agent, lookups, "")
-}
-
-// executeGroup fires parallel goroutines where each agent gets a SPECIFIC task
-// from the Routing LLM, not the raw user message.
-func (s *service) executeGroup(
-	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
-	runtimeState *orchestrator.RuntimeStatus,
-	targetAgents []*orchestrator.Agent,
-	agentTasks map[string]string,
-	lookups agentLookups,
-) ([]*orchestrator.Message, *merrors.Error) {
-	type agentResult struct {
-		replies []*orchestrator.Message
-		err     *merrors.Error
-	}
-	results := make([]agentResult, len(targetAgents))
-	var wg sync.WaitGroup
-	wg.Add(len(targetAgents))
-
-	for i, agent := range targetAgents {
-		go func(idx int, agent *orchestrator.Agent) {
-			defer wg.Done()
-			// Use the specific task from routing, not the raw user message.
-			task := agentTasks[agent.Slug]
-			if task == "" {
-				task = opts.Content.Text // fallback to raw message
-			}
-			replies, err := s.callAgentStreaming(ctx, opts, conversation, runtimeState, agent, lookups, "\n\nYour task: "+task)
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}
@@ -386,6 +293,15 @@ func (s *service) callAgentStreaming(
 				Query:          chunk.Args,
 			})
 
+			// Track delegation events for audit and UX.
+			if chunk.Tool == "delegate" {
+				delegateSlug, taskSummary := parseDelegateArgs(chunk.Args)
+				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
+					go s.recordDelegation(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
+					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+				}
+			}
+
 		case userswarmclient.StreamEventToolResult:
 			s.broadcaster.EmitAgentTool(ctx, opts.WorkspaceID, realtime.AgentToolPayload{
 				AgentID:        agent.ID,
@@ -393,6 +309,15 @@ func (s *service) callAgentStreaming(
 				Tool:           chunk.Tool,
 				Status:         "done",
 			})
+
+			// Clear delegate agent status when delegation completes.
+			if chunk.Tool == "delegate" {
+				delegateSlug, _ := parseDelegateArgs(chunk.Args)
+				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
+					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+					go s.completeDelegation(opts.WorkspaceID, conversation.ID, placeholder.ID, delegateAgent.ID)
+				}
+			}
 
 		case userswarmclient.StreamEventDone:
 			// Mark that the stream ended properly.
@@ -523,6 +448,92 @@ func (s *service) finalizeStreamMessage(
 
 	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, placeholder)
 	return placeholder
+}
+
+// buildConversationContext creates a context summary from recent messages
+// for injection into agent calls. This gives agents awareness of the
+// conversation even though their ZeroClaw memory is namespace-isolated.
+func (s *service) buildConversationContext(
+	ctx context.Context,
+	sess *dbr.Session,
+	conversationID string,
+	lookups agentLookups,
+	limit int,
+) string {
+	if limit == 0 {
+		limit = 20
+	}
+
+	messages, mErr := s.messageRepo.ListRecent(ctx, sess, conversationID, limit)
+	if mErr != nil || len(messages) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n\n## Conversation Context\n")
+	sb.WriteString("Recent messages in this conversation (most recent last):\n\n")
+
+	for _, msg := range messages {
+		sender := "User"
+		if msg.Role == orchestrator.MessageRoleAgent && msg.AgentID != nil {
+			if agent := lookups.byID[*msg.AgentID]; agent != nil {
+				sender = agent.Name
+			}
+		}
+
+		text := msg.Content.Text
+		if len(text) > 500 {
+			text = text[:500] + "..."
+		}
+		if text == "" || msg.Status == orchestrator.MessageStatusSilent {
+			continue
+		}
+
+		fmt.Fprintf(&sb, "**%s**: %s\n\n", sender, text)
+	}
+
+	return sb.String()
+}
+
+// parseDelegateArgs extracts the agent slug and task from delegate tool_call JSON args.
+func parseDelegateArgs(argsJSON string) (slug, task string) {
+	var args struct {
+		Agent  string `json:"agent"`
+		Prompt string `json:"prompt"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return "", ""
+	}
+	return args.Agent, args.Prompt
+}
+
+// recordDelegation inserts an agent_delegations row (async, best-effort).
+func (s *service) recordDelegation(ctx context.Context, sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
+	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, _ = sess.InsertInto("agent_delegations").
+		Pair("workspace_id", workspaceID).
+		Pair("conversation_id", conversationID).
+		Pair("trigger_message_id", triggerMsgID).
+		Pair("delegator_agent_id", delegatorAgentID).
+		Pair("delegate_agent_id", delegateAgentID).
+		Pair("task_summary", taskSummary).
+		Pair("status", "running").
+		ExecContext(auditCtx)
+}
+
+// completeDelegation marks a delegation as completed (async, best-effort).
+func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, delegateAgentID string) {
+	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sess := s.db.NewSession(nil)
+	_, _ = sess.Update("agent_delegations").
+		Set("status", "completed").
+		Set("completed_at", time.Now().UTC()).
+		Set("duration_ms", dbr.Expr("EXTRACT(EPOCH FROM (NOW() - created_at))::INTEGER * 1000")).
+		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = 'running'",
+			triggerMsgID, delegateAgentID).
+		ExecContext(auditCtx)
 }
 
 // persistUserMessage saves the user message in its own transaction and

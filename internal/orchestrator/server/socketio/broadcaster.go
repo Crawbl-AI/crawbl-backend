@@ -78,3 +78,18 @@ func (b *Broadcaster) EmitAgentTool(ctx context.Context, workspaceID string, pay
 func (b *Broadcaster) EmitMessageStatus(ctx context.Context, workspaceID string, payload realtime.MessageStatusPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageStatus, payload)
 }
+
+// EmitAgentDelegation emits an agent.delegation event for inter-agent communication.
+func (b *Broadcaster) EmitAgentDelegation(ctx context.Context, workspaceID string, payload realtime.AgentDelegationPayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentDelegation, payload)
+}
+
+// EmitArtifactUpdated emits an artifact.updated event.
+func (b *Broadcaster) EmitArtifactUpdated(ctx context.Context, workspaceID string, payload realtime.ArtifactEventPayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventArtifactUpdated, payload)
+}
+
+// EmitWorkflowEvent emits a workflow progress event.
+func (b *Broadcaster) EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload realtime.WorkflowEventPayload) {
+	b.EmitToWorkspace(ctx, workspaceID, event, payload)
+}

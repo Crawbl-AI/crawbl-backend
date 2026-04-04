@@ -242,4 +242,20 @@ func registerTools(server *sdkmcp.Server, deps *Deps) {
 		Name:        "create_agent_history",
 		Description: "Create a conversation history entry for a delegate agent. Use this when you delegate significant work to an agent and want to record it as a notable event in their history. Do not create entries for every message — only for important tasks, completions, or milestones.",
 	}, newCreateAgentHistoryHandler(deps))
+
+	// Agent-to-agent messaging (Crawbl extension)
+	if deps.RuntimeClient != nil {
+		sdkmcp.AddTool(server, &sdkmcp.Tool{
+			Name: "send_message_to_agent",
+			Description: "Send a message to another agent in your workspace and get their response. " +
+				"Use this to collaborate with other agents on tasks. " +
+				"The target agent will receive your message and respond with their result.",
+		}, newSendMessageHandler(deps))
+	}
+
+	// Shared artifacts (Crawbl extension)
+	registerArtifactTools(server, deps)
+
+	// Workflow engine (Crawbl extension)
+	registerWorkflowTools(server, deps)
 }

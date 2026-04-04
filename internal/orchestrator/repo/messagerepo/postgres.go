@@ -184,6 +184,38 @@ func (r *messageRepo) DeleteByID(ctx context.Context, sess orchestratorrepo.Sess
 	return nil
 }
 
+// ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
+func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(conversationID) == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	var rows []orchestratorrepo.MessageRow
+	_, err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+		From("messages").
+		Where("conversation_id = ?", conversationID).
+		OrderDesc("created_at").
+		Limit(uint64(limit)).
+		LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, merrors.WrapStdServerError(err, "list recent messages")
+	}
+
+	// Reverse to oldest-first order.
+	messages := make([]*orchestrator.Message, len(rows))
+	for i, row := range rows {
+		msg, decodeErr := row.ToDomain()
+		if decodeErr != nil {
+			return nil, merrors.WrapStdServerError(decodeErr, "decode recent message")
+		}
+		messages[len(rows)-1-i] = msg
+	}
+	return messages, nil
+}
+
 // Save persists message data to the database.
 // It handles both creating new messages and updating existing ones by checking
 // if a message with the same ID exists first.

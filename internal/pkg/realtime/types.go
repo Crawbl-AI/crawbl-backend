@@ -29,6 +29,15 @@ type Broadcaster interface {
 
 	// EmitMessageStatus emits a message.status event for delivery status transitions.
 	EmitMessageStatus(ctx context.Context, workspaceID string, payload MessageStatusPayload)
+
+	// EmitAgentDelegation emits an agent.delegation event for inter-agent communication.
+	EmitAgentDelegation(ctx context.Context, workspaceID string, payload AgentDelegationPayload)
+
+	// EmitArtifactUpdated emits an artifact.updated event.
+	EmitArtifactUpdated(ctx context.Context, workspaceID string, payload ArtifactEventPayload)
+
+	// EmitWorkflowEvent emits a workflow progress event.
+	EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload WorkflowEventPayload)
 }
 
 // NopBroadcaster is a no-op implementation used when real-time is not configured.
@@ -63,6 +72,22 @@ const (
 	EventMessageStatus = "message.status"
 )
 
+// Event name for inter-agent delegation visibility.
+const EventAgentDelegation = "agent.delegation"
+
+// Event name for artifact updates.
+const EventArtifactUpdated = "artifact.updated"
+
+// Event names for workflow progress.
+const (
+	EventWorkflowStarted        = "workflow.started"
+	EventWorkflowStepStarted    = "workflow.step.started"
+	EventWorkflowStepCompleted  = "workflow.step.completed"
+	EventWorkflowStepApproval   = "workflow.step.approval_required"
+	EventWorkflowCompleted      = "workflow.completed"
+	EventWorkflowFailed         = "workflow.failed"
+)
+
 // MessageChunkPayload is emitted for each streamed text token.
 type MessageChunkPayload struct {
 	MessageID      string `json:"message_id"`
@@ -94,4 +119,38 @@ type MessageStatusPayload struct {
 	ConversationID string `json:"conversation_id"`
 	LocalID        string `json:"local_id,omitempty"`
 	Status         string `json:"status"` // "sent", "delivered", "read"
+}
+
+// AgentDelegationPayload reports agent-to-agent message activity.
+type AgentDelegationPayload struct {
+	FromAgentID    string `json:"from_agent_id"`
+	ToAgentID      string `json:"to_agent_id"`
+	ConversationID string `json:"conversation_id"`
+	Status         string `json:"status"` // "running", "completed", "failed"
+	MessagePreview string `json:"message_preview,omitempty"`
+	MessageID      string `json:"message_id,omitempty"`
+}
+
+// ArtifactEventPayload reports artifact creation/update/review activity.
+type ArtifactEventPayload struct {
+	ArtifactID     string `json:"artifact_id"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Title          string `json:"title"`
+	Version        int    `json:"version"`
+	Action         string `json:"action"` // "created", "updated", "reviewed"
+	AgentID        string `json:"agent_id"`
+	AgentSlug      string `json:"agent_slug"`
+}
+
+// WorkflowEventPayload reports workflow execution progress.
+type WorkflowEventPayload struct {
+	WorkflowID     string `json:"workflow_id"`
+	ExecutionID    string `json:"execution_id"`
+	WorkflowName   string `json:"workflow_name"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Status         string `json:"status"` // varies by event type
+	StepIndex      int    `json:"step_index,omitempty"`
+	StepName       string `json:"step_name,omitempty"`
+	AgentSlug      string `json:"agent_slug,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
