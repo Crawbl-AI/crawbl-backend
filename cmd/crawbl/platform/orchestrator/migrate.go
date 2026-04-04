@@ -81,26 +81,14 @@ func autoMigrate(logger *slog.Logger) error {
 	}
 	defer m.Close()
 
-	// Fresh mode: drop everything and re-apply from scratch.
+	// Fresh mode: force version to -1 (no version) so all migrations re-run.
 	// Useful for dev environments where migration files are modified in-place.
+	// Existing tables use CREATE TABLE IF NOT EXISTS so re-running is safe.
 	if os.Getenv("CRAWBL_MIGRATE_FRESH") == "true" {
-		logger.Info("fresh migration mode: dropping and re-applying all migrations")
-		if err := m.Drop(); err != nil {
-			return fmt.Errorf("drop migrations: %w", err)
+		logger.Info("fresh migration mode: resetting migration version to force re-run")
+		if err := m.Force(-1); err != nil {
+			logger.Warn("force version reset failed, proceeding anyway", "error", err)
 		}
-		// Drop removes the schema_migrations table too, so we need to re-ensure schema
-		// and re-create the migrator.
-		if err := database.EnsureSchema(dbConfig); err != nil {
-			return fmt.Errorf("re-ensure schema after drop: %w", err)
-		}
-		m, err = migrate.New(
-			"file://"+migrationPath,
-			database.BuildDSN(dbConfig, true),
-		)
-		if err != nil {
-			return fmt.Errorf("re-create migrator after drop: %w", err)
-		}
-		defer m.Close()
 	}
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
