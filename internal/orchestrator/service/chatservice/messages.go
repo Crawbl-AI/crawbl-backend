@@ -502,26 +502,32 @@ func (s *service) callAgentStreaming(
 			"chunks", st.chunkCount,
 		)
 
-		// Strip sub-agent prefixed lines from Manager's bubble (they have their own bubbles).
+		// Strip sub-agent lines from Manager's bubble (they have their own bubbles).
+		// Matches: "Wally:", "- Wally —", "- Wally:", "[Wally]", "**Wally**"
 		if isPrimary && len(streams) > 1 {
-			subPrefixes := make([]string, 0, len(streams)-1)
+			var subNames []string
 			for _, otherSt := range streams {
 				if otherSt.agent.ID != agent.ID {
-					subPrefixes = append(subPrefixes, otherSt.agent.Name+":")
+					subNames = append(subNames, otherSt.agent.Name)
 				}
+			}
+			containsSubAgent := func(line string) bool {
+				trimmed := strings.TrimSpace(line)
+				for _, name := range subNames {
+					if strings.HasPrefix(trimmed, name+":") ||
+						strings.HasPrefix(trimmed, name+" —") ||
+						strings.HasPrefix(trimmed, "- "+name) ||
+						strings.HasPrefix(trimmed, "**"+name+"**") ||
+						strings.HasPrefix(trimmed, "["+name+"]") {
+						return true
+					}
+				}
+				return false
 			}
 			lines := strings.Split(finalText, "\n")
 			filtered := lines[:0]
 			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				isSub := false
-				for _, p := range subPrefixes {
-					if strings.HasPrefix(trimmed, p) {
-						isSub = true
-						break
-					}
-				}
-				if !isSub {
+				if !containsSubAgent(line) {
 					filtered = append(filtered, line)
 				}
 			}

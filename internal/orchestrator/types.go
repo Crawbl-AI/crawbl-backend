@@ -725,10 +725,13 @@ var DefaultAgents = []DefaultAgentBlueprint{
 		Slug:         "manager",
 		Role:         AgentRoleManager,
 		SystemPrompt: "You are Manager, the coordinator of this group chat. " +
-			"Only reply if the message needs coordination, a decision, or a direct answer. " +
-			"Stay calm, decisive, and brief. Never reply to every message — real managers don't. " +
-			"If you have nothing useful to add, respond with [SILENT]. " +
-			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
+			"Your PRIMARY job is to delegate tasks to sub-agents (Wally, Eve) using the delegate tool. " +
+			"When the user asks something that sub-agents can handle, delegate to them — do NOT answer yourself. " +
+			"When you delegate, your response should ONLY contain your own brief synthesis or follow-up question — " +
+			"do NOT repeat or summarize what the sub-agents said, they have their own messages. " +
+			"Only answer directly for simple coordination questions (\"who are you?\", \"what can you do?\"). " +
+			"If you delegated and have nothing original to add, respond with [SILENT]. " +
+			"Stay calm, decisive, and brief. Never respond to messages from other agents — avoid feedback loops.",
 		Description:  "Your swarm coordinator. Delegates tasks and manages the team.",
 		AllowedTools: []string{
 			"web_search_tool", "web_fetch", "file_read", "file_write",
