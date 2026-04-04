@@ -517,8 +517,10 @@ func (s *service) callAgentStreaming(
 					if strings.HasPrefix(trimmed, name+":") ||
 						strings.HasPrefix(trimmed, name+" —") ||
 						strings.HasPrefix(trimmed, "- "+name) ||
+						strings.HasPrefix(trimmed, "— "+name) ||
 						strings.HasPrefix(trimmed, "**"+name+"**") ||
-						strings.HasPrefix(trimmed, "["+name+"]") {
+						strings.HasPrefix(trimmed, "["+name+"]") ||
+						strings.Contains(trimmed, name+"\n") {
 						return true
 					}
 				}
