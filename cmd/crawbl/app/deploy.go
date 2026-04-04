@@ -2,10 +2,14 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/argocd"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/release"
 )
@@ -14,9 +18,11 @@ func newDeployCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy [component]",
 		Short: "Build, push, and deploy a component",
-		Long:  "Build a Docker image, push to DOCR, update crawbl-argocd-apps, and create a GitHub release.",
+		Long:  "Build and deploy a component. Backend components use Docker + ArgoCD. Docs and website deploy to Cloudflare Pages.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
   crawbl app deploy zeroclaw --tag v1.0.0
+  crawbl app deploy docs
+  crawbl app deploy website
   crawbl app deploy all --tag v1.0.0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -261,20 +267,19 @@ func newDeployZeroClawCommand() *cobra.Command {
 
 func newDeployDocsCommand() *cobra.Command {
 	var (
-		tag        string
-		platform   string
-		argocdRepo string
-		path       string
+		tag  string
+		path string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "docs",
-		Short: "Deploy the documentation site",
-		Long:  "Build and push the crawbl-docs image, then update the image tag in crawbl-argocd-apps.",
-		Example: `  crawbl app deploy docs --tag v1.0.0
+		Short: "Deploy the documentation site to Cloudflare Pages",
+		Long:  "Build the Docusaurus site and deploy static output to Cloudflare Pages.",
+		Example: `  crawbl app deploy docs
+  crawbl app deploy docs --tag v1.0.0
   crawbl app deploy docs --path /custom/path/crawbl-docs`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := checkAllTools(); err != nil {
+			if err := checkStaticDeployTools(); err != nil {
 				return err
 			}
 
@@ -289,28 +294,11 @@ func newDeployDocsCommand() *cobra.Command {
 			}
 			tag = resolved.Tag
 
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildDocsImageRepo,
-				contextDir: docsDir,
-				tag:        tag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
+			if err := runNpmBuild(docsDir); err != nil {
 				return err
 			}
 
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(); err != nil {
-				return err
-			}
-			if err := u.UpdateDocs(); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush("docs"); err != nil {
+			if err := runWranglerDeploy(docsDir, "build", "crawbl-docs"); err != nil {
 				return err
 			}
 
@@ -323,27 +311,25 @@ func newDeployDocsCommand() *cobra.Command {
 		},
 	}
 
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
-	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-docs repo (default: ../crawbl-docs)")
+	addStaticDeployFlags(cmd, &tag, &path, "crawbl-docs")
 	return cmd
 }
 
 func newDeployWebsiteCommand() *cobra.Command {
 	var (
-		tag        string
-		platform   string
-		argocdRepo string
-		path       string
+		tag  string
+		path string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "website",
-		Short: "Deploy the marketing site",
-		Long:  "Build and push the crawbl-website image, then update the image tag in crawbl-argocd-apps.",
-		Example: `  crawbl app deploy website --tag v1.0.0
+		Short: "Deploy the marketing site to Cloudflare Pages",
+		Long:  "Build the Next.js static site and deploy output to Cloudflare Pages.",
+		Example: `  crawbl app deploy website
+  crawbl app deploy website --tag v1.0.0
   crawbl app deploy website --path /custom/path/crawbl-website`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := checkAllTools(); err != nil {
+			if err := checkStaticDeployTools(); err != nil {
 				return err
 			}
 
@@ -358,28 +344,11 @@ func newDeployWebsiteCommand() *cobra.Command {
 			}
 			tag = resolved.Tag
 
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildWebsiteImageRepo,
-				contextDir: websiteDir,
-				tag:        tag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
+			if err := runNpmBuild(websiteDir); err != nil {
 				return err
 			}
 
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(); err != nil {
-				return err
-			}
-			if err := u.UpdateWebsite(); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush("website"); err != nil {
+			if err := runWranglerDeploy(websiteDir, "out", "crawbl-website"); err != nil {
 				return err
 			}
 
@@ -392,8 +361,7 @@ func newDeployWebsiteCommand() *cobra.Command {
 		},
 	}
 
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
-	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-website repo (default: ../crawbl-website)")
+	addStaticDeployFlags(cmd, &tag, &path, "crawbl-website")
 	return cmd
 }
 
@@ -486,4 +454,51 @@ func newDeployAllCommand() *cobra.Command {
 
 	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
 	return cmd
+}
+
+// addStaticDeployFlags registers flags for static site deploy subcommands (docs, website).
+func addStaticDeployFlags(cmd *cobra.Command, tag *string, path *string, pathDefault string) {
+	cmd.Flags().StringVarP(tag, "tag", "t", "", "Release tag (default: auto-calculated semver)")
+	cmd.Flags().StringVar(path, "path", "", fmt.Sprintf("Path to %s repo (default: ../%s)", pathDefault, pathDefault))
+}
+
+// checkStaticDeployTools verifies required tools for static site deploys.
+func checkStaticDeployTools() error {
+	if err := release.CheckTools(); err != nil {
+		return err
+	}
+	for _, tool := range []string{"npm", "wrangler"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			return fmt.Errorf("%s is required but not found in PATH", tool)
+		}
+	}
+	return nil
+}
+
+// runNpmBuild runs npm run build in the given directory.
+func runNpmBuild(dir string) error {
+	out.Step(style.Docker, "Building static site in %s", dir)
+	cmd := exec.Command("npm", "run", "build")
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("npm run build failed: %w", err)
+	}
+	out.Success("Static site built successfully")
+	return nil
+}
+
+// runWranglerDeploy deploys a static site to Cloudflare Pages using wrangler.
+func runWranglerDeploy(dir, outputDir, projectName string) error {
+	out.Step(style.Deploy, "Deploying %s to Cloudflare Pages", projectName)
+	cmd := exec.Command("wrangler", "pages", "deploy", outputDir, "--project-name", projectName)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("wrangler pages deploy failed: %w", err)
+	}
+	out.Success("Deployed %s to Cloudflare Pages", projectName)
+	return nil
 }

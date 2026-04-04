@@ -104,18 +104,6 @@ func (u *Update) UpdateZeroClaw() error {
 	return os.WriteFile(webhookPath, []byte(updated), 0o644)
 }
 
-// UpdateDocs updates .image.tag in components/docs/chart/values.yaml.
-func (u *Update) UpdateDocs() error {
-	out.Step(style.Deploy, "Updating docs image tag to %s", u.Tag)
-	return u.RunYQ(fmt.Sprintf(`.image.tag = "%s"`, u.Tag), "components/docs/chart/values.yaml")
-}
-
-// UpdateWebsite updates .image.tag in components/website/chart/values.yaml.
-func (u *Update) UpdateWebsite() error {
-	out.Step(style.Deploy, "Updating website image tag to %s", u.Tag)
-	return u.RunYQ(fmt.Sprintf(`.image.tag = "%s"`, u.Tag), "components/website/chart/values.yaml")
-}
-
 // PullLatest pulls the latest changes from remote before making modifications.
 func (u *Update) PullLatest() error {
 	out.Step(style.Deploy, "Pulling latest changes from argocd repo")

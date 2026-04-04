@@ -16,11 +16,9 @@ const (
 	buildAuthFilterDockerfile = "dockerfiles/envoy-auth-filter.dockerfile"
 	buildAuthFilterContext    = "cmd/envoy-auth-filter"
 
-	buildDocsImageRepo = "registry.digitalocean.com/crawbl/crawbl-docs"
-	buildDocsRepoDir   = "crawbl-docs"
+	buildDocsRepoDir = "crawbl-docs"
 
-	buildWebsiteImageRepo = "registry.digitalocean.com/crawbl/crawbl-website"
-	buildWebsiteRepoDir   = "crawbl-website"
+	buildWebsiteRepoDir = "crawbl-website"
 
 	buildZeroClawImageRepo = "registry.digitalocean.com/crawbl/zeroclaw"
 	buildZeroClawRepoDir   = "crawbl-zeroclaw"
@@ -30,22 +28,19 @@ func newBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build [component]",
 		Short: "Build a component Docker image",
-		Long:  "Build a Docker image for one Crawbl component such as the platform, auth filter, or docs site.",
+		Long:  "Build a Docker image for one Crawbl component such as the platform or auth filter.",
 		Example: `  crawbl app build platform     # Build unified platform image (orchestrator + webhook)
-  crawbl app build auth-filter  # Build Envoy auth WASM filter image
-  crawbl app build docs         # Build docs site image`,
+  crawbl app build auth-filter  # Build Envoy auth WASM filter image`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, docs, website, zeroclaw)", args[0])
+			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, zeroclaw)", args[0])
 		},
 	}
 
 	cmd.AddCommand(newBuildPlatformCommand())
 	cmd.AddCommand(newBuildAuthFilterCommand())
-	cmd.AddCommand(newBuildDocsCommand())
-	cmd.AddCommand(newBuildWebsiteCommand())
 	cmd.AddCommand(newBuildZeroClawCommand())
 
 	return cmd
@@ -120,82 +115,6 @@ func newBuildAuthFilterCommand() *cobra.Command {
 	}
 
 	addBuildFlags(cmd, &tag, &platform, &push)
-	return cmd
-}
-
-func newBuildDocsCommand() *cobra.Command {
-	var (
-		tag      string
-		platform string
-		push     bool
-		path     string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "docs",
-		Short: "Build the documentation site image",
-		Long:  "Build the Crawbl documentation site Docker image using docker buildx.",
-		Example: `  crawbl app build docs --tag v1.0.0
-  crawbl app build docs --tag latest --push
-  crawbl app build docs --tag v1.0.0 --path /custom/path/crawbl-docs`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if tag == "" {
-				return fmt.Errorf("--tag is required")
-			}
-			docsDir, err := gitutil.ResolveSiblingRepo(path, buildDocsRepoDir)
-			if err != nil {
-				return err
-			}
-			return runDockerBuild(buildOpts{
-				imageRepo:  buildDocsImageRepo,
-				contextDir: docsDir,
-				tag:        tag,
-				platform:   platform,
-				push:       push,
-			})
-		},
-	}
-
-	addBuildFlags(cmd, &tag, &platform, &push)
-	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-docs repo (default: ../crawbl-docs)")
-	return cmd
-}
-
-func newBuildWebsiteCommand() *cobra.Command {
-	var (
-		tag      string
-		platform string
-		push     bool
-		path     string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "website",
-		Short: "Build the marketing site image",
-		Long:  "Build the Crawbl marketing site Docker image using docker buildx.",
-		Example: `  crawbl app build website --tag v1.0.0
-  crawbl app build website --tag latest --push
-  crawbl app build website --tag v1.0.0 --path /custom/path/crawbl-website`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if tag == "" {
-				return fmt.Errorf("--tag is required")
-			}
-			websiteDir, err := gitutil.ResolveSiblingRepo(path, buildWebsiteRepoDir)
-			if err != nil {
-				return err
-			}
-			return runDockerBuild(buildOpts{
-				imageRepo:  buildWebsiteImageRepo,
-				contextDir: websiteDir,
-				tag:        tag,
-				platform:   platform,
-				push:       push,
-			})
-		},
-	}
-
-	addBuildFlags(cmd, &tag, &platform, &push)
-	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-website repo (default: ../crawbl-website)")
 	return cmd
 }
 

@@ -129,14 +129,16 @@ crawbl app deploy platform --tag v1.2.3
 
 Semver logic: finds the last `v*` tag, scans commits since then — `feat:` triggers a minor bump, `!:` (breaking) triggers a major bump, everything else is a patch bump.
 
-Each `crawbl app deploy` call:
-1. Verifies working tree is clean and pushed (skipped for docs, website, zeroclaw)
+Each `crawbl app deploy` call for backend components (platform, auth-filter):
+1. Verifies working tree is clean and pushed
 2. Builds the Docker image locally
 3. Pushes to DOCR (`registry.digitalocean.com/crawbl/`)
 4. Updates the image tag in `crawbl-argocd-apps` and pushes
 5. Creates a Git tag (auto-calculated; bumps patch if tag already exists on remote)
 6. Creates a GitHub release with Claude-enriched notes (sonnet model) and a full changelog link
 7. ArgoCD auto-syncs the new image to the cluster
+
+For **docs** and **website**, steps 2-4 and 7 are skipped. Instead, the deploy runs `npm run build` in the sibling repo and `wrangler pages deploy` to upload the static output to Cloudflare Pages. Tagging and GitHub release still happen.
 
 `crawbl app deploy all` deploys platform + auth-filter only. Docs, website, and zeroclaw are deployed individually.
 
