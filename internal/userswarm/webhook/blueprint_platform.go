@@ -138,5 +138,7 @@ func runtimeGatewayEnv(port int32) []corev1.EnvVar {
 		{Name: "ZEROCLAW_GATEWAY_HOST", Value: "0.0.0.0"},
 		{Name: "ZEROCLAW_ALLOW_PUBLIC_BIND", Value: "true"},
 		{Name: "ZEROCLAW_WORKSPACE", Value: "/zeroclaw-data/workspace"},
+		// Multi-agent delegation + tool calls can exceed the default 30s timeout.
+		{Name: "ZEROCLAW_GATEWAY_TIMEOUT_SECS", Value: "300"},
 	}
 }
