@@ -1,6 +1,10 @@
 package orchestrator
 
 import (
+	"fmt"
+	"log/slog"
+	"os"
+
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -42,4 +46,41 @@ func newMigrateCommand() *cobra.Command {
 	cmd.Flags().StringVar(&serviceName, "svc", defaultServiceName, "Migration service name")
 
 	return cmd
+}
+
+// autoMigrate runs pending database migrations on server startup.
+// Uses golang-migrate with the file source pointing to the migrations directory.
+// In containers, migrations are at /migrations/orchestrator.
+// Locally, they're at ./migrations/orchestrator.
+func autoMigrate(logger *slog.Logger) error {
+	dbConfig := database.ConfigFromEnv("CRAWBL_")
+	if err := database.EnsureSchema(dbConfig); err != nil {
+		return fmt.Errorf("ensure schema: %w", err)
+	}
+
+	// Try container path first, then local path.
+	migrationPath := "/migrations/orchestrator"
+	if _, err := os.Stat(migrationPath); os.IsNotExist(err) {
+		migrationPath = "./migrations/orchestrator"
+	}
+	if _, err := os.Stat(migrationPath); os.IsNotExist(err) {
+		logger.Warn("migrations directory not found, skipping auto-migrate")
+		return nil
+	}
+
+	m, err := migrate.New(
+		"file://"+migrationPath,
+		database.BuildDSN(dbConfig, true),
+	)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	logger.Info("database migrations applied successfully")
+	return nil
 }

@@ -180,6 +180,8 @@ crawbl app deploy zeroclaw               # Deploy zeroclaw (no git guard)
 crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
 ```
 
+> 💡 **Migrations are automatic.** The orchestrator runs pending database migrations on startup — no separate migration step needed after deploy.
+
 For zeroclaw, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
 
 Makefile shortcuts (auto-semver, no manual tag needed):

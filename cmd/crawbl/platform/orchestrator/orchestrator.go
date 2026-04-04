@@ -20,6 +20,7 @@ import (
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentpromptsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentsettingsrepo"
@@ -27,6 +28,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
@@ -34,6 +36,7 @@ import (
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
+	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
@@ -74,6 +77,13 @@ func runServer(ctx context.Context) error {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
+	// Auto-migrate: run pending migrations on startup.
+	// Migrations are embedded in the container image at /migrations/orchestrator.
+	if err := autoMigrate(logger); err != nil {
+		logger.Error("auto-migration failed", "error", err)
+		return fmt.Errorf("auto-migration failed: %w", err)
+	}
+
 	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
 	defer cleanup()
 
@@ -92,18 +102,13 @@ func runServer(ctx context.Context) error {
 	agentSettingsRepo := agentsettingsrepo.New()
 	agentPromptsRepo := agentpromptsrepo.New()
 	agentHistoryRepo := agenthistoryrepo.New()
-
-	router := chatservice.NewRouter(chatservice.RouterConfig{
-		APIKey:  strings.TrimSpace(os.Getenv("CRAWBL_ROUTING_API_KEY")),
-		Model:   envOrDefault("CRAWBL_ROUTING_MODEL", "gpt-5-mini"),
-		Timeout: durationFromEnv("CRAWBL_ROUTING_TIMEOUT", 5*time.Second),
-	}, logger)
+	artifactRepo := artifactrepo.New()
 
 	chatService := chatservice.New(
 		db,
 		workspaceRepo, agentRepo, conversationRepo, messageRepo,
 		toolsRepo, agentSettingsRepo, agentPromptsRepo, agentHistoryRepo,
-		runtimeClient, broadcaster, router,
+		runtimeClient, broadcaster,
 	)
 	agentService := agentservice.New(
 		workspaceRepo, agentRepo,
@@ -126,7 +131,7 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo)
+	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -257,6 +262,9 @@ func buildMCPHandler(
 	conversationRepo orchestratorrepo.ConversationRepo,
 	messageRepo orchestratorrepo.MessageRepo,
 	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
+	artifactRepo artifactrepo.Repo,
+	runtimeClient userswarmclient.Client,
+	broadcaster realtime.Broadcaster,
 ) http.Handler {
 	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
 	if signingKey == "" {
@@ -277,6 +285,9 @@ func buildMCPHandler(
 		}
 	}
 
+	workflowRepo := workflowrepo.New()
+	workflowSvc := workflowservice.New(db, workflowRepo, runtimeClient, broadcaster)
+
 	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
 		DB:               db,
 		Logger:           logger,
@@ -286,8 +297,13 @@ func buildMCPHandler(
 		ConversationRepo: conversationRepo,
 		MessageRepo:      messageRepo,
 		AgentHistoryRepo: agentHistoryRepo,
+		ArtifactRepo:     artifactRepo,
 		SigningKey:       signingKey,
 		FCM:              fcm,
+		RuntimeClient:    runtimeClient,
+		Broadcaster:      broadcaster,
+		WorkflowRepo:     workflowRepo,
+		WorkflowService:  workflowSvc,
 	})
 	logger.Info("MCP server enabled at /mcp/v1")
 	return handler

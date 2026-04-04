@@ -127,6 +127,8 @@ crawbl app deploy all
 crawbl app deploy platform --tag v1.2.3
 ```
 
+> **Migrations run automatically on startup.** The orchestrator runs `golang-migrate` against the Postgres database before starting the HTTP server. No manual migration step is needed after deploy. Migration files at `migrations/orchestrator/` are embedded in the container image.
+
 Semver logic: finds the last `v*` tag, scans commits since then — `feat:` triggers a minor bump, `!:` (breaking) triggers a major bump, everything else is a patch bump.
 
 Each `crawbl app deploy` call for backend components (platform, auth-filter):
