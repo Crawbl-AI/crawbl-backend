@@ -171,9 +171,25 @@ func (s *service) executeParallel(
 	return replies, nil
 }
 
+// subAgentStream tracks a placeholder message and accumulated text for a single
+// agent_id seen during a multi-agent streaming response (Phase 5).
+type subAgentStream struct {
+	agent       *orchestrator.Agent
+	placeholder *orchestrator.Message
+	accumulated strings.Builder
+	chunkCount  int
+	firstChunk  bool
+	done        bool // received a StreamEventDone for this agent_id
+}
+
 // callAgentStreaming handles a single agent's streaming webhook call.
 // Creates a placeholder message, reads streaming chunks from ZeroClaw,
 // emits Socket.IO events for each chunk, and persists the final message.
+//
+// Phase 5 multi-agent support: ZeroClaw may send chunk/done pairs with
+// different agent_id values (e.g. "wally", "eve", "manager"). Each distinct
+// agent_id gets its own placeholder message so the mobile client shows
+// separate message bubbles per sub-agent.
 func (s *service) callAgentStreaming(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
@@ -251,18 +267,98 @@ func (s *service) callAgentStreaming(
 	}
 
 	// 4. Read chunks and emit events.
+	//
+	// Multi-agent streaming (Phase 5): chunks arriving with different agent_id
+	// values are routed to separate subAgentStream entries. Each entry holds its
+	// own placeholder and accumulator. The primary agent's entry is pre-seeded so
+	// single-agent behaviour is unchanged.
 	streamStart := time.Now()
-	chunkCount := 0
-	var accumulated strings.Builder
-	firstChunk := true
-	streamDone := false
+	totalChunks := 0
+	globalStreamDone := false
+	globalFirstChunk := true // guards the "user message read" once-emit
+
+	// streams is keyed by the agent's DB ID (not slug) for stable lookups.
+	streams := make(map[string]*subAgentStream)
+	streams[agent.ID] = &subAgentStream{
+		agent:       agent,
+		placeholder: placeholder,
+		firstChunk:  true,
+	}
+
+	// resolveStream returns the subAgentStream for the given chunk.AgentID slug,
+	// creating a new placeholder and DB row if this is the first chunk for that
+	// sub-agent. Falls back to the primary agent stream when the slug is unknown.
+	resolveStream := func(chunkAgentSlug string) *subAgentStream {
+		// Empty slug or primary agent slug → use primary stream.
+		if chunkAgentSlug == "" || chunkAgentSlug == agent.Slug {
+			return streams[agent.ID]
+		}
+
+		// Look up sub-agent by slug.
+		subAgent := lookups.bySlug[chunkAgentSlug]
+		if subAgent == nil {
+			// Unknown slug — fall back to primary to avoid data loss.
+			slog.Warn("callAgentStreaming: unknown sub-agent slug, routing to primary",
+				"slug", chunkAgentSlug,
+				"primary_agent_id", agent.ID,
+			)
+			return streams[agent.ID]
+		}
+
+		// Already have a stream for this agent.
+		if st, exists := streams[subAgent.ID]; exists {
+			return st
+		}
+
+		// First chunk for this sub-agent — create a new placeholder.
+		subNow := time.Now().UTC()
+		subAgentIDPtr := &subAgent.ID
+		subPlaceholder := &orchestrator.Message{
+			ID:             uuid.NewString(),
+			ConversationID: conversation.ID,
+			Role:           orchestrator.MessageRoleAgent,
+			Content: orchestrator.MessageContent{
+				Type: orchestrator.MessageContentTypeText,
+				Text: "",
+			},
+			Status:      orchestrator.MessageStatusPending,
+			AgentID:     subAgentIDPtr,
+			Attachments: []orchestrator.Attachment{},
+			CreatedAt:   subNow,
+			UpdatedAt:   subNow,
+		}
+		if _, mErr := database.WithTransaction(opts.Sess, "create sub-agent placeholder", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
+			if mErr := s.messageRepo.Save(ctx, tx, subPlaceholder); mErr != nil {
+				return nil, mErr
+			}
+			return subPlaceholder, nil
+		}); mErr != nil {
+			slog.Warn("callAgentStreaming: failed to create sub-agent placeholder, routing to primary",
+				"sub_agent_slug", subAgent.Slug,
+				"sub_agent_id", subAgent.ID,
+				"error", mErr.Error(),
+			)
+			return streams[agent.ID]
+		}
+
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, subAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+
+		st := &subAgentStream{
+			agent:       subAgent,
+			placeholder: subPlaceholder,
+			firstChunk:  true,
+		}
+		streams[subAgent.ID] = st
+		return st
+	}
 
 	for chunk := range streamCh {
 		switch chunk.Type {
 		case userswarmclient.StreamEventChunk, userswarmclient.StreamEventThinking:
-			if firstChunk {
-				s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusWriting), conversation.ID)
-				// First token received → mark user message as read (once across parallel agents).
+			st := resolveStream(chunk.AgentID)
+
+			// Once per stream: mark user message as read.
+			if globalFirstChunk {
 				if opts.UserMessageID != "" && opts.StatusReadOnce != nil {
 					opts.StatusReadOnce.Do(func() {
 						s.broadcaster.EmitMessageStatus(ctx, opts.WorkspaceID, realtime.MessageStatusPayload{
@@ -273,20 +369,37 @@ func (s *service) callAgentStreaming(
 						})
 					})
 				}
-				firstChunk = false
+				globalFirstChunk = false
 			}
-			accumulated.WriteString(chunk.Delta)
-			chunkCount++
+
+			// Once per sub-agent: transition to writing status.
+			if st.firstChunk {
+				s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusWriting), conversation.ID)
+				st.firstChunk = false
+			}
+
+			st.accumulated.WriteString(chunk.Delta)
+			st.chunkCount++
+			totalChunks++
+
 			s.broadcaster.EmitMessageChunk(ctx, opts.WorkspaceID, realtime.MessageChunkPayload{
-				MessageID:      placeholder.ID,
+				MessageID:      st.placeholder.ID,
 				ConversationID: conversation.ID,
-				AgentID:        agent.ID,
+				AgentID:        st.agent.ID,
 				Chunk:          chunk.Delta,
 			})
 
 		case userswarmclient.StreamEventToolCall:
+			// Tool events are attributed to the chunk's agent_id when available,
+			// otherwise fall back to the primary agent.
+			toolAgentID := agent.ID
+			if chunk.AgentID != "" {
+				if ta := lookups.bySlug[chunk.AgentID]; ta != nil {
+					toolAgentID = ta.ID
+				}
+			}
 			s.broadcaster.EmitAgentTool(ctx, opts.WorkspaceID, realtime.AgentToolPayload{
-				AgentID:        agent.ID,
+				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
 				Tool:           chunk.Tool,
 				Status:         "running",
@@ -297,14 +410,21 @@ func (s *service) callAgentStreaming(
 			if chunk.Tool == "delegate" {
 				delegateSlug, taskSummary := parseDelegateArgs(chunk.Args)
 				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
+					// Use the primary placeholder as the trigger message for audit.
 					go s.recordDelegation(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 				}
 			}
 
 		case userswarmclient.StreamEventToolResult:
+			toolAgentID := agent.ID
+			if chunk.AgentID != "" {
+				if ta := lookups.bySlug[chunk.AgentID]; ta != nil {
+					toolAgentID = ta.ID
+				}
+			}
 			s.broadcaster.EmitAgentTool(ctx, opts.WorkspaceID, realtime.AgentToolPayload{
-				AgentID:        agent.ID,
+				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
 				Tool:           chunk.Tool,
 				Status:         "done",
@@ -320,8 +440,29 @@ func (s *service) callAgentStreaming(
 			}
 
 		case userswarmclient.StreamEventDone:
-			// Mark that the stream ended properly.
-			streamDone = true
+			// Mark done on the specific agent that finished, or globally when
+			// agent_id is empty (legacy single-agent ZeroClaw behaviour).
+			if chunk.AgentID == "" {
+				globalStreamDone = true
+				// Mark all streams done for finalization.
+				for _, st := range streams {
+					st.done = true
+				}
+			} else {
+				st := resolveStream(chunk.AgentID)
+				st.done = true
+				// If every stream has received its done event, mark global done.
+				allDone := true
+				for _, st := range streams {
+					if !st.done {
+						allDone = false
+						break
+					}
+				}
+				if allDone {
+					globalStreamDone = true
+				}
+			}
 		}
 	}
 
@@ -329,84 +470,99 @@ func (s *service) callAgentStreaming(
 		"agent_slug", agent.Slug,
 		"agent_id", agent.ID,
 		"conversation_id", conversation.ID,
-		"chunks", chunkCount,
-		"text_len", accumulated.Len(),
+		"sub_agent_count", len(streams),
+		"total_chunks", totalChunks,
 		"elapsed_ms", time.Since(streamStart).Milliseconds(),
 	)
 
-	// 5. Finalize based on what we received.
-	finalText := strings.TrimSpace(accumulated.String())
+	// 5. Finalize each sub-agent stream independently.
+	var replies []*orchestrator.Message
 
-	// Case A: Agent had nothing to say (0 chunks, empty text) — delete placeholder, user never sees it.
-	if finalText == "" && chunkCount == 0 {
-		slog.Warn("callAgentStreaming: agent produced no output, deleting placeholder",
-			"agent_slug", agent.Slug,
-			"agent_id", agent.ID,
-			"conversation_id", conversation.ID,
-		)
-		_ = s.messageRepo.DeleteByID(ctx, opts.Sess, placeholder.ID)
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+	for _, st := range streams {
+		finalText := strings.TrimSpace(st.accumulated.String())
+		isPrimary := st.agent.ID == agent.ID
+
+		// Determine effective done status for this stream.
+		// If the global stream closed properly (all done events received or legacy
+		// single-agent done), treat every stream as done.
+		streamCompletedCleanly := st.done || globalStreamDone
+
+		// Case A: No output — delete placeholder.
+		if finalText == "" && st.chunkCount == 0 {
+			if isPrimary {
+				slog.Warn("callAgentStreaming: agent produced no output, deleting placeholder",
+					"agent_slug", st.agent.Slug,
+					"agent_id", st.agent.ID,
+					"conversation_id", conversation.ID,
+				)
+			}
+			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			continue
+		}
+
+		// Case B: [SILENT] response.
+		if finalText == "[SILENT]" {
+			slog.Info("callAgentStreaming: agent responded SILENT",
+				"agent_slug", st.agent.Slug,
+				"agent_id", st.agent.ID,
+				"conversation_id", conversation.ID,
+			)
+			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, "", orchestrator.MessageStatusSilent, lookups)
+			s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
+				MessageID:      st.placeholder.ID,
+				ConversationID: conversation.ID,
+				AgentID:        st.agent.ID,
+				Status:         string(orchestrator.MessageStatusSilent),
+			})
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			if reply != nil {
+				replies = append(replies, reply)
+			}
+			continue
+		}
+
+		// Case D: Partial response (stream closed without done event).
+		if !streamCompletedCleanly && finalText != "" {
+			slog.Warn("callAgentStreaming: incomplete response (stream ended without done event)",
+				"agent_slug", st.agent.Slug,
+				"agent_id", st.agent.ID,
+				"conversation_id", conversation.ID,
+				"chunks", st.chunkCount,
+				"text_len", len(finalText),
+			)
+			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusIncomplete, lookups)
+			s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
+				MessageID:      st.placeholder.ID,
+				ConversationID: conversation.ID,
+				AgentID:        st.agent.ID,
+				Status:         string(orchestrator.MessageStatusIncomplete),
+			})
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			if reply != nil {
+				replies = append(replies, reply)
+			}
+			continue
+		}
+
+		// Case C: Normal delivered response.
+		reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusDelivered, lookups)
+		s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
+			MessageID:      st.placeholder.ID,
+			ConversationID: conversation.ID,
+			AgentID:        st.agent.ID,
+			Status:         string(orchestrator.MessageStatusDelivered),
+		})
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+		if reply != nil {
+			replies = append(replies, reply)
+		}
+	}
+
+	if len(replies) == 0 {
 		return nil, nil
 	}
-
-	// Case B: Agent responded [SILENT] — save with silent status for Flutter to show a system message.
-	if finalText == "[SILENT]" {
-		slog.Info("callAgentStreaming: agent responded SILENT",
-			"agent_slug", agent.Slug,
-			"agent_id", agent.ID,
-			"conversation_id", conversation.ID,
-		)
-		reply := s.finalizeStreamMessage(ctx, opts, conversation, placeholder, "", orchestrator.MessageStatusSilent, lookups)
-		s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
-			MessageID:      placeholder.ID,
-			ConversationID: conversation.ID,
-			AgentID:        agent.ID,
-			Status:         string(orchestrator.MessageStatusSilent),
-		})
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
-		if reply == nil {
-			return nil, nil
-		}
-		return []*orchestrator.Message{reply}, nil
-	}
-
-	// Case D: Partial response (got text but stream didn't complete properly) — save as incomplete.
-	if !streamDone && finalText != "" {
-		slog.Warn("callAgentStreaming: incomplete response (stream ended without done event)",
-			"agent_slug", agent.Slug,
-			"agent_id", agent.ID,
-			"conversation_id", conversation.ID,
-			"chunks", chunkCount,
-			"text_len", len(finalText),
-		)
-		reply := s.finalizeStreamMessage(ctx, opts, conversation, placeholder, finalText, orchestrator.MessageStatusIncomplete, lookups)
-		s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
-			MessageID:      placeholder.ID,
-			ConversationID: conversation.ID,
-			AgentID:        agent.ID,
-			Status:         string(orchestrator.MessageStatusIncomplete),
-		})
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
-		if reply == nil {
-			return nil, nil
-		}
-		return []*orchestrator.Message{reply}, nil
-	}
-
-	// Case C: Normal response — save with delivered status.
-	reply := s.finalizeStreamMessage(ctx, opts, conversation, placeholder, finalText, orchestrator.MessageStatusDelivered, lookups)
-	s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
-		MessageID:      placeholder.ID,
-		ConversationID: conversation.ID,
-		AgentID:        agent.ID,
-		Status:         string(orchestrator.MessageStatusDelivered),
-	})
-	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
-
-	if reply == nil {
-		return nil, nil
-	}
-	return []*orchestrator.Message{reply}, nil
+	return replies, nil
 }
 
 // finalizeStreamMessage updates the placeholder message with final text and status,
