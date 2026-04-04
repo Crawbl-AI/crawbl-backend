@@ -81,16 +81,6 @@ func autoMigrate(logger *slog.Logger) error {
 	}
 	defer m.Close()
 
-	// Fresh mode: force version to -1 (no version) so all migrations re-run.
-	// Useful for dev environments where migration files are modified in-place.
-	// Existing tables use CREATE TABLE IF NOT EXISTS so re-running is safe.
-	if os.Getenv("CRAWBL_MIGRATE_FRESH") == "true" {
-		logger.Info("fresh migration mode: resetting migration version to force re-run")
-		if err := m.Force(-1); err != nil {
-			logger.Warn("force version reset failed, proceeding anyway", "error", err)
-		}
-	}
-
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("run migrations: %w", err)
 	}
