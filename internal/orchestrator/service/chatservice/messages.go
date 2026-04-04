@@ -502,29 +502,30 @@ func (s *service) callAgentStreaming(
 			"chunks", st.chunkCount,
 		)
 
-		// Issue 2: When there are sub-agent streams, strip lines from the primary
-		// (Manager) response that are prefixed with a sub-agent name. Those lines
-		// appear in their own dedicated bubbles, so including them in Manager's
-		// bubble duplicates content.
+		// Strip sub-agent prefixed lines from Manager's bubble (they have their own bubbles).
 		if isPrimary && len(streams) > 1 {
-			lines := strings.Split(finalText, "\n")
-			var managerLines []string
-			for _, line := range lines {
-				isSubAgentLine := false
-				for _, otherSt := range streams {
-					if otherSt.agent.ID != agent.ID {
-						prefix := otherSt.agent.Name + ":"
-						if strings.HasPrefix(strings.TrimSpace(line), prefix) {
-							isSubAgentLine = true
-							break
-						}
-					}
-				}
-				if !isSubAgentLine {
-					managerLines = append(managerLines, line)
+			subPrefixes := make([]string, 0, len(streams)-1)
+			for _, otherSt := range streams {
+				if otherSt.agent.ID != agent.ID {
+					subPrefixes = append(subPrefixes, otherSt.agent.Name+":")
 				}
 			}
-			finalText = strings.TrimSpace(strings.Join(managerLines, "\n"))
+			lines := strings.Split(finalText, "\n")
+			filtered := lines[:0]
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				isSub := false
+				for _, p := range subPrefixes {
+					if strings.HasPrefix(trimmed, p) {
+						isSub = true
+						break
+					}
+				}
+				if !isSub {
+					filtered = append(filtered, line)
+				}
+			}
+			finalText = strings.TrimSpace(strings.Join(filtered, "\n"))
 		}
 
 		// Determine effective done status for this stream.
