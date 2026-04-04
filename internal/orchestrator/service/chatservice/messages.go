@@ -502,38 +502,17 @@ func (s *service) callAgentStreaming(
 			"chunks", st.chunkCount,
 		)
 
-		// Strip sub-agent lines from Manager's bubble (they have their own bubbles).
-		// Matches: "Wally:", "- Wally —", "- Wally:", "[Wally]", "**Wally**"
+		// If sub-agents answered, suppress Manager's message entirely.
+		// Manager's job is to delegate — when delegation happened, only
+		// sub-agent bubbles should appear.
 		if isPrimary && len(streams) > 1 {
-			var subNames []string
-			for _, otherSt := range streams {
-				if otherSt.agent.ID != agent.ID {
-					subNames = append(subNames, otherSt.agent.Name)
-				}
-			}
-			containsSubAgent := func(line string) bool {
-				trimmed := strings.TrimSpace(line)
-				for _, name := range subNames {
-					if strings.HasPrefix(trimmed, name+":") ||
-						strings.HasPrefix(trimmed, name+" —") ||
-						strings.HasPrefix(trimmed, "- "+name) ||
-						strings.HasPrefix(trimmed, "— "+name) ||
-						strings.HasPrefix(trimmed, "**"+name+"**") ||
-						strings.HasPrefix(trimmed, "["+name+"]") ||
-						strings.Contains(trimmed, name+"\n") {
-						return true
-					}
-				}
-				return false
-			}
-			lines := strings.Split(finalText, "\n")
-			filtered := lines[:0]
-			for _, line := range lines {
-				if !containsSubAgent(line) {
-					filtered = append(filtered, line)
-				}
-			}
-			finalText = strings.TrimSpace(strings.Join(filtered, "\n"))
+			slog.Info("callAgentStreaming: suppressing Manager bubble (sub-agents answered)",
+				"agent_slug", st.agent.Slug,
+				"sub_agent_count", len(streams)-1,
+			)
+			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
+			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			continue
 		}
 
 		// Determine effective done status for this stream.
