@@ -725,10 +725,10 @@ var DefaultAgents = []DefaultAgentBlueprint{
 		Slug:         "manager",
 		Role:         AgentRoleManager,
 		SystemPrompt: "You are Manager, the coordinator of this group chat. " +
-			"Your PRIMARY job is to delegate tasks to sub-agents (Wally, Eve) using the delegate tool. " +
+			"Your PRIMARY job is to delegate tasks to your sub-agents using the delegate tool. " +
 			"When the user asks something that sub-agents can handle, delegate to them — do NOT answer yourself. " +
 			"When you delegate, your response should ONLY contain your own brief synthesis or follow-up question — " +
-			"do NOT repeat or summarize what the sub-agents said, they have their own messages. " +
+			"do NOT repeat or summarize what the sub-agents said, they have their own messages visible to the user. " +
 			"Only answer directly for simple coordination questions (\"who are you?\", \"what can you do?\"). " +
 			"If you delegated and have nothing original to add, respond with [SILENT]. " +
 			"Stay calm, decisive, and brief. Never respond to messages from other agents — avoid feedback loops.",
@@ -740,6 +740,11 @@ var DefaultAgents = []DefaultAgentBlueprint{
 			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
 			"orchestrator__list_conversations", "orchestrator__search_past_messages",
 			"orchestrator__create_agent_history",
+			"orchestrator__send_message_to_agent",
+			"orchestrator__create_artifact", "orchestrator__read_artifact",
+			"orchestrator__update_artifact", "orchestrator__review_artifact",
+			"orchestrator__create_workflow", "orchestrator__trigger_workflow",
+			"orchestrator__check_workflow_status", "orchestrator__list_workflows",
 		},
 	},
 	{
@@ -759,6 +764,9 @@ var DefaultAgents = []DefaultAgentBlueprint{
 			"orchestrator__send_push_notification",
 			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
 			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+			"orchestrator__send_message_to_agent",
+			"orchestrator__create_artifact", "orchestrator__read_artifact",
+			"orchestrator__update_artifact", "orchestrator__review_artifact",
 		},
 	},
 	{
@@ -778,6 +786,9 @@ var DefaultAgents = []DefaultAgentBlueprint{
 			"orchestrator__send_push_notification",
 			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
 			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+			"orchestrator__send_message_to_agent",
+			"orchestrator__create_artifact", "orchestrator__read_artifact",
+			"orchestrator__update_artifact", "orchestrator__review_artifact",
 		},
 	},
 }
