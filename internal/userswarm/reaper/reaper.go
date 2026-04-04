@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gocraft/dbr/v2"
@@ -27,10 +28,16 @@ import (
 // long-running controller and does not watch for changes — it does a single
 // snapshot query and acts on it.
 //
-// The cleanup happens in two phases:
+// The cleanup happens in three phases:
 //
-//  1. Per-user phase: find all e2e test users older than cfg.MaxAge, delete
-//     their UserSwarm CRs, then soft-delete the user row.
+//  1. Stale-CR phase: list every UserSwarm CR in the cluster, keep the ones
+//     whose Kubernetes CreationTimestamp is older than cfg.MaxAge, and for
+//     each of those look up the owning user by Spec.UserID. If the user is
+//     an e2e test user (subject starts with "e2e-"), delete the CR and
+//     soft-delete the user row. Driving off the CR's own age — instead of
+//     the database user's created_at — means swarms get cleaned up even when
+//     the user row was already soft-deleted out of band, and catches CRs
+//     that have been lingering independent of their DB record.
 //
 //  2. Orphan sweep: scan every UserSwarm CR in the cluster and delete any
 //     whose owning user no longer exists in the database. This catches swarms
@@ -66,63 +73,121 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 		return nil, fmt.Errorf("build k8s client: %w", err)
 	}
 
-	// Calculate the cutoff timestamp. Any e2e user created before this moment
-	// is considered stale and eligible for reaping. Users created after the
-	// cutoff are still within the MaxAge window and are left alone (they may
-	// belong to a test run that is still in progress).
+	// Calculate the cutoff timestamp. Any UserSwarm CR whose Kubernetes
+	// CreationTimestamp is older than this moment is considered stale and
+	// eligible for reaping. CRs created after the cutoff are still within the
+	// MaxAge window and are left alone (they may belong to a test run that is
+	// still in progress).
 	cutoff := time.Now().UTC().Add(-cfg.MaxAge)
-	users, err := findStaleE2EUsers(ctx, sess, cutoff)
-	if err != nil {
-		return nil, fmt.Errorf("find stale e2e users: %w", err)
-	}
-	result.UsersFound = len(users)
 
-	if len(users) == 0 {
-		logger.Info("no stale e2e users found")
-	} else {
-		logger.Info("found stale e2e users", "count", len(users), "cutoff", cutoff.Format(time.RFC3339))
+	// Phase 1: list every UserSwarm CR in the cluster and drive cleanup off
+	// its own CreationTimestamp. We used to iterate the users table instead,
+	// which meant a CR could outlive its row indefinitely — once the user was
+	// soft-deleted out of band, phase 1 stopped seeing it and phase 2's
+	// user-existence check was the only thing keeping the CR in scope. By
+	// looking at CR age directly we catch stale swarms regardless of DB state.
+	var swarmList crawblv1alpha1.UserSwarmList
+	if err := k8sClient.List(ctx, &swarmList); err != nil {
+		return nil, fmt.Errorf("list userswarms: %w", err)
 	}
 
-	// Phase 1: process each stale user in turn.
-	for _, user := range users {
-		// Log the age of this record so it is easy to spot unusually old
-		// test users in the output (e.g. from a hung CI run days ago).
-		age := time.Since(user.CreatedAt).Truncate(time.Minute)
-		logger.Info("processing stale user",
+	logger.Info("scanning userswarm CRs for staleness",
+		"total", len(swarmList.Items),
+		"cutoff", cutoff.Format(time.RFC3339),
+		"max_age", cfg.MaxAge,
+	)
+
+	// Track which users have already been soft-deleted in this run so we
+	// don't issue a redundant UPDATE when the same e2e user owns multiple
+	// stale CRs (one per workspace).
+	softDeletedUsers := make(map[string]struct{})
+
+	for i := range swarmList.Items {
+		swarm := &swarmList.Items[i]
+
+		// Skip CRs that have not yet aged past the cutoff.
+		if swarm.CreationTimestamp.Time.After(cutoff) {
+			continue
+		}
+
+		age := time.Since(swarm.CreationTimestamp.Time).Truncate(time.Minute)
+		userID := swarm.Spec.UserID
+
+		// Look up the owning user (including soft-deleted rows) so we can
+		// decide whether this is an e2e swarm worth reaping in phase 1, and
+		// so we can log a meaningful subject. Orphans (no user row at all)
+		// are left to phase 2, which is the dedicated orphan sweep.
+		user, err := findUserByID(ctx, sess, userID)
+		if err != nil {
+			logger.Error("failed to look up user for stale swarm",
+				"swarm", swarm.Name,
+				"user_id", userID,
+				"error", err,
+			)
+			result.Errors++
+			continue
+		}
+		if user == nil {
+			// No user row at all — leave it to phase 2's orphan sweep so the
+			// log output cleanly separates "stale e2e" from "orphaned".
+			continue
+		}
+
+		// Phase 1 is scoped to e2e users. Stale CRs for real users are a
+		// different class of problem (possibly a bug in the teardown path)
+		// and should not be silently deleted here.
+		if !strings.HasPrefix(user.Subject, "e2e-") {
+			continue
+		}
+
+		result.UsersFound++
+		logger.Info("processing stale userswarm",
+			"swarm", swarm.Name,
 			"subject", user.Subject,
 			"email", user.Email,
 			"age", age,
 			"dry_run", cfg.DryRun,
 		)
 
-		// In dry-run mode we count the user as "reaped" for reporting purposes
-		// but skip all mutating operations.
 		if cfg.DryRun {
-			result.UsersReaped++
+			result.SwarmsReaped++
+			if _, seen := softDeletedUsers[user.ID]; !seen {
+				softDeletedUsers[user.ID] = struct{}{}
+				result.UsersReaped++
+			}
 			continue
 		}
 
-		// Delete every UserSwarm CR that belongs to this user's workspaces.
-		// This is done before soft-deleting the user so that the cluster
-		// resources are removed first. If the swarm deletion fails for some
-		// workspace, reapUserSwarms increments the error count and continues;
-		// we still attempt to soft-delete the user so the database stays
-		// consistent with a best-effort K8s cleanup.
-		reaped, errs := reapUserSwarms(ctx, k8sClient, sess, logger, user)
-		result.SwarmsReaped += reaped
-		result.Errors += errs
+		if err := k8sClient.Delete(ctx, swarm); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error("failed to delete stale userswarm", "name", swarm.Name, "error", err)
+				result.Errors++
+				continue
+			}
+		}
+		logger.Info("deleted stale userswarm", "name", swarm.Name, "user", user.Subject)
+		result.SwarmsReaped++
 
-		// Soft-delete the user by setting deleted_at. We use a soft delete
-		// rather than a hard DELETE so that audit logs and foreign key
-		// references in other tables remain intact. The WHERE clause guards
-		// against racing with another reaper invocation or an explicit delete
-		// triggered by the orchestrator.
-		if err := softDeleteUser(ctx, sess, user); err != nil {
+		// Soft-delete the user row once, even if multiple CRs map back to
+		// the same user. The deleted_at IS NULL guard inside softDeleteUser
+		// is a second line of defence against double-writes.
+		if _, seen := softDeletedUsers[user.ID]; seen {
+			continue
+		}
+		softDeletedUsers[user.ID] = struct{}{}
+		if user.DeletedAt != nil {
+			// User was already soft-deleted out of band (e.g. by an earlier
+			// reaper run that failed after the DB update but before the CR
+			// delete). Count it as reaped for visibility, but skip the
+			// UPDATE since there's nothing to do.
+			result.UsersReaped++
+			continue
+		}
+		if err := softDeleteUser(ctx, sess, *user); err != nil {
 			logger.Error("failed to soft-delete user", "subject", user.Subject, "error", err)
 			result.Errors++
 			continue
 		}
-
 		result.UsersReaped++
 		logger.Info("reaped user", "subject", user.Subject)
 	}
@@ -147,88 +212,28 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	return result, nil
 }
 
-// findStaleE2EUsers queries the database for test users that are old enough to
-// be reaped. It returns only users that:
-//   - have a subject starting with "e2e-" (the convention used by the test
-//     harness when calling POST /v1/auth/sign-up in e2e tests)
-//   - have not yet been soft-deleted (deleted_at IS NULL)
-//   - were created before the given cutoff timestamp
-//
-// Results are ordered oldest-first so the logs are easy to read chronologically.
-func findStaleE2EUsers(ctx context.Context, sess *dbr.Session, cutoff time.Time) ([]staleUser, error) {
+// findUserByID looks up a single user row by primary key, including
+// soft-deleted users. It returns (nil, nil) when no row exists so the
+// caller can distinguish "missing" from "error". Soft-deleted users are
+// returned with DeletedAt populated so phase 1 can skip the redundant
+// UPDATE when the row was already torn down by a previous reaper run.
+func findUserByID(ctx context.Context, sess *dbr.Session, id string) (*staleUser, error) {
+	if id == "" {
+		return nil, nil
+	}
 	var users []staleUser
-	_, err := sess.Select("id", "subject", "email", "created_at").
+	_, err := sess.Select("id", "subject", "email", "created_at", "deleted_at").
 		From("users").
-		Where("subject LIKE 'e2e-%'").
-		Where("deleted_at IS NULL").
-		Where("created_at < ?", cutoff).
-		OrderAsc("created_at").
+		Where("id = ?", id).
+		Limit(1).
 		LoadContext(ctx, &users)
 	if err != nil {
 		return nil, err
 	}
-	return users, nil
-}
-
-// reapUserSwarms finds all workspaces owned by the given user, then deletes
-// the UserSwarm CR for each workspace. It returns the number of swarms
-// successfully deleted and the number of errors encountered.
-//
-// UserSwarm CRs are cluster-scoped (not namespace-scoped) and are named
-// "workspace-<workspaceID>" by convention (see internal/userswarm/client).
-// Once a CR is deleted, Metacontroller's sync hook fires and the webhook
-// (internal/userswarm/webhook) tears down the ZeroClaw runtime pods, PVCs,
-// and Services in the "userswarms" namespace.
-//
-// Errors are non-fatal: if one workspace's swarm cannot be deleted the
-// function continues to the next workspace. The caller accumulates the error
-// count and decides whether to surface it.
-func reapUserSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.Session, logger *slog.Logger, user staleUser) (reaped, errors int) {
-	// Load the IDs of all workspaces belonging to this user. Each workspace
-	// maps 1:1 to a UserSwarm CR in the cluster.
-	var workspaceIDs []string
-	_, err := sess.Select("id").
-		From("workspaces").
-		Where("user_id = ?", user.ID).
-		LoadContext(ctx, &workspaceIDs)
-	if err != nil {
-		logger.Error("failed to list workspaces", "user_id", user.ID, "error", err)
-		return 0, 1
+	if len(users) == 0 {
+		return nil, nil
 	}
-
-	for _, wsID := range workspaceIDs {
-		swarmName := "workspace-" + wsID
-
-		// Attempt to fetch the CR before deleting it. If it is already gone
-		// (NotFound) we treat that as success — the desired end state (no CR)
-		// is already achieved.
-		var swarm crawblv1alpha1.UserSwarm
-		if err := k8sClient.Get(ctx, client.ObjectKey{Name: swarmName}, &swarm); err != nil {
-			if client.IgnoreNotFound(err) == nil {
-				// CR does not exist; nothing to delete.
-				continue
-			}
-			logger.Error("failed to get userswarm", "name", swarmName, "error", err)
-			errors++
-			continue
-		}
-
-		if err := k8sClient.Delete(ctx, &swarm); err != nil {
-			// A NotFound error on Delete means another process beat us to it;
-			// that is fine and we do not count it as an error.
-			if client.IgnoreNotFound(err) == nil {
-				continue
-			}
-			logger.Error("failed to delete userswarm", "name", swarmName, "error", err)
-			errors++
-			continue
-		}
-
-		logger.Info("deleted userswarm", "name", swarmName, "user", user.Subject)
-		reaped++
-	}
-
-	return reaped, errors
+	return &users[0], nil
 }
 
 // reapOrphanedSwarms is the second cleanup phase. It lists every UserSwarm CR

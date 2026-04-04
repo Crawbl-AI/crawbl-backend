@@ -78,12 +78,14 @@ type Config struct {
 }
 
 // staleUser holds the minimal set of fields the reaper needs to process a
-// single test user. It is populated by findStaleE2EUsers() from the "users"
+// single test user. It is populated by findUserByID() from the "users"
 // table and is not exported because it is only meaningful within this package.
 //
 // The ID field is the internal UUID used as a foreign key in the "workspaces"
 // table. Subject is the external identifier (always "e2e-<suffix>" for test
-// users). Email and CreatedAt are logged for observability.
+// users). Email and CreatedAt are logged for observability; DeletedAt lets
+// phase 1 detect users that were already soft-deleted out of band so it can
+// skip the redundant UPDATE while still cleaning up the lingering CR.
 type staleUser struct {
 	// ID is the database primary key (UUID) for this user row.
 	ID string
@@ -96,9 +98,15 @@ type staleUser struct {
 	// processing to make it easy to trace a specific test run in the logs.
 	Email string
 
-	// CreatedAt is when the user was inserted into the database. The reaper
-	// uses this to decide whether the record is old enough to delete.
+	// CreatedAt is when the user was inserted into the database. Retained for
+	// observability; staleness is now determined by the UserSwarm CR's own
+	// CreationTimestamp rather than this field.
 	CreatedAt time.Time
+
+	// DeletedAt is set when the user row has already been soft-deleted.
+	// Phase 1 uses this to avoid re-issuing the soft-delete UPDATE on a row
+	// that has already been torn down out of band.
+	DeletedAt *time.Time
 }
 
 // Result summarises what happened during a reaper run. It is returned by Run()
