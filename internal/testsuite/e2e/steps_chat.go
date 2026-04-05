@@ -71,7 +71,9 @@ func (tc *testContext) userShouldSeeDefaultConversations(alias string) error {
 	if err := tc.userOpensConversations(alias); err != nil {
 		return err
 	}
-	if err := tc.assertJSONArrayLength("data", 3); err != nil {
+	// At least 3 conversations (swarm + 2 agent directs); may be more
+	// if earlier CRUD scenarios created extras.
+	if err := tc.assertJSONArrayMinLength("data", 3); err != nil {
 		return err
 	}
 	if err := tc.assertJSONArrayContainsItem("data", "type", "swarm"); err != nil {
@@ -185,15 +187,15 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 func (tc *testContext) assistantReplyShouldSucceed() error { return tc.assertStatus(200) }
 
 func (tc *testContext) assistantReplyShouldContainText() error {
-	return tc.assertJSONNotEmpty("data.messages.0.content.text")
+	return tc.assertJSONNotEmpty("data.0.content.text")
 }
 
 func (tc *testContext) assistantReplyShouldComeFromAgent() error {
-	return tc.assertJSONNotEmpty("data.messages.0.agent_id")
+	return tc.assertJSONNotEmpty("data.0.agent.id")
 }
 
 func (tc *testContext) assistantReplyShouldComeFromSpecificAgent(role string) error {
-	return tc.assertJSONEquals("data.messages.0.agent_slug", normalizeKey(role))
+	return tc.assertJSONEquals("data.0.agent.slug", normalizeKey(role))
 }
 
 // --- Conversation CRUD -----------------------------------------------

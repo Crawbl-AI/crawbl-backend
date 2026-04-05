@@ -109,6 +109,18 @@ func (tc *testContext) assertJSONArrayLength(path string, expected int) error {
 	return nil
 }
 
+func (tc *testContext) assertJSONArrayMinLength(path string, min int) error {
+	arr := gjson.GetBytes(tc.lastBody, path)
+	if !arr.IsArray() {
+		return fmt.Errorf("JSON %s: expected array, got %s", path, arr.Type)
+	}
+	got := len(arr.Array())
+	if got < min {
+		return fmt.Errorf("JSON %s: expected at least %d items, got %d", path, min, got)
+	}
+	return nil
+}
+
 func (tc *testContext) assertJSONArrayContainsItem(arrayPath, field, expected string) error {
 	arr := gjson.GetBytes(tc.lastBody, arrayPath)
 	if !arr.IsArray() {

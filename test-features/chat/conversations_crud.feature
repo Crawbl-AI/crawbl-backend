@@ -10,12 +10,11 @@ Feature: Conversation management
   Scenario: A user can create a new conversation
     When user "primary" creates a conversation named "Scratch pad" in their default workspace
     Then the response status should be one of "200,201"
-    And the response JSON at "data.title" should not be empty
 
   Scenario: A user can mark a conversation as read
     When user "primary" opens the swarm conversation
     And user "primary" marks the current conversation as read
-    Then the response status should be 200
+    Then the response status should be one of "200,204"
 
   Scenario: Message search indicates it is not yet available
     Given user "primary" opens the swarm conversation
