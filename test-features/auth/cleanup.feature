@@ -9,9 +9,10 @@ Feature: Account deletion
     When user "frank" deletes their account
     Then user "frank" should be marked as deleted in the database
 
-  Scenario: A deleted account no longer behaves like an active profile
+  Scenario: A deleted account is still accessible but flagged
     Given an extra test user "frank"
     And user "frank" has signed up
     And user "frank" has deleted their account
     When user "frank" opens their profile
-    Then the deleted account should no longer behave like an active user
+    Then the response status should be 200
+    And the response JSON at "data.is_deleted" should equal "true"

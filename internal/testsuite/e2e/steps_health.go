@@ -30,8 +30,8 @@ func (tc *testContext) publicLegalDocumentsShouldBeAvailable() error {
 	if err := tc.assertStatus(200); err != nil {
 		return err
 	}
-	if err := tc.assertJSONNotEmpty("data.tos.version"); err != nil {
+	if err := tc.assertJSONNotEmpty("data.terms_of_service_version"); err != nil {
 		return err
 	}
-	return tc.assertJSONNotEmpty("data.privacy.version")
+	return tc.assertJSONNotEmpty("data.privacy_policy_version")
 }

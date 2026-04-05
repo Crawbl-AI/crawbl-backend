@@ -203,7 +203,7 @@ func (tc *testContext) userCreatesConversation(alias, title string) error {
 		return err
 	}
 	state := tc.userState(alias)
-	body := map[string]any{"title": title}
+	body := map[string]any{"title": title, "type": "swarm"}
 	if _, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, body); err != nil {
 		return err
 	}
