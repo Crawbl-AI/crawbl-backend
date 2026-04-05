@@ -75,6 +75,13 @@ func runtimeConfigFromEnv() *runtimeConfig {
 		AgentRuntimeImage:        envOrDefault("CRAWBL_AGENT_RUNTIME_IMAGE", "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"),
 		OrchestratorGRPCEndpoint: os.Getenv("CRAWBL_ORCHESTRATOR_ENDPOINT"),
 		MCPEndpoint:              os.Getenv("CRAWBL_MCP_ENDPOINT"),
+		PostgresHost:             os.Getenv("CRAWBL_DATABASE_HOST"),
+		PostgresPort:             os.Getenv("CRAWBL_DATABASE_PORT"),
+		PostgresUser:             os.Getenv("CRAWBL_DATABASE_USER"),
+		PostgresName:             os.Getenv("CRAWBL_DATABASE_NAME"),
+		PostgresSchema:           os.Getenv("CRAWBL_DATABASE_SCHEMA"),
+		PostgresSSLMode:          os.Getenv("CRAWBL_DATABASE_SSLMODE"),
+		RedisAddr:                os.Getenv("CRAWBL_REDIS_ADDR"),
 	}
 }
 

@@ -171,7 +171,49 @@ func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image,
 		container.EnvFrom = kube.SecretEnvFrom(secretName)
 	}
 
+	// Literal env vars for Postgres + Redis connection settings. The
+	// runtime container reads these through internal/pkg/database and
+	// internal/pkg/redisclient. Passwords live in the envSecretRef
+	// Secret (projected via EnvFrom above); the non-secret fields are
+	// injected here so a single webhook rollout updates every runtime
+	// pod's backend targets without touching the per-workspace Secret.
+	container.Env = append(container.Env, runtimeBackendEnv(cfg)...)
+
 	return container
+}
+
+// runtimeBackendEnv produces the list of literal env vars the runtime
+// container needs to reach the orchestrator-shared Postgres + Redis
+// backends. Values are sourced from the webhook process env (see
+// runtimeConfigFromEnv) so cluster operators change backends by
+// rolling the webhook, not by editing every per-workspace Secret.
+func runtimeBackendEnv(cfg *runtimeConfig) []corev1.EnvVar {
+	if cfg == nil {
+		return nil
+	}
+	out := make([]corev1.EnvVar, 0, 8)
+	if cfg.PostgresHost != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_HOST", Value: cfg.PostgresHost})
+	}
+	if cfg.PostgresPort != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_PORT", Value: cfg.PostgresPort})
+	}
+	if cfg.PostgresUser != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_USER", Value: cfg.PostgresUser})
+	}
+	if cfg.PostgresName != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_NAME", Value: cfg.PostgresName})
+	}
+	if cfg.PostgresSchema != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_SCHEMA", Value: cfg.PostgresSchema})
+	}
+	if cfg.PostgresSSLMode != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_SSLMODE", Value: cfg.PostgresSSLMode})
+	}
+	if cfg.RedisAddr != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_REDIS_ADDR", Value: cfg.RedisAddr})
+	}
+	return out
 }
 
 // resolveRuntimeImage picks the image in this order:
