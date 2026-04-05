@@ -89,6 +89,22 @@ func registerProductSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^user "([^"]*)" should see tool categories$`, tc.userShouldSeeToolCategories)
 	sc.Step(`^user "([^"]*)" should see tools in the catalog$`, tc.userShouldSeeToolsInCatalog)
 	sc.Step(`^user "([^"]*)" should see integration apps in the catalog$`, tc.userShouldSeeIntegrationAppsInCatalog)
+
+	// Conversation CRUD
+	sc.Step(`^user "([^"]*)" creates a conversation named "([^"]*)" in their default workspace$`, tc.userCreatesConversation)
+	sc.Step(`^user "([^"]*)" marks the current conversation as read$`, tc.userMarksConversationRead)
+	sc.Step(`^user "([^"]*)" searches messages for "([^"]*)" in the current conversation$`, tc.userSearchesMessages)
+	sc.Step(`^user "([^"]*)" deletes the current conversation$`, tc.userDeletesConversation)
+	sc.Step(`^user "([^"]*)" opens the current conversation again$`, tc.userOpensCurrentConversationAgain)
+
+	// Agent sub-endpoints
+	sc.Step(`^user "([^"]*)" opens the details for agent "([^"]*)"$`, tc.userOpensAgentDetails)
+	sc.Step(`^user "([^"]*)" opens the history for agent "([^"]*)"$`, tc.userOpensAgentHistory)
+	sc.Step(`^user "([^"]*)" opens the settings for agent "([^"]*)"$`, tc.userOpensAgentSettings)
+	sc.Step(`^user "([^"]*)" opens the tools for agent "([^"]*)"$`, tc.userOpensAgentTools)
+	sc.Step(`^user "([^"]*)" opens the memories for agent "([^"]*)"$`, tc.userOpensAgentMemories)
+	sc.Step(`^user "([^"]*)" saves a memory with key "([^"]*)" and content "([^"]*)" for agent "([^"]*)"$`, tc.userSavesAgentMemory)
+	sc.Step(`^user "([^"]*)" deletes the memory with key "([^"]*)" for agent "([^"]*)"$`, tc.userDeletesAgentMemory)
 }
 
 func (tc *testContext) guestChecksServiceHealth() error {
@@ -925,4 +941,139 @@ func (tc *testContext) userShouldSeeIntegrationAppsInCatalog(alias string) error
 		}
 	}
 	return fmt.Errorf("no items with type=app found")
+}
+
+// --- Conversation CRUD steps -----------------------------------------
+
+func (tc *testContext) userCreatesConversation(alias, title string) error {
+	if err := tc.ensureDefaultWorkspace(alias); err != nil {
+		return err
+	}
+	state := tc.userState(alias)
+	body := map[string]any{"title": title}
+	if _, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, body); err != nil {
+		return err
+	}
+	// Capture the new conversation ID so follow-up steps can reference it.
+	id := gjson.GetBytes(tc.lastBody, "data.id").String()
+	if id != "" {
+		state.currentConversation = id
+	}
+	return nil
+}
+
+func (tc *testContext) userMarksConversationRead(alias string) error {
+	state := tc.userState(alias)
+	if state.currentConversation == "" {
+		return fmt.Errorf("no current conversation set for %q", alias)
+	}
+	_, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/read", alias, nil)
+	return err
+}
+
+func (tc *testContext) userSearchesMessages(alias, query string) error {
+	state := tc.userState(alias)
+	if state.currentConversation == "" {
+		return fmt.Errorf("no current conversation set for %q", alias)
+	}
+	_, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages/search?q="+query, alias, nil)
+	return err
+}
+
+func (tc *testContext) userDeletesConversation(alias string) error {
+	state := tc.userState(alias)
+	if state.currentConversation == "" {
+		return fmt.Errorf("no current conversation set for %q", alias)
+	}
+	_, err := tc.doRequest("DELETE", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, map[string]any{})
+	return err
+}
+
+func (tc *testContext) userOpensCurrentConversationAgain(alias string) error {
+	state := tc.userState(alias)
+	if state.currentConversation == "" {
+		return fmt.Errorf("no current conversation set for %q", alias)
+	}
+	_, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil)
+	return err
+}
+
+// --- Agent sub-endpoint steps ----------------------------------------
+
+func (tc *testContext) agentIDForSlug(alias, slug string) (string, error) {
+	state := tc.userState(alias)
+	if len(state.agentIDsBySlug) == 0 {
+		if err := tc.userOpensAgents(alias); err != nil {
+			return "", err
+		}
+	}
+	id := state.agentIDsBySlug[normalizeKey(slug)]
+	if id == "" {
+		return "", fmt.Errorf("no agent with slug %q for user %q", slug, alias)
+	}
+	return id, nil
+}
+
+func (tc *testContext) userOpensAgentDetails(alias, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/details", alias, nil)
+	return err
+}
+
+func (tc *testContext) userOpensAgentHistory(alias, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/history", alias, nil)
+	return err
+}
+
+func (tc *testContext) userOpensAgentSettings(alias, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/settings", alias, nil)
+	return err
+}
+
+func (tc *testContext) userOpensAgentTools(alias, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/tools", alias, nil)
+	return err
+}
+
+func (tc *testContext) userOpensAgentMemories(alias, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/memories", alias, nil)
+	return err
+}
+
+func (tc *testContext) userSavesAgentMemory(alias, key, content, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	body := map[string]any{"key": key, "content": content}
+	_, err = tc.doRequest("POST", "/v1/agents/"+id+"/memories", alias, body)
+	return err
+}
+
+func (tc *testContext) userDeletesAgentMemory(alias, key, slug string) error {
+	id, err := tc.agentIDForSlug(alias, slug)
+	if err != nil {
+		return err
+	}
+	_, err = tc.doRequest("DELETE", "/v1/agents/"+id+"/memories/"+key, alias, map[string]any{})
+	return err
 }

@@ -5,8 +5,11 @@
 package e2e
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/gocraft/dbr/v2"
@@ -24,6 +27,13 @@ func registerDBSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the database user "([^"]*)" should have country_code "([^"]*)"$`, tc.dbUserHasCountryCode)
 	sc.Step(`^the database user "([^"]*)" should have deleted_at set$`, tc.dbUserHasDeletedAt)
 	sc.Step(`^the database user "([^"]*)" should have is_deleted "([^"]*)"$`, tc.dbUserIsDeleted)
+
+	// Agent-runtime assertions (polled up to 30s for async tool effects).
+	sc.Step(`^the assistant should have remembered at least (\d+) notes? for subject "([^"]*)"$`, tc.dbAgentMemoryCountForSubject)
+	sc.Step(`^the assistant remembered note "([^"]*)" should contain "([^"]*)"$`, tc.dbAgentMemoryContains)
+	sc.Step(`^the audit trail should include a "([^"]*)" tool call for subject "([^"]*)"$`, tc.dbMCPAuditLogForSubject)
+	sc.Step(`^the assistant should have delegated at least (\d+) tasks? for subject "([^"]*)"$`, tc.dbAgentDelegationCountForSubject)
+	sc.Step(`^the assistant should have at least (\d+) agent-to-agent messages? for subject "([^"]*)"$`, tc.dbAgentMessageCountForSubject)
 }
 
 // sess returns a dbr session for DB queries, or nil if not configured.
@@ -232,4 +242,119 @@ func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
 		return fmt.Errorf("expected is_deleted=%s for %q, got %s", expected, alias, got)
 	}
 	return nil
+}
+
+// --- Agent-runtime DB assertions (polled, async-tolerant) -----------
+
+func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) error {
+	if tc.dbConn == nil {
+		return nil
+	}
+	subject := tc.resolveSubject(alias)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return pollUntil(ctx, 1*time.Second, func() error {
+		count, err := tc.queryCount(`
+			SELECT COUNT(*) FROM agent_memories
+			JOIN workspaces ON workspaces.id = agent_memories.workspace_id
+			JOIN users ON users.id = workspaces.user_id
+			WHERE users.subject = $1`, subject)
+		if err != nil {
+			return err
+		}
+		if count < expected {
+			return fmt.Errorf("expected at least %d agent memory(ies) for %q, got %d", expected, alias, count)
+		}
+		return nil
+	})
+}
+
+func (tc *testContext) dbAgentMemoryContains(key, substring string) error {
+	if tc.dbConn == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return pollUntil(ctx, 1*time.Second, func() error {
+		s := tc.sess()
+		var content string
+		row := s.QueryRow("SELECT content FROM agent_memories WHERE key = $1 LIMIT 1", key)
+		if err := row.Scan(&content); err != nil {
+			return fmt.Errorf("agent_memory key %q not found: %w", key, err)
+		}
+		if !strings.Contains(content, substring) {
+			return fmt.Errorf("agent_memory %q does not contain %q", key, substring)
+		}
+		return nil
+	})
+}
+
+func (tc *testContext) dbMCPAuditLogForSubject(toolName, alias string) error {
+	if tc.dbConn == nil {
+		return nil
+	}
+	subject := tc.resolveSubject(alias)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return pollUntil(ctx, 1*time.Second, func() error {
+		count, err := tc.queryCount(`
+			SELECT COUNT(*) FROM mcp_audit_logs
+			JOIN users ON users.id = mcp_audit_logs.user_id
+			WHERE users.subject = $1 AND mcp_audit_logs.tool_name = $2`, subject, toolName)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return fmt.Errorf("no mcp_audit_logs row for tool %q and subject %q", toolName, alias)
+		}
+		return nil
+	})
+}
+
+func (tc *testContext) dbAgentDelegationCountForSubject(expected int, alias string) error {
+	if tc.dbConn == nil {
+		return nil
+	}
+	subject := tc.resolveSubject(alias)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return pollUntil(ctx, 1*time.Second, func() error {
+		count, err := tc.queryCount(`
+			SELECT COUNT(*) FROM agent_delegations
+			JOIN conversations ON conversations.id = agent_delegations.conversation_id
+			JOIN workspaces ON workspaces.id = conversations.workspace_id
+			JOIN users ON users.id = workspaces.user_id
+			WHERE users.subject = $1`, subject)
+		if err != nil {
+			return err
+		}
+		if count < expected {
+			return fmt.Errorf("expected at least %d delegation(s) for %q, got %d", expected, alias, count)
+		}
+		return nil
+	})
+}
+
+func (tc *testContext) dbAgentMessageCountForSubject(expected int, alias string) error {
+	if tc.dbConn == nil {
+		return nil
+	}
+	subject := tc.resolveSubject(alias)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return pollUntil(ctx, 1*time.Second, func() error {
+		count, err := tc.queryCount(`
+			SELECT COUNT(*) FROM agent_messages
+			JOIN conversations ON conversations.id = agent_messages.conversation_id
+			JOIN workspaces ON workspaces.id = conversations.workspace_id
+			JOIN users ON users.id = workspaces.user_id
+			WHERE users.subject = $1`, subject)
+		if err != nil {
+			return err
+		}
+		if count < expected {
+			return fmt.Errorf("expected at least %d agent-to-agent message(s) for %q, got %d", expected, alias, count)
+		}
+		return nil
+	})
 }

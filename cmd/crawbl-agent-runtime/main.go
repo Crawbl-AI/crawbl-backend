@@ -28,7 +28,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/agents"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/model"
@@ -36,6 +35,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/server"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/session"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	agentmcp "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
@@ -182,7 +182,7 @@ func main() {
 	// memory_store, memory_recall, memory_forget, + file_read/file_write
 	// when Spaces is configured) built once per pod and bound onto every
 	// agent in the graph.
-	localTools, err := agents.BuildCommonTools(agents.CommonToolDeps{
+	localTools, err := tools.BuildCommonTools(tools.CommonToolDeps{
 		MemStore:        memStore,
 		WorkspaceID:     cfg.WorkspaceID,
 		SearXNGEndpoint: cfg.SearXNGEndpoint,

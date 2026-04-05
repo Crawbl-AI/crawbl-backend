@@ -23,14 +23,26 @@ import (
 
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
 	_ "github.com/lib/pq"
+	"github.com/redis/go-redis/v9"
 )
 
 // Config holds the configuration for an e2e test run.
+//
+// The CI invocation only needs BaseURL (and optionally E2EToken for
+// the gateway bypass). Everything else is optional and sourced from
+// environment variables by the CLI wrapper — scenarios that need a
+// specific client (Postgres, Redis, DO Spaces) skip gracefully when
+// the corresponding config is absent. This keeps `crawbl test e2e
+// --base-url ...` working in CI without the workflow having to know
+// which infrastructure dependencies a particular scenario touches.
 type Config struct {
 	BaseURL             string
 	UID                 string
@@ -42,6 +54,22 @@ type Config struct {
 	RuntimeReadyTimeout time.Duration
 	RuntimePollInterval time.Duration
 	DatabaseDSN         string
+
+	// Redis config — enables "the assistant should remember the
+	// current conversation context" style assertions. When empty,
+	// all Redis-backed steps are silent no-ops.
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
+
+	// DO Spaces config — enables "the file should be saved in the
+	// workspace file store" style assertions. When empty, all
+	// Spaces-backed steps are silent no-ops.
+	SpacesEndpoint  string
+	SpacesRegion    string
+	SpacesBucket    string
+	SpacesAccessKey string
+	SpacesSecretKey string
 }
 
 // Results holds the aggregate outcome of a test run.
@@ -186,9 +214,17 @@ type testContext struct {
 	cfg    *Config
 	http   *http.Client
 	dbConn *dbr.Connection
-	users  map[string]*testUser
-	saved  map[string]string
-	state  map[string]*userJourneyState
+	// redisClient is set only when cfg.RedisAddr is non-empty.
+	// Steps that need Redis check for nil and no-op gracefully so
+	// local runs without a Redis port-forward stay green.
+	redisClient *redis.Client
+	// spacesClient is set only when the full Spaces config quartet
+	// is present. Steps that need Spaces check for nil the same
+	// way as Redis.
+	spacesClient *s3.Client
+	users        map[string]*testUser
+	saved        map[string]string
+	state        map[string]*userJourneyState
 	// Current response state.
 	lastStatus int
 	lastBody   []byte
@@ -240,6 +276,39 @@ func newTestContext(cfg *Config, users *suiteUsers) *testContext {
 		}
 	}
 
+	if cfg.RedisAddr != "" {
+		tc.redisClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+		})
+		// Fail-safe: ping once so misconfigured runs fall back to
+		// "skip Redis steps" instead of crashing in the middle of
+		// a scenario. Three-second bound keeps suite startup snappy.
+		pingCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := tc.redisClient.Ping(pingCtx).Err(); err != nil {
+			_ = tc.redisClient.Close()
+			tc.redisClient = nil
+		}
+		cancel()
+	}
+
+	if cfg.SpacesEndpoint != "" && cfg.SpacesBucket != "" && cfg.SpacesAccessKey != "" && cfg.SpacesSecretKey != "" {
+		region := cfg.SpacesRegion
+		if region == "" {
+			region = "us-east-1" // S3 wire protocol requires a region header even for DO Spaces.
+		}
+		// Construct the S3 client directly (no aws-sdk-go-v2/config
+		// dependency) to mirror internal/agentruntime/storage/spaces.go
+		// — Spaces is only a wire-protocol S3 target here.
+		tc.spacesClient = s3.New(s3.Options{
+			Region:       region,
+			Credentials:  credentials.NewStaticCredentialsProvider(cfg.SpacesAccessKey, cfg.SpacesSecretKey, ""),
+			BaseEndpoint: aws.String(cfg.SpacesEndpoint),
+			UsePathStyle: false,
+		})
+	}
+
 	return tc
 }
 
@@ -247,6 +316,10 @@ func (tc *testContext) cleanup() {
 	if tc.dbConn != nil {
 		_ = tc.dbConn.Close()
 	}
+	if tc.redisClient != nil {
+		_ = tc.redisClient.Close()
+	}
+	// s3.Client has no Close method; HTTP client pools drain on GC.
 }
 
 func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
@@ -263,4 +336,6 @@ func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
 	registerAssertionSteps(sc, tc)
 	registerStateSteps(sc, tc)
 	registerProductSteps(sc, tc)
+	registerRedisSteps(sc, tc)
+	registerSpacesSteps(sc, tc)
 }

@@ -3,12 +3,28 @@ package test
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/testsuite/e2e"
 )
+
+// envInt parses an int from an env var, returning the fallback on
+// missing / malformed values. Used for CRAWBL_E2E_REDIS_DB so CI
+// never has to pass it explicitly.
+func envInt(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return v
+}
 
 func newE2ECommand() *cobra.Command {
 	var (
@@ -52,6 +68,19 @@ Database assertions require --database-dsn to connect to the orchestrator's Post
 				RuntimeReadyTimeout: runtimeReadyTimeout,
 				RuntimePollInterval: runtimePollInterval,
 				DatabaseDSN:         databaseDSN,
+
+				// Infrastructure clients are env-only so CI keeps
+				// invoking `crawbl test e2e --base-url ...` unchanged.
+				// When these are unset the corresponding scenarios
+				// skip their assertions gracefully.
+				RedisAddr:       os.Getenv("CRAWBL_E2E_REDIS_ADDR"),
+				RedisPassword:   os.Getenv("CRAWBL_E2E_REDIS_PASSWORD"),
+				RedisDB:         envInt("CRAWBL_E2E_REDIS_DB", 0),
+				SpacesEndpoint:  os.Getenv("CRAWBL_E2E_SPACES_ENDPOINT"),
+				SpacesRegion:    os.Getenv("CRAWBL_E2E_SPACES_REGION"),
+				SpacesBucket:    os.Getenv("CRAWBL_E2E_SPACES_BUCKET"),
+				SpacesAccessKey: os.Getenv("CRAWBL_E2E_SPACES_ACCESS_KEY"),
+				SpacesSecretKey: os.Getenv("CRAWBL_E2E_SPACES_SECRET_KEY"),
 			}
 
 			results := e2e.Run(cfg)
