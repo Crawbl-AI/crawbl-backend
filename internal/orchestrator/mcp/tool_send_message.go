@@ -12,25 +12,19 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // maxAgentDepth is the maximum depth for agent-to-agent chains.
 // Prevents infinite loops: A->B->C->D stops at depth 3.
 const maxAgentDepth = 3
 
-// agentMessageStatus* constants define the execution state of an agent_messages row.
-const (
-	agentMessageStatusRunning   = "running"
-	agentMessageStatusCompleted = "completed"
-	agentMessageStatusFailed    = "failed"
-)
-
 func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, sendMessageOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input sendMessageInput) (*sdkmcp.CallToolResult, sendMessageOutput, error) {
-		userID, workspaceID, idErr := requireIdentity(ctx)
-		if idErr != nil {
-			return nil, sendMessageOutput{}, idErr
+		userID := userIDFromContext(ctx)
+		workspaceID := workspaceIDFromContext(ctx)
+		if userID == "" || workspaceID == "" {
+			return nil, sendMessageOutput{}, fmt.Errorf("unauthorized: missing user or workspace identity")
 		}
 
 		if deps.RuntimeClient == nil {
@@ -38,28 +32,14 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 
 		input.AgentSlug = strings.TrimSpace(input.AgentSlug)
-		input.AgentID = strings.TrimSpace(input.AgentID)
 		input.Message = strings.TrimSpace(input.Message)
-		if input.Message == "" {
-			return nil, sendMessageOutput{Error: "message is required"}, nil
-		}
-		if input.AgentID == "" && input.AgentSlug == "" {
-			return nil, sendMessageOutput{Error: "agent_id or agent_slug is required"}, nil
+		if input.AgentSlug == "" || input.Message == "" {
+			return nil, sendMessageOutput{Error: "agent_slug and message are required"}, nil
 		}
 
 		sess := deps.newSession()
 
-		// Extract calling agent slug from session ID format: {conversation_id}:{agent_slug}
-		callingSessionID := sessionIDFromContext(ctx)
-		callingSlug := ""
-		if parts := strings.SplitN(callingSessionID, ":", 2); len(parts) == 2 {
-			callingSlug = parts[1]
-		}
-
 		// 1. Resolve target agent and calling agent from the workspace.
-		// We always need the full list to find the calling (from) agent by slug and to
-		// build the available-agents error message. The target agent can be found in the
-		// same pass or resolved directly by UUID when agent_id is provided.
 		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID)
 		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
 		if mErr != nil {
@@ -68,12 +48,15 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 
 		var targetAgent *orchestrator.Agent
 		var fromAgent *orchestrator.Agent
+		// Extract calling agent slug from session ID format: {conversation_id}:{agent_slug}
+		callingSessionID := sessionIDFromContext(ctx)
+		callingSlug := ""
+		if parts := strings.SplitN(callingSessionID, ":", 2); len(parts) == 2 {
+			callingSlug = parts[1]
+		}
 
 		for _, a := range agents {
-			// Match target by UUID (fast path) or slug (fallback).
-			if input.AgentID != "" && a.ID == input.AgentID {
-				targetAgent = a
-			} else if input.AgentID == "" && a.Slug == input.AgentSlug {
+			if a.Slug == input.AgentSlug {
 				targetAgent = a
 			}
 			if callingSlug != "" && a.Slug == callingSlug {
@@ -84,26 +67,17 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		if targetAgent == nil {
 			available := make([]string, 0, len(agents))
 			for _, a := range agents {
-				if a.Role != orchestrator.AgentRoleManager {
+				if a.Role != "manager" {
 					available = append(available, a.Slug)
 				}
 			}
-			identifier := input.AgentID
-			if identifier == "" {
-				identifier = input.AgentSlug
-			}
 			return nil, sendMessageOutput{
-				Error: fmt.Sprintf("unknown agent '%s'. Available: %s", identifier, strings.Join(available, ", ")),
+				Error: fmt.Sprintf("unknown agent '%s'. Available: %s", input.AgentSlug, strings.Join(available, ", ")),
 			}, nil
 		}
 
-		// Populate AgentSlug from resolved target for downstream use.
-		if input.AgentSlug == "" {
-			input.AgentSlug = targetAgent.Slug
-		}
-
 		// Self-delegation guard: an agent cannot send a message to itself.
-		if callingSlug != "" && callingSlug == targetAgent.Slug {
+		if callingSlug == input.AgentSlug {
 			return nil, sendMessageOutput{
 				Error: "an agent cannot send a message to itself",
 			}, nil
@@ -144,7 +118,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			Pair("to_agent_id", targetAgent.ID).
 			Pair("to_agent_slug", targetAgent.Slug).
 			Pair("request_text", input.Message).
-			Pair("status", agentMessageStatusRunning).
+			Pair("status", "running").
 			Pair("depth", newDepth).
 			ExecContext(ctx)
 		if err != nil {
@@ -160,15 +134,15 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 				FromAgentID:    fromAgentID,
 				ToAgentID:      targetAgent.ID,
 				ConversationID: input.ConversationID,
-				Status:         agentMessageStatusRunning,
+				Status:         "running",
 				MessagePreview: truncateStr(input.Message, 100),
 				MessageID:      msgID,
 			})
-			deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, targetAgent.ID, string(orchestrator.AgentStatusThinking), input.ConversationID)
+			deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, targetAgent.ID, "thinking", input.ConversationID)
 		}
 
-		// 5. Ensure runtime is ready and call agent runtime.
-		RecordAPICall(ctx, "AGENT:POST /webhook")
+		// 5. Ensure runtime is ready and call the agent runtime.
+		RecordAPICall(ctx, "RUNTIME:GRPC Converse")
 		startTime := time.Now()
 
 		// Build conversation context to inject.
@@ -183,7 +157,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 
 		// Ensure the runtime is verified before calling.
-		runtimeState, rErr := deps.RuntimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+		runtimeState, rErr := deps.RuntimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 			UserID:          userID,
 			WorkspaceID:     workspaceID,
 			WaitForVerified: true,
@@ -199,8 +173,8 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			}, nil
 		}
 
-		// Call agent runtime via runtime client (synchronous SendText).
-		turns, callErr := deps.RuntimeClient.SendText(ctx, &agentclient.SendTextOpts{
+		// Call agent runtime pod via runtime client (synchronous SendText).
+		turns, callErr := deps.RuntimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 			Runtime:   runtimeState,
 			Message:   fullMessage,
 			SessionID: input.ConversationID,
@@ -230,14 +204,14 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 		responseText := sb.String()
 
-		// Truncate for storage.
+		// Truncate for storage (32KB max).
 		storedText := responseText
-		if len(storedText) > agentMessageMaxStoredBytes {
-			storedText = storedText[:agentMessageMaxStoredBytes] + "\n[truncated]"
+		if len(storedText) > 32768 {
+			storedText = storedText[:32768] + "\n[truncated]"
 		}
 
 		_, _ = sess.Update("agent_messages").
-			Set("status", agentMessageStatusCompleted).
+			Set("status", "completed").
 			Set("response_text", storedText).
 			Set("duration_ms", duration).
 			Set("completed_at", time.Now().UTC()).
@@ -276,23 +250,6 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 		return ""
 	}
 
-	// Pre-fetch all agents for the workspace once to avoid N+1 lookups per message.
-	agentMap := make(map[string]string)
-	if deps.AgentRepo != nil {
-		// Collect the unique agent IDs referenced by this message batch.
-		seen := make(map[string]struct{})
-		for _, msg := range messages {
-			if msg.Role == orchestrator.MessageRoleAgent && msg.Agent == nil && msg.AgentID != nil {
-				seen[*msg.AgentID] = struct{}{}
-			}
-		}
-		for agentID := range seen {
-			if a, err := deps.AgentRepo.GetByIDGlobal(ctx, sess, agentID); err == nil && a != nil {
-				agentMap[agentID] = a.Name
-			}
-		}
-	}
-
 	var sb strings.Builder
 	sb.WriteString("## Conversation Context\nRecent messages (oldest first):\n\n")
 
@@ -304,8 +261,8 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 		if text == "" {
 			continue
 		}
-		if len(text) > agentContextMaxTextLen {
-			text = text[:agentContextMaxTextLen] + "..."
+		if len(text) > 500 {
+			text = text[:500] + "..."
 		}
 
 		sender := "User"
@@ -313,8 +270,9 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 			if msg.Agent != nil {
 				sender = msg.Agent.Name
 			} else if msg.AgentID != nil {
-				if name, ok := agentMap[*msg.AgentID]; ok {
-					sender = name
+				agent, _ := deps.AgentRepo.GetByIDGlobal(ctx, deps.newSession(), *msg.AgentID)
+				if agent != nil {
+					sender = agent.Name
 				}
 			}
 		}
@@ -327,7 +285,7 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 // updateAgentMessageFailed marks an agent_messages row as failed.
 func updateAgentMessageFailed(ctx context.Context, sess *dbr.Session, msgID, errMsg string, durationMs int64) {
 	_, _ = sess.Update("agent_messages").
-		Set("status", agentMessageStatusFailed).
+		Set("status", "failed").
 		Set("error_message", errMsg).
 		Set("duration_ms", durationMs).
 		Set("completed_at", time.Now().UTC()).
@@ -335,12 +293,20 @@ func updateAgentMessageFailed(ctx context.Context, sess *dbr.Session, msgID, err
 		ExecContext(ctx)
 }
 
+// truncateStr truncates a string to the given max length with "..." suffix.
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 // emitDelegationDone emits status updates after a delegation completes or fails.
 func emitDelegationDone(ctx context.Context, deps *Deps, workspaceID, fromAgentID, toAgentID, conversationID, msgID, status string) {
 	if deps.Broadcaster == nil {
 		return
 	}
-	deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, toAgentID, string(orchestrator.AgentStatusOnline), conversationID)
+	deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, toAgentID, "online", conversationID)
 	deps.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
 		FromAgentID:    fromAgentID,
 		ToAgentID:      toAgentID,

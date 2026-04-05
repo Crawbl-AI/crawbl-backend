@@ -1,0 +1,120 @@
+// Package crawbl.agentruntime.v1 is the wire contract between the Crawbl
+// orchestrator and the crawbl-agent-runtime pod. Every agent conversation,
+// tool call, and streaming event flows through this proto. It replaces the
+// HTTP/NDJSON webhook format that the legacy Rust agent runtime used.
+//
+// Plan reference: .omc/plans/2026-04-05-crawbl-agent-runtime-plan.md §6.3.
+//
+// Wire rules:
+//   - gRPC bidi stream on port 42618 inside each workspace pod.
+//   - HMAC bearer token in the "authorization" gRPC metadata header.
+//   - Session correlation via the typed session_id field, NOT a header.
+//   - Streaming events are a oneof — servers MUST emit ChunkEvents / ToolCall /
+//     ToolResult events before the final DoneEvent.
+//   - No field renumbers. No field deletions without a reserved range. Proto
+//     evolution rules apply from day 1 because this is a frozen contract
+//     until a named Phase 5 lockstep upgrade plan exists.
+syntax = "proto3";
+
+package crawbl.agentruntime.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1;runtimev1";
+
+// AgentRuntime is the per-workspace runtime service. Orchestrator clients
+// open a Converse bidi stream, send ConverseRequest messages from the mobile
+// user, and receive ConverseEvent oneofs back until a DoneEvent closes the
+// turn.
+service AgentRuntime {
+  // Converse is a bidi stream. The first ConverseRequest on the stream MUST
+  // include workspace_id and user_id. Subsequent requests on the same stream
+  // reuse those values and set message + optional agent_id + optional
+  // system_prompt. The server responds with zero or more ChunkEvent /
+  // ThinkingEvent / ToolCallEvent / ToolResultEvent events followed by
+  // exactly one DoneEvent per input request.
+  rpc Converse(stream ConverseRequest) returns (stream ConverseEvent);
+}
+
+// ConverseRequest carries a single user turn to the runtime.
+message ConverseRequest {
+  // SessionID correlates turns within a single conversation. The runtime
+  // feeds it into ADK session.State keyed by this ID. Required.
+  string session_id = 1;
+
+  // Message is the raw user text for this turn. Required on every request.
+  string message = 2;
+
+  // AgentID optionally targets a specific agent within the swarm (e.g.
+  // "manager", "wally", "eve"). Empty string means the Manager routes.
+  string agent_id = 3;
+
+  // SystemPrompt optionally overrides the agent's system prompt for this turn
+  // only. Used by product-level personas; does not modify stored config.
+  string system_prompt = 4;
+
+  // WorkspaceID is the Crawbl workspace identifier. Required on the first
+  // request in a stream; subsequent requests in the same stream MAY repeat it
+  // but the server uses the value from the first request for routing.
+  string workspace_id = 5;
+
+  // UserID is the platform user identifier. Required on the first request.
+  string user_id = 6;
+}
+
+// ConverseEvent is a single streaming event from the runtime back to the
+// orchestrator. Exactly one oneof variant is set per event.
+message ConverseEvent {
+  oneof event {
+    ChunkEvent chunk = 1;
+    ThinkingEvent thinking = 2;
+    ToolCallEvent tool_call = 3;
+    ToolResultEvent tool_result = 4;
+    DoneEvent done = 5;
+  }
+}
+
+// ChunkEvent is a partial text delta streamed from an agent.
+message ChunkEvent {
+  string agent_id = 1;
+  string text = 2;
+}
+
+// ThinkingEvent is a reasoning-step delta (Claude extended thinking or
+// equivalent). Treated like ChunkEvent on the orchestrator side but UI may
+// render it differently.
+message ThinkingEvent {
+  string agent_id = 1;
+  string text = 2;
+}
+
+// ToolCallEvent is emitted immediately before a tool is invoked. The
+// orchestrator SHOULD persist this to mcp_audit_logs if the tool is an
+// orchestrator-mediated MCP tool.
+message ToolCallEvent {
+  string agent_id = 1;
+  string tool = 2;
+  string args_json = 3;
+  string call_id = 4;
+}
+
+// ToolResultEvent is emitted after a tool invocation completes. The pairing
+// with a preceding ToolCallEvent is by call_id.
+message ToolResultEvent {
+  string call_id = 1;
+  string result_json = 2;
+  bool error = 3;
+  string error_message = 4;
+}
+
+// DoneEvent is the terminal event of a single ConverseRequest. It carries the
+// aggregated turns array (for wire compatibility with the legacy
+// response shape) and the model identifier used to produce the turn.
+message DoneEvent {
+  string model = 1;
+  repeated Turn turns = 2;
+}
+
+// Turn is one agent's contribution in a multi-agent response.
+message Turn {
+  string agent_id = 1;
+  string text = 2;
+}

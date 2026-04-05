@@ -1,0 +1,77 @@
+// Memory service for the crawbl-agent-runtime.
+//
+// This service is the gRPC equivalent of the old /api/memory HTTP
+// endpoint. It is a facade — the actual memories table lives in the
+// orchestrator's Postgres database. The runtime calls this service locally
+// for shape convenience; the runtime-side handler forwards the calls to the
+// orchestrator over the same HMAC-authed MCP bridge used for other
+// orchestrator-mediated tools.
+//
+// Plan reference:
+//   .omc/plans/2026-04-05-crawbl-agent-runtime-plan.md §6.6 (state ownership)
+//   .omc/plans/2026-04-05-crawbl-agent-runtime-plan.md §13 (Memory tier = Postgres)
+syntax = "proto3";
+
+package crawbl.agentruntime.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1;runtimev1";
+
+import "google/protobuf/timestamp.proto";
+
+// Memory exposes CRUD operations on the workspace's memory entries.
+// All methods require workspace_id and are authenticated via the same HMAC
+// bearer token used for AgentRuntime.Converse.
+service Memory {
+  rpc ListMemories(ListMemoriesRequest) returns (ListMemoriesResponse);
+  rpc CreateMemory(CreateMemoryRequest) returns (CreateMemoryResponse);
+  rpc DeleteMemory(DeleteMemoryRequest) returns (DeleteMemoryResponse);
+}
+
+// MemoryEntry is a single row from the memories table, surfaced to agents
+// via the runtime's memory_recall tool and via direct Memory.ListMemories
+// calls.
+message MemoryEntry {
+  // Key is the stable identifier within a (workspace, category) namespace.
+  string key = 1;
+  // Content is the actual memory body. For content larger than 8 KB, the
+  // orchestrator may store the body in DigitalOcean Spaces and return a
+  // blob_key pointer here instead — Phase 2+ optimization, not Phase 1.
+  string content = 2;
+  // Category partitions memories for UI grouping and for scoped recall.
+  // Common values: "core", "daily", "conversation".
+  string category = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message ListMemoriesRequest {
+  string workspace_id = 1;
+  // Category optionally filters by category. Empty = all categories.
+  string category = 2;
+  // Limit caps the number of entries returned. 0 = server default (100).
+  int32 limit = 3;
+  // Offset is the number of entries to skip for pagination. 0 = start.
+  int32 offset = 4;
+}
+
+message ListMemoriesResponse {
+  repeated MemoryEntry entries = 1;
+}
+
+message CreateMemoryRequest {
+  string workspace_id = 1;
+  string key = 2;
+  string content = 3;
+  string category = 4;
+}
+
+message CreateMemoryResponse {
+  MemoryEntry entry = 1;
+}
+
+message DeleteMemoryRequest {
+  string workspace_id = 1;
+  string key = 2;
+}
+
+message DeleteMemoryResponse {}

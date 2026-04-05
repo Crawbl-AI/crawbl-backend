@@ -19,18 +19,14 @@ func requireIdentity(ctx context.Context) (userID, workspaceID string, err error
 
 // resolveAgentBySlug finds an agent ID by slug within a workspace.
 func resolveAgentBySlug(ctx context.Context, deps *Deps, sess *dbr.Session, workspaceID, slug string) (string, error) {
-	agent, mErr := deps.AgentRepo.GetBySlug(ctx, sess, workspaceID, slug)
+	agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
 	if mErr != nil {
-		return "", fmt.Errorf("agent %q not found: %s", slug, mErr.Error())
+		return "", fmt.Errorf("failed to list agents: %s", mErr.Error())
 	}
-	return agent.ID, nil
-}
-
-// truncateStr truncates a string to maxLen runes, appending "..." if truncated.
-func truncateStr(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
+	for _, a := range agents {
+		if a.Slug == slug {
+			return a.ID, nil
+		}
 	}
-	return string(runes[:maxLen]) + "..."
+	return "", fmt.Errorf("agent %q not found in workspace", slug)
 }

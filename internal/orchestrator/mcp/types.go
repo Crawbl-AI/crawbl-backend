@@ -1,11 +1,11 @@
 // Package mcp provides the MCP (Model Context Protocol) server for the Crawbl orchestrator.
 //
-// Agent runtimes connect to this server as MCP clients to access
+// agent runtimes connect to this server as MCP clients to access
 // platform capabilities: push notifications, user context, and (future) OAuth
 // integrations. The server is embedded in the orchestrator at /mcp/v1.
 //
 // Security model:
-//   - Each agent runtime gets an HMAC-signed bearer token at provisioning time.
+//   - Each agent runtime pod gets an HMAC-signed bearer token at provisioning time.
 //   - The token encodes userID:workspaceID and is validated on every request.
 //   - Tool handlers can only access data for the authenticated user.
 //   - OAuth tokens for integrations are stored server-side; agents never see them.
@@ -24,7 +24,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // WorkflowExecutor is the interface the MCP layer needs from the workflow service.
@@ -42,31 +42,27 @@ const (
 	ctxKeyAPICalls    contextKey = "mcp_api_calls"
 )
 
-const (
-	// mcpServerVersion is the MCP server protocol version.
-	mcpServerVersion = "1.0.0"
+// mcpServerVersion is the version string reported in the MCP server implementation info.
+const mcpServerVersion = "1.0.0"
 
-	// auditMaxResponseBytes caps the response body size logged in audit entries.
-	auditMaxResponseBytes = 2048
+// mcpToolCallMethod is the MCP protocol method name for tool invocations.
+const mcpToolCallMethod = "tools/call"
 
-	// auditWriteTimeout is the timeout for writing audit log entries to the database.
-	auditWriteTimeout = 5 * time.Second
+// auditWriteTimeout is the maximum time allowed for writing an audit log entry.
+const auditWriteTimeout = 5 * time.Second
 
-	// mcpToolCallMethod is the JSON-RPC method name for MCP tool invocations.
-	mcpToolCallMethod = "tools/call"
+// auditMaxResponseBytes is the maximum number of bytes stored for a tool response in the audit log.
+const auditMaxResponseBytes = 4096
 
-	// agentMessageMaxStoredBytes is the maximum response size stored in agent_messages.
-	agentMessageMaxStoredBytes = 32768
+// defaultSearchLimit is the default number of messages returned by search tools.
+const defaultSearchLimit = 20
 
-	// agentContextMaxTextLen caps message text length in agent conversation context.
-	agentContextMaxTextLen = 500
+// maxSearchLimit is the maximum number of messages returned by search tools.
+const maxSearchLimit = 50
 
-	// defaultSearchLimit is the default number of results for message search.
-	defaultSearchLimit = 20
-
-	// maxSearchLimit is the maximum number of results for message search.
-	maxSearchLimit = 50
-)
+// agentContextMaxTextLen is the maximum number of characters per message when
+// building conversation context to inject into agent calls.
+const agentContextMaxTextLen = 500
 
 // Deps holds all dependencies needed by the MCP server and tool handlers.
 type Deps struct {
@@ -81,7 +77,7 @@ type Deps struct {
 	ArtifactRepo     artifactrepo.Repo
 	SigningKey        string
 	FCM              *firebase.FCMClient    // nil = push notifications disabled
-	RuntimeClient    agentclient.Client // nil = agent messaging disabled
+	RuntimeClient    userswarmclient.Client // nil = agent messaging disabled
 	Broadcaster      realtime.Broadcaster   // nil = no real-time events
 	WorkflowRepo     workflowrepo.Repo      // nil = workflow tools disabled
 	WorkflowService  WorkflowExecutor       // nil = workflow execution disabled
@@ -95,7 +91,7 @@ type Config struct {
 	FCMProjectID string
 	// FCMServiceAccountPath is the path to the Firebase service account JSON.
 	FCMServiceAccountPath string
-	// Endpoint is the full URL agent runtimes use to reach this MCP server.
+	// Endpoint is the full URL agent runtime pods use to reach this MCP server.
 	// Example: http://orchestrator.backend.svc.cluster.local:7171/mcp/v1
 	Endpoint string
 }
@@ -130,7 +126,10 @@ func (d *Deps) newSession() *dbr.Session {
 	return d.DB.NewSession(nil)
 }
 
-// pushInput is the typed input for the send_push_notification tool.
+// ---------------------------------------------------------------------------
+// Tool input/output types — push notifications
+// ---------------------------------------------------------------------------
+
 type pushInput struct {
 	Title   string `json:"title" jsonschema:"the notification title shown on the device"`
 	Message string `json:"message" jsonschema:"the notification body text"`
@@ -140,6 +139,10 @@ type pushOutput struct {
 	Sent bool   `json:"sent"`
 	Info string `json:"info"`
 }
+
+// ---------------------------------------------------------------------------
+// Tool input/output types — user context
+// ---------------------------------------------------------------------------
 
 // Note: empty input structs need at least one field to generate valid OpenAI tool schemas.
 // OpenAI rejects {"type":"object","additionalProperties":false} without "properties".
@@ -183,8 +186,13 @@ type agentBrief struct {
 	Slug string `json:"slug"`
 }
 
-// listConversationsInput is the typed input for the list_conversations tool.
-type listConversationsInput struct{}
+// ---------------------------------------------------------------------------
+// Tool input/output types — conversations
+// ---------------------------------------------------------------------------
+
+type listConversationsInput struct {
+	IncludeArchived bool `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
+}
 
 type listConversationsOutput struct {
 	Conversations []conversationBrief `json:"conversations"`
@@ -225,10 +233,14 @@ type messageRow struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
+// ---------------------------------------------------------------------------
+// Tool input/output types — agent history
+// ---------------------------------------------------------------------------
+
 // createAgentHistoryInput is the input for the create_agent_history tool.
 type createAgentHistoryInput struct {
-	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"Agent slug (deprecated - use agent_id)"`
-	AgentID        string `json:"agent_id,omitempty" jsonschema:"Agent UUID (preferred over agent_slug)"`
+	AgentID        string `json:"agent_id,omitempty"`
+	AgentSlug      string `json:"agent_slug,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle,omitempty"`
@@ -240,10 +252,13 @@ type createAgentHistoryOutput struct {
 	Info    string `json:"info"`
 }
 
+// ---------------------------------------------------------------------------
+// Tool input/output types — send_message_to_agent
+// ---------------------------------------------------------------------------
+
 // sendMessageInput is the typed input for the send_message_to_agent tool.
 type sendMessageInput struct {
-	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the target agent (deprecated - use agent_id)"`
-	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the target agent (preferred over agent_slug)"`
+	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the target agent (e.g. 'wally', 'eve')"`
 	Message        string `json:"message" jsonschema:"the message/task to send to the target agent"`
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID for context"`
 }
@@ -257,14 +272,17 @@ type sendMessageOutput struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// createArtifactInput is the typed input for the create_artifact tool.
+// ---------------------------------------------------------------------------
+// Tool input/output types — artifacts
+// ---------------------------------------------------------------------------
+
 type createArtifactInput struct {
 	Title          string `json:"title" jsonschema:"the title of the artifact"`
 	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
 	ContentType    string `json:"content_type,omitempty" jsonschema:"MIME type of the content (default: text/markdown)"`
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation to associate the artifact with"`
-	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the agent creating the artifact (deprecated - use agent_id)"`
-	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the agent creating the artifact (preferred over agent_slug)"`
+	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the agent creating the artifact (fast path)"`
+	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the agent creating the artifact"`
 }
 
 type createArtifactOutput struct {
@@ -300,8 +318,8 @@ type updateArtifactInput struct {
 	Content         string `json:"content" jsonschema:"the new content for the artifact"`
 	ChangeSummary   string `json:"change_summary,omitempty" jsonschema:"a brief summary of what changed"`
 	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"for optimistic locking — update fails if current version differs"`
-	AgentSlug       string `json:"agent_slug,omitempty" jsonschema:"slug of the agent making the update (deprecated - use agent_id)"`
-	AgentID         string `json:"agent_id,omitempty" jsonschema:"UUID of the agent making the update (preferred over agent_slug)"`
+	AgentID         string `json:"agent_id,omitempty" jsonschema:"UUID of the agent making the update (fast path)"`
+	AgentSlug       string `json:"agent_slug,omitempty" jsonschema:"slug of the agent making the update"`
 }
 
 type updateArtifactOutput struct {
@@ -314,14 +332,18 @@ type reviewArtifactInput struct {
 	Outcome    string `json:"outcome" jsonschema:"review outcome: approved, changes_requested, or commented"`
 	Comments   string `json:"comments" jsonschema:"review comments explaining the outcome"`
 	Version    int    `json:"version,omitempty" jsonschema:"specific version to review (default: current)"`
-	AgentSlug  string `json:"agent_slug,omitempty" jsonschema:"slug of the reviewing agent (deprecated - use agent_id)"`
-	AgentID    string `json:"agent_id,omitempty" jsonschema:"UUID of the reviewing agent (preferred over agent_slug)"`
+	AgentID    string `json:"agent_id,omitempty" jsonschema:"UUID of the reviewing agent (fast path)"`
+	AgentSlug  string `json:"agent_slug,omitempty" jsonschema:"slug of the reviewing agent"`
 }
 
 type reviewArtifactOutput struct {
 	Reviewed bool   `json:"reviewed"`
 	Info     string `json:"info"`
 }
+
+// ---------------------------------------------------------------------------
+// Audit log types
+// ---------------------------------------------------------------------------
 
 // auditEntry holds the fields for a single MCP tool call audit record.
 type auditEntry struct {

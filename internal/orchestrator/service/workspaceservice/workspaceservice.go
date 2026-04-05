@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
@@ -32,7 +32,7 @@ import (
 //   - logger: Structured logger for diagnostic and error logging.
 //
 // Returns an orchestratorservice.WorkspaceService implementation.
-func New(workspaceRepo workspaceRepo, runtimeClient agentclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+func New(workspaceRepo workspaceRepo, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
 	if workspaceRepo == nil {
 		panic("workspace service repo cannot be nil")
 	}
@@ -89,7 +89,7 @@ func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 
 	// Eagerly provision the agent runtime so agents are online by the
 	// time the user reaches the workspace screen.
-	if _, rErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+	if _, rErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: false,
@@ -176,7 +176,7 @@ func (s *service) attachRuntimeStatus(ctx context.Context, workspace *orchestrat
 		return
 	}
 
-	runtimeStatus, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+	runtimeStatus, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: false,

@@ -16,7 +16,7 @@ import (
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // Repos groups the repository dependencies used by the chat service.
@@ -67,7 +67,7 @@ type service struct {
 	// agentHistoryRepo provides access to agent history storage.
 	agentHistoryRepo agentHistoryRepo
 	// runtimeClient communicates with the agent runtime for chat operations.
-	runtimeClient agentclient.Client
+	runtimeClient userswarmclient.Client
 	// broadcaster emits real-time events to connected WebSocket clients.
 	broadcaster realtime.Broadcaster
 	// defaultAgents contains the blueprint definitions for default agents

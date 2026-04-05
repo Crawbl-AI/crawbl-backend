@@ -8,14 +8,14 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // service implements the workflow execution engine.
 type service struct {
 	db            *dbr.Connection
 	workflowRepo  workflowrepo.Repo
-	runtimeClient agentclient.Client
+	runtimeClient userswarmclient.Client
 	broadcaster   realtime.Broadcaster
 }
 
@@ -23,7 +23,7 @@ type service struct {
 func New(
 	db *dbr.Connection,
 	workflowRepo workflowrepo.Repo,
-	runtimeClient agentclient.Client,
+	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
 ) *service {
 	if db == nil {

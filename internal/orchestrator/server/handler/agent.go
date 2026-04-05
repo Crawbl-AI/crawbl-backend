@@ -98,7 +98,7 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 			historyItems = append(historyItems, h)
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentHistoryResponse{
+		WriteJSON(w, http.StatusOK, dto.AgentHistoryResponse{
 			Items: historyItems,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   pagination.Total,
@@ -183,7 +183,7 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 			tools = append(tools, dto.ToAgentToolResponse(t))
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentToolsResponse{
+		WriteJSON(w, http.StatusOK, dto.AgentToolsResponse{
 			Data: tools,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   page.Pagination.Total,
@@ -199,9 +199,8 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 // This is a public endpoint — no auth required (loaded by DictService before login).
 func ListModels(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		availableModels := orchestrator.GetAvailableModels()
-		models := make([]dto.AgentModelResponse, 0, len(availableModels))
-		for _, m := range availableModels {
+		models := make([]dto.AgentModelResponse, 0, len(orchestrator.AvailableModels))
+		for _, m := range orchestrator.AvailableModels {
 			models = append(models, dto.AgentModelResponse{
 				ID:          m.ID,
 				Name:        m.Name,
@@ -213,7 +212,7 @@ func ListModels(c *Context) http.HandlerFunc {
 	}
 }
 
-// GetAgentMemories retrieves memories from the agent's runtime.
+// GetAgentMemories retrieves memories from the agent's agent runtime.
 func GetAgentMemories(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -242,22 +241,20 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Apply handler-level pagination over the full list returned by the service.
-		// The service returns all matching memories; we slice here for the page window.
+		// Slice pagination over the full list from the agent runtime.
 		total := len(memories)
-		entries := memories
-		if offset >= total {
-			entries = nil
-		} else {
-			end := offset + limit
-			if end > total {
-				end = total
-			}
-			entries = entries[offset:end]
+		start := offset
+		if start > total {
+			start = total
 		}
+		end := start + limit
+		if end > total {
+			end = total
+		}
+		page := memories[start:end]
 
-		items := make([]dto.AgentMemoryResponse, 0, len(entries))
-		for _, m := range entries {
+		items := make([]dto.AgentMemoryResponse, 0, len(page))
+		for _, m := range page {
 			items = append(items, dto.AgentMemoryResponse{
 				Key:       m.Key,
 				Content:   m.Content,
@@ -267,19 +264,19 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentMemoriesListResponse{
+		WriteJSON(w, http.StatusOK, dto.AgentMemoriesListResponse{
 			Data: items,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   total,
 				Limit:   limit,
 				Offset:  offset,
-				HasNext: offset+limit < total,
+				HasNext: end < total,
 			},
 		})
 	}
 }
 
-// DeleteAgentMemory removes a specific memory from the agent's runtime.
+// DeleteAgentMemory removes a specific memory from the agent's agent runtime.
 func DeleteAgentMemory(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -303,7 +300,7 @@ func DeleteAgentMemory(c *Context) http.HandlerFunc {
 	}
 }
 
-// CreateAgentMemory stores a new memory in the agent's runtime.
+// CreateAgentMemory stores a new memory in the agent's agent runtime.
 func CreateAgentMemory(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/zishang520/socket.io/v2/socket"
@@ -19,50 +18,6 @@ type messageHandler struct {
 	chatService orchestratorservice.ChatService
 	authService orchestratorservice.AuthService
 	logger      *slog.Logger
-}
-
-// socketDisconnectOnce tracks per-socket disconnect registration state.
-// It ensures the disconnect handler is registered only once per socket,
-// regardless of how many messages are dispatched concurrently.
-type socketDisconnectOnce struct {
-	once   sync.Once
-	ctx    context.Context
-	cancel context.CancelFunc
-}
-
-// socketDisconnectMap tracks per-socket disconnect context, keyed by socket ID.
-var (
-	socketDisconnectMu  sync.Mutex
-	socketDisconnectMap = make(map[string]*socketDisconnectOnce)
-)
-
-// getOrCreateSocketContext returns the socket-level context for a given socket,
-// creating and registering the disconnect handler exactly once per socket.
-func getOrCreateSocketContext(s *socket.Socket) (context.Context, func()) {
-	id := string(s.Id())
-
-	socketDisconnectMu.Lock()
-	entry, ok := socketDisconnectMap[id]
-	if !ok {
-		ctx, cancel := context.WithCancel(context.Background())
-		entry = &socketDisconnectOnce{ctx: ctx, cancel: cancel}
-		socketDisconnectMap[id] = entry
-		socketDisconnectMu.Unlock()
-
-		// Register disconnect handler exactly once per socket.
-		entry.once.Do(func() {
-			s.On("disconnect", func(...any) {
-				entry.cancel()
-				socketDisconnectMu.Lock()
-				delete(socketDisconnectMap, id)
-				socketDisconnectMu.Unlock()
-			})
-		})
-	} else {
-		socketDisconnectMu.Unlock()
-	}
-
-	return entry.ctx, entry.cancel
 }
 
 // handleMessageSend processes a message.send event from the Socket.IO client.
@@ -115,13 +70,14 @@ func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
 
 // dispatch runs the message send flow asynchronously.
 func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Principal, payload messageSendPayload) {
-	// Use a per-dispatch context that is cancelled either when this dispatch
-	// completes (defer cancel) or when the socket disconnects. The disconnect
-	// handler is registered exactly once per socket via getOrCreateSocketContext,
-	// so repeated calls to dispatch do not accumulate extra disconnect listeners.
-	socketCtx, _ := getOrCreateSocketContext(s)
-	ctx, cancel := context.WithCancel(socketCtx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Cancel the context when the socket disconnects, stopping in-flight
+	// the agent runtime requests and saving LLM tokens for disconnected clients.
+	s.On("disconnect", func(...any) {
+		cancel()
+	})
 
 	localID := strings.TrimSpace(payload.LocalID)
 	sess := h.db.NewSession(nil)

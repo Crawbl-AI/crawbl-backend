@@ -10,7 +10,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // Repos groups the repository dependencies used by the agent service.
@@ -40,7 +40,7 @@ type service struct {
 	// agentHistoryRepo provides access to agent history storage.
 	agentHistoryRepo agentHistoryRepo
 	// runtimeClient communicates with the user swarm runtime for status enrichment.
-	runtimeClient agentclient.Client
+	runtimeClient userswarmclient.Client
 }
 
 // workspaceRepo defines the repository interface for workspace data operations.

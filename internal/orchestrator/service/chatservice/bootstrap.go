@@ -7,33 +7,16 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/google/uuid"
 
+	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 // ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
 // with default agents and conversations.
 func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Session, userID, workspaceID string) (*orchestrator.Workspace, []*orchestrator.Agent, []*orchestrator.Conversation, *merrors.Error) {
-	// Fast path: workspace already bootstrapped — skip the ~15 seed queries.
-	if _, ok := s.bootstrapCache.Load(workspaceID); ok {
-		workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
-		if mErr != nil {
-			return nil, nil, nil, mErr
-		}
-		agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			return nil, nil, nil, mErr
-		}
-		conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			return nil, nil, nil, mErr
-		}
-		return workspace, agents, conversations, nil
-	}
-
 	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
 	if mErr != nil {
 		return nil, nil, nil, mErr
@@ -59,9 +42,6 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 	if mErr != nil {
 		return nil, nil, nil, mErr
 	}
-
-	// Mark workspace as bootstrapped so subsequent calls take the fast path.
-	s.bootstrapCache.Store(workspaceID, true)
 
 	return workspace, agents, conversations, nil
 }
@@ -216,10 +196,11 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 	})
 }
 
-// ensureDefaultTools seeds the tool catalog from the seed package.
-// This is idempotent — the repo's Seed method uses ON CONFLICT DO UPDATE.
+// ensureDefaultTools seeds the tool catalog from the crawbl-agent-runtime
+// tools package. Idempotent — the repo's Seed method uses ON CONFLICT DO
+// UPDATE.
 func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.SessionRunner) *merrors.Error {
-	catalog := seed.Tools()
+	catalog := agentruntimetools.DefaultCatalog()
 	rows := make([]orchestratorrepo.ToolRow, 0, len(catalog))
 	now := time.Now().UTC()
 	for idx, tool := range catalog {
@@ -227,7 +208,7 @@ func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.
 			Name:        tool.Name,
 			DisplayName: tool.DisplayName,
 			Description: tool.Description,
-			Category:    tool.Category,
+			Category:    string(tool.Category),
 			IconURL:     tool.IconURL,
 			SortOrder:   idx,
 			CreatedAt:   now,

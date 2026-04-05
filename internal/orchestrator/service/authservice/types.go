@@ -57,20 +57,20 @@ type userRepo interface {
 	// SavePushToken stores a push notification token for a user device.
 	// This enables sending notifications to the user's mobile device.
 	SavePushToken(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, pushToken string) *merrors.Error
+	// ClearPushTokens removes all push notification tokens for a user.
+	// Called on logout so the user stops receiving push notifications.
+	ClearPushTokens(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) *merrors.Error
 	// IsUserDeleted checks if a user with the given subject or email has been soft-deleted.
 	// This prevents re-registration of deleted user accounts.
 	IsUserDeleted(ctx context.Context, sess orchestratorrepo.SessionRunner, subject, email string) (bool, *merrors.Error)
 	// CheckNicknameExists verifies if a nickname is already in use.
 	// This is used during user creation to ensure unique nicknames.
 	CheckNicknameExists(ctx context.Context, sess orchestratorrepo.SessionRunner, nickname string) (bool, *merrors.Error)
-	// ClearPushTokens removes all push notification tokens for a user.
-	// Called on logout so the user stops receiving push notifications.
-	ClearPushTokens(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) *merrors.Error
 }
 
 // workspaceBootstrapper defines the interface for workspace initialization.
 // It handles creating the default workspace for new users, which includes
-// setting up the necessary agent runtime and any default resources.
+// setting up the necessary agent runtime runtime and any default resources.
 type workspaceBootstrapper interface {
 	// EnsureDefaultWorkspace creates a default workspace for the specified user
 	// if one does not already exist. This is called during user registration.

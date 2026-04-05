@@ -17,7 +17,7 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // Context holds shared dependencies for all handlers.
@@ -50,7 +50,7 @@ type Context struct {
 	Broadcaster realtime.Broadcaster
 
 	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
-	RuntimeClient agentclient.Client
+	RuntimeClient userswarmclient.Client
 }
 
 // NewSession creates a new database session.

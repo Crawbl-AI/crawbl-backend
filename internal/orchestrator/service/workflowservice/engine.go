@@ -12,7 +12,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // ExecuteWorkflow runs a workflow asynchronously. Call in a goroutine.
@@ -40,7 +40,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 
 	// Update execution to running.
 	now := time.Now().UTC()
-	execution.Status = string(workflowrepo.WorkflowStatusRunning)
+	execution.Status = "running"
 	execution.StartedAt = &now
 	_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
@@ -49,8 +49,8 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		WorkflowID:     definition.ID,
 		ExecutionID:    executionID,
 		WorkflowName:   definition.Name,
-		ConversationID: orchestrator.DerefString(execution.ConversationID),
-		Status:         string(workflowrepo.WorkflowStatusRunning),
+		ConversationID: derefStr(execution.ConversationID),
+		Status:         "running",
 	})
 
 	// Execute steps sequentially.
@@ -78,7 +78,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			StepIndex:   i,
 			StepName:    step.Name,
 			AgentSlug:   step.AgentSlug,
-			Status:      string(workflowrepo.WorkflowStatusRunning),
+			Status:      "running",
 			InputText:   prompt,
 			StartedAt:   &stepNow,
 			CreatedAt:   stepNow,
@@ -90,8 +90,8 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			WorkflowID:     definition.ID,
 			ExecutionID:    executionID,
 			WorkflowName:   definition.Name,
-			ConversationID: orchestrator.DerefString(execution.ConversationID),
-			Status:         string(workflowrepo.WorkflowStatusRunning),
+			ConversationID: derefStr(execution.ConversationID),
+			Status:         "running",
 			StepIndex:      i,
 			StepName:       step.Name,
 			AgentSlug:      step.AgentSlug,
@@ -99,26 +99,26 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 
 		// Check if step requires approval.
 		if step.RequiresApproval {
-			stepExec.Status = string(workflowrepo.WorkflowStatusWaitingApproval)
+			stepExec.Status = "waiting_approval"
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 			s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowStepApproval, realtime.WorkflowEventPayload{
 				WorkflowID:     definition.ID,
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
-				ConversationID: orchestrator.DerefString(execution.ConversationID),
-				Status:         string(workflowrepo.WorkflowStatusWaitingApproval),
+				ConversationID: derefStr(execution.ConversationID),
+				Status:         "waiting_approval",
 				StepIndex:      i,
 				StepName:       step.Name,
 				AgentSlug:      step.AgentSlug,
 			})
 
 			// TODO: Wait for approval via channel/polling. For now, auto-approve.
-			stepExec.Status = string(workflowrepo.WorkflowStatusApproved)
+			stepExec.Status = "approved"
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 		}
 
-		// Execute step: call the agent runtime.
+		// Execute step: call the agent runtime with the agent.
 		startTime := time.Now()
 		timeout := time.Duration(step.TimeoutSecs) * time.Second
 		if timeout == 0 {
@@ -126,7 +126,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		}
 
 		stepCtx, cancel := context.WithTimeout(ctx, timeout)
-		turns, callErr := s.runtimeClient.SendText(stepCtx, &agentclient.SendTextOpts{
+		turns, callErr := s.runtimeClient.SendText(stepCtx, &userswarmclient.SendTextOpts{
 			Runtime:   runtime,
 			Message:   prompt,
 			SessionID: fmt.Sprintf("workflow:%s:step:%d", executionID, i),
@@ -135,33 +135,32 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		cancel()
 
 		durationMs := int(time.Since(startTime).Milliseconds())
-		stepCompletedAt := time.Now().UTC()
+		completedAt := time.Now().UTC()
 
 		if callErr != nil {
-			stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
+			stepExec.Status = "failed"
 			errMsg := callErr.Error()
 			stepExec.OutputText = &errMsg
 			stepExec.DurationMs = &durationMs
-			stepExec.CompletedAt = &stepCompletedAt
+			stepExec.CompletedAt = &completedAt
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 			// Handle on_failure policy.
-			if step.OnFailure == string(workflowrepo.WorkflowOnFailureSkip) {
+			if step.OnFailure == "skip" {
 				continue
 			}
 			// "stop" (default) -- fail the whole workflow.
-			execCompletedAt := time.Now().UTC()
-			execution.Status = string(workflowrepo.WorkflowStatusFailed)
+			execution.Status = "failed"
 			execution.ErrorMessage = &errMsg
-			execution.CompletedAt = &execCompletedAt
+			execution.CompletedAt = &completedAt
 			_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
 			s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
 				WorkflowID:     definition.ID,
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
-				ConversationID: orchestrator.DerefString(execution.ConversationID),
-				Status:         string(workflowrepo.WorkflowStatusFailed),
+				ConversationID: derefStr(execution.ConversationID),
+				Status:         "failed",
 				StepIndex:      i,
 				StepName:       step.Name,
 				Error:          errMsg,
@@ -179,10 +178,10 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		response := strings.Join(responseParts, "\n")
 
 		// Step succeeded.
-		stepExec.Status = string(workflowrepo.WorkflowStatusCompleted)
+		stepExec.Status = "completed"
 		stepExec.OutputText = &response
 		stepExec.DurationMs = &durationMs
-		stepExec.CompletedAt = &stepCompletedAt
+		stepExec.CompletedAt = &completedAt
 		_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 		// Store output in workflow context.
@@ -201,43 +200,32 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			WorkflowID:     definition.ID,
 			ExecutionID:    executionID,
 			WorkflowName:   definition.Name,
-			ConversationID: orchestrator.DerefString(execution.ConversationID),
-			Status:         string(workflowrepo.WorkflowStatusCompleted),
+			ConversationID: derefStr(execution.ConversationID),
+			Status:         "completed",
 			StepIndex:      i,
 			StepName:       step.Name,
 			AgentSlug:      step.AgentSlug,
 		})
 	}
 
-	// Determine final status based on whether the context was cancelled.
-	finalCompletedAt := time.Now().UTC()
-	execution.CompletedAt = &finalCompletedAt
-	if ctx.Err() != nil {
-		errMsg := ctx.Err().Error()
-		execution.Status = string(workflowrepo.WorkflowStatusFailed)
-		execution.ErrorMessage = &errMsg
-		_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
-
-		s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
-			WorkflowID:     definition.ID,
-			ExecutionID:    executionID,
-			WorkflowName:   definition.Name,
-			ConversationID: orchestrator.DerefString(execution.ConversationID),
-			Status:         string(workflowrepo.WorkflowStatusFailed),
-			Error:          errMsg,
-		})
-		return
-	}
-
-	execution.Status = string(workflowrepo.WorkflowStatusCompleted)
+	// Workflow completed successfully.
+	completedAt := time.Now().UTC()
+	execution.Status = "completed"
+	execution.CompletedAt = &completedAt
 	_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
 	s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowCompleted, realtime.WorkflowEventPayload{
 		WorkflowID:     definition.ID,
 		ExecutionID:    executionID,
 		WorkflowName:   definition.Name,
-		ConversationID: orchestrator.DerefString(execution.ConversationID),
-		Status:         string(workflowrepo.WorkflowStatusCompleted),
+		ConversationID: derefStr(execution.ConversationID),
+		Status:         "completed",
 	})
 }
 
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

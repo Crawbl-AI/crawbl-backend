@@ -8,7 +8,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -70,7 +70,7 @@ type NewServerOpts struct {
 
 	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
 	// Used by the delete handler to remove runtimes when a user is deleted.
-	RuntimeClient agentclient.Client
+	RuntimeClient userswarmclient.Client
 
 	// MCPHandler is the HTTP handler for the MCP server.
 	// If nil, the MCP endpoint is not mounted.
@@ -114,7 +114,7 @@ type Server struct {
 	broadcaster realtime.Broadcaster
 
 	// runtimeClient manages agent runtime CRs. Used to delete runtimes on user deletion.
-	runtimeClient agentclient.Client
+	runtimeClient userswarmclient.Client
 
 	// integrationService manages third-party OAuth connections.
 	integrationService orchestratorservice.IntegrationService

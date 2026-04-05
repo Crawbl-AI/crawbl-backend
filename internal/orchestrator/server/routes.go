@@ -41,6 +41,15 @@ func registerRoutes(s *Server) http.Handler {
 		r.Get("/legal", handler.Legal(h))
 		r.Get("/models", handler.ListModels(h))
 
+		// Internal endpoints — HMAC bearer authed, NOT on the public
+		// Envoy HTTPRoute. The crawbl-agent-runtime pod calls these at
+		// startup to fetch workspace agent blueprints. Identity flows
+		// via the same HMAC scheme used by the MCP server.
+		//
+		// The handler validates the bearer inline (no middleware) so
+		// routes.go stays simple. Signing key is CRAWBL_MCP_SIGNING_KEY.
+		r.Get("/internal/agents", handler.GetWorkspaceBlueprint(h))
+
 		r.Group(func(r chi.Router) {
 			r.Use(httpserver.AuthMiddleware(s.httpMiddleware, s.logger))
 			r.Post("/fcm-token", handler.SaveFCMToken(h))

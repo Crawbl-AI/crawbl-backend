@@ -2,12 +2,13 @@ package agentservice
 
 import (
 	"context"
+	"strings"
 
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // GetAgent retrieves a single agent by ID with runtime status enrichment.
@@ -228,7 +229,7 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 	}, nil
 }
 
-// GetAgentMemories retrieves memories from the agent runtime.
+// GetAgentMemories retrieves memories from the agent's agent runtime.
 func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -244,7 +245,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 		return nil, mErr
 	}
 
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     agent.WorkspaceID,
 		WaitForVerified: false,
@@ -253,7 +254,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 		return nil, mErr
 	}
 
-	entries, mErr := s.runtimeClient.ListMemories(ctx, &agentclient.ListMemoriesOpts{
+	entries, mErr := s.runtimeClient.ListMemories(ctx, &userswarmclient.ListMemoriesOpts{
 		Runtime:  runtimeState,
 		Category: opts.Category,
 		Limit:    opts.Limit,
@@ -277,7 +278,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 	return memories, nil
 }
 
-// DeleteAgentMemory removes a memory from the agent runtime.
+// DeleteAgentMemory removes a memory from the agent's agent runtime.
 func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.Key == "" {
 		return merrors.ErrInvalidInput
@@ -293,7 +294,7 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     agent.WorkspaceID,
 		WaitForVerified: false,
@@ -302,13 +303,13 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
-	return s.runtimeClient.DeleteMemory(ctx, &agentclient.DeleteMemoryOpts{
+	return s.runtimeClient.DeleteMemory(ctx, &userswarmclient.DeleteMemoryOpts{
 		Runtime: runtimeState,
 		Key:     opts.Key,
 	})
 }
 
-// CreateAgentMemory stores a memory in the agent runtime.
+// CreateAgentMemory stores a memory in the agent's agent runtime.
 func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.Key == "" || opts.Content == "" {
 		return merrors.ErrInvalidInput
@@ -324,7 +325,7 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     agent.WorkspaceID,
 		WaitForVerified: false,
@@ -333,7 +334,7 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
-	return s.runtimeClient.CreateMemory(ctx, &agentclient.CreateMemoryOpts{
+	return s.runtimeClient.CreateMemory(ctx, &userswarmclient.CreateMemoryOpts{
 		Runtime:  runtimeState,
 		Key:      opts.Key,
 		Content:  opts.Content,
@@ -341,42 +342,74 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 	})
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
 func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: false,
 	})
 	if mErr != nil {
-		for _, a := range agents {
-			a.Status = orchestrator.AgentStatusOffline
+		for _, agent := range agents {
+			agent.Status = orchestrator.AgentStatusOffline
 		}
 		return
 	}
-	orchestrator.EnrichAgentStatus(agents, runtimeState)
+	for _, agent := range agents {
+		agent.Status = statusForRuntime(runtimeState)
+	}
+}
+
+// statusForRuntime maps a runtime status to an agent status.
+func statusForRuntime(runtimeState *orchestrator.RuntimeStatus) orchestrator.AgentStatus {
+	if runtimeState == nil {
+		return orchestrator.AgentStatusOffline
+	}
+	if runtimeState.Verified {
+		return orchestrator.AgentStatusOnline
+	}
+	switch strings.ToLower(strings.TrimSpace(runtimeState.Phase)) {
+	case "progressing", "pending":
+		return orchestrator.AgentStatusPending
+	case "failed", "error":
+		return orchestrator.AgentStatusError
+	default:
+		return orchestrator.AgentStatusOffline
+	}
 }
 
 // agentHistoryRowToDomain converts a repo history row to the domain type.
 func agentHistoryRowToDomain(row orchestratorrepo.AgentHistoryRow) orchestrator.AgentHistoryItem {
 	return orchestrator.AgentHistoryItem{
-		ConversationID: orchestrator.DerefString(row.ConversationID),
+		ConversationID: derefString(row.ConversationID),
 		Title:          row.Title,
 		Subtitle:       row.Subtitle,
 		CreatedAt:      &row.CreatedAt,
 	}
 }
 
+// derefString safely dereferences a *string, returning "" for nil.
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // resolveModelDef looks up a model ID in the available models registry.
 // Falls back to the first available model if the ID is not found.
 func resolveModelDef(modelID string) orchestrator.AgentModelDef {
-	for _, m := range orchestrator.GetAvailableModels() {
+	for _, m := range orchestrator.AvailableModels {
 		if m.ID == modelID {
 			return m
 		}
 	}
-	if models := orchestrator.GetAvailableModels(); len(models) > 0 {
-		return models[0]
+	if len(orchestrator.AvailableModels) > 0 {
+		return orchestrator.AvailableModels[0]
 	}
 	return orchestrator.AgentModelDef{ID: modelID, Name: modelID}
 }

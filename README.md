@@ -32,7 +32,7 @@ flowchart LR
     redis["Redis"]
     cr["UserSwarm CR"]
     mc["Metacontroller"]
-    runtime["ZeroClaw Runtime"]
+    runtime["the agent runtime Runtime"]
     mcp["Embedded MCP Server"]
     llm["LLM / External APIs"]
 
@@ -120,7 +120,7 @@ internal/
 │   ├── client/                 #    Creates and manages agent pods on K8s
 │   ├── webhook/                #    Builds pod specs when agents are provisioned
 │   └── reaper/                 #    Cleans up stale users + orphaned pods
-├── zeroclaw/                   # 🧠 Agent runtime config + tool catalog
+├── agent-runtime/                   # 🧠 Agent runtime config + tool catalog
 ├── pkg/                        # 📦 Shared packages
 │   ├── configenv/              #    Environment variable loading
 │   ├── database/               #    Postgres connection + migrations
@@ -144,16 +144,16 @@ api/                            # 📐 Kubernetes CRD types
 
 See [`config/README.md`](config/README.md) for the complete reference of every env var and hardcoded default.
 
-## 🐳 Manual ZeroClaw Build
+## 🐳 Manual the agent runtime Build
 
-CI is slow — use this to build and push the ZeroClaw image directly.
+CI is slow — use this to build and push the agent runtime image directly.
 
 ```bash
-# From crawbl-zeroclaw/ — build only:
-crawbl app build zeroclaw --tag <tag>
+# From / — build only:
+crawbl app build agent-runtime --tag <tag>
 
 # Build, push, and update ArgoCD in one step:
-crawbl app deploy zeroclaw --tag <tag>
+crawbl app deploy agent-runtime --tag <tag>
 ```
 
 > If you build manually without deploy, update the image tag in `crawbl-argocd-apps` yourself — `deploy` does this automatically.
@@ -162,7 +162,7 @@ crawbl app deploy zeroclaw --tag <tag>
 
 `crawbl app deploy <component>` is the full local-first deploy workflow. Each call:
 
-1. Verifies working tree is clean and pushed (backend components only; docs/website/zeroclaw skip this)
+1. Verifies working tree is clean and pushed (backend components only; docs/website/agent-runtime skip this)
 2. Builds the Docker image locally
 3. Pushes to DOCR (`registry.digitalocean.com/crawbl/`)
 4. Updates image tag in `crawbl-argocd-apps` and pushes
@@ -176,20 +176,20 @@ crawbl app deploy <component>             # Build, push, update ArgoCD, tag, rel
 crawbl app deploy all                     # Deploy platform + auth-filter only
 crawbl app deploy docs                    # Deploy docs (no git guard)
 crawbl app deploy website                 # Deploy website (no git guard)
-crawbl app deploy zeroclaw               # Deploy zeroclaw (no git guard)
+crawbl app deploy agent-runtime               # Deploy agent-runtime (no git guard)
 crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
 ```
 
 > 💡 **Migrations are automatic.** The orchestrator runs pending database migrations on startup — no separate migration step needed after deploy.
 
-For zeroclaw, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
+For agent-runtime, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
 
 Makefile shortcuts (auto-semver, no manual tag needed):
 
 ```bash
 make deploy-dev          # Deploy platform + auth-filter
 make deploy-platform     # Deploy platform only
-make deploy-zeroclaw     # Deploy zeroclaw only
+make deploy-agent-runtime     # Deploy agent-runtime only
 make deploy-docs         # Deploy docs only
 make deploy-website      # Deploy website only
 ```
@@ -207,6 +207,6 @@ make deploy-website      # Deploy website only
 | | Repo | |
 |---|------|---|
 | 📚 | [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) | Docs, API reference, architecture |
-| 🤖 | [crawbl-zeroclaw](https://github.com/Crawbl-AI/crawbl-zeroclaw) | ZeroClaw agent runtime |
+| 🤖 | [](https://github.com/Crawbl-AI/) | the agent runtime agent runtime |
 | 📱 | [crawbl-mobile](https://github.com/Crawbl-AI/crawbl-mobile) | Flutter mobile app |
 | ☸️ | [crawbl-argocd-apps](https://github.com/Crawbl-AI/crawbl-argocd-apps) | K8s manifests + Helm values |

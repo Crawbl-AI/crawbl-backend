@@ -3,12 +3,14 @@
 // used for authentication, user management, workspace management, messaging,
 // and runtime status tracking.
 //
-// The orchestrator sits between the Flutter mobile app and each user's agent runtime,
-// handling routing, auth, orchestration, integrations, billing controls,
+// The orchestrator sits between the Flutter mobile app and each user's agent runtime
+// swarm, handling routing, auth, orchestration, integrations, billing controls,
 // and auditability.
 package orchestrator
 
 import (
+	"errors"
+	"strings"
 	"time"
 )
 
@@ -22,6 +24,36 @@ const (
 
 	// DefaultAgentAvatarURL is the default avatar URL for agents (empty means no default).
 	DefaultAgentAvatarURL = ""
+
+	// UserSenderDisplayName is the display name used for user-sent messages in previews.
+	UserSenderDisplayName = "You"
+)
+
+// Error variables define the sentinel errors used throughout the orchestrator package.
+var (
+	// ErrInvalidToken indicates the provided authentication token is malformed or invalid.
+	ErrInvalidToken = errors.New("invalid token")
+
+	// ErrUnauthorized indicates the request lacks valid authentication credentials.
+	ErrUnauthorized = errors.New("unauthorized")
+
+	// ErrUserNotFound indicates the requested user does not exist in the system.
+	ErrUserNotFound = errors.New("user not found")
+
+	// ErrUserDeleted indicates the user account has been deleted.
+	ErrUserDeleted = errors.New("user deleted")
+
+	// ErrNilPrincipal indicates a nil principal was provided where one is required.
+	ErrNilPrincipal = errors.New("principal is required")
+
+	// ErrEmptySubject indicates the principal subject field is empty.
+	ErrEmptySubject = errors.New("principal subject is required")
+
+	// ErrEmptyEmail indicates the principal email field is empty.
+	ErrEmptyEmail = errors.New("principal email is required")
+
+	// ErrNilUser indicates a nil user was provided where one is required.
+	ErrNilUser = errors.New("user is required")
 )
 
 // AgentStatus represents the operational status of an agent within a workspace.
@@ -124,46 +156,6 @@ const (
 
 	// MessageContentTypeLoading indicates a loading/placeholder state.
 	MessageContentTypeLoading MessageContentType = "loading"
-
-	// MessageContentTypeDelegation indicates an agent delegation card.
-	MessageContentTypeDelegation MessageContentType = "delegation"
-
-	// MessageContentTypeArtifact indicates an artifact/output card.
-	MessageContentTypeArtifact MessageContentType = "artifact"
-
-	// MessageContentTypeWorkflow indicates a workflow step card.
-	MessageContentTypeWorkflow MessageContentType = "workflow"
-)
-
-// DelegationStatus represents the state of an agent delegation.
-type DelegationStatus string
-
-const (
-	// DelegationStatusDelegating indicates the task is being handed off to a sub-agent.
-	DelegationStatusDelegating DelegationStatus = "delegating"
-
-	// DelegationStatusWorking indicates the sub-agent is actively working on the task.
-	DelegationStatusWorking DelegationStatus = "working"
-
-	// DelegationStatusCompleted indicates the delegation finished successfully.
-	DelegationStatusCompleted DelegationStatus = "completed"
-
-	// DelegationStatusFailed indicates the delegation failed.
-	DelegationStatusFailed DelegationStatus = "failed"
-)
-
-// ArtifactMessageStatus represents the state of an artifact in a message card.
-type ArtifactMessageStatus string
-
-const (
-	// ArtifactMessageStatusCreated indicates the artifact was just created.
-	ArtifactMessageStatusCreated ArtifactMessageStatus = "created"
-
-	// ArtifactMessageStatusUpdated indicates the artifact was updated.
-	ArtifactMessageStatusUpdated ArtifactMessageStatus = "updated"
-
-	// ArtifactMessageStatusFinalized indicates the artifact is complete and immutable.
-	ArtifactMessageStatusFinalized ArtifactMessageStatus = "finalized"
 )
 
 // ActionStyle represents the visual style of an action button.
@@ -194,25 +186,7 @@ const (
 
 	// ToolStateFailed indicates the tool execution failed.
 	ToolStateFailed ToolState = "failed"
-
-	// ToolStateDone indicates the tool has finished (alias used in streaming events).
-	ToolStateDone ToolState = "done"
 )
-
-// SilentResponseToken is the sentinel value agents use to indicate a message
-// should not be surfaced to the user.
-const SilentResponseToken = "[SILENT]"
-
-// DefaultContextMessageLimit is the default number of recent messages included
-// as conversation context when calling the agent runtime.
-const DefaultContextMessageLimit = 20
-
-// ConversationContextMaxTextLen is the maximum character length for message text
-// in conversation context summaries.
-const ConversationContextMaxTextLen = 500
-
-// UserSenderDisplayName is the display name shown for user messages in summaries.
-const UserSenderDisplayName = "You"
 
 // AttachmentType represents the type of file attachment.
 type AttachmentType string
@@ -402,34 +376,6 @@ const (
 	RuntimeStateFailed RuntimeState = "failed"
 )
 
-// RuntimePhase represents the lifecycle phase of an agent runtime.
-// These phases come from Kubernetes resource status conditions.
-type RuntimePhase string
-
-// Runtime phase constants define the possible phases of a swarm deployment.
-const (
-	// RuntimePhaseProgressing indicates the runtime is actively being deployed or updated.
-	RuntimePhaseProgressing RuntimePhase = "progressing"
-
-	// RuntimePhasePending indicates the runtime is waiting to be scheduled or initialized.
-	RuntimePhasePending RuntimePhase = "pending"
-
-	// RuntimePhaseFailed indicates the runtime deployment failed.
-	RuntimePhaseFailed RuntimePhase = "failed"
-
-	// RuntimePhaseError indicates the runtime encountered an error condition.
-	RuntimePhaseError RuntimePhase = "error"
-
-	// RuntimePhaseRunning indicates the runtime is actively running.
-	RuntimePhaseRunning RuntimePhase = "running"
-
-	// RuntimePhaseDeleting indicates the runtime is being deleted.
-	RuntimePhaseDeleting RuntimePhase = "deleting"
-
-	// RuntimePhaseSuspended indicates the runtime is suspended.
-	RuntimePhaseSuspended RuntimePhase = "suspended"
-)
-
 // AgentRole constants define the swarm hierarchy roles.
 const (
 	// AgentRoleSubAgent is a delegate agent under the Manager.
@@ -455,7 +401,7 @@ type Agent struct {
 	// Role describes the agent's role in the swarm hierarchy (e.g., "sub-agent", "manager").
 	Role string `json:"role"`
 
-	// Slug is the routing identifier for this agent.
+	// Slug is the agent runtime routing identifier for this agent.
 	// Matches the [agents.<slug>] key in config.toml and is sent as agent_id in the webhook.
 	Slug string `json:"slug"`
 
@@ -499,6 +445,16 @@ type AgentModelDef struct {
 	ID          string
 	Name        string
 	Description string
+}
+
+// DefaultAgentModel is the model ID assigned to new agents.
+// "auto" means the platform selects the best model (currently gpt-5-mini, future: AWS Bedrock routing).
+const DefaultAgentModel = "auto"
+
+// AvailableModels is the registry of models users can choose from.
+var AvailableModels = []AgentModelDef{
+	{ID: "auto", Name: "Auto", Description: "Platform selects the best model automatically"},
+	{ID: "gpt-5-mini", Name: "GPT-5 Mini", Description: "Fast and efficient model for everyday tasks"},
 }
 
 // ResponseLength represents the response verbosity preference.
@@ -721,7 +677,10 @@ type Pagination struct {
 }
 
 // RuntimeStatus represents the current state of a user's swarm runtime.
-// This is populated from the agent runtime status.
+// This is populated from Kubernetes UserSwarm custom resource status,
+// plus the identity fields (UserID, WorkspaceID) stamped by the runtime
+// client so downstream gRPC calls can sign HMAC bearer tokens without
+// a second lookup.
 type RuntimeStatus struct {
 	// SwarmName is the name of the swarm instance.
 	SwarmName string
@@ -732,7 +691,19 @@ type RuntimeStatus struct {
 	// ServiceName is the Kubernetes service name for the swarm.
 	ServiceName string
 
-	// Phase is the current phase from the runtime status.
+	// UserID is the platform user ID that owns this workspace. Populated
+	// by the runtime client on EnsureRuntime; used by downstream
+	// SendText/Memory calls to sign HMAC bearer tokens for gRPC auth
+	// against the per-workspace crawbl-agent-runtime pod.
+	UserID string
+
+	// WorkspaceID is the Crawbl workspace ID this runtime serves.
+	// Populated alongside UserID so gRPC calls from the orchestrator to
+	// the per-workspace pod can authenticate without a second lookup
+	// into the workspaces table.
+	WorkspaceID string
+
+	// Phase is the current phase from the UserSwarm status.
 	Phase string
 
 	// Verified indicates whether the swarm has passed health verification.
@@ -745,6 +716,102 @@ type RuntimeStatus struct {
 	LastError string
 }
 
+// DefaultAgentBlueprint defines the configuration for a default agent in a new workspace.
+type DefaultAgentBlueprint struct {
+	// Name is the display name of the agent.
+	Name string
+
+	// Slug is the agent runtime routing identifier.
+	Slug string
+
+	// Role is the swarm hierarchy role.
+	Role string
+
+	// SystemPrompt is the LLM system message for this agent's personality.
+	SystemPrompt string
+
+	// Description is a short human-readable summary of the agent's purpose.
+	Description string
+
+	// AllowedTools is the list of tool name strings this agent is permitted to use.
+	AllowedTools []string
+}
+
+// DefaultAgents is the list of agents created by default in new workspaces.
+var DefaultAgents = []DefaultAgentBlueprint{
+	{
+		Name:         "Manager",
+		Slug:         "manager",
+		Role:         AgentRoleManager,
+		SystemPrompt: "You are Manager, the coordinator of this group chat. " +
+			"Your PRIMARY job is to delegate tasks to your sub-agents using the delegate tool. " +
+			"When the user asks something that sub-agents can handle, delegate to them — do NOT answer yourself. " +
+			"When you delegate, your response should ONLY contain your own brief synthesis or follow-up question — " +
+			"do NOT repeat or summarize what the sub-agents said, they have their own messages visible to the user. " +
+			"Only answer directly for simple coordination questions (\"who are you?\", \"what can you do?\"). " +
+			"If you delegated and have nothing original to add, respond with [SILENT]. " +
+			"Stay calm, decisive, and brief. Never respond to messages from other agents — avoid feedback loops.",
+		Description:  "Your swarm coordinator. Delegates tasks and manages the team.",
+		AllowedTools: []string{
+			"web_search_tool", "web_fetch", "file_read", "file_write",
+			"memory_recall", "memory_store", "delegate",
+			"orchestrator__send_push_notification",
+			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+			"orchestrator__create_agent_history",
+			"orchestrator__send_message_to_agent",
+			"orchestrator__create_artifact", "orchestrator__read_artifact",
+			"orchestrator__update_artifact", "orchestrator__review_artifact",
+			"orchestrator__create_workflow", "orchestrator__trigger_workflow",
+			"orchestrator__check_workflow_status", "orchestrator__list_workflows",
+		},
+	},
+	{
+		Name:         "Wally",
+		Slug:         "wally",
+		Role:         AgentRoleSubAgent,
+		SystemPrompt: "You are Wally, a versatile research and analysis specialist. " +
+			"Only speak when you have a relevant opinion, insight, or something genuinely helpful. " +
+			"Keep replies short and direct — 1-3 sentences. " +
+			"If the topic isn't relevant to you or you have nothing to add, respond with [SILENT]. " +
+			"Real people don't reply to every message. " +
+			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
+		Description:  "A versatile assistant that handles research, writing, analysis, and general help.",
+		AllowedTools: []string{
+			"web_search_tool", "web_fetch", "file_read", "file_write",
+			"memory_recall", "memory_store",
+			"orchestrator__send_push_notification",
+			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+			"orchestrator__send_message_to_agent",
+			"orchestrator__create_artifact", "orchestrator__read_artifact",
+			"orchestrator__update_artifact", "orchestrator__review_artifact",
+		},
+	},
+	{
+		Name:         "Eve",
+		Slug:         "eve",
+		Role:         AgentRoleSubAgent,
+		SystemPrompt: "You are Eve, a creative and communication specialist. " +
+			"Reply only when you have something creative, empathetic, or clarifying to add. " +
+			"Ask questions back to the group naturally. Be clear and concise. " +
+			"If you have nothing useful to add, respond with [SILENT]. " +
+			"Silence is normal — real people don't reply to every message. " +
+			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
+		Description:  "A creative and communication specialist that handles content creation, email drafting, brainstorming, summarization, and presentation prep.",
+		AllowedTools: []string{
+			"web_search_tool", "web_fetch", "file_read", "file_write",
+			"memory_recall", "memory_store",
+			"orchestrator__send_push_notification",
+			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
+			"orchestrator__list_conversations", "orchestrator__search_past_messages",
+			"orchestrator__send_message_to_agent",
+			"orchestrator__create_artifact", "orchestrator__read_artifact",
+			"orchestrator__update_artifact", "orchestrator__review_artifact",
+		},
+	},
+}
+
 // Mention represents an @-mention of an agent in a swarm message.
 type Mention struct {
 	AgentID   string `json:"agent_id"`
@@ -752,6 +819,10 @@ type Mention struct {
 	Offset    int    `json:"offset"`
 	Length    int    `json:"length"`
 }
+
+// ---------------------------------------------------------------------------
+// Integration categories and items (for API responses)
+// ---------------------------------------------------------------------------
 
 // ItemType distinguishes tools from third-party integrations in the API response.
 type ItemType string
@@ -762,6 +833,69 @@ const (
 	// ItemTypeApp is a third-party integration (Gmail, Slack, etc.).
 	ItemTypeApp ItemType = "app"
 )
+
+// CategoryMeta holds display metadata for an item category.
+// Used by the handler to build the categories list for GET /v1/integrations.
+type CategoryMeta struct {
+	ID       string
+	Name     string
+	ImageURL string
+}
+
+// APIVersion is the current API version string.
+const APIVersion = "1.0.0"
+
+// DefaultSubscriptionName is the display name for the default subscription plan.
+const DefaultSubscriptionName = "Freemium"
+
+// DefaultSubscriptionCode is the code identifier for the default subscription plan.
+const DefaultSubscriptionCode = "freemium"
+
+// GetDefaultAgents returns the list of default agent blueprints for new workspaces.
+func GetDefaultAgents() []DefaultAgentBlueprint {
+	return DefaultAgents
+}
+
+// GetAvailableModels returns the list of available LLM model definitions.
+func GetAvailableModels() []AgentModelDef {
+	// TODO: load from seed package when available
+	return nil
+}
+
+// StatusForRuntime maps a runtime status to an agent status.
+func StatusForRuntime(runtime *RuntimeStatus) AgentStatus {
+	if runtime == nil {
+		return AgentStatusOffline
+	}
+	if runtime.Verified {
+		return AgentStatusOnline
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.Phase)) {
+	case "progressing", "pending":
+		return AgentStatusPending
+	case "failed", "error":
+		return AgentStatusError
+	default:
+		return AgentStatusOffline
+	}
+}
+
+// EnrichAgentStatus sets each agent's status based on the workspace runtime state.
+func EnrichAgentStatus(agents []*Agent, runtime *RuntimeStatus) {
+	for _, agent := range agents {
+		agent.Status = StatusForRuntime(runtime)
+	}
+}
+
+// IntegrationCategories returns display metadata for integration (app) categories.
+// Tool categories live in the agentruntime/tools package; these are merged at the handler level.
+func IntegrationCategories() []CategoryMeta {
+	return []CategoryMeta{
+		{"communication", "Communication", "https://cdn.crawbl.com/categories/communication.png"},
+		{"productivity", "Productivity", "https://cdn.crawbl.com/categories/productivity.png"},
+		{"development", "Development", "https://cdn.crawbl.com/categories/development.png"},
+	}
+}
 
 // IntegrationItem represents an available integration with its connection status.
 // Returned by GET /v1/integrations for the mobile app's Connected Apps screen.
@@ -800,12 +934,26 @@ type OAuthConfig struct {
 	AdditionalParameters map[string]string
 }
 
-// DerefString returns the value of a *string, or empty string if nil.
-func DerefString(s *string) string {
-	if s == nil {
-		return ""
+// ResolveRuntimeState determines the runtime state based on Kubernetes phase
+// and verification status. A verified swarm is always ready. Otherwise, the
+// state is derived from the phase:
+//   - Pending, Progressing, Deleting, or empty -> Provisioning
+//   - Error -> Failed
+//   - Suspended or unknown -> Offline
+func ResolveRuntimeState(phase string, verified bool) RuntimeState {
+	if verified {
+		return RuntimeStateReady
 	}
-	return *s
-}
 
+	switch phase {
+	case "Pending", "Progressing", "Deleting", "":
+		return RuntimeStateProvisioning
+	case "Error":
+		return RuntimeStateFailed
+	case "Suspended":
+		return RuntimeStateOffline
+	default:
+		return RuntimeStateOffline
+	}
+}
 

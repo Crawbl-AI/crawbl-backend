@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentpromptsrepo"
@@ -43,7 +43,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -86,13 +86,6 @@ func runServer(ctx context.Context) error {
 
 	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
 	defer cleanup()
-
-	// Seed tool catalog and categories from embedded JSON.
-	// Idempotent — safe on every startup.
-	if err := seed.Run(ctx, db.NewSession(nil), logger); err != nil {
-		logger.Error("database seeding failed", "error", err)
-		return fmt.Errorf("database seeding failed: %w", err)
-	}
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
@@ -152,15 +145,7 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, mcpRepos{
-		user:         userRepo,
-		workspace:    workspaceRepo,
-		agent:        agentRepo,
-		conversation: conversationRepo,
-		message:      messageRepo,
-		agentHistory: agentHistoryRepo,
-		artifact:     artifactRepo,
-	}, runtimeClient, broadcaster)
+	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -219,16 +204,41 @@ func mustBuildRepos(logger *slog.Logger) (
 	}
 }
 
-func buildRuntimeClient(logger *slog.Logger) (agentclient.Client, error) {
-	cfg := agentclient.Config{
-		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", agentclient.DriverFake),
-		FakeReplyPrefix: envOrDefault("CRAWBL_RUNTIME_FAKE_REPLY_PREFIX", agentclient.DefaultFakeReplyPrefix),
+func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
+	cfg := userswarmclient.Config{
+		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", userswarmclient.DriverFake),
+		FakeReplyPrefix: envOrDefault("CRAWBL_RUNTIME_FAKE_REPLY_PREFIX", userswarmclient.DefaultFakeReplyPrefix),
+		UserSwarm: userswarmclient.UserSwarmConfig{
+			RuntimeNamespace:    envOrDefault("CRAWBL_RUNTIME_NAMESPACE", userswarmclient.DefaultRuntimeNamespace),
+			Image:               strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE")),
+			ImagePullSecretName: strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE_PULL_SECRET")),
+			DefaultProvider:     envOrDefault("CRAWBL_RUNTIME_DEFAULT_PROVIDER", "openai"),
+			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-5-mini"),
+			EnvSecretName:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_ENV_SECRET_NAME")),
+			MCPSigningKey:       strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY")),
+			PollTimeout:         durationFromEnv("CRAWBL_RUNTIME_POLL_TIMEOUT", userswarmclient.DefaultPollTimeout),
+			PollInterval:        durationFromEnv("CRAWBL_RUNTIME_POLL_INTERVAL", userswarmclient.DefaultPollInterval),
+			Port:                int32FromEnv("CRAWBL_RUNTIME_PORT", userswarmclient.DefaultRuntimePort),
+		},
 	}
 
-	switch strings.ToLower(strings.TrimSpace(cfg.Driver)) {
-	case "", agentclient.DriverFake:
+	// Accept the legacy driver string "userswarm" as an alias for
+	// "crawbl-runtime" during the Phase 2B transition window so dev-cluster
+	// ConfigMaps that still carry the old value keep working. The plan is
+	// to flip CRAWBL_RUNTIME_DRIVER to "crawbl-runtime" in argocd-apps as
+	// part of US-P2-010 and then this branch becomes dead code.
+	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
+	switch driver {
+	case "", userswarmclient.DriverFake:
 		logger.Info("configured fake runtime client")
-		return agentclient.NewMockClient(cfg), nil
+		return userswarmclient.NewFakeClient(cfg), nil
+	case userswarmclient.DriverCrawblRuntime, "userswarm":
+		client, err := userswarmclient.NewUserSwarmClient(cfg)
+		if err != nil {
+			return nil, err
+		}
+		logger.Info("configured crawbl-runtime client (gRPC)", slog.String("namespace", cfg.UserSwarm.RuntimeNamespace))
+		return client, nil
 	default:
 		return nil, fmt.Errorf("unsupported runtime driver %q", cfg.Driver)
 	}
@@ -243,25 +253,35 @@ func legalDocumentsFromEnv() *orch.LegalDocuments {
 	}
 }
 
+func durationFromEnv(key string, fallback time.Duration) time.Duration {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return fallback
+}
 
-// mcpRepos groups the repository dependencies needed to build the MCP handler.
-// Passing a single struct instead of 7 individual parameters keeps the
-// function signature manageable.
-type mcpRepos struct {
-	user         orchestratorrepo.UserRepo
-	workspace    orchestratorrepo.WorkspaceRepo
-	agent        orchestratorrepo.AgentRepo
-	conversation orchestratorrepo.ConversationRepo
-	message      orchestratorrepo.MessageRepo
-	agentHistory orchestratorrepo.AgentHistoryRepo
-	artifact     artifactrepo.Repo
+func int32FromEnv(key string, fallback int32) int32 {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			return int32(n)
+		}
+	}
+	return fallback
 }
 
 func buildMCPHandler(
 	logger *slog.Logger,
 	db *dbr.Connection,
-	repos mcpRepos,
-	runtimeClient agentclient.Client,
+	userRepo orchestratorrepo.UserRepo,
+	workspaceRepo orchestratorrepo.WorkspaceRepo,
+	agentRepo orchestratorrepo.AgentRepo,
+	conversationRepo orchestratorrepo.ConversationRepo,
+	messageRepo orchestratorrepo.MessageRepo,
+	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
+	artifactRepo artifactrepo.Repo,
+	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
 ) http.Handler {
 	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
@@ -289,13 +309,13 @@ func buildMCPHandler(
 	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
 		DB:               db,
 		Logger:           logger,
-		UserRepo:         repos.user,
-		WorkspaceRepo:    repos.workspace,
-		AgentRepo:        repos.agent,
-		ConversationRepo: repos.conversation,
-		MessageRepo:      repos.message,
-		AgentHistoryRepo: repos.agentHistory,
-		ArtifactRepo:     repos.artifact,
+		UserRepo:         userRepo,
+		WorkspaceRepo:    workspaceRepo,
+		AgentRepo:        agentRepo,
+		ConversationRepo: conversationRepo,
+		MessageRepo:      messageRepo,
+		AgentHistoryRepo: agentHistoryRepo,
+		ArtifactRepo:     artifactRepo,
 		SigningKey:       signingKey,
 		FCM:              fcm,
 		RuntimeClient:    runtimeClient,

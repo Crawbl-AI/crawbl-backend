@@ -111,7 +111,7 @@ func tagExistsOnRemote(repoPath, tag string) bool {
 	return len(strings.TrimSpace(string(output))) > 0
 }
 
-// CalculateForCrawblFork calculates the next tag for the crawbl zeroclaw fork.
+// CalculateForCrawblFork calculates the next tag for the agent-runtime.
 // Tags follow the pattern v<upstream>-crawbl.<N> where N increments per release.
 // Example: v0.6.8-crawbl.1 → v0.6.8-crawbl.2
 func CalculateForCrawblFork(repoPath string) (Result, error) {

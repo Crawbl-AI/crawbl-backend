@@ -55,6 +55,39 @@ services:
       timeout: 5s
       retries: 20
 
+  # crawbl-agent-runtime is the Phase 1 POC of the new in-tree Go runtime
+  # that replaces the agent runtime in Phase 2. Opt-in profile — NOT part of the
+  # default stack. Run via:
+  #
+  #   set -a && source .env && set +a
+  #   docker compose --profile agent-runtime up agent-runtime
+  #
+  # The service builds the dedicated dockerfiles/agent-runtime.dockerfile
+  # (not the platform one) and wires the gRPC listener to host port 42618
+  # so a local grpcurl can target it for manual verification (US-AR-014).
+  #
+  # CRAWBL_WORKSPACE_ID / CRAWBL_USER_ID / CRAWBL_ORCHESTRATOR_ENDPOINT /
+  # CRAWBL_MCP_ENDPOINT are REQUIRED and must be set in .env before
+  # bringing the service up — config.Validate fails fast on missing
+  # values. The orchestrator service in this compose file is only
+  # started with `--profile default`, so for a full stack run:
+  #
+  #   docker compose --profile default --profile database --profile agent-runtime up
+  agent-runtime:
+    build:
+      context: .
+      dockerfile: dockerfiles/agent-runtime.dockerfile
+    env_file: ${ENV_FILE}
+    command:
+      - "--grpc-listen=:42618"
+    profiles:
+      - agent-runtime
+    networks:
+      - crawbl-backend
+    ports:
+      - "42618:42618"
+    restart: unless-stopped
+
 volumes:
   db-data:
 
