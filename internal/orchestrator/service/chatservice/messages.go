@@ -352,6 +352,20 @@ func (s *service) callAgentStreaming(
 
 		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, subAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 
+		// Emit the agent.delegation event so the mobile client can
+		// render the delegation card live as the sub-agent picks up
+		// the turn. Matches the orchestrator__send_message_to_agent
+		// MCP flow — both paths go through EmitAgentDelegation so
+		// the client can reuse a single handler regardless of how
+		// the delegation was triggered.
+		s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
+			FromAgentID:    agent.ID,
+			ToAgentID:      subAgent.ID,
+			ConversationID: conversation.ID,
+			Status:         "running",
+			MessageID:      subPlaceholder.ID,
+		})
+
 		st := &subAgentStream{
 			agent:       subAgent,
 			placeholder: subPlaceholder,

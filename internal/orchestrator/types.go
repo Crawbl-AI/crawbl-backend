@@ -158,6 +158,25 @@ const (
 
 	// MessageContentTypeLoading indicates a loading/placeholder state.
 	MessageContentTypeLoading MessageContentType = "loading"
+
+	// MessageContentTypeDelegation renders an agent-to-agent delegation
+	// card in the mobile chat. Emitted inline when the Manager (or
+	// any agent) hands a task off to a sub-agent via the streaming
+	// pipeline or the orchestrator__send_message_to_agent MCP tool.
+	// See BACKEND_REQUIREMENTS.md §11.
+	MessageContentTypeDelegation MessageContentType = "delegation"
+
+	// MessageContentTypeArtifact renders a versioned artifact card
+	// (document, plan, spreadsheet, code file) inline in the
+	// conversation. Artifacts persist beyond the chat history and
+	// are versioned. See BACKEND_REQUIREMENTS.md §12.
+	MessageContentTypeArtifact MessageContentType = "artifact"
+
+	// MessageContentTypeWorkflow renders a multi-step workflow
+	// progress card inline in the conversation. Shows the workflow
+	// name, current step, and overall status. See
+	// BACKEND_REQUIREMENTS.md §13.
+	MessageContentTypeWorkflow MessageContentType = "workflow"
 )
 
 // ActionStyle represents the visual style of an action button.
