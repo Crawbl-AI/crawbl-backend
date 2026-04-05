@@ -121,12 +121,31 @@ type MessageStatusPayload struct {
 	Status         string `json:"status"` // "sent", "delivered", "read"
 }
 
+// AgentDelegationStatus values carried on AgentDelegationPayload.Status
+// and persisted to the agent_delegations / agent_messages DB rows.
+// These are the single source of truth for the delegation lifecycle —
+// every emitter and every DB writer references the constants below so
+// the wire value, the DB row, and the mobile client stay in lockstep.
+const (
+	AgentDelegationStatusRunning   = "running"
+	AgentDelegationStatusCompleted = "completed"
+	AgentDelegationStatusFailed    = "failed"
+)
+
+// AgentToolStatus values carried on AgentToolPayload.Status. Tool
+// invocations emit "running" on start and "done" on completion.
+const (
+	AgentToolStatusRunning = "running"
+	AgentToolStatusDone    = "done"
+)
+
 // AgentDelegationPayload reports agent-to-agent message activity.
 type AgentDelegationPayload struct {
 	FromAgentID    string `json:"from_agent_id"`
 	ToAgentID      string `json:"to_agent_id"`
 	ConversationID string `json:"conversation_id"`
-	Status         string `json:"status"` // "running", "completed", "failed"
+	// Status is one of AgentDelegationStatus* (running | completed | failed).
+	Status         string `json:"status"`
 	MessagePreview string `json:"message_preview,omitempty"`
 	MessageID      string `json:"message_id,omitempty"`
 }

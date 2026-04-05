@@ -19,6 +19,19 @@ import (
 // Prevents infinite loops: A->B->C->D stops at depth 3.
 const maxAgentDepth = 3
 
+// delegationMessagePreviewMaxRunes caps the preview text attached to
+// the agent.delegation socket event so we never flood a delegation
+// card with a huge prompt body.
+const delegationMessagePreviewMaxRunes = 100
+
+// agentMessageMaxStoredBytes caps the response_text column on the
+// agent_messages row. Longer responses are truncated with a marker.
+const agentMessageMaxStoredBytes = 32768
+
+// agentMessageTruncatedMarker is appended to a response that exceeds
+// agentMessageMaxStoredBytes when stored in the agent_messages row.
+const agentMessageTruncatedMarker = "\n[truncated]"
+
 func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, sendMessageOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input sendMessageInput) (*sdkmcp.CallToolResult, sendMessageOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -118,7 +131,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			Pair("to_agent_id", targetAgent.ID).
 			Pair("to_agent_slug", targetAgent.Slug).
 			Pair("request_text", input.Message).
-			Pair("status", "running").
+			Pair("status", realtime.AgentDelegationStatusRunning).
 			Pair("depth", newDepth).
 			ExecContext(ctx)
 		if err != nil {
@@ -134,11 +147,11 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 				FromAgentID:    fromAgentID,
 				ToAgentID:      targetAgent.ID,
 				ConversationID: input.ConversationID,
-				Status:         "running",
-				MessagePreview: truncateStr(input.Message, 100),
+				Status:         realtime.AgentDelegationStatusRunning,
+				MessagePreview: truncateStr(input.Message, delegationMessagePreviewMaxRunes),
 				MessageID:      msgID,
 			})
-			deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, targetAgent.ID, "thinking", input.ConversationID)
+			deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, targetAgent.ID, string(orchestrator.AgentStatusThinking), input.ConversationID)
 		}
 
 		// 5. Ensure runtime is ready and call the agent runtime.
@@ -165,7 +178,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		if rErr != nil {
 			duration := time.Since(startTime).Milliseconds()
 			updateAgentMessageFailed(ctx, sess, msgID, rErr.Error(), duration)
-			emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, "failed")
+			emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
 			return nil, sendMessageOutput{
 				AgentSlug: input.AgentSlug,
 				Error:     "runtime not ready: " + rErr.Error(),
@@ -186,7 +199,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		// 6. Update agent_messages row and handle result.
 		if callErr != nil {
 			updateAgentMessageFailed(ctx, sess, msgID, callErr.Error(), duration)
-			emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, "failed")
+			emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
 			return nil, sendMessageOutput{
 				AgentSlug: input.AgentSlug,
 				Error:     callErr.Error(),
@@ -204,14 +217,14 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 		responseText := sb.String()
 
-		// Truncate for storage (32KB max).
+		// Cap the stored response to the agent_messages column budget.
 		storedText := responseText
-		if len(storedText) > 32768 {
-			storedText = storedText[:32768] + "\n[truncated]"
+		if len(storedText) > agentMessageMaxStoredBytes {
+			storedText = storedText[:agentMessageMaxStoredBytes] + agentMessageTruncatedMarker
 		}
 
 		_, _ = sess.Update("agent_messages").
-			Set("status", "completed").
+			Set("status", realtime.AgentDelegationStatusCompleted).
 			Set("response_text", storedText).
 			Set("duration_ms", duration).
 			Set("completed_at", time.Now().UTC()).
@@ -219,7 +232,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			ExecContext(ctx)
 
 		// 7. Clear agent status and emit completion.
-		emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, "completed")
+		emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, realtime.AgentDelegationStatusCompleted)
 
 		deps.Logger.Info("send_message_to_agent: completed",
 			"from_slug", fromAgentSlug,
@@ -285,7 +298,7 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 // updateAgentMessageFailed marks an agent_messages row as failed.
 func updateAgentMessageFailed(ctx context.Context, sess *dbr.Session, msgID, errMsg string, durationMs int64) {
 	_, _ = sess.Update("agent_messages").
-		Set("status", "failed").
+		Set("status", realtime.AgentDelegationStatusFailed).
 		Set("error_message", errMsg).
 		Set("duration_ms", durationMs).
 		Set("completed_at", time.Now().UTC()).
@@ -306,7 +319,7 @@ func emitDelegationDone(ctx context.Context, deps *Deps, workspaceID, fromAgentI
 	if deps.Broadcaster == nil {
 		return
 	}
-	deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, toAgentID, "online", conversationID)
+	deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, toAgentID, string(orchestrator.AgentStatusOnline), conversationID)
 	deps.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
 		FromAgentID:    fromAgentID,
 		ToAgentID:      toAgentID,

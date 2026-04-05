@@ -362,7 +362,7 @@ func (s *service) callAgentStreaming(
 			FromAgentID:    agent.ID,
 			ToAgentID:      subAgent.ID,
 			ConversationID: conversation.ID,
-			Status:         "running",
+			Status:         realtime.AgentDelegationStatusRunning,
 			MessageID:      subPlaceholder.ID,
 		})
 
@@ -425,7 +425,7 @@ func (s *service) callAgentStreaming(
 				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
 				Tool:           chunk.Tool,
-				Status:         "running",
+				Status:         realtime.AgentToolStatusRunning,
 				Query:          chunk.Args,
 			})
 
@@ -745,7 +745,7 @@ func (s *service) recordDelegation(ctx context.Context, sess *dbr.Session, works
 		Pair("delegator_agent_id", delegatorAgentID).
 		Pair("delegate_agent_id", delegateAgentID).
 		Pair("task_summary", taskSummary).
-		Pair("status", "running").
+		Pair("status", realtime.AgentDelegationStatusRunning).
 		ExecContext(auditCtx)
 }
 
@@ -755,11 +755,11 @@ func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, 
 	defer cancel()
 	sess := s.db.NewSession(nil)
 	_, _ = sess.Update("agent_delegations").
-		Set("status", "completed").
+		Set("status", realtime.AgentDelegationStatusCompleted).
 		Set("completed_at", time.Now().UTC()).
 		Set("duration_ms", dbr.Expr("EXTRACT(EPOCH FROM (NOW() - created_at))::INTEGER * 1000")).
-		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = 'running'",
-			triggerMsgID, delegateAgentID).
+		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = ?",
+			triggerMsgID, delegateAgentID, realtime.AgentDelegationStatusRunning).
 		ExecContext(auditCtx)
 }
 
