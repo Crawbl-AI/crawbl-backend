@@ -101,6 +101,76 @@ func CalculateForRepo(repoPath string) (Result, error) {
 	return Result{Tag: tag, LastTag: lastTag, Bump: bump}, nil
 }
 
+// CalculateForPrefix determines the next semantic version for tags with the
+// given prefix (e.g. "agent-runtime/" → matches "agent-runtime/v*" tags).
+// The returned Tag includes the prefix. Falls back to <prefix>v0.1.0 if
+// no matching tags exist.
+func CalculateForPrefix(prefix string) (Result, error) {
+	pattern := prefix + "v*"
+	lastTag := ""
+	describeCmd := gitCmd("", "describe", "--tags", "--abbrev=0", "--match", pattern)
+	if output, err := describeCmd.Output(); err == nil {
+		lastTag = strings.TrimSpace(string(output))
+	}
+
+	if lastTag == "" {
+		// No existing tags for this prefix — start at v0.1.0.
+		tag := prefix + "v0.1.0"
+		return Result{Tag: tag, LastTag: "", Bump: "minor"}, nil
+	}
+
+	// Strip prefix to get the bare version string.
+	bare := strings.TrimPrefix(lastTag, prefix)
+	v, err := semver.Parse(strings.TrimPrefix(bare, "v"))
+	if err != nil {
+		return Result{}, fmt.Errorf("invalid tag %s: %w", lastTag, err)
+	}
+
+	// Get commit messages since last tag.
+	logCmd := gitCmd("", "log", lastTag+"..HEAD", "--pretty=format:%s")
+	logOutput, _ := logCmd.Output()
+
+	bump := "patch"
+	if len(logOutput) > 0 {
+		for _, line := range strings.Split(string(logOutput), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			if breakingRe.MatchString(line) {
+				bump = "major"
+				break
+			}
+			if featRe.MatchString(line) && bump != "major" {
+				bump = "minor"
+			}
+		}
+	}
+
+	switch bump {
+	case "major":
+		v.Major++
+		v.Minor = 0
+		v.Patch = 0
+	case "minor":
+		v.Minor++
+		v.Patch = 0
+	default:
+		v.Patch++
+	}
+	v.Pre = nil
+	v.Build = nil
+
+	tag := prefix + "v" + v.String()
+
+	for tagExistsOnRemote("", tag) {
+		v.Patch++
+		tag = prefix + "v" + v.String()
+	}
+
+	return Result{Tag: tag, LastTag: lastTag, Bump: bump}, nil
+}
+
 // tagExistsOnRemote checks if a tag exists on the remote.
 func tagExistsOnRemote(repoPath, tag string) bool {
 	cmd := gitCmd(repoPath, "ls-remote", "--tags", "origin", "refs/tags/"+tag)

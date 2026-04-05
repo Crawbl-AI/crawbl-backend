@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -226,7 +227,10 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tag = resolved.Tag
+			// Git tag is prefixed (agent-runtime/v0.1.0), Docker tag is bare (v0.1.0).
+			gitTag := resolved.Tag
+			imageTag := strings.TrimPrefix(gitTag, "agent-runtime/")
+			tag = imageTag
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -262,7 +266,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: "Crawbl-AI/crawbl-backend",
-				Tag:      tag,
+				Tag:      gitTag,
 				PrevTag:  resolved.PrevTag,
 			})
 		},
@@ -295,7 +299,7 @@ func newDeployDocsCommand() *cobra.Command {
 				return err
 			}
 
-			resolved, err := resolveDeployTag(tag, false, docsDir)
+			resolved, err := resolveDeployTagForRepo(tag, false, docsDir)
 			if err != nil {
 				return err
 			}
@@ -345,7 +349,7 @@ func newDeployWebsiteCommand() *cobra.Command {
 				return err
 			}
 
-			resolved, err := resolveDeployTag(tag, false, websiteDir)
+			resolved, err := resolveDeployTagForRepo(tag, false, websiteDir)
 			if err != nil {
 				return err
 			}
