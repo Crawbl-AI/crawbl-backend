@@ -59,7 +59,23 @@ func main() {
 		"openai_model", cfg.OpenAI.ModelName,
 	)
 
-	// Step 2: LLM adapter.
+	// Step 2a: fetch workspace blueprint (Phase 1: hardcoded default,
+	// real HTTP fetch lands in Phase 2). Done before any heavy init so
+	// a blueprint fetch failure fails fast before we burn time on the
+	// LLM adapter + MCP dial.
+	bpCtx, bpCancel := context.WithTimeout(context.Background(), cfg.Startup.BlueprintFetchTimeout)
+	blueprint, err := runner.FetchBlueprint(bpCtx, cfg, logger)
+	bpCancel()
+	if err != nil {
+		logger.Error("fetch workspace blueprint", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("workspace blueprint loaded", "workspace_id", blueprint.WorkspaceID, "agent_count", len(blueprint.Agents))
+	for _, a := range blueprint.Agents {
+		logger.Info("blueprint agent", "slug", a.Slug, "role", a.Role, "allowed_tools", a.AllowedTools)
+	}
+
+	// Step 2b: LLM adapter.
 	llm, err := model.NewFromConfig(cfg)
 	if err != nil {
 		logger.Error("init model adapter", "error", err)
