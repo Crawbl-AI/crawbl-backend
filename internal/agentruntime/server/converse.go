@@ -182,30 +182,42 @@ func (h *converseHandler) runOneTurn(
 		// and all ChunkEvents precede the terminal DoneEvent (we
 		// synthesize Done ourselves after the iterator finishes).
 		if event.LLMResponse.Content != nil {
-			for _, part := range event.LLMResponse.Content.Parts {
-				if part != nil && part.FunctionCall != nil && part.FunctionCall.Name != "" {
-					state.toolCalls = append(state.toolCalls, part.FunctionCall.Name)
-					h.logger.Info("agent tool invoked",
-						"workspace_id", principal.Object,
-						"session_id", sessionID,
-						"agent", event.Author,
-						"tool", part.FunctionCall.Name,
-						"args_preview", previewMap(part.FunctionCall.Args, 120),
-					)
-				}
-				ce := translatePart(event.Author, part, event.Partial)
-				if ce == nil {
-					continue
-				}
-				if sendErr := stream.Send(ce); sendErr != nil {
-					return sendErr
+			// ADK sends content in two phases:
+			//   1. Partial events (Partial=true) — streaming token-by-token.
+			//   2. Final event (IsFinalResponse=true, Partial=false) — replays
+			//      the complete text. We must NOT send these as ChunkEvents
+			//      again or the orchestrator accumulates the text twice.
+			//
+			// Strategy: stream ChunkEvents only for partial events. For the
+			// final event, only capture the aggregated Turn for DoneEvent.
+			isFinal := event.IsFinalResponse()
+
+			if !isFinal {
+				// Partial event — stream each part to the client.
+				for _, part := range event.LLMResponse.Content.Parts {
+					if part != nil && part.FunctionCall != nil && part.FunctionCall.Name != "" {
+						state.toolCalls = append(state.toolCalls, part.FunctionCall.Name)
+						h.logger.Info("agent tool invoked",
+							"workspace_id", principal.Object,
+							"session_id", sessionID,
+							"agent", event.Author,
+							"tool", part.FunctionCall.Name,
+							"args_preview", previewMap(part.FunctionCall.Args, 120),
+						)
+					}
+					ce := translatePart(event.Author, part, event.Partial)
+					if ce == nil {
+						continue
+					}
+					if sendErr := stream.Send(ce); sendErr != nil {
+						return sendErr
+					}
 				}
 			}
-			// If this event is the agent's final (non-partial) response
-			// for this turn, capture it as a Turn for the DoneEvent
-			// aggregation. ADK IsFinalResponse() returns true only for
-			// the authoritative "model's final answer" event.
-			if event.IsFinalResponse() && event.LLMResponse.Content != nil {
+
+			// Final event — capture as Turn for DoneEvent aggregation.
+			// Do NOT re-send parts as chunks (they were already streamed).
+			if isFinal {
 				text := concatPartText(event.LLMResponse.Content)
 				if strings.TrimSpace(text) == "" {
 					continue
