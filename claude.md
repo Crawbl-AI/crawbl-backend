@@ -91,7 +91,7 @@ The backend sits between the Flutter app and each user's agent runtime. It owns 
 ## MVP Focus
 
 1. Auth and user provisioning
-2. the agent runtime request proxy
+2. Agent runtime request proxy
 3. Gmail and Google Calendar adapters
 4. Hosted LLM provider integration
 5. Read-first integrations, then ask-before-write flows
