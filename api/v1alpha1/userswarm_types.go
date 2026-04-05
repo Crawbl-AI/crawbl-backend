@@ -1,23 +1,38 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
+	// DefaultRuntimeNamespace is the shared namespace every workspace
+	// runtime pod is scheduled into when Spec.Placement.RuntimeNamespace
+	// is unset.
 	DefaultRuntimeNamespace = "userswarms"
-	DefaultGatewayPort      = 42617
-	DefaultRuntimeMode      = "daemon"
+
+	// DefaultGatewayPort is the gRPC listen port baked into every
+	// crawbl-agent-runtime pod. Bumped from the legacy ZeroClaw HTTP port
+	// 42617 when the wire protocol switched to gRPC in Phase 2B.
+	DefaultGatewayPort = 42618
+
+	// DefaultRuntimeMode is historical — the agent runtime binary no
+	// longer takes a mode argument. Retained as a non-empty default so
+	// existing CRs with Spec.Runtime.Mode set continue to round-trip.
+	DefaultRuntimeMode = "daemon"
 )
 
-// UserSwarmSpec describes the desired state for a single user's ZeroClaw runtime.
+// UserSwarmSpec describes the desired state for a single user's agent
+// runtime. Storage has been removed (the runtime is stateless and emptyDir
+// backed) and TOMLOverrides is gone (no more TOML merge step — configuration
+// flows through CLI flags and the envSecretRef Secret).
 type UserSwarmSpec struct {
 	UserID    string                 `json:"userId"`
 	Placement UserSwarmPlacementSpec `json:"placement,omitempty"`
 	Runtime   UserSwarmRuntimeSpec   `json:"runtime"`
-	Storage   UserSwarmStorageSpec   `json:"storage"`
 	Config    UserSwarmConfigSpec    `json:"config,omitempty"`
 	Suspend   bool                   `json:"suspend,omitempty"`
 }
@@ -34,18 +49,17 @@ type UserSwarmRuntimeSpec struct {
 	Resources           corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-type UserSwarmStorageSpec struct {
-	Size             string `json:"size"`
-	StorageClassName string `json:"storageClassName,omitempty"`
-}
-
+// UserSwarmConfigSpec holds per-workspace runtime configuration. The
+// Raw field is a typed JSON escape hatch the webhook may inject into
+// the runtime pod verbatim when operators need to set a knob the
+// structured fields do not yet cover.
 type UserSwarmConfigSpec struct {
-	DefaultProvider    string                                `json:"defaultProvider,omitempty"`
-	DefaultModel       string                                `json:"defaultModel,omitempty"`
-	DefaultTemperature *float64                              `json:"defaultTemperature,omitempty"`
-	TOMLOverrides      string                                `json:"tomlOverrides,omitempty"`
-	EnvSecretRef       *UserSwarmSecretRef                   `json:"envSecretRef,omitempty"`
-	Agents             map[string]UserSwarmAgentConfigSpec    `json:"agents,omitempty"`
+	DefaultProvider    string                              `json:"defaultProvider,omitempty"`
+	DefaultModel       string                              `json:"defaultModel,omitempty"`
+	DefaultTemperature *float64                            `json:"defaultTemperature,omitempty"`
+	EnvSecretRef       *UserSwarmSecretRef                 `json:"envSecretRef,omitempty"`
+	Agents             map[string]UserSwarmAgentConfigSpec `json:"agents,omitempty"`
+	Raw                *json.RawMessage                    `json:"raw,omitempty"`
 }
 
 // UserSwarmAgentConfigSpec holds per-agent configuration overrides.
@@ -141,7 +155,6 @@ func (in *UserSwarmSpec) DeepCopyInto(out *UserSwarmSpec) {
 	*out = *in
 	out.Placement = in.Placement
 	in.Runtime.DeepCopyInto(&out.Runtime)
-	out.Storage = in.Storage
 	in.Config.DeepCopyInto(&out.Config)
 }
 
@@ -166,6 +179,11 @@ func (in *UserSwarmConfigSpec) DeepCopyInto(out *UserSwarmConfigSpec) {
 			val.DeepCopyInto(&outVal)
 			out.Agents[key] = outVal
 		}
+	}
+	if in.Raw != nil {
+		raw := make(json.RawMessage, len(*in.Raw))
+		copy(raw, *in.Raw)
+		out.Raw = &raw
 	}
 }
 

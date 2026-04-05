@@ -198,8 +198,6 @@ func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
 			RuntimeNamespace:    envOrDefault("CRAWBL_RUNTIME_NAMESPACE", userswarmclient.DefaultRuntimeNamespace),
 			Image:               strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE")),
 			ImagePullSecretName: strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE_PULL_SECRET")),
-			StorageSize:         envOrDefault("CRAWBL_RUNTIME_STORAGE_SIZE", userswarmclient.DefaultRuntimeStorageSize),
-			StorageClassName:    strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_STORAGE_CLASS_NAME")),
 			DefaultProvider:     envOrDefault("CRAWBL_RUNTIME_DEFAULT_PROVIDER", "openai"),
 			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-5-mini"),
 			EnvSecretName:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_ENV_SECRET_NAME")),

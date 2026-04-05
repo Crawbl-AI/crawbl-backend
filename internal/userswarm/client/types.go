@@ -118,12 +118,6 @@ const (
 	// every workspace pod is scheduled.
 	DefaultRuntimeNamespace = "userswarms"
 
-	// DefaultRuntimeStorageSize is retained until US-P2-006 removes the
-	// Spec.Storage fields from the UserSwarm CRD. The runtime itself no
-	// longer mounts a PVC, but the CRD still accepts the field during
-	// the Phase 2B transition.
-	DefaultRuntimeStorageSize = "2Gi"
-
 	// DefaultRuntimePort is the TCP port that crawbl-agent-runtime binds
 	// its gRPC server to inside the pod. 42618 replaces the legacy
 	// 42617 used by the HTTP webhook during the ZeroClaw era.
@@ -181,12 +175,6 @@ type UserSwarmConfig struct {
 	// ImagePullSecretName is the Kubernetes Secret that grants nodes
 	// permission to pull the agent-runtime image from DOCR.
 	ImagePullSecretName string
-
-	// StorageSize and StorageClassName are retained until US-P2-006
-	// removes Spec.Storage from the CRD. The runtime itself no longer
-	// uses PVCs — these fields are harmless no-ops at this commit.
-	StorageSize      string
-	StorageClassName string
 
 	// DefaultProvider is the LLM provider slug ("openai", "anthropic")
 	// injected into each new workspace's runtime config.

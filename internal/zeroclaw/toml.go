@@ -18,7 +18,6 @@ import (
 	"github.com/BurntSushi/toml"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/fileutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -143,12 +142,9 @@ func BuildConfigTOML(sw *crawblv1alpha1.UserSwarm, zc *ZeroClawConfig, mcpCfg ..
 		}
 	}
 
-	// Step 4: Apply raw TOML overrides (escape hatch for anything not in the spec).
-	if err := fileutil.ApplyTOMLOverrides(&cfg, sw.Spec.Config.TOMLOverrides); err != nil {
-		return "", err
-	}
-
-	// Step 5: Encode as TOML.
+	// Step 4: Encode as TOML. The TOMLOverrides escape hatch was removed
+	// along with the CRD field in US-P2-006 — the whole zeroclaw TOML
+	// path is scheduled for deletion in US-P2-008.
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
 		return "", fmt.Errorf("encode zeroclaw bootstrap config: %w", err)

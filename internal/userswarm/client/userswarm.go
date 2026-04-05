@@ -73,9 +73,6 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 	if strings.TrimSpace(userswarmCfg.RuntimeNamespace) == "" {
 		userswarmCfg.RuntimeNamespace = DefaultRuntimeNamespace
 	}
-	if strings.TrimSpace(userswarmCfg.StorageSize) == "" {
-		userswarmCfg.StorageSize = DefaultRuntimeStorageSize
-	}
 	if userswarmCfg.PollTimeout <= 0 {
 		userswarmCfg.PollTimeout = DefaultPollTimeout
 	}
@@ -210,10 +207,9 @@ func (c *userSwarmClient) getRuntimeState(ctx context.Context, swarmName string)
 // workspace. EnsureRuntime diffs this against the actual CR to decide
 // whether to create or update.
 //
-// No TOML override is injected — the agent-runtime pod reads its config
-// from a structured ConfigMap (US-P2-005) rather than a TOML merge path.
-// The Spec.Config.TOMLOverrides field still exists on the CRD (removed
-// in US-P2-006) but this function leaves it empty.
+// The agent-runtime pod reads all of its configuration from CLI flags
+// injected by the webhook plus the envSecretRef Secret — there is no
+// TOML merge step, no ConfigMap, and no Raw escape hatch populated here.
 func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRuntimeOpts) *crawblv1alpha1.UserSwarm {
 	name := userswarmName(opts.WorkspaceID)
 
@@ -239,10 +235,6 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 				Mode:                crawblv1alpha1.DefaultRuntimeMode,
 				Port:                c.config.Port,
 				ImagePullSecretName: c.config.ImagePullSecretName,
-			},
-			Storage: crawblv1alpha1.UserSwarmStorageSpec{
-				Size:             c.config.StorageSize,
-				StorageClassName: c.config.StorageClassName,
 			},
 			Config: crawblv1alpha1.UserSwarmConfigSpec{
 				DefaultProvider: c.config.DefaultProvider,
