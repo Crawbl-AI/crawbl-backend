@@ -21,6 +21,12 @@ var integrationsJSON []byte
 //go:embed integration_categories.json
 var integrationCategoriesJSON []byte
 
+//go:embed tools.json
+var toolsJSON []byte
+
+//go:embed tool_categories.json
+var toolCategoriesJSON []byte
+
 // AgentEntry defines a default agent blueprint.
 type AgentEntry struct {
 	Name         string   `json:"name"`
@@ -29,6 +35,27 @@ type AgentEntry struct {
 	SystemPrompt string   `json:"system_prompt"`
 	Description  string   `json:"description"`
 	AllowedTools []string `json:"allowed_tools"`
+}
+
+// ToolEntry defines a single tool in the agent capability catalog.
+// Implemented tracks whether the runtime actually has a working
+// binding for the tool — mobile / API consumers must filter on this
+// flag (or use ImplementedTools()) so users never see "coming soon"
+// tools as if they were usable today.
+type ToolEntry struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	IconURL     string `json:"icon_url"`
+	Implemented bool   `json:"implemented"`
+}
+
+// ToolCategoryEntry is the display metadata for a tool category.
+type ToolCategoryEntry struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ImageURL string `json:"image_url"`
 }
 
 // ModelEntry describes an available LLM model.
@@ -60,6 +87,8 @@ var (
 	models                []ModelEntry
 	integrations          []IntegrationEntry
 	integrationCategories []IntegrationCategoryEntry
+	tools                 []ToolEntry
+	toolCategories        []ToolCategoryEntry
 )
 
 func init() {
@@ -67,6 +96,8 @@ func init() {
 	mustParse(modelsJSON, &models, "models.json")
 	mustParse(integrationsJSON, &integrations, "integrations.json")
 	mustParse(integrationCategoriesJSON, &integrationCategories, "integration_categories.json")
+	mustParse(toolsJSON, &tools, "tools.json")
+	mustParse(toolCategoriesJSON, &toolCategories, "tool_categories.json")
 }
 
 func mustParse(data []byte, target any, name string) {
@@ -86,4 +117,29 @@ func IntegrationProviders() []IntegrationEntry { return integrations }
 
 // IntegrationCategories returns display metadata for integration categories.
 func IntegrationCategories() []IntegrationCategoryEntry { return integrationCategories }
+
+// DefaultTools returns the complete tool catalog, including entries
+// flagged as not yet implemented. Use this for seeding the tools
+// table (where the roadmap lives) or for docs / planning. API
+// handlers and user-facing code should prefer ImplementedTools.
+func DefaultTools() []ToolEntry { return tools }
+
+// ImplementedTools returns only the subset of tools that the runtime
+// can actually invoke today. This is the list the /v1/integrations
+// endpoint surfaces so the mobile app never shows a tool the agent
+// cannot use.
+func ImplementedTools() []ToolEntry {
+	out := make([]ToolEntry, 0, len(tools))
+	for _, t := range tools {
+		if t.Implemented {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// ToolCategoriesList returns the display metadata for every tool
+// category. Named -List to avoid colliding with the orchestrator's
+// integration-category accessor.
+func ToolCategoriesList() []ToolCategoryEntry { return toolCategories }
 

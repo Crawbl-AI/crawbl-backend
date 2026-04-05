@@ -1,34 +1,35 @@
 // Package tools defines the agent tool catalog for the crawbl-agent-runtime.
 //
-// This file is the SINGLE SOURCE OF TRUTH for tool metadata (name,
-// display name, description, category, icon) in the new runtime. It is a
-// direct migration of the legacy internal/agentruntime/tools/catalog.go catalog —
-// every entry preserves the exact tool name and category so the mobile
-// app's `/v1/integrations` response and the agent's tool auto-approval
-// list continue to work unchanged across the Phase 2 atomic swap.
+// Catalog DATA (names, display names, descriptions, icons, categories,
+// implementation flags) lives in migrations/orchestrator/seed/tools.json
+// and tool_categories.json. This package is a thin Go-typed wrapper
+// over the seed loader so callers can keep using the existing ToolDef
+// shape and helper functions.
 //
 // Implementation lives in subpackages:
 //
-//   - tools/local   — tools executed inside the runtime process (web_fetch,
-//                     web_search, memory_*, cron_*, file_*, calculator,
-//                     weather, shell, etc.). Phase 1 implements web_fetch
-//                     for real; the rest register as stubs that return
-//                     "not implemented" until later stories fill them in.
-//   - tools/mcp     — tools that bridge to the orchestrator's MCP server at
-//                     /mcp/v1 (orchestrator__* prefix). The runtime never
-//                     implements these locally; it forwards every call to
-//                     the orchestrator with an HMAC bearer token.
+//   - tools/local — tools executed inside the runtime process
+//     (web_fetch, web_search_tool, memory_*). Additional local tools
+//     will drop in here as they are implemented.
+//   - tools/mcp   — tools that bridge to the orchestrator's MCP server
+//     at /mcp/v1 (orchestrator__* prefix). The runtime never
+//     implements these locally; it forwards every call to the
+//     orchestrator with an HMAC bearer token.
 //
-// To add a tool, append an entry to defaultCatalog below AND add the
-// local implementation in tools/local/ or register the MCP bridge in
-// tools/mcp/. Changing a tool name is a breaking change for the mobile
-// app — don't do it without updating crawbl-mobile.
+// To add a tool, append an entry to migrations/orchestrator/seed/tools.json
+// with `"implemented": false`, land the implementation in
+// tools/local/ or tools/mcp/, then flip the flag to true. The
+// /v1/integrations endpoint filters on the flag so users never see a
+// "coming soon" tool as if they could call it today.
 package tools
 
-// ToolCategory groups tools by function for display in the mobile app.
-// Values are intentionally the same strings as internal/agentruntime/tools/catalog.go
-// so the `/v1/integrations` API response is byte-compatible across the
-// legacy → crawbl-agent-runtime swap.
+import (
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
+)
+
+// ToolCategory groups tools by function for display in the mobile
+// app. Values are intentionally the same strings the seed file uses
+// so JSON round-trips are byte-compatible.
 type ToolCategory string
 
 const (
@@ -44,104 +45,43 @@ const (
 )
 
 // ToolDef describes a single tool in the agent's capability set.
-// Mirrors internal/agentruntime/tools/catalog.go:ToolDef so the seed path in
-// internal/orchestrator/service/chatservice/bootstrap.go can swap imports
-// without touching the struct shape.
+// Mirrors the legacy shape so every existing caller compiles
+// unchanged after the seed migration.
 type ToolDef struct {
-	// Name is the tool identifier registered with the agent runtime and
-	// used by LLM tool calls. MUST match the legacy the agent runtime tool name.
-	Name string
-	// DisplayName is a human-readable label for the mobile UI.
+	Name        string
 	DisplayName string
-	// Description explains what the tool does in plain English.
 	Description string
-	// Category groups the tool for UI organization.
-	Category ToolCategory
-	// IconURL is a CDN URL for the tool's icon, surfaced in the mobile app.
-	IconURL string
+	Category    ToolCategory
+	IconURL     string
+	// Implemented tracks whether the runtime currently has a working
+	// binding. Callers that surface tools to end users should filter
+	// on this field (or use ImplementedCatalog) so "coming soon"
+	// tools do not appear as invocable.
+	Implemented bool
 }
 
-// defaultCatalog is the full 35-tool catalog. Order here determines display
-// order in the mobile app. Every entry is a byte-for-byte copy from
-// internal/agentruntime/tools/catalog.go:46-107 — do NOT diverge without coordinated
-// mobile + docs updates.
-var defaultCatalog = []ToolDef{
-	// --- Search & Web ---
-	{"web_search_tool", "Web Search", "Search the internet for current information, news, and real-time data", CategorySearch, "https://cdn.crawbl.com/tools/web-search.png"},
-	{"web_fetch", "Web Fetch", "Read and extract content from any webpage URL", CategorySearch, "https://cdn.crawbl.com/tools/web-fetch.png"},
-	{"http_request", "HTTP Request", "Make HTTP API calls to external services", CategorySearch, "https://cdn.crawbl.com/tools/http-request.png"},
-
-	// --- Files ---
-	{"file_read", "Read Files", "Read files from the agent's workspace", CategoryFiles, "https://cdn.crawbl.com/tools/file-read.png"},
-	{"file_write", "Write Files", "Create and write files in the agent's workspace", CategoryFiles, "https://cdn.crawbl.com/tools/file-write.png"},
-	{"file_edit", "Edit Files", "Edit existing files in the agent's workspace", CategoryFiles, "https://cdn.crawbl.com/tools/file-edit.png"},
-	{"glob_search", "File Search", "Search for files by name pattern in the workspace", CategoryFiles, "https://cdn.crawbl.com/tools/glob-search.png"},
-	{"content_search", "Content Search", "Search inside files for specific text or patterns", CategoryFiles, "https://cdn.crawbl.com/tools/content-search.png"},
-
-	// --- Memory ---
-	{"memory_store", "Remember", "Store important information for future conversations", CategoryMemory, "https://cdn.crawbl.com/tools/memory-store.png"},
-	{"memory_recall", "Recall", "Retrieve previously stored information and context", CategoryMemory, "https://cdn.crawbl.com/tools/memory-recall.png"},
-	{"memory_forget", "Forget", "Remove stored information from memory", CategoryMemory, "https://cdn.crawbl.com/tools/memory-forget.png"},
-
-	// --- Scheduling ---
-	{"cron_add", "Schedule Task", "Create scheduled or recurring tasks", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-add.png"},
-	{"cron_list", "List Schedules", "View all scheduled tasks", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-list.png"},
-	{"cron_remove", "Remove Schedule", "Delete a scheduled task", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-remove.png"},
-	{"cron_update", "Update Schedule", "Modify an existing scheduled task", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-update.png"},
-	{"cron_run", "Run Now", "Execute a scheduled task immediately", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-run.png"},
-	{"cron_runs", "Run History", "View execution history for a scheduled task", CategoryScheduling, "https://cdn.crawbl.com/tools/cron-runs.png"},
-
-	// --- Orchestrator MCP: Notifications ---
-	{"orchestrator__send_push_notification", "Push Notification", "Send push notifications to your mobile device", CategoryNotification, "https://cdn.crawbl.com/tools/push-notification.png"},
-
-	// --- Orchestrator MCP: User Context ---
-	{"orchestrator__get_user_profile", "User Profile", "Access your profile information and preferences", CategoryContext, "https://cdn.crawbl.com/tools/user-profile.png"},
-	{"orchestrator__get_workspace_info", "Workspace Info", "Get workspace details and agent list", CategoryContext, "https://cdn.crawbl.com/tools/workspace-info.png"},
-	{"orchestrator__list_conversations", "Conversations", "List all conversations in your workspace", CategoryContext, "https://cdn.crawbl.com/tools/conversations.png"},
-	{"orchestrator__search_past_messages", "Search Messages", "Search through past conversation messages", CategoryContext, "https://cdn.crawbl.com/tools/search-messages.png"},
-
-	// --- Utility ---
-	{"calculator", "Calculator", "Perform mathematical calculations", CategoryUtility, "https://cdn.crawbl.com/tools/calculator.png"},
-	{"weather", "Weather", "Get current weather information for any location", CategoryUtility, "https://cdn.crawbl.com/tools/weather.png"},
-	{"image_info", "Image Info", "Analyze and extract information from images", CategoryUtility, "https://cdn.crawbl.com/tools/image-info.png"},
-	{"shell", "Shell Commands", "Run shell commands in the agent's environment", CategoryShell, "https://cdn.crawbl.com/tools/shell.png"},
-
-	// --- Orchestrator MCP: Agent History ---
-	{"orchestrator__create_agent_history", "Agent History", "Record notable events in an agent's history", CategoryIntegration, "https://cdn.crawbl.com/tools/agent-history.png"},
-
-	// --- Delegation ---
-	{"delegate", "Delegate", "Hand off tasks to specialized sub-agents", CategoryIntegration, "https://cdn.crawbl.com/tools/delegate.png"},
-
-	// --- Orchestrator MCP: Agent Communication (Phase 2) ---
-	{"orchestrator__send_message_to_agent", "Agent Message", "Send messages between agents for collaboration", CategoryIntegration, "https://cdn.crawbl.com/tools/agent-message.png"},
-
-	// --- Orchestrator MCP: Artifacts (Phase 3) ---
-	{"orchestrator__create_artifact", "Create Artifact", "Create a shared document or code artifact", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-create.png"},
-	{"orchestrator__read_artifact", "Read Artifact", "Read a shared artifact created by any agent", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-read.png"},
-	{"orchestrator__update_artifact", "Update Artifact", "Update a shared artifact with a new version", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-update.png"},
-	{"orchestrator__review_artifact", "Review Artifact", "Review and approve or request changes on an artifact", CategoryIntegration, "https://cdn.crawbl.com/tools/artifact-review.png"},
-
-	// --- Orchestrator MCP: Workflows (Phase 4) ---
-	{"orchestrator__create_workflow", "Create Workflow", "Define a multi-step agent workflow", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-create.png"},
-	{"orchestrator__trigger_workflow", "Start Workflow", "Trigger a defined workflow", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-trigger.png"},
-	{"orchestrator__check_workflow_status", "Workflow Status", "Check the status of a running workflow", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-status.png"},
-	{"orchestrator__list_workflows", "List Workflows", "List all available workflows", CategoryIntegration, "https://cdn.crawbl.com/tools/workflow-list.png"},
-}
-
-// DefaultCatalog returns the full tool catalog for API responses and seed
-// code. Callers MUST NOT mutate the returned slice — it is shared with
-// every seed path in the orchestrator. If caller mutation becomes a
-// concern, return a copy here.
+// DefaultCatalog returns the full tool catalog, including entries
+// flagged as not yet implemented. Used for seeding the orchestrator
+// tools table (which holds the full roadmap) and for planning /
+// documentation surfaces.
 func DefaultCatalog() []ToolDef {
-	return defaultCatalog
+	return toDefs(seed.DefaultTools())
+}
+
+// ImplementedCatalog returns only the tools the runtime can actually
+// invoke today. Every user-facing API surface should call this
+// instead of DefaultCatalog.
+func ImplementedCatalog() []ToolDef {
+	return toDefs(seed.ImplementedTools())
 }
 
 // DefaultAutoApproveList returns tool names for the agent autonomy
-// auto-approval set. Derived from the catalog so adding a tool
-// automatically makes it auto-approved.
+// auto-approval set. Only IMPLEMENTED tools are included — there is
+// no value in auto-approving a tool that cannot run.
 func DefaultAutoApproveList() []string {
-	names := make([]string, 0, len(defaultCatalog))
-	for _, t := range defaultCatalog {
+	impl := seed.ImplementedTools()
+	names := make([]string, 0, len(impl))
+	for _, t := range impl {
 		names = append(names, t.Name)
 	}
 	return names
@@ -154,19 +94,34 @@ type CategoryMeta struct {
 	ImageURL string
 }
 
-// ToolCategories returns display metadata for all tool categories. Order
-// and content match agentruntimetools.ToolCategories() so the mobile app's
-// integrations screen continues to render identically.
+// ToolCategories returns display metadata for all tool categories.
+// Order matches the seed file.
 func ToolCategories() []CategoryMeta {
-	return []CategoryMeta{
-		{CategorySearch, "Search", "https://cdn.crawbl.com/categories/search.png"},
-		{CategoryFiles, "Files", "https://cdn.crawbl.com/categories/files.png"},
-		{CategoryMemory, "Memory", "https://cdn.crawbl.com/categories/memory.png"},
-		{CategoryScheduling, "Scheduling", "https://cdn.crawbl.com/categories/scheduling.png"},
-		{CategoryNotification, "Notification", "https://cdn.crawbl.com/categories/notification.png"},
-		{CategoryContext, "Context", "https://cdn.crawbl.com/categories/context.png"},
-		{CategoryUtility, "Utility", "https://cdn.crawbl.com/categories/utility.png"},
-		{CategoryIntegration, "Integration", "https://cdn.crawbl.com/categories/integration.png"},
-		{CategoryShell, "Shell", "https://cdn.crawbl.com/categories/shell.png"},
+	cats := seed.ToolCategoriesList()
+	out := make([]CategoryMeta, 0, len(cats))
+	for _, c := range cats {
+		out = append(out, CategoryMeta{
+			ID:       ToolCategory(c.ID),
+			Name:     c.Name,
+			ImageURL: c.ImageURL,
+		})
 	}
+	return out
+}
+
+// toDefs converts the seed package's ToolEntry slice into the
+// Go-typed ToolDef slice the rest of the codebase expects.
+func toDefs(entries []seed.ToolEntry) []ToolDef {
+	out := make([]ToolDef, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, ToolDef{
+			Name:        e.Name,
+			DisplayName: e.DisplayName,
+			Description: e.Description,
+			Category:    ToolCategory(e.Category),
+			IconURL:     e.IconURL,
+			Implemented: e.Implemented,
+		})
+	}
+	return out
 }

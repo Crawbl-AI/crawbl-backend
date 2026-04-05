@@ -52,8 +52,12 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 			})
 		}
 
-		// Build items: tools first, then integrations.
-		catalog := agentruntimetools.DefaultCatalog()
+		// Build items: tools first, then integrations. Filter to the
+		// implemented subset — users must never see a tool the agent
+		// cannot actually call. Roadmap entries live in the seed file
+		// but stay out of the API response until their implementation
+		// lands and the "implemented" flag flips in tools.json.
+		catalog := agentruntimetools.ImplementedCatalog()
 		itemsList := make([]dto.IntegrationItemResponse, 0, len(catalog)+len(items))
 
 		for _, t := range catalog {
