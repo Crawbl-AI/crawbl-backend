@@ -98,7 +98,7 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 			historyItems = append(historyItems, h)
 		}
 
-		WriteJSON(w, http.StatusOK, dto.AgentHistoryResponse{
+		WriteSuccess(w, http.StatusOK, dto.AgentHistoryResponse{
 			Items: historyItems,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   pagination.Total,
@@ -183,8 +183,8 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 			tools = append(tools, dto.ToAgentToolResponse(t))
 		}
 
-		WriteJSON(w, http.StatusOK, dto.AgentToolsResponse{
-			Data: tools,
+		WriteSuccess(w, http.StatusOK, dto.AgentToolsResponse{
+			Tools: tools,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   page.Pagination.Total,
 				Limit:   page.Pagination.Limit,
@@ -265,8 +265,8 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteJSON(w, http.StatusOK, dto.AgentMemoriesListResponse{
-			Data: items,
+		WriteSuccess(w, http.StatusOK, dto.AgentMemoriesListResponse{
+			Memories: items,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   total,
 				Limit:   limit,

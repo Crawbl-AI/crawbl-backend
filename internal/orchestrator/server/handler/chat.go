@@ -127,7 +127,7 @@ func MessagesList(c *Context) http.HandlerFunc {
 		}
 
 		WriteSuccess(w, http.StatusOK, &dto.MessagesListResponse{
-			Data: response,
+			Messages: response,
 			Pagination: dto.MessagesPaginationResponse{
 				NextScrollID: page.Pagination.NextScrollID,
 				PrevScrollID: page.Pagination.PrevScrollID,

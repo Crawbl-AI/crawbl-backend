@@ -71,7 +71,7 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 			return
 		}
 
-		WriteJSON(w, http.StatusOK, &dto.SavePushTokenResponse{Success: true})
+		WriteSuccess(w, http.StatusOK, &dto.SavePushTokenResponse{Success: true})
 	}
 }
 

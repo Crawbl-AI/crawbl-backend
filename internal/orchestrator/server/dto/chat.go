@@ -153,10 +153,15 @@ type MessagesPaginationResponse struct {
 }
 
 // MessagesListResponse is the paginated response for listing messages.
-// Includes both the message data and pagination cursors for scrolling.
+// Emitted through the WriteSuccess envelope helper, so the final wire
+// shape is {"data": {"messages": [...], "pagination": {...}}} — the
+// outer "data" is the envelope, the inner "messages" is this struct's
+// Messages field. Do NOT rename the field to Data; that produces a
+// {"data": {"data": [...]}} double-envelope the mobile client cannot
+// parse.
 type MessagesListResponse struct {
-	// Data contains the messages for the current page.
-	Data []MessageResponse `json:"data"`
+	// Messages is the list of messages for the current page.
+	Messages []MessageResponse `json:"messages"`
 
 	// Pagination contains the cursors and flags for scrolling through results.
 	Pagination MessagesPaginationResponse `json:"pagination"`

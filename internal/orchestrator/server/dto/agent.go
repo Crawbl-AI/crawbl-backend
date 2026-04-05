@@ -118,9 +118,12 @@ type AgentHistoryResponse struct {
 	Pagination OffsetPaginationResponse   `json:"pagination"`
 }
 
-// AgentToolsResponse is the response envelope for GET /v1/agents/{id}/tools.
+// AgentToolsResponse is the response body for GET /v1/agents/{id}/tools.
+// Emitted through the WriteSuccess envelope helper, so the final wire
+// shape is {"data": {"tools": [...], "pagination": {...}}}.
 type AgentToolsResponse struct {
-	Data       []AgentToolResponse      `json:"data"`
+	// Tools is the list of tools the agent is allowed to invoke.
+	Tools      []AgentToolResponse      `json:"tools"`
 	Pagination OffsetPaginationResponse `json:"pagination"`
 }
 
@@ -180,9 +183,12 @@ type AgentMemoryResponse struct {
 	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
-// AgentMemoriesListResponse is the paginated response for listing agent memories.
+// AgentMemoriesListResponse is the paginated response for listing agent
+// memories. Emitted through the WriteSuccess envelope helper, so the
+// final wire shape is {"data": {"memories": [...], "pagination": {...}}}.
 type AgentMemoriesListResponse struct {
-	Data       []AgentMemoryResponse    `json:"data"`
+	// Memories is the list of memory entries for the current page.
+	Memories   []AgentMemoryResponse    `json:"memories"`
 	Pagination OffsetPaginationResponse `json:"pagination"`
 }
 
