@@ -674,12 +674,18 @@ func (s *service) callAgentStreaming(
 		}
 	}
 
-	// Issue 1: Safety sweep — clear all sub-agent statuses to online.
-	// Guards against race conditions in Go map iteration order leaving a
-	// sub-agent (e.g. Wally) stuck in "writing" status on the client.
+	// Safety sweep: clear all sub-agent statuses to online and emit
+	// delegation completion for each sub-agent that participated.
 	for _, st := range streams {
 		if st.agent.ID != agent.ID {
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
+				FromAgentID:    agent.ID,
+				ToAgentID:      st.agent.ID,
+				ConversationID: conversation.ID,
+				Status:         realtime.AgentDelegationStatusCompleted,
+				MessageID:      st.placeholder.ID,
+			})
 		}
 	}
 
