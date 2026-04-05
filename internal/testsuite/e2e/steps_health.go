@@ -18,7 +18,7 @@ func (tc *testContext) serviceShouldReportOnline() error {
 	if err := tc.assertStatus(200); err != nil {
 		return err
 	}
-	return tc.assertJSONEquals("data.status", "online")
+	return tc.assertJSONEquals("data.online", "true")
 }
 
 func (tc *testContext) guestReadsPublicLegalDocuments() error {

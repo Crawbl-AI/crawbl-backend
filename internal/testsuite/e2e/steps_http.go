@@ -80,10 +80,9 @@ func (tc *testContext) sendWithBody(method, alias, path, jsonBody string) error 
 func (tc *testContext) executeRequest(req *http.Request) error {
 	resp, err := tc.http.Do(req)
 	if err != nil {
-		// Timeouts are not fatal — store status 0 and let assertions handle it.
 		tc.lastStatus = 0
 		tc.lastBody = nil
-		return nil
+		return fmt.Errorf("request %s %s failed: %w", req.Method, req.URL.Path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
