@@ -1,6 +1,6 @@
 // Package e2e — user lifecycle step definitions.
 // All 3 test users (primary, frank, grace) are pre-created at suite level.
-// No dynamic user creation — prevents UserSwarm explosion.
+// No dynamic user creation — prevents runtime instance explosion.
 package e2e
 
 import (

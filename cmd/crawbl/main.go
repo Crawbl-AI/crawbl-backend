@@ -1,6 +1,6 @@
 // Package main is the unified Crawbl platform binary.
 // It contains all runtime subcommands under "platform" (orchestrator,
-// userswarm) and local CLI tooling (app, infra, test).
+// agent runtime) and local CLI tooling (app, infra, test).
 // One binary, one image, different entrypoints per K8s workload.
 package main
 

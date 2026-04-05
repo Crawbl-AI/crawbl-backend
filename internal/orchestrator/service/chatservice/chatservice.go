@@ -6,7 +6,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // New creates a new ChatService with the provided dependencies.
@@ -21,7 +21,7 @@ func New(
 	agentSettingsRepo agentSettingsRepo,
 	agentPromptsRepo agentPromptsRepo,
 	agentHistoryRepo agentHistoryRepo,
-	runtimeClient userswarmclient.Client,
+	runtimeClient agentclient.Client,
 	broadcaster realtime.Broadcaster,
 ) orchestratorservice.ChatService {
 	if db == nil {

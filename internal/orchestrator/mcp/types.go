@@ -1,11 +1,11 @@
 // Package mcp provides the MCP (Model Context Protocol) server for the Crawbl orchestrator.
 //
-// ZeroClaw agent runtimes connect to this server as MCP clients to access
+// Agent runtimes connect to this server as MCP clients to access
 // platform capabilities: push notifications, user context, and (future) OAuth
 // integrations. The server is embedded in the orchestrator at /mcp/v1.
 //
 // Security model:
-//   - Each ZeroClaw pod gets an HMAC-signed bearer token at provisioning time.
+//   - Each agent runtime gets an HMAC-signed bearer token at provisioning time.
 //   - The token encodes userID:workspaceID and is validated on every request.
 //   - Tool handlers can only access data for the authenticated user.
 //   - OAuth tokens for integrations are stored server-side; agents never see them.
@@ -24,7 +24,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // WorkflowExecutor is the interface the MCP layer needs from the workflow service.
@@ -55,7 +55,7 @@ type Deps struct {
 	ArtifactRepo     artifactrepo.Repo
 	SigningKey        string
 	FCM              *firebase.FCMClient    // nil = push notifications disabled
-	RuntimeClient    userswarmclient.Client // nil = agent messaging disabled
+	RuntimeClient    agentclient.Client // nil = agent messaging disabled
 	Broadcaster      realtime.Broadcaster   // nil = no real-time events
 	WorkflowRepo     workflowrepo.Repo      // nil = workflow tools disabled
 	WorkflowService  WorkflowExecutor       // nil = workflow execution disabled
@@ -69,7 +69,7 @@ type Config struct {
 	FCMProjectID string
 	// FCMServiceAccountPath is the path to the Firebase service account JSON.
 	FCMServiceAccountPath string
-	// Endpoint is the full URL ZeroClaw pods use to reach this MCP server.
+	// Endpoint is the full URL agent runtimes use to reach this MCP server.
 	// Example: http://orchestrator.backend.svc.cluster.local:7171/mcp/v1
 	Endpoint string
 }

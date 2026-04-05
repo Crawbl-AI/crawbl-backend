@@ -6,8 +6,8 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agent"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
-	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // IntegrationsList returns both agent tools and third-party integrations
@@ -33,8 +33,8 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Build categories by merging tool categories (zeroclaw) and integration categories (orchestrator).
-		toolCats := zeroclaw.ToolCategories()
+		// Build categories by merging tool categories (agent) and integration categories (orchestrator).
+		toolCats := agent.ToolCategories()
 		appCats := orchestrator.IntegrationCategories()
 		categories := make([]dto.CategoryResponse, 0, len(toolCats)+len(appCats))
 		for _, cat := range toolCats {
@@ -53,7 +53,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 		}
 
 		// Build items: tools first, then integrations.
-		catalog := zeroclaw.DefaultToolCatalog()
+		catalog := agent.DefaultToolCatalog()
 		itemsList := make([]dto.IntegrationItemResponse, 0, len(catalog)+len(items))
 
 		for _, t := range catalog {

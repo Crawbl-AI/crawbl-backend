@@ -113,7 +113,7 @@ func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pu
 // createAWSBackupResources creates all AWS resources for PVC backups:
 // S3 bucket, IAM user with scoped credentials, and Secrets Manager entries.
 func createAWSBackupResources(ctx *pulumi.Context, cfg Config, opts ...pulumi.ResourceOption) error {
-	// S3 backup bucket — stores PVC backups from ZeroClaw swarm pods.
+	// S3 backup bucket — stores PVC backups from agent runtime pods.
 	// Path convention: s3://crawbl-backups/{env}/swarms/{userId}/{swarmName}/hourly|final/
 	bucket, err := createBackupBucket(ctx, cfg, opts...)
 	if err != nil {

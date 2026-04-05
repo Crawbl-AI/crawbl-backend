@@ -12,7 +12,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // maxAgentDepth is the maximum depth for agent-to-agent chains.
@@ -141,8 +141,8 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, targetAgent.ID, "thinking", input.ConversationID)
 		}
 
-		// 5. Ensure runtime is ready and call ZeroClaw.
-		RecordAPICall(ctx, "ZEROCLAW:POST /webhook")
+		// 5. Ensure runtime is ready and call agent runtime.
+		RecordAPICall(ctx, "AGENT:POST /webhook")
 		startTime := time.Now()
 
 		// Build conversation context to inject.
@@ -157,7 +157,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 
 		// Ensure the runtime is verified before calling.
-		runtimeState, rErr := deps.RuntimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		runtimeState, rErr := deps.RuntimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
 			UserID:          userID,
 			WorkspaceID:     workspaceID,
 			WaitForVerified: true,
@@ -173,8 +173,8 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			}, nil
 		}
 
-		// Call ZeroClaw pod via runtime client (synchronous SendText).
-		turns, callErr := deps.RuntimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
+		// Call agent runtime via runtime client (synchronous SendText).
+		turns, callErr := deps.RuntimeClient.SendText(ctx, &agentclient.SendTextOpts{
 			Runtime:   runtimeState,
 			Message:   fullMessage,
 			SessionID: input.ConversationID,

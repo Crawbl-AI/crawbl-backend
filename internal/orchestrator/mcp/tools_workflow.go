@@ -10,7 +10,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 			return nil, triggerWorkflowOutput{Info: "runtime client not configured"}, nil
 		}
 
-		runtime, mErr := deps.RuntimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		runtime, mErr := deps.RuntimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
 			UserID:          userID,
 			WorkspaceID:     workspaceID,
 			WaitForVerified: true,

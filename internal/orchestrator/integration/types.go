@@ -14,7 +14,7 @@
 // Security:
 //   - Tokens are encrypted at rest using AES-256-GCM
 //   - Encryption key is stored in AWS Secrets Manager, not in code
-//   - Tokens are never exposed to ZeroClaw pods or MCP responses
+//   - Tokens are never exposed to agent runtime pods or MCP responses
 //   - Each token is scoped to a single user+workspace+provider
 package integration
 

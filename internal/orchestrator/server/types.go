@@ -8,7 +8,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -68,9 +68,9 @@ type NewServerOpts struct {
 	// If nil, Socket.IO is not mounted and the server is HTTP-only.
 	SocketIOHandler http.Handler
 
-	// RuntimeClient manages UserSwarm CRs for workspace provisioning and cleanup.
-	// Used by the delete handler to remove swarms when a user is deleted.
-	RuntimeClient userswarmclient.Client
+	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
+	// Used by the delete handler to remove runtimes when a user is deleted.
+	RuntimeClient agentclient.Client
 
 	// MCPHandler is the HTTP handler for the MCP server.
 	// If nil, the MCP endpoint is not mounted.
@@ -84,7 +84,7 @@ type NewServerOpts struct {
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.
 // It provides authentication, workspace management, chat functionality, and
 // real-time WebSocket communication via Socket.IO while acting as the control
-// plane between mobile clients and ZeroClaw swarms.
+// plane between mobile clients and agent runtimes.
 type Server struct {
 	// httpServer is the underlying HTTP server instance.
 	httpServer *http.Server
@@ -113,8 +113,8 @@ type Server struct {
 	// broadcaster emits real-time events to connected WebSocket clients.
 	broadcaster realtime.Broadcaster
 
-	// runtimeClient manages UserSwarm CRs. Used to delete swarms on user deletion.
-	runtimeClient userswarmclient.Client
+	// runtimeClient manages agent runtime CRs. Used to delete runtimes on user deletion.
+	runtimeClient agentclient.Client
 
 	// integrationService manages third-party OAuth connections.
 	integrationService orchestratorservice.IntegrationService

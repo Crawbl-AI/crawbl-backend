@@ -67,7 +67,7 @@ type userRepo interface {
 
 // workspaceBootstrapper defines the interface for workspace initialization.
 // It handles creating the default workspace for new users, which includes
-// setting up the necessary ZeroClaw swarm runtime and any default resources.
+// setting up the necessary agent runtime and any default resources.
 type workspaceBootstrapper interface {
 	// EnsureDefaultWorkspace creates a default workspace for the specified user
 	// if one does not already exist. This is called during user registration.

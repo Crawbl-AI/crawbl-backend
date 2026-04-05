@@ -17,7 +17,7 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // Context holds shared dependencies for all handlers.
@@ -49,8 +49,8 @@ type Context struct {
 	// Broadcaster emits real-time events to connected WebSocket clients.
 	Broadcaster realtime.Broadcaster
 
-	// RuntimeClient manages UserSwarm CRs for workspace provisioning and cleanup.
-	RuntimeClient userswarmclient.Client
+	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
+	RuntimeClient agentclient.Client
 }
 
 // NewSession creates a new database session.

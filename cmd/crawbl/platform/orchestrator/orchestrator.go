@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -43,7 +42,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -190,37 +189,16 @@ func mustBuildRepos(logger *slog.Logger) (
 	}
 }
 
-func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
-	cfg := userswarmclient.Config{
-		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", userswarmclient.DriverFake),
-		FakeReplyPrefix: envOrDefault("CRAWBL_RUNTIME_FAKE_REPLY_PREFIX", userswarmclient.DefaultFakeReplyPrefix),
-		UserSwarm: userswarmclient.UserSwarmConfig{
-			RuntimeNamespace:    envOrDefault("CRAWBL_RUNTIME_NAMESPACE", userswarmclient.DefaultRuntimeNamespace),
-			Image:               strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE")),
-			ImagePullSecretName: strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_IMAGE_PULL_SECRET")),
-			StorageSize:         envOrDefault("CRAWBL_RUNTIME_STORAGE_SIZE", userswarmclient.DefaultRuntimeStorageSize),
-			StorageClassName:    strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_STORAGE_CLASS_NAME")),
-			DefaultProvider:     envOrDefault("CRAWBL_RUNTIME_DEFAULT_PROVIDER", "openai"),
-			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-5-mini"),
-			EnvSecretName:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_ENV_SECRET_NAME")),
-			TOMLOverrides:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_TOML_OVERRIDES")),
-			PollTimeout:         durationFromEnv("CRAWBL_RUNTIME_POLL_TIMEOUT", userswarmclient.DefaultPollTimeout),
-			PollInterval:        durationFromEnv("CRAWBL_RUNTIME_POLL_INTERVAL", userswarmclient.DefaultPollInterval),
-			Port:                int32FromEnv("CRAWBL_RUNTIME_PORT", userswarmclient.DefaultRuntimePort),
-		},
+func buildRuntimeClient(logger *slog.Logger) (agentclient.Client, error) {
+	cfg := agentclient.Config{
+		Driver:          envOrDefault("CRAWBL_RUNTIME_DRIVER", agentclient.DriverFake),
+		FakeReplyPrefix: envOrDefault("CRAWBL_RUNTIME_FAKE_REPLY_PREFIX", agentclient.DefaultFakeReplyPrefix),
 	}
 
 	switch strings.ToLower(strings.TrimSpace(cfg.Driver)) {
-	case "", userswarmclient.DriverFake:
+	case "", agentclient.DriverFake:
 		logger.Info("configured fake runtime client")
-		return userswarmclient.NewFakeClient(cfg), nil
-	case userswarmclient.DriverUserSwarm:
-		client, err := userswarmclient.NewUserSwarmClient(cfg)
-		if err != nil {
-			return nil, err
-		}
-		logger.Info("configured userswarm runtime client", slog.String("namespace", cfg.UserSwarm.RuntimeNamespace))
-		return client, nil
+		return agentclient.NewMockClient(cfg), nil
 	default:
 		return nil, fmt.Errorf("unsupported runtime driver %q", cfg.Driver)
 	}
@@ -235,23 +213,6 @@ func legalDocumentsFromEnv() *orch.LegalDocuments {
 	}
 }
 
-func durationFromEnv(key string, fallback time.Duration) time.Duration {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
-	}
-	return fallback
-}
-
-func int32FromEnv(key string, fallback int32) int32 {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
-			return int32(n)
-		}
-	}
-	return fallback
-}
 
 func buildMCPHandler(
 	logger *slog.Logger,
@@ -263,7 +224,7 @@ func buildMCPHandler(
 	messageRepo orchestratorrepo.MessageRepo,
 	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
 	artifactRepo artifactrepo.Repo,
-	runtimeClient userswarmclient.Client,
+	runtimeClient agentclient.Client,
 	broadcaster realtime.Broadcaster,
 ) http.Handler {
 	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))

@@ -138,7 +138,7 @@ func MessagesList(c *Context) http.HandlerFunc {
 }
 
 // MessagesSend creates a new message in a conversation.
-// The message is sent to the ZeroClaw swarm for processing.
+// The message is sent to the agent runtime for processing.
 // Supports text content and file attachments via the request body.
 func MessagesSend(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

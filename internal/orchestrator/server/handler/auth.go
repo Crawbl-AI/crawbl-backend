@@ -131,8 +131,8 @@ func SignUp(c *Context) http.HandlerFunc {
 
 // DeleteAccount deletes the authenticated user's account.
 // Restricted to non-production environments. In addition to soft-deleting the user,
-// it also deletes any UserSwarm CRs associated with the user's workspaces to prevent
-// orphaned swarm resources in the cluster.
+// it also deletes any agent runtime CRs associated with the user's workspaces to prevent
+// orphaned agent runtime resources in the cluster.
 func DeleteAccount(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Block account deletion in production.
@@ -161,7 +161,7 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 			Subject: principal.Subject,
 		})
 
-		// Fetch workspaces before deletion so we can clean up UserSwarm CRs.
+		// Fetch workspaces before deletion so we can clean up agent runtime CRs.
 		var workspaces []*orchestrator.Workspace
 		if userErr == nil && user != nil {
 			workspaces, _ = c.WorkspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
@@ -180,17 +180,17 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Best-effort cleanup of UserSwarm CRs for each workspace.
+		// Best-effort cleanup of agent runtime CRs for each workspace.
 		if c.RuntimeClient != nil {
 			for _, ws := range workspaces {
 				if delErr := c.RuntimeClient.DeleteRuntime(r.Context(), ws.ID); delErr != nil {
-					c.Logger.Warn("failed to delete userswarm on account deletion",
+					c.Logger.Warn("failed to delete agent runtime on account deletion",
 						"workspace_id", ws.ID,
 						"user", principal.Subject,
 						"error", delErr,
 					)
 				} else {
-					c.Logger.Info("deleted userswarm on account deletion",
+					c.Logger.Info("deleted agent runtime on account deletion",
 						"workspace_id", ws.ID,
 						"user", principal.Subject,
 					)

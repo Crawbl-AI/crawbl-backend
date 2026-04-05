@@ -7,7 +7,7 @@
 //   - frank: used for multi-user isolation tests
 //   - grace: used for multi-user isolation tests
 //
-// This prevents UserSwarm explosion in the cluster (max 3 UserSwarms per run).
+// This prevents runtime instance explosion in the cluster (max 3 runtime instances per run).
 package e2e
 
 import (

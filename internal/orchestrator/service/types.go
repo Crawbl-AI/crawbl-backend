@@ -330,7 +330,7 @@ type CreateAgentMemoryOpts struct {
 	Category string
 }
 
-// AgentMemory represents a memory entry from the ZeroClaw runtime.
+// AgentMemory represents a memory entry from the agent runtime.
 type AgentMemory struct {
 	Key       string `json:"key"`
 	Content   string `json:"content"`
@@ -412,14 +412,14 @@ type AuthService interface {
 type WorkspaceService interface {
 	// EnsureDefaultWorkspace creates the default workspace for a user if it does
 	// not already exist. This is typically called during user provisioning and
-	// may trigger Kubernetes UserSwarm resource creation.
+	// may trigger Kubernetes agent runtime resource creation.
 	//
 	// Returns a merrors.Error if the operation fails, or nil on success.
 	EnsureDefaultWorkspace(ctx context.Context, opts *EnsureDefaultWorkspaceOpts) *merrors.Error
 
 	// ListByUserID retrieves all workspaces associated with a specific user.
 	// The returned workspaces may include runtime status information from the
-	// associated UserSwarm resources.
+	// associated agent runtime resources.
 	//
 	// Returns a slice of Workspace pointers on success, or a merrors.Error on failure.
 	ListByUserID(ctx context.Context, opts *ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error)
@@ -512,13 +512,13 @@ type AgentService interface {
 	// Returns a ToolPage on success, or a merrors.Error on failure.
 	GetAgentTools(ctx context.Context, opts *GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error)
 
-	// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+	// GetAgentMemories retrieves memories from the agent runtime.
 	GetAgentMemories(ctx context.Context, opts *GetAgentMemoriesOpts) ([]AgentMemory, *merrors.Error)
 
-	// DeleteAgentMemory removes a specific memory from the agent's ZeroClaw runtime.
+	// DeleteAgentMemory removes a specific memory from the agent runtime.
 	DeleteAgentMemory(ctx context.Context, opts *DeleteAgentMemoryOpts) *merrors.Error
 
-	// CreateAgentMemory stores a new memory in the agent's ZeroClaw runtime.
+	// CreateAgentMemory stores a new memory in the agent runtime.
 	CreateAgentMemory(ctx context.Context, opts *CreateAgentMemoryOpts) *merrors.Error
 }
 

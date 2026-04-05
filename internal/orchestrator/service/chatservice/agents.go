@@ -7,7 +7,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 type agentLookups struct {
@@ -84,7 +84,7 @@ func newAgentLookups(agents []*orchestrator.Agent) agentLookups {
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
 func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: false,

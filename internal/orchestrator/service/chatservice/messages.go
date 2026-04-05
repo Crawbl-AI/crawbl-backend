@@ -17,7 +17,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // SendMessage sends a user message and returns the agent replies.
@@ -41,7 +41,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 		return nil, mErr
 	}
 
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,
 		WaitForVerified: true,
@@ -183,10 +183,10 @@ type subAgentStream struct {
 }
 
 // callAgentStreaming handles a single agent's streaming webhook call.
-// Creates a placeholder message, reads streaming chunks from ZeroClaw,
+// Creates a placeholder message, reads streaming chunks from the agent runtime,
 // emits Socket.IO events for each chunk, and persists the final message.
 //
-// Phase 5 multi-agent support: ZeroClaw may send chunk/done pairs with
+// Phase 5 multi-agent support: the agent runtime may send chunk/done pairs with
 // different agent_id values (e.g. "wally", "eve", "manager"). Each distinct
 // agent_id gets its own placeholder message so the mobile client shows
 // separate message bubbles per sub-agent.
@@ -233,8 +233,8 @@ func (s *service) callAgentStreaming(
 		return nil, mErr
 	}
 
-	// 3. Start streaming from ZeroClaw.
-	streamCh, mErr := s.runtimeClient.SendTextStream(ctx, &userswarmclient.SendTextOpts{
+	// 3. Start streaming from the agent runtime.
+	streamCh, mErr := s.runtimeClient.SendTextStream(ctx, &agentclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   runtimeMessage(normalizeRuntimeMessage(opts.Content.Text, opts.Mentions), extraContext),
 		SessionID: conversation.ID,
@@ -252,7 +252,7 @@ func (s *service) callAgentStreaming(
 		return nil, mErr
 	}
 
-	// User message reached ZeroClaw → mark as delivered (once across parallel agents).
+	// User message reached the agent runtime → mark as delivered (once across parallel agents).
 	if opts.UserMessageID != "" && opts.StatusDeliveredOnce != nil {
 		opts.StatusDeliveredOnce.Do(func() {
 			s.broadcaster.EmitMessageStatus(ctx, opts.WorkspaceID, realtime.MessageStatusPayload{
@@ -360,7 +360,7 @@ func (s *service) callAgentStreaming(
 
 	for chunk := range streamCh {
 		switch chunk.Type {
-		case userswarmclient.StreamEventChunk, userswarmclient.StreamEventThinking:
+		case agentclient.StreamEventChunk, agentclient.StreamEventThinking:
 			st := resolveStream(chunk.AgentID)
 
 			// Once per stream: mark user message as read.
@@ -395,7 +395,7 @@ func (s *service) callAgentStreaming(
 				Chunk:          chunk.Delta,
 			})
 
-		case userswarmclient.StreamEventToolCall:
+		case agentclient.StreamEventToolCall:
 			// Tool events are attributed to the chunk's agent_id when available,
 			// otherwise fall back to the primary agent.
 			toolAgentID := agent.ID
@@ -422,7 +422,7 @@ func (s *service) callAgentStreaming(
 				}
 			}
 
-		case userswarmclient.StreamEventToolResult:
+		case agentclient.StreamEventToolResult:
 			toolAgentID := agent.ID
 			if chunk.AgentID != "" {
 				if ta := lookups.bySlug[chunk.AgentID]; ta != nil {
@@ -445,9 +445,9 @@ func (s *service) callAgentStreaming(
 				}
 			}
 
-		case userswarmclient.StreamEventDone:
+		case agentclient.StreamEventDone:
 			// Mark done on the specific agent that finished, or globally when
-			// agent_id is empty (legacy single-agent ZeroClaw behaviour).
+			// agent_id is empty (legacy single-agent behaviour).
 			if chunk.AgentID == "" {
 				globalStreamDone = true
 				// Mark all streams done for finalization.
@@ -662,7 +662,7 @@ func (s *service) finalizeStreamMessage(
 
 // buildConversationContext creates a context summary from recent messages
 // for injection into agent calls. This gives agents awareness of the
-// conversation even though their ZeroClaw memory is namespace-isolated.
+// conversation even though their agent runtime memory is namespace-isolated.
 func (s *service) buildConversationContext(
 	ctx context.Context,
 	sess *dbr.Session,
@@ -863,7 +863,7 @@ func runtimeMessage(message, extraContext string) string {
 }
 
 // normalizeRuntimeMessage strips structured @mention spans before forwarding the
-// message to ZeroClaw. The orchestrator has already resolved the target agent,
+// message to the agent runtime. The orchestrator has already resolved the target agent,
 // so the runtime should receive only the user instruction rather than mobile
 // chat routing syntax like "@Wally ...".
 func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) string {
@@ -917,7 +917,7 @@ func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) st
 	return normalized
 }
 
-// ZeroClaw treats an empty agent_id as "use the default manager entrypoint".
+// The agent runtime treats an empty agent_id as "use the default manager entrypoint".
 // Sub-agents are addressed by slug so the runtime can activate the native
 // [agents.<slug>] config for that turn.
 func runtimeAgentID(agent *orchestrator.Agent) string {
