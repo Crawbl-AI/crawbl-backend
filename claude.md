@@ -144,7 +144,17 @@ For **docs** and **website**, steps 2-4 and 7 are skipped. Instead, the deploy r
 
 `crawbl app deploy all` deploys platform + auth-filter only. Docs, website, and zeroclaw are deployed individually.
 
-`crawbl setup` verifies required tools: `docker`, `yq`, `gh`, `claude`. `.mise.toml` includes `yq`.
+`crawbl setup` verifies required tools: `docker`, `yq`, `gh`, `claude`. `.mise.toml` includes `yq`, `protoc`, and the standard Go/k8s/cloud toolchain. Run `mise install` inside `crawbl-backend/` after a fresh clone to provision `protoc` and the rest.
+
+**Protobuf / gRPC toolchain** (required by `internal/agentruntime/` and `cmd/crawbl-agent-runtime/`):
+- `protoc` — installed via `mise install` (pinned in `.mise.toml`) or `brew install protobuf`.
+- `protoc-gen-go` and `protoc-gen-go-grpc` — Go plugins, installed by the `make generate` target or manually with:
+  ```bash
+  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+  ```
+  These land in `$(go env GOPATH)/bin` which must be on `PATH` for `protoc` to find them.
+- Regenerate gRPC bindings from `proto/agentruntime/v1/*.proto` with `make generate`.
 
 Makefile shortcuts use auto-semver — no manual tag needed:
 
