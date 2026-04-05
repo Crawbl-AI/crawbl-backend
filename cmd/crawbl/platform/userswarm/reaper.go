@@ -14,30 +14,23 @@ import (
 
 func newReaperCommand() *cobra.Command {
 	var (
-		databaseDSN        string
-		maxAge             time.Duration
-		orphanVolumeMinAge time.Duration
-		digitalOceanToken  string
-		dryRun             bool
+		databaseDSN string
+		maxAge      time.Duration
+		dryRun      bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "reaper",
-		Short: "Clean up stale test users, orphaned swarms, and leaked DO volumes",
+		Short: "Clean up stale test users and orphaned UserSwarm CRs",
 		Long: `Two-phase cleanup job for the dev cluster:
 
 Phase 1: Finds users whose subject starts with "e2e-" and whose created_at
 is older than --max-age, deletes their UserSwarm CRs (triggering teardown
-of all agent pods, PVCs, and Services) and soft-deletes the user record.
+of all agent runtime pods and Services) and soft-deletes the user record.
 
 Phase 2: Scans ALL UserSwarm CRs cluster-wide and deletes any whose owning
 user no longer exists or has been soft-deleted. This is a universal safety
 net that catches orphans from any source, not just e2e tests.
-
-Phase 3: Lists DigitalOcean block volumes created by the CSI driver and
-deletes any unattached pvc-* volumes that no longer map to a live PV in the
-current cluster or that still carry a k8s:<cluster-id> tag for a deleted
-cluster.
 
 Designed to run as a Kubernetes CronJob using the crawbl-platform image.`,
 		Example: `  # Dry run — see what would be cleaned up
@@ -54,11 +47,9 @@ Designed to run as a Kubernetes CronJob using the crawbl-platform image.`,
 			}
 
 			cfg := &reaper.Config{
-				DatabaseDSN:        databaseDSN,
-				MaxAge:             maxAge,
-				DryRun:             dryRun,
-				DigitalOceanToken:  digitalOceanToken,
-				OrphanVolumeMinAge: orphanVolumeMinAge,
+				DatabaseDSN: databaseDSN,
+				MaxAge:      maxAge,
+				DryRun:      dryRun,
 			}
 
 			result, err := reaper.Run(cmd.Context(), cfg)
@@ -71,7 +62,6 @@ Designed to run as a Kubernetes CronJob using the crawbl-platform image.`,
 			out.Infof("Users found:   %d", result.UsersFound)
 			out.Infof("Users reaped:  %d", result.UsersReaped)
 			out.Infof("Swarms reaped: %d", result.SwarmsReaped)
-			out.Infof("Volumes reaped: %d", result.VolumesReaped)
 			out.Infof("Errors:        %d", result.Errors)
 
 			if cfg.DryRun {
@@ -87,8 +77,6 @@ Designed to run as a Kubernetes CronJob using the crawbl-platform image.`,
 
 	cmd.Flags().StringVar(&databaseDSN, "database-dsn", os.Getenv("CRAWBL_DATABASE_DSN"), "Postgres DSN, or set CRAWBL_DATABASE_DSN")
 	cmd.Flags().DurationVar(&maxAge, "max-age", 2*time.Hour, "Delete e2e users older than this duration")
-	cmd.Flags().StringVar(&digitalOceanToken, "do-token", os.Getenv("DIGITALOCEAN_ACCESS_TOKEN"), "DigitalOcean API token, or set DIGITALOCEAN_ACCESS_TOKEN")
-	cmd.Flags().DurationVar(&orphanVolumeMinAge, "orphan-volume-min-age", 30*time.Minute, "Only delete unattached DO volumes older than this duration")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Log what would be deleted without making changes")
 
 	return cmd
