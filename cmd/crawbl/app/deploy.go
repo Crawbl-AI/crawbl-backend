@@ -35,6 +35,7 @@ func newDeployCommand() *cobra.Command {
 	cmd.AddCommand(newDeployPlatformCommand())
 	cmd.AddCommand(newDeployAuthFilterCommand())
 	cmd.AddCommand(newDeployZeroClawCommand())
+	cmd.AddCommand(newDeployAgentRuntimeCommand())
 	cmd.AddCommand(newDeployDocsCommand())
 	cmd.AddCommand(newDeployWebsiteCommand())
 	cmd.AddCommand(newDeployAllCommand())
@@ -178,6 +179,84 @@ func newDeployAuthFilterCommand() *cobra.Command {
 				return err
 			}
 			if err := u.CommitAndPush("auth-filter"); err != nil {
+				return err
+			}
+
+			return release.TagAndRelease(release.Config{
+				RepoPath: rootDir,
+				RepoSlug: "Crawbl-AI/crawbl-backend",
+				Tag:      tag,
+				PrevTag:  resolved.PrevTag,
+			})
+		},
+	}
+
+	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
+	return cmd
+}
+
+// newDeployAgentRuntimeCommand ships the new Phase 2 crawbl-agent-runtime
+// image: builds the small distroless binary from dockerfiles/agent-runtime
+// .dockerfile, pushes to DOCR, bumps the tag in crawbl-argocd-apps, and
+// tags the crawbl-backend repo with an agent-runtime/vX.Y.Z namespaced
+// tag so it doesn't collide with the main platform tag sequence.
+//
+// This is the deploy counterpart to `crawbl app build agent-runtime`
+// (which just builds locally without pushing). Use this once per
+// merged PR that touches cmd/crawbl-agent-runtime/ or
+// internal/agentruntime/.
+func newDeployAgentRuntimeCommand() *cobra.Command {
+	var (
+		tag        string
+		platform   string
+		argocdRepo string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "agent-runtime",
+		Short: "Deploy the crawbl-agent-runtime image",
+		Long:  "Build and push the crawbl-agent-runtime image (distroless, ~26 MB), then update the agent-runtime image tag in crawbl-argocd-apps. Tags releases under agent-runtime/vX.Y.Z.",
+		Example: `  crawbl app deploy agent-runtime
+  crawbl app deploy agent-runtime --tag v0.1.0
+  crawbl app deploy agent-runtime --argocd-repo ../crawbl-argocd-apps`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := checkAllTools(); err != nil {
+				return err
+			}
+			resolved, err := resolveDeployTag(tag, true, "agent-runtime/")
+			if err != nil {
+				return err
+			}
+			tag = resolved.Tag
+
+			rootDir, err := gitutil.RootDir()
+			if err != nil {
+				return err
+			}
+
+			if err := runDockerBuild(buildOpts{
+				imageRepo:  buildAgentRuntimeImageRepo,
+				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildAgentRuntimeDockerfile),
+				contextDir: rootDir,
+				tag:        tag,
+				platform:   platform,
+				push:       true,
+			}); err != nil {
+				return err
+			}
+
+			repoPath, err := resolveArgocdRepo(argocdRepo)
+			if err != nil {
+				return err
+			}
+			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
+			if err := u.PullLatest(); err != nil {
+				return err
+			}
+			if err := u.UpdateAgentRuntime(); err != nil {
+				return err
+			}
+			if err := u.CommitAndPush("agent-runtime"); err != nil {
 				return err
 			}
 

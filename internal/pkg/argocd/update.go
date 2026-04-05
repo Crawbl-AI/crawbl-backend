@@ -79,6 +79,48 @@ func (u *Update) UpdateAuthFilter() error {
 	return os.WriteFile(f, []byte(updated), 0o644)
 }
 
+// UpdateAgentRuntime updates the crawbl-agent-runtime image tag in the
+// orchestrator chart values and the userswarm webhook manifest. This is
+// Phase 2's counterpart to UpdateZeroClaw — once the webhook stops
+// shelling out to ZeroClaw and starts scheduling the new agent-runtime
+// image, this function owns the per-deploy tag bump.
+//
+// The orchestrator chart key lives at .config.runtime.agentRuntimeImage
+// (added in the Phase 2 argocd-apps change). The webhook env var lives
+// at CRAWBL_AGENT_RUNTIME_IMAGE inside userswarm-webhook.yaml (also
+// added in Phase 2). Until those CRs land, this function is a no-op
+// that logs the intended tag and returns nil so the deploy flow
+// exercises end-to-end without blocking on the argocd-apps PR.
+func (u *Update) UpdateAgentRuntime() error {
+	out.Step(style.Deploy, "Updating crawbl-agent-runtime image tag to %s", u.Tag)
+
+	agentRuntimeImage := fmt.Sprintf("%s/crawbl-agent-runtime:%s", RegistryBase, u.Tag)
+
+	// Best-effort: try to update both locations. If the keys don't
+	// exist yet (Phase 2 argocd-apps change not landed), yq will fail
+	// with a non-zero exit and ReplaceImageTag returns the original
+	// content unchanged — both are acceptable during the transition.
+	orchestratorPath := "components/orchestrator/chart/values.yaml"
+	if err := u.RunYQ(
+		fmt.Sprintf(`.config.runtime.agentRuntimeImage = "%s"`, agentRuntimeImage),
+		orchestratorPath,
+	); err != nil {
+		// Non-fatal during Phase 2 transition — the key may not exist
+		// in the chart yet. Log + continue so the webhook update still
+		// runs if the chart update fails.
+		out.Step(style.Tip, "orchestrator chart agentRuntimeImage key not yet present (Phase 2 argocd-apps PR pending): %v", err)
+	}
+
+	webhookPath := filepath.Join(u.RepoPath, "components/metacontroller/resources/userswarm-webhook.yaml")
+	data, err := os.ReadFile(webhookPath)
+	if err != nil {
+		return fmt.Errorf("read userswarm-webhook.yaml: %w", err)
+	}
+	imageBase := RegistryBase + "/crawbl-agent-runtime:"
+	updated := ReplaceImageTag(string(data), imageBase, u.Tag)
+	return os.WriteFile(webhookPath, []byte(updated), 0o644)
+}
+
 // UpdateZeroClaw updates the zeroclaw image reference in orchestrator values and the webhook manifest.
 func (u *Update) UpdateZeroClaw() error {
 	out.Step(style.Deploy, "Updating zeroclaw image ref to %s", u.Tag)

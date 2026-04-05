@@ -22,6 +22,14 @@ const (
 
 	buildZeroClawImageRepo = "registry.digitalocean.com/crawbl/zeroclaw"
 	buildZeroClawRepoDir   = "crawbl-zeroclaw"
+
+	// crawbl-agent-runtime — the Phase 2 in-tree Go replacement for the
+	// Rust ZeroClaw runtime. Built from the same repo as the platform
+	// image but uses a dedicated, minimal Dockerfile (distroless nonroot,
+	// ~26 MB) so per-workspace pods pull a small image instead of the
+	// full ~200 MB platform binary.
+	buildAgentRuntimeImageRepo  = "registry.digitalocean.com/crawbl/crawbl-agent-runtime"
+	buildAgentRuntimeDockerfile = "dockerfiles/agent-runtime.dockerfile"
 )
 
 func newBuildCommand() *cobra.Command {
