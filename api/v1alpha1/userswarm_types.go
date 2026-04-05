@@ -15,7 +15,7 @@ const (
 	DefaultRuntimeNamespace = "userswarms"
 
 	// DefaultGatewayPort is the gRPC listen port baked into every
-	// crawbl-agent-runtime pod. Bumped from the legacy ZeroClaw HTTP port
+	// crawbl-agent-runtime pod. Bumped from the legacy HTTP port
 	// 42617 when the wire protocol switched to gRPC in Phase 2B.
 	DefaultGatewayPort = 42618
 

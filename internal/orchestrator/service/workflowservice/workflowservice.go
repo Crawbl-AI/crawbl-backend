@@ -1,6 +1,6 @@
 // Package workflowservice provides the workflow execution engine for the Crawbl
 // multi-agent system. It manages workflow definitions, creates execution records,
-// and runs steps sequentially by calling ZeroClaw agent runtimes.
+// and runs steps sequentially by calling agent runtimes.
 package workflowservice
 
 import (

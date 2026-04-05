@@ -6,7 +6,7 @@
 //
 // There is no HTTP wire code anywhere in this package anymore. The
 // legacy /webhook, /webhook/stream, and /api/memory endpoints that the
-// Rust ZeroClaw runtime exposed are gone (US-P2-004).
+// Rust agent runtime exposed are gone (US-P2-004).
 package client
 
 import (

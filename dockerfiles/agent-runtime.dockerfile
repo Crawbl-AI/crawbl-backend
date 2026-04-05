@@ -2,7 +2,7 @@
 #
 # Dockerfile for the crawbl-agent-runtime binary.
 #
-# Builds the per-workspace agent runtime that replaces ZeroClaw in Phase 2.
+# Builds the per-workspace agent runtime that replaces agent runtime in Phase 2.
 # The image is intentionally minimal — distroless nonroot base, only the
 # runtime binary copied in, no config files (config comes from mounted
 # ConfigMap at /config/runtime.yaml and env vars injected by the K8s Pod

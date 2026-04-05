@@ -6,8 +6,8 @@
 
 | I want to... | Where |
 |--------------|-------|
-| Add a new agent tool | `internal/zeroclaw/tools.go` → add to `defaultToolCatalog` |
-| Change LLM defaults (temperature, model) | `internal/zeroclaw/types.go` (constants) |
+| Add a new agent tool | `internal/agentruntime/tools/catalog.go` → add to `defaultToolCatalog` |
+| Change LLM defaults (temperature, model) | `internal/agentruntime/types.go` (constants) |
 | Add an integration provider | `internal/orchestrator/service/integrationservice/integrationservice.go` |
 | Change default workspace name | `internal/orchestrator/types.go` → `DefaultWorkspaceName` |
 | Add a new error code | `internal/pkg/errors/types.go` |
@@ -32,11 +32,11 @@ Source `.env` before running: `set -a && source .env && set +a`
 |----------|---------|------|
 | `CRAWBL_RUNTIME_DRIVER` | `fake` | `fake` (local echo) or `userswarm` (real K8s) |
 | `CRAWBL_RUNTIME_NAMESPACE` | `userswarms` | K8s namespace for agent pods |
-| `CRAWBL_RUNTIME_IMAGE` | — | ZeroClaw container image (required in prod) |
+| `CRAWBL_RUNTIME_IMAGE` | — | the agent runtime container image (required in prod) |
 | `CRAWBL_RUNTIME_DEFAULT_PROVIDER` | `openai` | LLM provider for new agents |
 | `CRAWBL_RUNTIME_DEFAULT_MODEL` | `gpt-5-mini` | LLM model for new agents |
 | `CRAWBL_RUNTIME_STORAGE_SIZE` | `2Gi` | PVC size per user |
-| `CRAWBL_RUNTIME_PORT` | `42617` | ZeroClaw gateway port inside pod |
+| `CRAWBL_RUNTIME_PORT` | `42617` | the agent runtime gateway port inside pod |
 | `CRAWBL_RUNTIME_ENV_SECRET_NAME` | — | K8s Secret with LLM API keys |
 | `CRAWBL_RUNTIME_POLL_TIMEOUT` | `60s` | Max wait for agent pod readiness |
 
@@ -69,7 +69,7 @@ Source `.env` before running: `set -a && source .env && set +a`
 
 ## 📋 Samples
 
-- [`config/samples/zeroclaw.yaml`](samples/zeroclaw.yaml) — Full ZeroClaw config with all options commented
+- [`config/samples/agent-runtime.yaml`](samples/agent-runtime.yaml) — Full runtime config with all options commented
 
 ## 📖 Deep Reference
 

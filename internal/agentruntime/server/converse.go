@@ -93,7 +93,7 @@ func (h *converseHandler) Converse(stream runtimev1.AgentRuntime_ConverseServer)
 		// Drive one turn through the ADK runner. RunTurn returns an
 		// iterator; each yielded event gets translated into a
 		// ConverseEvent oneof and sent to the client. The terminal
-		// DoneEvent aggregates turns (for wire compat with ZeroClaw's
+		// DoneEvent aggregates turns (for wire compat with the agent runtime's
 		// multi-agent response shape) and closes this turn, but the
 		// outer for-loop keeps the stream open for the next request.
 		turnErr := h.runOneTurn(stream, principal, sessionID, req.GetSystemPrompt(), message)
@@ -171,7 +171,7 @@ func (h *converseHandler) runOneTurn(
 		return sendError(stream, sessionID, codes.Internal, fmt.Sprintf("runner: %v", iterErr))
 	}
 
-	// Synthesize the terminal DoneEvent. ZeroClaw wire compatibility:
+	// Synthesize the terminal DoneEvent. legacy wire compatibility:
 	// the orchestrator's existing consumer expects a turns[] array in
 	// the final event so multi-agent responses persist cleanly.
 	done := &runtimev1.ConverseEvent{

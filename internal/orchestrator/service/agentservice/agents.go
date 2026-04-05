@@ -229,7 +229,7 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 	}, nil
 }
 
-// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+// GetAgentMemories retrieves memories from the agent's agent runtime.
 func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -278,7 +278,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 	return memories, nil
 }
 
-// DeleteAgentMemory removes a memory from the agent's ZeroClaw runtime.
+// DeleteAgentMemory removes a memory from the agent's agent runtime.
 func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.Key == "" {
 		return merrors.ErrInvalidInput
@@ -309,7 +309,7 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 	})
 }
 
-// CreateAgentMemory stores a memory in the agent's ZeroClaw runtime.
+// CreateAgentMemory stores a memory in the agent's agent runtime.
 func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.Key == "" || opts.Content == "" {
 		return merrors.ErrInvalidInput

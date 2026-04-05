@@ -2,7 +2,7 @@
 //
 // This file is the SINGLE SOURCE OF TRUTH for tool metadata (name,
 // display name, description, category, icon) in the new runtime. It is a
-// direct migration of the legacy internal/zeroclaw/tools.go catalog —
+// direct migration of the legacy internal/agentruntime/tools/catalog.go catalog —
 // every entry preserves the exact tool name and category so the mobile
 // app's `/v1/integrations` response and the agent's tool auto-approval
 // list continue to work unchanged across the Phase 2 atomic swap.
@@ -26,9 +26,9 @@
 package tools
 
 // ToolCategory groups tools by function for display in the mobile app.
-// Values are intentionally the same strings as internal/zeroclaw/tools.go
+// Values are intentionally the same strings as internal/agentruntime/tools/catalog.go
 // so the `/v1/integrations` API response is byte-compatible across the
-// ZeroClaw → crawbl-agent-runtime swap.
+// legacy → crawbl-agent-runtime swap.
 type ToolCategory string
 
 const (
@@ -44,12 +44,12 @@ const (
 )
 
 // ToolDef describes a single tool in the agent's capability set.
-// Mirrors internal/zeroclaw/tools.go:ToolDef so the seed path in
+// Mirrors internal/agentruntime/tools/catalog.go:ToolDef so the seed path in
 // internal/orchestrator/service/chatservice/bootstrap.go can swap imports
 // without touching the struct shape.
 type ToolDef struct {
 	// Name is the tool identifier registered with the agent runtime and
-	// used by LLM tool calls. MUST match the legacy ZeroClaw tool name.
+	// used by LLM tool calls. MUST match the legacy the agent runtime tool name.
 	Name string
 	// DisplayName is a human-readable label for the mobile UI.
 	DisplayName string
@@ -63,7 +63,7 @@ type ToolDef struct {
 
 // defaultCatalog is the full 35-tool catalog. Order here determines display
 // order in the mobile app. Every entry is a byte-for-byte copy from
-// internal/zeroclaw/tools.go:46-107 — do NOT diverge without coordinated
+// internal/agentruntime/tools/catalog.go:46-107 — do NOT diverge without coordinated
 // mobile + docs updates.
 var defaultCatalog = []ToolDef{
 	// --- Search & Web ---
@@ -155,7 +155,7 @@ type CategoryMeta struct {
 }
 
 // ToolCategories returns display metadata for all tool categories. Order
-// and content match zeroclaw.ToolCategories() so the mobile app's
+// and content match agentruntimetools.ToolCategories() so the mobile app's
 // integrations screen continues to render identically.
 func ToolCategories() []CategoryMeta {
 	return []CategoryMeta{

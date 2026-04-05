@@ -1,6 +1,6 @@
 // Memory service for the crawbl-agent-runtime.
 //
-// This service is the gRPC equivalent of the old ZeroClaw /api/memory HTTP
+// This service is the gRPC equivalent of the old /api/memory HTTP
 // endpoint. It is a facade — the actual memories table lives in the
 // orchestrator's Postgres database. The runtime calls this service locally
 // for shape convenience; the runtime-side handler forwards the calls to the

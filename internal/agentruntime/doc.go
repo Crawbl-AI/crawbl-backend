@@ -1,6 +1,6 @@
 // Package agentruntime contains the crawbl-agent-runtime binary's
 // implementation packages. The runtime is the in-tree Go replacement for the
-// Rust ZeroClaw runtime and runs one instance per user workspace as a
+// Rust agent runtime and runs one instance per user workspace as a
 // per-workspace pod under the existing Metacontroller / UserSwarm flow.
 //
 // The entry point is crawbl-backend/cmd/crawbl-agent-runtime. This package

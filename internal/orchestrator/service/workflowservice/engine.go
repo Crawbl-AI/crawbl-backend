@@ -17,7 +17,7 @@ import (
 
 // ExecuteWorkflow runs a workflow asynchronously. Call in a goroutine.
 // It fetches the definition, iterates through steps sequentially, and calls
-// ZeroClaw for each step using the specified agent_slug. Step outputs are
+// the agent runtime for each step using the specified agent_slug. Step outputs are
 // collected into a context map that supports template variable substitution
 // in subsequent step prompts.
 func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus) {
@@ -118,7 +118,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 		}
 
-		// Execute step: call ZeroClaw with the agent.
+		// Execute step: call the agent runtime with the agent.
 		startTime := time.Now()
 		timeout := time.Duration(step.TimeoutSecs) * time.Second
 		if timeout == 0 {

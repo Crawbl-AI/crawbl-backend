@@ -12,7 +12,7 @@
 //
 // There is no HTTP/NDJSON wire anywhere in this package. The legacy
 // /webhook, /webhook/stream, and /api/memory endpoints that the Rust
-// ZeroClaw runtime exposed are gone.
+// agent runtime exposed are gone.
 package client
 
 import (
@@ -106,7 +106,7 @@ const (
 	DriverFake = "fake"
 
 	// DriverCrawblRuntime selects the production Kubernetes-backed
-	// client. Was DriverUserSwarm during the ZeroClaw era; renamed
+	// client. Was DriverUserSwarm during the pre-gRPC era; renamed
 	// when the HTTP webhook path was replaced with gRPC in Phase 2.
 	DriverCrawblRuntime = "crawbl-runtime"
 
@@ -120,7 +120,7 @@ const (
 
 	// DefaultRuntimePort is the TCP port that crawbl-agent-runtime binds
 	// its gRPC server to inside the pod. 42618 replaces the legacy
-	// 42617 used by the HTTP webhook during the ZeroClaw era.
+	// 42617 used by the HTTP webhook during the pre-gRPC era.
 	DefaultRuntimePort int32 = 42618
 
 	// DefaultPollTimeout bounds how long EnsureRuntime waits for a

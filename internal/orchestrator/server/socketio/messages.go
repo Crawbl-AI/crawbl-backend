@@ -74,7 +74,7 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 	defer cancel()
 
 	// Cancel the context when the socket disconnects, stopping in-flight
-	// ZeroClaw requests and saving LLM tokens for disconnected clients.
+	// the agent runtime requests and saving LLM tokens for disconnected clients.
 	s.On("disconnect", func(...any) {
 		cancel()
 	})

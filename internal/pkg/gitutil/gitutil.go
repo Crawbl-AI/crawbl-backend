@@ -20,7 +20,7 @@ func RootDir() (string, error) {
 }
 
 // ResolveSiblingRepo locates an external repo directory (e.g. crawbl-docs,
-// crawbl-website, crawbl-zeroclaw). It checks the explicit flag first, then
+// crawbl-website, ). It checks the explicit flag first, then
 // falls back to ../<repoDir> relative to the current working directory.
 func ResolveSiblingRepo(explicit, repoDir string) (string, error) {
 	if explicit != "" {

@@ -12,7 +12,7 @@ import (
 // NewFakeClient constructs the test/local-dev Client implementation.
 //
 // fakeClient satisfies the Client interface without touching Kubernetes or any
-// real ZeroClaw pod.  It is used in two scenarios:
+// real agent runtime pod.  It is used in two scenarios:
 //
 //  1. Unit tests — the orchestrator service layer can be exercised without a
 //     live cluster by setting Driver = DriverFake in Config.
@@ -119,7 +119,7 @@ func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTur
 	}
 
 	// Echo the message back as a single manager turn so the caller can see it
-	// was processed.  The real implementation returns turns from ZeroClaw agents.
+	// was processed.  The real implementation returns turns from the agent runtime agents.
 	return []AgentTurn{
 		{AgentID: "manager", Text: fmt.Sprintf("%s: %s", c.replyPrefix, opts.Message)},
 	}, nil

@@ -1,6 +1,6 @@
 // Command crawbl-agent-runtime is the second binary in the crawbl-backend
 // module. It runs as the per-workspace agent runtime pod — one instance
-// per user's swarm — and replaces the Rust ZeroClaw runtime in Phase 2.
+// per user's swarm — and replaces the Rust agent runtime in Phase 2.
 //
 // Lifecycle:
 //

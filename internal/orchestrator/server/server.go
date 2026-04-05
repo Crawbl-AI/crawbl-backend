@@ -1,6 +1,6 @@
 // Package server provides the HTTP server implementation for the Crawbl orchestrator API.
 // It handles authentication, workspace management, and chat operations for the mobile-facing
-// HTTP interface that sits between the Flutter app and user ZeroClaw swarms.
+// HTTP interface that sits between the Flutter app and user agent runtimes.
 //
 // The server package contains:
 //   - HTTP server initialization and lifecycle management

@@ -24,8 +24,8 @@ import (
 // If the name already fits, it is returned lowercased and trimmed.
 // If it exceeds maxLen, a hash suffix is appended to preserve uniqueness:
 //
-//	"zeroclaw-very-long-workspace-id-that-exceeds-limits" (65 chars)
-//	→ "zeroclaw-very-long-workspace-id-that-exc-a1b2c3d4e5" (52 chars)
+//	"workspace-very-long-workspace-id-that-exceeds-limits" (65 chars)
+//	→ "workspace-very-long-workspace-id-that-exc-a1b2c3d4e5" (52 chars)
 //
 // This prevents collisions when two long names share a common prefix.
 func TruncateName(name string, maxLen int) string {

@@ -6,13 +6,13 @@ Build the Go middleware/orchestrator for Crawbl.
 
 This repo contains both the Crawbl orchestrator HTTP API and the UserSwarm lifecycle/runtime control-plane code.
 
-The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns routing, auth, orchestration, integrations, billing controls, and auditability.
+The backend sits between the Flutter app and each user's agent runtime. It owns routing, auth, orchestration, integrations, billing controls, and auditability.
 
 ## Core Responsibilities
 
 - Authenticate users and issue/validate platform sessions
 - Serve the mobile-facing HTTP API for auth, workspaces, and future realtime flows
-- Provision `UserSwarm` resources and ZeroClaw deployments in shared runtime namespaces
+- Provision `UserSwarm` resources and the agent runtime deployments in shared runtime namespaces
 - Proxy chat/task requests to the correct user swarm
 - Integrate with hosted LLM providers and enforce cost and access policy at the backend layer
 - Expose integration adapters for Gmail, Calendar, Asana, and future apps
@@ -26,7 +26,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 - WHEN RUNNING COMMANDS OR WAITING FOR INPUT OR WAITING FOR SOMETHING, NEVER SLEEP FOR MORE THAN 10 SECONDS
 - Always use the `crawbl` CLI for building, pushing, and deploying images. Prefer `crawbl app build` and `crawbl app deploy` over raw docker/kubectl/yq commands.
 - Treat this service as the control plane, not a thin API wrapper
-- Long-term, keep LLM provider credentials in the backend, not in ZeroClaw pods
+- Long-term, keep LLM provider credentials in the backend, not in agent runtime pods
 - Runtime secrets are injected via ESO-managed Kubernetes Secrets (envSecretRef); provider key brokering will move fully behind the orchestrator later
 - Default model access is platform-managed; add BYOK later for power users
 - Connected app credentials are per-user and must be revocable
@@ -40,7 +40,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 
 ## Design Priorities
 
-- Clear typed contracts between mobile, backend, and ZeroClaw
+- Clear typed contracts between mobile, backend, and agent runtime
 - Idempotent provisioning and retries
 - Secure secret storage and token refresh
 - Structured logs, audit trails, and per-user usage accounting
@@ -71,7 +71,7 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 - Use the local Docker stack for Venom-based minimal workflow verification; avoid reintroducing manual curl-only verification as the primary path
 - `UserSwarm.status` is the source of truth for runtime readiness. Do not duplicate swarm phase/readiness into Postgres unless there is a strong product reason.
 - The backend should expose workspace runtime readiness through the normal workspace endpoints before adding a dedicated provisioning endpoint.
-- Runtime pods are private because Kubernetes limits reachability, not because ZeroClaw binds localhost. Keep that distinction in mind when changing `tomlOverrides` or gateway env defaults.
+- Runtime pods are private because Kubernetes limits reachability, not because the agent runtime binds localhost. Keep that distinction in mind when changing `tomlOverrides` or gateway env defaults.
 
 ## Environment Variables and Secrets
 
@@ -86,12 +86,12 @@ The backend sits between the Flutter app and each user's ZeroClaw swarm. It owns
 1. Build the orchestrator HTTP foundation first
 2. Add swarm-aware auth/session and workspace state
 3. Add internal MCP endpoints and first-party skills
-4. Move provider access behind the orchestrator instead of persisting provider keys in ZeroClaw runtime config
+4. Move provider access behind the orchestrator instead of persisting provider keys in agent runtime config
 
 ## MVP Focus
 
 1. Auth and user provisioning
-2. ZeroClaw request proxy
+2. the agent runtime request proxy
 3. Gmail and Google Calendar adapters
 4. Hosted LLM provider integration
 5. Read-first integrations, then ask-before-write flows
@@ -118,7 +118,7 @@ crawbl app deploy platform
 crawbl app deploy auth-filter
 crawbl app deploy docs
 crawbl app deploy website
-crawbl app deploy zeroclaw   # built/deployed separately
+crawbl app deploy agent-runtime   # built/deployed separately
 
 # Deploy platform + auth-filter only
 crawbl app deploy all
@@ -142,7 +142,7 @@ Each `crawbl app deploy` call for backend components (platform, auth-filter):
 
 For **docs** and **website**, steps 2-4 and 7 are skipped. Instead, the deploy runs `npm run build` in the sibling repo and `wrangler pages deploy` to upload the static output to Cloudflare Pages. Tagging and GitHub release still happen.
 
-`crawbl app deploy all` deploys platform + auth-filter only. Docs, website, and zeroclaw are deployed individually.
+`crawbl app deploy all` deploys platform + auth-filter only. Docs, website, and agent-runtime are deployed individually.
 
 `crawbl setup` verifies required tools: `docker`, `yq`, `gh`, `claude`. `.mise.toml` includes `yq`, `protoc`, and the standard Go/k8s/cloud toolchain. Run `mise install` inside `crawbl-backend/` after a fresh clone to provision `protoc` and the rest.
 

@@ -56,7 +56,7 @@ services:
       retries: 20
 
   # crawbl-agent-runtime is the Phase 1 POC of the new in-tree Go runtime
-  # that replaces ZeroClaw in Phase 2. Opt-in profile — NOT part of the
+  # that replaces the agent runtime in Phase 2. Opt-in profile — NOT part of the
   # default stack. Run via:
   #
   #   set -a && source .env && set +a

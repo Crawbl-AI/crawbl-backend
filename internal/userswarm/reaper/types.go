@@ -22,7 +22,7 @@
 //
 // UserSwarm CRs are created by the orchestrator when a user signs up
 // (internal/userswarm/client). Metacontroller watches those CRs and reconciles
-// the actual ZeroClaw runtime pods and services in the "userswarms" namespace.
+// the actual agent runtime pods and services in the "userswarms" namespace.
 // The webhook (internal/userswarm/webhook) is notified by Metacontroller on
 // every sync event and drives the desired-state diff. The reaper sits outside
 // this reconciliation loop — it is a one-shot job (or cron job) that deletes

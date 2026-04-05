@@ -3,7 +3,7 @@
 // used for authentication, user management, workspace management, messaging,
 // and runtime status tracking.
 //
-// The orchestrator sits between the Flutter mobile app and each user's ZeroClaw
+// The orchestrator sits between the Flutter mobile app and each user's agent runtime
 // swarm, handling routing, auth, orchestration, integrations, billing controls,
 // and auditability.
 package orchestrator
@@ -397,7 +397,7 @@ type Agent struct {
 	// Role describes the agent's role in the swarm hierarchy (e.g., "sub-agent", "manager").
 	Role string `json:"role"`
 
-	// Slug is the ZeroClaw routing identifier for this agent.
+	// Slug is the agent runtime routing identifier for this agent.
 	// Matches the [agents.<slug>] key in config.toml and is sent as agent_id in the webhook.
 	Slug string `json:"slug"`
 
@@ -717,7 +717,7 @@ type DefaultAgentBlueprint struct {
 	// Name is the display name of the agent.
 	Name string
 
-	// Slug is the ZeroClaw routing identifier.
+	// Slug is the agent runtime routing identifier.
 	Slug string
 
 	// Role is the swarm hierarchy role.
@@ -839,7 +839,7 @@ type CategoryMeta struct {
 }
 
 // IntegrationCategories returns display metadata for integration (app) categories.
-// Tool categories live in the zeroclaw package; these are merged at the handler level.
+// Tool categories live in the agentruntime/tools package; these are merged at the handler level.
 func IntegrationCategories() []CategoryMeta {
 	return []CategoryMeta{
 		{"communication", "Communication", "https://cdn.crawbl.com/categories/communication.png"},

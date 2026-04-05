@@ -141,8 +141,8 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, targetAgent.ID, "thinking", input.ConversationID)
 		}
 
-		// 5. Ensure runtime is ready and call ZeroClaw.
-		RecordAPICall(ctx, "ZEROCLAW:POST /webhook")
+		// 5. Ensure runtime is ready and call the agent runtime.
+		RecordAPICall(ctx, "RUNTIME:GRPC Converse")
 		startTime := time.Now()
 
 		// Build conversation context to inject.
@@ -173,7 +173,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			}, nil
 		}
 
-		// Call ZeroClaw pod via runtime client (synchronous SendText).
+		// Call agent runtime pod via runtime client (synchronous SendText).
 		turns, callErr := deps.RuntimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 			Runtime:   runtimeState,
 			Message:   fullMessage,

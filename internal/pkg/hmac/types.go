@@ -3,7 +3,7 @@
 //
 // Tokens encode a key-value payload (e.g. userID:workspaceID) signed with
 // a shared secret. This is used for:
-//   - MCP bearer tokens (ZeroClaw → orchestrator)
+//   - MCP bearer tokens (agent runtime → orchestrator)
 //   - Any future internal auth that needs stateless, signed identity tokens
 //
 // Token format: base64url(payload).hmac_sha256_hex

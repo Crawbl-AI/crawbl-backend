@@ -1,7 +1,7 @@
 # Thin wrapper around the repo-local `./crawbl` launcher.
 # The launcher builds `bin/crawbl` on demand and keeps it fresh.
 
-.PHONY: setup post-clone hooks build build-ci run run-db run-clean stop clean migrate test test-e2e fmt lint verify build-dev deploy-dev deploy-platform deploy-zeroclaw deploy-docs deploy-website ci-check generate generate-tools-install
+.PHONY: setup post-clone hooks build build-ci run run-db run-clean stop clean migrate test test-e2e fmt lint verify build-dev deploy-dev deploy-platform deploy-agent-runtime deploy-docs deploy-website ci-check generate generate-tools-install
 
 setup: hooks build
 	./crawbl setup
@@ -67,8 +67,8 @@ deploy-dev:
 deploy-platform:
 	./crawbl app deploy platform
 
-deploy-zeroclaw:
-	./crawbl app deploy zeroclaw
+deploy-agent-runtime:
+	./crawbl app deploy agent-runtime
 
 deploy-docs:
 	./crawbl app deploy docs

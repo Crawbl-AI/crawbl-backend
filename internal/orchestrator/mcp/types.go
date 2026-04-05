@@ -1,11 +1,11 @@
 // Package mcp provides the MCP (Model Context Protocol) server for the Crawbl orchestrator.
 //
-// ZeroClaw agent runtimes connect to this server as MCP clients to access
+// agent runtimes connect to this server as MCP clients to access
 // platform capabilities: push notifications, user context, and (future) OAuth
 // integrations. The server is embedded in the orchestrator at /mcp/v1.
 //
 // Security model:
-//   - Each ZeroClaw pod gets an HMAC-signed bearer token at provisioning time.
+//   - Each agent runtime pod gets an HMAC-signed bearer token at provisioning time.
 //   - The token encodes userID:workspaceID and is validated on every request.
 //   - Tool handlers can only access data for the authenticated user.
 //   - OAuth tokens for integrations are stored server-side; agents never see them.
@@ -69,7 +69,7 @@ type Config struct {
 	FCMProjectID string
 	// FCMServiceAccountPath is the path to the Firebase service account JSON.
 	FCMServiceAccountPath string
-	// Endpoint is the full URL ZeroClaw pods use to reach this MCP server.
+	// Endpoint is the full URL agent runtime pods use to reach this MCP server.
 	// Example: http://orchestrator.backend.svc.cluster.local:7171/mcp/v1
 	Endpoint string
 }

@@ -7,9 +7,9 @@
 
 ## Tool Catalog
 
-Single source of truth: `internal/zeroclaw/tools.go`
+Single source of truth: `internal/agentruntime/tools/catalog.go`
 
-Adding a tool here auto-enables it in the mobile app AND ZeroClaw's auto-approve list.
+Adding a tool here auto-enables it in the mobile app AND the agent runtime's auto-approve list.
 
 | Tool | Display Name | Category |
 |------|-------------|----------|
@@ -79,9 +79,9 @@ Source: `internal/pkg/errors/types.go`
 
 ---
 
-## ZeroClaw Defaults
+## the agent runtime Defaults
 
-Source: `internal/zeroclaw/types.go`
+Source: `internal/agentruntime/types.go`
 
 | Constant | Value | What |
 |----------|-------|------|
@@ -142,11 +142,11 @@ Source: `internal/orchestrator/mcp/server.go`
 
 ## LLM API Key Priority
 
-Inside ZeroClaw pods, scanned in order (first non-empty wins):
+Inside agent runtime pods, scanned in order (first non-empty wins):
 
 1. `OPENAI_API_KEY`
 2. `USERSWARM_API_KEY`
-3. `ZEROCLAW_API_KEY`
+3. `CRAWBL_API_KEY`
 4. `API_KEY`
 5. `OPENROUTER_API_KEY`
 6. `ANTHROPIC_API_KEY`

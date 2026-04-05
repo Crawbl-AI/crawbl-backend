@@ -70,7 +70,7 @@ type OpenAIConfig struct {
 	APIKey string
 
 	// ModelName is the OpenAI model identifier. Defaults to "gpt-5-mini"
-	// (see defaults.go), matching the existing ZeroClaw runtime and
+	// (see defaults.go), matching the existing agent runtime and
 	// orchestrator defaults. Phase 1 locks this value per plan §0 directive 6.
 	ModelName string
 

@@ -212,7 +212,7 @@ func ListModels(c *Context) http.HandlerFunc {
 	}
 }
 
-// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+// GetAgentMemories retrieves memories from the agent's agent runtime.
 func GetAgentMemories(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -241,7 +241,7 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Slice pagination over the full list from ZeroClaw.
+		// Slice pagination over the full list from the agent runtime.
 		total := len(memories)
 		start := offset
 		if start > total {
@@ -276,7 +276,7 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 	}
 }
 
-// DeleteAgentMemory removes a specific memory from the agent's ZeroClaw runtime.
+// DeleteAgentMemory removes a specific memory from the agent's agent runtime.
 func DeleteAgentMemory(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -300,7 +300,7 @@ func DeleteAgentMemory(c *Context) http.HandlerFunc {
 	}
 }
 
-// CreateAgentMemory stores a new memory in the agent's ZeroClaw runtime.
+// CreateAgentMemory stores a new memory in the agent's agent runtime.
 func CreateAgentMemory(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)

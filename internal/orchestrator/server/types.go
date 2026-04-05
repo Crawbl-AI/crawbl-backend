@@ -84,7 +84,7 @@ type NewServerOpts struct {
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.
 // It provides authentication, workspace management, chat functionality, and
 // real-time WebSocket communication via Socket.IO while acting as the control
-// plane between mobile clients and ZeroClaw swarms.
+// plane between mobile clients and agent runtimes.
 type Server struct {
 	// httpServer is the underlying HTTP server instance.
 	httpServer *http.Server

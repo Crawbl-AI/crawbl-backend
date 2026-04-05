@@ -229,7 +229,7 @@ type AgentRow struct {
 	Name string `db:"name"`
 	// Role is the swarm hierarchy role (e.g., "sub-agent", "manager").
 	Role string `db:"role"`
-	// Slug is the ZeroClaw routing identifier.
+	// Slug is the agent runtime routing identifier.
 	Slug string `db:"slug"`
 	// AvatarURL is the URL to the agent's avatar image.
 	AvatarURL string `db:"avatar_url"`

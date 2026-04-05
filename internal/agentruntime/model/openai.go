@@ -33,7 +33,7 @@ var ErrOpenAIAPIKeyMissing = errors.New("openai: APIKey is required (set OPENAI_
 // compatible providers without adding more dependencies.
 //
 // ModelName falls back to config.DefaultOpenAIModel ("gpt-5-mini") when
-// empty — this matches the existing ZeroClaw and orchestrator defaults.
+// empty — this matches the existing the agent runtime and orchestrator defaults.
 func NewOpenAI(cfg config.OpenAIConfig) (adkmodel.LLM, error) {
 	apiKey := strings.TrimSpace(cfg.APIKey)
 	if apiKey == "" {

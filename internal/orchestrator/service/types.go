@@ -330,7 +330,7 @@ type CreateAgentMemoryOpts struct {
 	Category string
 }
 
-// AgentMemory represents a memory entry from the ZeroClaw runtime.
+// AgentMemory represents a memory entry from the agent runtime.
 type AgentMemory struct {
 	Key       string `json:"key"`
 	Content   string `json:"content"`
@@ -512,13 +512,13 @@ type AgentService interface {
 	// Returns a ToolPage on success, or a merrors.Error on failure.
 	GetAgentTools(ctx context.Context, opts *GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error)
 
-	// GetAgentMemories retrieves memories from the agent's ZeroClaw runtime.
+	// GetAgentMemories retrieves memories from the agent's agent runtime.
 	GetAgentMemories(ctx context.Context, opts *GetAgentMemoriesOpts) ([]AgentMemory, *merrors.Error)
 
-	// DeleteAgentMemory removes a specific memory from the agent's ZeroClaw runtime.
+	// DeleteAgentMemory removes a specific memory from the agent's agent runtime.
 	DeleteAgentMemory(ctx context.Context, opts *DeleteAgentMemoryOpts) *merrors.Error
 
-	// CreateAgentMemory stores a new memory in the agent's ZeroClaw runtime.
+	// CreateAgentMemory stores a new memory in the agent's agent runtime.
 	CreateAgentMemory(ctx context.Context, opts *CreateAgentMemoryOpts) *merrors.Error
 }
 
