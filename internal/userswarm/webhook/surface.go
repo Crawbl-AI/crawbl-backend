@@ -87,6 +87,9 @@ func runtimeConfigFromEnv() *runtimeConfig {
 		OTelEnvironment:          os.Getenv("CRAWBL_OTEL_ENVIRONMENT"),
 		OTelNamespace:            os.Getenv("CRAWBL_OTEL_NAMESPACE"),
 		OTelExportInterval:       os.Getenv("CRAWBL_OTEL_EXPORT_INTERVAL"),
+		SpacesEndpoint:           os.Getenv("CRAWBL_SPACES_ENDPOINT"),
+		SpacesRegion:             os.Getenv("CRAWBL_SPACES_REGION"),
+		SpacesBucket:             os.Getenv("CRAWBL_SPACES_BUCKET"),
 	}
 }
 

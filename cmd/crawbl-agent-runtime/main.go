@@ -35,6 +35,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/server"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/session"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
 	agentmcp "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
@@ -151,13 +152,41 @@ func main() {
 		}
 	}()
 
-	// Step 4c: shared local tool slice (web_fetch, web_search_tool,
-	// memory_store, memory_recall, memory_forget) built once per pod
-	// and bound onto every agent in the graph.
+	// Step 4c: DigitalOcean Spaces client for file_read / file_write.
+	// Returns (nil, nil) when every CRAWBL_SPACES_* field is empty so
+	// local dev without object storage stays on a single code path;
+	// BuildCommonTools below skips the file tools when the client is
+	// nil but keeps the rest of the tool set available.
+	spacesClient, err := storage.NewSpacesClient(storage.Config{
+		Endpoint:  cfg.Spaces.Endpoint,
+		Region:    cfg.Spaces.Region,
+		Bucket:    cfg.Spaces.Bucket,
+		AccessKey: cfg.Spaces.AccessKey,
+		SecretKey: cfg.Spaces.SecretKey,
+	})
+	if err != nil {
+		logger.Error("init spaces client", "error", err)
+		os.Exit(1)
+	}
+	if spacesClient != nil {
+		logger.Info("spaces client ready",
+			"endpoint", cfg.Spaces.Endpoint,
+			"region", cfg.Spaces.Region,
+			"bucket", spacesClient.Bucket(),
+		)
+	} else {
+		logger.Info("spaces client disabled (no CRAWBL_SPACES_* config); file_read/file_write unavailable")
+	}
+
+	// Step 4d: shared local tool slice (web_fetch, web_search_tool,
+	// memory_store, memory_recall, memory_forget, + file_read/file_write
+	// when Spaces is configured) built once per pod and bound onto every
+	// agent in the graph.
 	localTools, err := agents.BuildCommonTools(agents.CommonToolDeps{
 		MemStore:        memStore,
 		WorkspaceID:     cfg.WorkspaceID,
 		SearXNGEndpoint: cfg.SearXNGEndpoint,
+		Spaces:          spacesClient,
 	})
 	if err != nil {
 		logger.Error("init local tools", "error", err)

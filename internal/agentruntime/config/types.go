@@ -76,8 +76,36 @@ type Config struct {
 	// to override.
 	SearXNGEndpoint string
 
+	// Spaces carries the DigitalOcean Spaces client configuration
+	// used by the file_read / file_write tools. Optional — when
+	// every field is empty, the runtime boots without storage and
+	// the file tools are silently unavailable.
+	Spaces SpacesConfig
+
 	// Startup holds operational knobs (graceful shutdown window, timeouts).
 	Startup StartupConfig
+}
+
+// SpacesConfig carries the DigitalOcean Spaces client settings the
+// agent runtime uses to back the file_read / file_write tools. Every
+// field is required when any field is set; an entirely empty value
+// disables storage.
+type SpacesConfig struct {
+	// Endpoint is the Spaces HTTPS URL, e.g.
+	// "https://fra1.digitaloceanspaces.com".
+	Endpoint string
+	// Region is the Spaces region (e.g. "fra1"). Required by the
+	// S3-protocol signing logic even though Spaces ignores it for
+	// auth.
+	Region string
+	// Bucket is the single shared bucket every workspace's blobs
+	// live under, scoped per-workspace at the key prefix level.
+	Bucket string
+	// AccessKey / SecretKey are the Spaces API credentials. Sourced
+	// from ESO-synced Secrets (runtime-openai-secrets); never
+	// hardcoded.
+	AccessKey string
+	SecretKey string
 }
 
 // OpenAIConfig is the OpenAI model adapter settings.

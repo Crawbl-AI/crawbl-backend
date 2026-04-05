@@ -69,6 +69,11 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 
 	fs.StringVar(&cfg.SearXNGEndpoint, "searxng-endpoint", envOr("CRAWBL_SEARXNG_ENDPOINT", cfg.SearXNGEndpoint), "SearXNG meta-search base URL used by the web_search_tool")
 
+	// DigitalOcean Spaces (file_read / file_write backend).
+	fs.StringVar(&cfg.Spaces.Endpoint, "spaces-endpoint", os.Getenv("CRAWBL_SPACES_ENDPOINT"), "DO Spaces HTTPS endpoint, e.g. https://fra1.digitaloceanspaces.com")
+	fs.StringVar(&cfg.Spaces.Region, "spaces-region", os.Getenv("CRAWBL_SPACES_REGION"), "DO Spaces region (e.g. fra1)")
+	fs.StringVar(&cfg.Spaces.Bucket, "spaces-bucket", os.Getenv("CRAWBL_SPACES_BUCKET"), "DO Spaces bucket name")
+
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
@@ -76,6 +81,8 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	// Env-only secrets never have flag equivalents.
 	cfg.MCPSigningKey = os.Getenv("CRAWBL_MCP_SIGNING_KEY")
 	cfg.OpenAI.APIKey = os.Getenv("OPENAI_API_KEY")
+	cfg.Spaces.AccessKey = os.Getenv("CRAWBL_SPACES_ACCESS_KEY")
+	cfg.Spaces.SecretKey = os.Getenv("CRAWBL_SPACES_SECRET_KEY")
 
 	// Resolve Redis session TTL: CLI flag > env > default.
 	if strings.TrimSpace(*redisTTLFlag) != "" {

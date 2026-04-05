@@ -228,6 +228,15 @@ func runtimeBackendEnv(cfg *runtimeConfig) []corev1.EnvVar {
 	if cfg.OTelExportInterval != "" {
 		out = append(out, corev1.EnvVar{Name: "CRAWBL_OTEL_EXPORT_INTERVAL", Value: cfg.OTelExportInterval})
 	}
+	if cfg.SpacesEndpoint != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_SPACES_ENDPOINT", Value: cfg.SpacesEndpoint})
+	}
+	if cfg.SpacesRegion != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_SPACES_REGION", Value: cfg.SpacesRegion})
+	}
+	if cfg.SpacesBucket != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_SPACES_BUCKET", Value: cfg.SpacesBucket})
+	}
 	return out
 }
 

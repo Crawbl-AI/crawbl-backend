@@ -63,6 +63,16 @@ type runtimeConfig struct {
 	OTelEnvironment     string
 	OTelNamespace       string
 	OTelExportInterval  string
+
+	// SpacesEndpoint / SpacesRegion / SpacesBucket are the non-secret
+	// DigitalOcean Spaces connection settings every runtime pod needs
+	// to wire the file_read / file_write tools against shared object
+	// storage. The matching SpacesAccessKey / SpacesSecretKey flow
+	// through the envSecretRef Secret (runtime-openai-secrets), never
+	// through webhook process env.
+	SpacesEndpoint string
+	SpacesRegion   string
+	SpacesBucket   string
 }
 
 // syncRequest is the request envelope Metacontroller POSTs to /sync.

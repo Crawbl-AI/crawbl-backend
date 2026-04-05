@@ -3,8 +3,8 @@
   { "name": "web_fetch", "display_name": "Web Fetch", "description": "Read and extract content from any webpage URL", "category": "search", "icon_url": "https://cdn.crawbl.com/tools/web-fetch.png", "implemented": true },
   { "name": "http_request", "display_name": "HTTP Request", "description": "Make HTTP API calls to external services", "category": "search", "icon_url": "https://cdn.crawbl.com/tools/http-request.png", "implemented": false },
 
-  { "name": "file_read", "display_name": "Read Files", "description": "Read files from the agent's workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/file-read.png", "implemented": false },
-  { "name": "file_write", "display_name": "Write Files", "description": "Create and write files in the agent's workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/file-write.png", "implemented": false },
+  { "name": "file_read", "display_name": "Read Files", "description": "Read files from the agent's workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/file-read.png", "implemented": true },
+  { "name": "file_write", "display_name": "Write Files", "description": "Create and write files in the agent's workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/file-write.png", "implemented": true },
   { "name": "file_edit", "display_name": "Edit Files", "description": "Edit existing files in the agent's workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/file-edit.png", "implemented": false },
   { "name": "glob_search", "display_name": "File Search", "description": "Search for files by name pattern in the workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/glob-search.png", "implemented": false },
   { "name": "content_search", "display_name": "Content Search", "description": "Search inside files for specific text or patterns", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/content-search.png", "implemented": false },

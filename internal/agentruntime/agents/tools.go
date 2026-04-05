@@ -20,6 +20,7 @@ import (
 	"google.golang.org/adk/tool/functiontool"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/local"
 )
 
@@ -291,6 +292,76 @@ func NewMemoryForgetTool(store memory.Store, workspaceID string) (adktool.Tool, 
 	return t, nil
 }
 
+// --- file_read ------------------------------------------------------
+
+// FileReadArgs is the LLM-facing schema for file_read.
+type FileReadArgs struct {
+	Key string `json:"key" jsonschema:"object key under the workspace, e.g. uploads/trip.md; required"`
+}
+
+// NewFileReadTool wraps local.FileRead. workspaceID + spaces client
+// are captured at construction time so the tool cannot read another
+// workspace's blobs.
+func NewFileReadTool(spaces *storage.SpacesClient, workspaceID string) (adktool.Tool, error) {
+	if spaces == nil {
+		return nil, fmt.Errorf("agents: file_read requires a non-nil storage client")
+	}
+	if workspaceID == "" {
+		return nil, fmt.Errorf("agents: file_read requires a non-empty workspace id")
+	}
+	handler := func(tctx adktool.Context, args FileReadArgs) (local.FileReadResult, error) {
+		return local.FileRead(toolCtxOrBackground(tctx), spaces, workspaceID, local.FileReadOptions{Key: args.Key})
+	}
+	t, err := functiontool.New(
+		functiontool.Config{
+			Name:        "file_read",
+			Description: "Read a file the user uploaded into their workspace storage. Returns the file contents (text or base64) and MIME type. Use this when the user refers to a document, note, or file by name.",
+		},
+		handler,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("agents: construct file_read tool: %w", err)
+	}
+	return t, nil
+}
+
+// --- file_write -----------------------------------------------------
+
+// FileWriteArgs is the LLM-facing schema for file_write.
+type FileWriteArgs struct {
+	Key         string `json:"key" jsonschema:"object key under the workspace, e.g. drafts/email.md; required"`
+	Content     string `json:"content" jsonschema:"file body; required"`
+	ContentType string `json:"content_type,omitempty" jsonschema:"optional MIME type (default text/plain)"`
+}
+
+// NewFileWriteTool wraps local.FileWrite.
+func NewFileWriteTool(spaces *storage.SpacesClient, workspaceID string) (adktool.Tool, error) {
+	if spaces == nil {
+		return nil, fmt.Errorf("agents: file_write requires a non-nil storage client")
+	}
+	if workspaceID == "" {
+		return nil, fmt.Errorf("agents: file_write requires a non-empty workspace id")
+	}
+	handler := func(tctx adktool.Context, args FileWriteArgs) (local.FileWriteResult, error) {
+		return local.FileWrite(toolCtxOrBackground(tctx), spaces, workspaceID, local.FileWriteOptions{
+			Key:         args.Key,
+			Content:     args.Content,
+			ContentType: args.ContentType,
+		})
+	}
+	t, err := functiontool.New(
+		functiontool.Config{
+			Name:        "file_write",
+			Description: "Create or overwrite a file in the user's workspace storage. Use this to persist agent outputs (drafts, notes, plans) the user will want to reference later.",
+		},
+		handler,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("agents: construct file_write tool: %w", err)
+	}
+	return t, nil
+}
+
 // --- BuildCommonTools -----------------------------------------------
 
 // CommonToolDeps carries the backend handles every local tool needs.
@@ -303,12 +374,18 @@ type CommonToolDeps struct {
 	// memory_recall / memory_forget.
 	MemStore memory.Store
 	// WorkspaceID is the Crawbl workspace this pod serves. The
-	// memory tools scope every read and write to this workspace.
+	// memory + file tools scope every read and write to this workspace.
 	WorkspaceID string
 	// SearXNGEndpoint is the base URL of the internal meta-search
 	// instance (see crawbl-argocd-apps/components/searxng/). Captured
 	// at construction time by web_search_tool.
 	SearXNGEndpoint string
+	// Spaces is the DigitalOcean Spaces client that backs the
+	// file_read / file_write tools. May be nil when storage is not
+	// configured (local dev) — BuildCommonTools skips the file tools
+	// in that case rather than returning an error, so the rest of
+	// the tool set stays available.
+	Spaces *storage.SpacesClient
 }
 
 // BuildCommonTools returns the full local tool slice the agents
@@ -336,7 +413,24 @@ func BuildCommonTools(deps CommonToolDeps) ([]adktool.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []adktool.Tool{webFetch, webSearch, memStore, memRecall, memForget}, nil
+	tools := []adktool.Tool{webFetch, webSearch, memStore, memRecall, memForget}
+
+	// File tools are optional — when Spaces is not configured the
+	// runtime stays usable for every other capability. When it IS
+	// configured, bind file_read + file_write so agents can read
+	// user uploads and persist outputs.
+	if deps.Spaces != nil {
+		fileRead, err := NewFileReadTool(deps.Spaces, deps.WorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+		fileWrite, err := NewFileWriteTool(deps.Spaces, deps.WorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+		tools = append(tools, fileRead, fileWrite)
+	}
+	return tools, nil
 }
 
 // toolCtxOrBackground extracts a context.Context from an ADK
