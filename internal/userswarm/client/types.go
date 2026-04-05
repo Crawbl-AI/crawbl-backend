@@ -58,6 +58,7 @@ type StreamChunk struct {
 	Args    string
 	Output  string
 	Model   string
+	CallID  string
 }
 
 // MemoryEntry is a single memory row returned by the runtime's Memory

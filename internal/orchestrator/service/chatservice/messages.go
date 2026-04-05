@@ -12,6 +12,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/google/uuid"
 
+	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
@@ -171,6 +172,14 @@ func (s *service) executeParallel(
 	return replies, nil
 }
 
+// pendingToolCall tracks a ToolCallEvent so we can resolve the tool name,
+// agent, and parsed args when the matching ToolResultEvent arrives.
+type pendingToolCall struct {
+	tool      string       // e.g. agentruntimetools.ToolTransferToAgent
+	agentSlug string       // agent slug from the ToolCallEvent (e.g. "manager")
+	args      toolCallArgs // parsed args — reused on ToolResult for delegation resolution
+}
+
 // subAgentStream tracks a placeholder message and accumulated text for a single
 // agent_id seen during a multi-agent streaming response (Phase 5).
 type subAgentStream struct {
@@ -287,6 +296,7 @@ func (s *service) callAgentStreaming(
 		placeholder: placeholder,
 		firstChunk:  true,
 	}
+	pendingToolCalls := make(map[string]pendingToolCall)
 
 	// resolveStream returns the subAgentStream for the given chunk.AgentID slug,
 	// creating a new placeholder and DB row if this is the first chunk for that
@@ -412,51 +422,94 @@ func (s *service) callAgentStreaming(
 				Chunk:          chunk.Delta,
 			})
 
+		// Tool call: agent is about to invoke a tool.
+		//
+		// 1. Parse the raw JSON args once (structured map + query string).
+		// 2. Store the call in pendingToolCalls keyed by call_id so the
+		//    matching ToolResult can resolve the tool name and args (the
+		//    proto ToolResultEvent only carries call_id + result_json).
+		// 3. Emit agent.tool { status: "running" } to mobile.
+		// 4. If the tool is transfer_to_agent (ADK delegation), record the
+		//    delegation for audit and push the sub-agent into "thinking".
 		case userswarmclient.StreamEventToolCall:
-			// Tool events are attributed to the chunk's agent_id when available,
-			// otherwise fall back to the primary agent.
 			toolAgentID := agent.ID
 			if chunk.AgentID != "" {
 				if ta := lookups.bySlug[chunk.AgentID]; ta != nil {
 					toolAgentID = ta.ID
 				}
 			}
+
+			// Single parse: JSON → structured args map + human-readable query.
+			parsed := parseToolCallArgs(chunk.Tool, chunk.Args)
+
+			// Stash so ToolResult can look up the tool name and original args.
+			if chunk.CallID != "" {
+				pendingToolCalls[chunk.CallID] = pendingToolCall{tool: chunk.Tool, agentSlug: chunk.AgentID, args: parsed}
+			}
+
+			// Mobile receives: tool (enum key for l10n), query (human-readable
+			// fallback), args (structured map for custom rendering).
 			s.broadcaster.EmitAgentTool(ctx, opts.WorkspaceID, realtime.AgentToolPayload{
 				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
 				Tool:           chunk.Tool,
 				Status:         realtime.AgentToolStatusRunning,
-				Query:          chunk.Args,
+				Query:          parsed.Query,
+				Args:           parsed.Parsed,
 			})
 
-			// Track delegation events for audit and UX.
-			if chunk.Tool == "delegate" {
-				delegateSlug, taskSummary := parseDelegateArgs(chunk.Args)
-				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
-					// Use the primary placeholder as the trigger message for audit.
-					go s.recordDelegation(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
+			// ADK delegation: Manager hands off to a sub-agent.
+			if chunk.Tool == agentruntimetools.ToolTransferToAgent {
+				slug, _ := parsed.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
+				if delegateAgent := lookups.bySlug[slug]; delegateAgent != nil {
+					go s.recordDelegation(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, "")
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 				}
 			}
 
+		// ── Tool result: tool invocation completed ───────────────────
+		//
+		// The proto ToolResultEvent carries only call_id + result_json,
+		// NOT the tool name or agent_id. We resolve those from the
+		// pendingToolCalls map populated by the preceding ToolCallEvent.
+		//
+		// 1. Look up the matching pendingToolCall by call_id.
+		// 2. Emit agent.tool { status: "done" } with the resolved tool name.
+		// 3. If the tool was transfer_to_agent, clear the sub-agent's
+		//    "thinking" status back to "online" and record completion.
 		case userswarmclient.StreamEventToolResult:
+			var matched pendingToolCall
+			if chunk.CallID != "" {
+				if info, ok := pendingToolCalls[chunk.CallID]; ok {
+					matched = info
+					delete(pendingToolCalls, chunk.CallID)
+				}
+			}
+
+			// Resolve the agent that invoked the tool.
 			toolAgentID := agent.ID
-			if chunk.AgentID != "" {
+			if matched.agentSlug != "" {
+				if ta := lookups.bySlug[matched.agentSlug]; ta != nil {
+					toolAgentID = ta.ID
+				}
+			} else if chunk.AgentID != "" {
 				if ta := lookups.bySlug[chunk.AgentID]; ta != nil {
 					toolAgentID = ta.ID
 				}
 			}
+
+			// Mobile matches this "done" to the earlier "running" by tool name.
 			s.broadcaster.EmitAgentTool(ctx, opts.WorkspaceID, realtime.AgentToolPayload{
 				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
-				Tool:           chunk.Tool,
-				Status:         "done",
+				Tool:           matched.tool,
+				Status:         realtime.AgentToolStatusDone,
 			})
 
-			// Clear delegate agent status when delegation completes.
-			if chunk.Tool == "delegate" {
-				delegateSlug, _ := parseDelegateArgs(chunk.Args)
-				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
+			// ADK delegation complete: reset sub-agent status and record audit.
+			if matched.tool == agentruntimetools.ToolTransferToAgent {
+				slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
+				if delegateAgent := lookups.bySlug[slug]; delegateAgent != nil {
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 					go s.completeDelegation(opts.WorkspaceID, conversation.ID, placeholder.ID, delegateAgent.ID)
 				}
@@ -722,16 +775,43 @@ func (s *service) buildConversationContext(
 	return sb.String()
 }
 
-// parseDelegateArgs extracts the agent slug and task from delegate tool_call JSON args.
-func parseDelegateArgs(argsJSON string) (slug, task string) {
-	var args struct {
-		Agent  string `json:"agent"`
-		Prompt string `json:"prompt"`
+// toolCallArgs is the result of parsing a tool call's raw JSON args once.
+// Returned by parseToolCallArgs and consumed by the streaming loop to
+// populate the agent.tool event (query + args) and delegation tracking.
+type toolCallArgs struct {
+	// Parsed is the full JSON args as a typed map for the mobile l10n layer.
+	Parsed map[string]any
+	// Query is the human-readable primary arg extracted via ToolQueryField.
+	Query string
+}
+
+// parseToolCallArgs unmarshals argsJSON once and extracts both the
+// structured args map and the human-readable query string. The query
+// field lookup is driven by agentruntimetools.ToolQueryField — no
+// switch statements, no magic strings.
+func parseToolCallArgs(toolName, argsJSON string) toolCallArgs {
+	if argsJSON == "" {
+		return toolCallArgs{}
 	}
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return "", ""
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(argsJSON), &parsed); err != nil {
+		return toolCallArgs{}
 	}
-	return args.Agent, args.Prompt
+	if len(parsed) == 0 {
+		return toolCallArgs{}
+	}
+
+	var query string
+	if fields, ok := agentruntimetools.ToolQueryField[toolName]; ok {
+		for _, field := range fields {
+			if v, ok := parsed[field].(string); ok && v != "" {
+				query = v
+				break
+			}
+		}
+	}
+
+	return toolCallArgs{Parsed: parsed, Query: query}
 }
 
 // recordDelegation inserts an agent_delegations row (async, best-effort).

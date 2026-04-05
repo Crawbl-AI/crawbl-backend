@@ -106,11 +106,12 @@ type MessageDonePayload struct {
 
 // AgentToolPayload reports tool call activity during streaming.
 type AgentToolPayload struct {
-	AgentID        string `json:"agent_id"`
-	ConversationID string `json:"conversation_id"`
-	Tool           string `json:"tool"`
-	Status         string `json:"status"`          // "running" or "done"
-	Query          string `json:"query,omitempty"`
+	AgentID        string         `json:"agent_id"`
+	ConversationID string         `json:"conversation_id"`
+	Tool           string         `json:"tool"`
+	Status         string         `json:"status"`          // "running" or "done"
+	Query          string         `json:"query,omitempty"`
+	Args           map[string]any `json:"args,omitempty"`
 }
 
 // MessageStatusPayload is emitted when a message's delivery status changes.

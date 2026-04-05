@@ -27,6 +27,83 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
+// Tool name constants. These are the canonical identifiers used in gRPC
+// ToolCallEvent.tool, agent.tool socket events, and the tools table.
+// Every tool name that appears in Go logic MUST be a constant here.
+const (
+	// ADK built-in: Manager delegates to a sub-agent.
+	// ArgField is the JSON key carrying the target agent slug.
+	ToolTransferToAgent         = "transfer_to_agent"
+	ToolTransferToAgentArgField = "agent_name"
+
+	// Search & Web
+	ToolWebSearch   = "web_search_tool"
+	ToolWebFetch    = "web_fetch"
+	ToolHTTPRequest = "http_request"
+
+	// Files
+	ToolFileRead      = "file_read"
+	ToolFileWrite     = "file_write"
+	ToolFileEdit      = "file_edit"
+	ToolGlobSearch    = "glob_search"
+	ToolContentSearch = "content_search"
+
+	// Memory
+	ToolMemoryStore  = "memory_store"
+	ToolMemoryRecall = "memory_recall"
+	ToolMemoryForget = "memory_forget"
+
+	// Scheduling
+	ToolCronAdd    = "cron_add"
+	ToolCronList   = "cron_list"
+	ToolCronRemove = "cron_remove"
+	ToolCronUpdate = "cron_update"
+	ToolCronRun    = "cron_run"
+	ToolCronRuns   = "cron_runs"
+
+	// Utility
+	ToolCalculator = "calculator"
+	ToolWeather    = "weather"
+	ToolImageInfo  = "image_info"
+	ToolShell      = "shell"
+
+	// Orchestrator MCP
+	ToolSendPushNotification = "orchestrator__send_push_notification"
+	ToolGetUserProfile       = "orchestrator__get_user_profile"
+	ToolGetWorkspaceInfo     = "orchestrator__get_workspace_info"
+	ToolListConversations    = "orchestrator__list_conversations"
+	ToolSearchPastMessages   = "orchestrator__search_past_messages"
+	ToolCreateAgentHistory   = "orchestrator__create_agent_history"
+	ToolSendMessageToAgent   = "orchestrator__send_message_to_agent"
+	ToolCreateArtifact       = "orchestrator__create_artifact"
+	ToolReadArtifact         = "orchestrator__read_artifact"
+	ToolUpdateArtifact       = "orchestrator__update_artifact"
+	ToolReviewArtifact       = "orchestrator__review_artifact"
+	ToolCreateWorkflow       = "orchestrator__create_workflow"
+	ToolTriggerWorkflow      = "orchestrator__trigger_workflow"
+	ToolCheckWorkflowStatus  = "orchestrator__check_workflow_status"
+	ToolListWorkflows        = "orchestrator__list_workflows"
+)
+
+// ToolQueryField maps tool names to the JSON arg field(s) that contain
+// the human-readable summary for agent.tool events. Checked in order;
+// first non-empty match wins. Tools not in this map get an empty query
+// — the mobile app uses tool name + args for l10n.
+var ToolQueryField = map[string][]string{
+	ToolWebSearch:          {"query"},
+	ToolWebFetch:           {"url"},
+	ToolHTTPRequest:        {"url"},
+	ToolGlobSearch:         {"pattern"},
+	ToolContentSearch:      {"query", "pattern"},
+	ToolMemoryStore:        {"key"},
+	ToolMemoryRecall:       {"key"},
+	ToolMemoryForget:       {"key"},
+	ToolCalculator:         {"expression"},
+	ToolWeather:            {"location"},
+	ToolShell:              {"command"},
+	ToolSearchPastMessages: {"query"},
+}
+
 // ToolCategory groups tools by function for display in the mobile
 // app. Values are intentionally the same strings the seed file uses
 // so JSON round-trips are byte-compatible.

@@ -253,12 +253,14 @@ func translateEvent(event *runtimev1.ConverseEvent) (StreamChunk, bool) {
 			AgentID: tc.GetAgentId(),
 			Tool:    tc.GetTool(),
 			Args:    tc.GetArgsJson(),
+			CallID:  tc.GetCallId(),
 		}, true
 	case event.GetToolResult() != nil:
 		tr := event.GetToolResult()
 		return StreamChunk{
 			Type:   StreamEventToolResult,
 			Output: tr.GetResultJson(),
+			CallID: tr.GetCallId(),
 		}, true
 	case event.GetDone() != nil:
 		d := event.GetDone()
