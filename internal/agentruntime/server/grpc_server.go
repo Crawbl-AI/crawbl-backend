@@ -11,29 +11,36 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 )
 
 // Server is the top-level gRPC server wrapper for crawbl-agent-runtime. It
-// owns the net.Listener, the *grpc.Server, the HealthServer, and the
-// in-memory Memory store (Phase 1). main.go constructs one Server via
-// New(), calls Start() in a goroutine, and Shutdown() on SIGTERM.
-//
-// The AgentRuntime service is still a stub in this iteration — US-AR-009
-// fills in the Converse bidi stream against the ADK runner. The Memory
-// service landed in US-AR-007 and is real (backed by memory.InMemoryStore).
+// owns the net.Listener, the *grpc.Server, the HealthServer, the in-memory
+// Memory store, and the runner.Runner that drives Converse turns.
+// main.go constructs one Server via New(), calls Start() in a goroutine,
+// and Shutdown() on SIGTERM.
 type Server struct {
-	cfg       config.Config
-	logger    *slog.Logger
-	listener  net.Listener
-	grpcSrv   *grpc.Server
-	health    *HealthServer
-	memStore  memory.Store
+	cfg      config.Config
+	logger   *slog.Logger
+	listener net.Listener
+	grpcSrv  *grpc.Server
+	health   *HealthServer
+	memStore memory.Store
+	runner   *runner.Runner
 }
 
 // New wires a Server ready to Start(). It registers the HMAC auth
-// interceptor, the health service, and the stub AgentRuntime / Memory
-// services. It does NOT open the listener — Start() does that.
-func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
+// interceptor, the health service, the real AgentRuntime handler (wired
+// to the provided runner), and the Memory service. It does NOT open
+// the listener — Start() does that.
+//
+// The caller owns the runner — pass nil only for tests that never
+// exercise Converse. The health server flips to SERVING inside main.go
+// immediately after New returns, on the assumption that the runner was
+// constructed successfully (because a nil runner produces a handler
+// that returns codes.Unavailable, which is the correct unhealthy
+// state).
+func New(cfg config.Config, logger *slog.Logger, r *runner.Runner) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -48,7 +55,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 
 	memStore := memory.NewInMemoryStore(nil)
 
-	runtimev1.RegisterAgentRuntimeServer(grpcSrv, &agentRuntimeStub{logger: logger})
+	runtimev1.RegisterAgentRuntimeServer(grpcSrv, newConverseHandler(logger, r))
 	runtimev1.RegisterMemoryServer(grpcSrv, newMemoryServer(logger, memStore))
 
 	return &Server{
@@ -57,6 +64,7 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 		grpcSrv:  grpcSrv,
 		health:   healthSrv,
 		memStore: memStore,
+		runner:   r,
 	}, nil
 }
 

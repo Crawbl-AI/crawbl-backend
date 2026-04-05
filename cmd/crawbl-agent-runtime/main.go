@@ -1,23 +1,20 @@
 // Command crawbl-agent-runtime is the second binary in the crawbl-backend
-// module. It runs as the per-workspace agent runtime pod — one instance per
-// user's swarm — and replaces the Rust ZeroClaw runtime in Phase 2.
+// module. It runs as the per-workspace agent runtime pod — one instance
+// per user's swarm — and replaces the Rust ZeroClaw runtime in Phase 2.
 //
-// Runtime responsibilities:
-//   - Host a multi-agent swarm (Manager + Wally + Eve) built on ADK-Go
-//     (google.golang.org/adk). Agents and composition land in US-AR-008.
-//   - Serve a gRPC bidi stream for conversational turns on port 42618. The
-//     Converse implementation lands in US-AR-009.
-//   - Talk back to the orchestrator's MCP server at /mcp/v1 over HMAC-signed
-//     HTTP for orchestrator-mediated tools (user profile, agent history,
-//     etc.). The MCP bridge lands in US-AR-006.
-//   - Persist all durable state in Postgres via the orchestrator; keep
-//     ephemeral caches in /cache (emptyDir) and /tmp (tmpfs); artifacts go
-//     to DigitalOcean Spaces via the S3 protocol client.
-//   - No per-user PVC anywhere in this process.
+// Lifecycle:
 //
-// This file handles process lifecycle only: parse config, construct the
-// gRPC server, start serving, wait for SIGINT/SIGTERM, shut down gracefully.
-// All business logic lives under internal/agentruntime/*.
+//  1. Parse config from CLI flags + environment variables.
+//  2. Construct the LLM adapter (OpenAI via adk-utils-go in Phase 1).
+//  3. Construct the orchestrator MCP toolset (HMAC-authed, auto-reconnect).
+//  4. Build the agent graph (Manager + Wally + Eve) via runner.New.
+//  5. Construct the gRPC server with the HMAC interceptor chain and
+//     register the Converse + Memory handlers.
+//  6. Flip the health server to SERVING.
+//  7. Serve until SIGINT/SIGTERM, then graceful-stop.
+//
+// All business logic lives under internal/agentruntime/*. This file is
+// wiring only.
 package main
 
 import (
@@ -28,7 +25,10 @@ import (
 	"syscall"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/model"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/server"
+	agentmcp "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/mcp"
 )
 
 // version is set by the Makefile build target via -ldflags at link time.
@@ -59,13 +59,53 @@ func main() {
 		"openai_model", cfg.OpenAI.ModelName,
 	)
 
-	srv, err := server.New(cfg, logger)
+	// Step 2: LLM adapter.
+	llm, err := model.NewFromConfig(cfg)
+	if err != nil {
+		logger.Error("init model adapter", "error", err)
+		os.Exit(1)
+	}
+
+	// Step 3: orchestrator MCP toolset. The returned Closer is a no-op
+	// in Phase 1 but still captured so US-AR-006's Closer contract is
+	// honored at the lifecycle boundary.
+	mcpToolset, mcpCloser, err := agentmcp.Toolset(cfg)
+	if err != nil {
+		logger.Error("init mcp toolset", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if cerr := mcpCloser.Close(); cerr != nil {
+			logger.Warn("mcp toolset close error", "error", cerr)
+		}
+	}()
+
+	// Step 4: agent graph + ADK runner.
+	r, err := runner.New(runner.BuildOptions{
+		Model:      llm,
+		MCPToolset: mcpToolset,
+		Logger:     logger,
+	})
+	if err != nil {
+		logger.Error("init runner", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("agent graph constructed", "root_agent", r.RootAgentName())
+
+	// Step 5: gRPC server.
+	srv, err := server.New(cfg, logger, r)
 	if err != nil {
 		logger.Error("init gRPC server", "error", err)
 		os.Exit(1)
 	}
 
-	// Serve in a goroutine so the main goroutine can watch for signals.
+	// Step 6: flip health to SERVING so Kubernetes probes mark the pod
+	// Ready as soon as the listener is up. The runner is already
+	// constructed above, so from this point forward Converse calls
+	// will succeed (subject to auth).
+	srv.Health().SetServing()
+
+	// Step 7: serve + signal loop.
 	serveErr := make(chan error, 1)
 	go func() {
 		if err := srv.Start(); err != nil {
@@ -74,7 +114,6 @@ func main() {
 		close(serveErr)
 	}()
 
-	// Wait for shutdown signal or a fatal serve error.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	select {
