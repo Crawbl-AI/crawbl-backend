@@ -182,14 +182,17 @@ type subAgentStream struct {
 	done        bool // received a StreamEventDone for this agent_id
 }
 
-// callAgentStreaming handles a single agent's streaming webhook call.
-// Creates a placeholder message, reads streaming chunks from ZeroClaw,
-// emits Socket.IO events for each chunk, and persists the final message.
+// callAgentStreaming handles a single agent's streaming gRPC call.
+// Creates a placeholder message, reads ConverseEvents from the runtime pod
+// over the gRPC Converse bidi stream, emits Socket.IO events for each
+// chunk, and persists the final message as rows arrive — there is no
+// batched turns[] flattening step. Each DoneEvent carrying an agent_id
+// becomes exactly one messages table row for that agent.
 //
-// Phase 5 multi-agent support: ZeroClaw may send chunk/done pairs with
-// different agent_id values (e.g. "wally", "eve", "manager"). Each distinct
-// agent_id gets its own placeholder message so the mobile client shows
-// separate message bubbles per sub-agent.
+// Multi-agent support: the runtime may send chunk/done pairs with
+// different agent_id values (e.g. "wally", "eve", "manager"). Each
+// distinct agent_id gets its own placeholder message so the mobile
+// client shows separate message bubbles per sub-agent.
 func (s *service) callAgentStreaming(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
@@ -233,7 +236,7 @@ func (s *service) callAgentStreaming(
 		return nil, mErr
 	}
 
-	// 3. Start streaming from ZeroClaw.
+	// 3. Open the Converse bidi stream against the workspace runtime pod.
 	streamCh, mErr := s.runtimeClient.SendTextStream(ctx, &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   runtimeMessage(normalizeRuntimeMessage(opts.Content.Text, opts.Mentions), extraContext),
@@ -252,7 +255,7 @@ func (s *service) callAgentStreaming(
 		return nil, mErr
 	}
 
-	// User message reached ZeroClaw → mark as delivered (once across parallel agents).
+	// User message reached the runtime → mark as delivered (once across parallel agents).
 	if opts.UserMessageID != "" && opts.StatusDeliveredOnce != nil {
 		opts.StatusDeliveredOnce.Do(func() {
 			s.broadcaster.EmitMessageStatus(ctx, opts.WorkspaceID, realtime.MessageStatusPayload{
@@ -447,7 +450,7 @@ func (s *service) callAgentStreaming(
 
 		case userswarmclient.StreamEventDone:
 			// Mark done on the specific agent that finished, or globally when
-			// agent_id is empty (legacy single-agent ZeroClaw behaviour).
+			// agent_id is empty (single-agent legacy behaviour).
 			if chunk.AgentID == "" {
 				globalStreamDone = true
 				// Mark all streams done for finalization.
@@ -662,7 +665,7 @@ func (s *service) finalizeStreamMessage(
 
 // buildConversationContext creates a context summary from recent messages
 // for injection into agent calls. This gives agents awareness of the
-// conversation even though their ZeroClaw memory is namespace-isolated.
+// conversation even though each runtime pod's memory is workspace-isolated.
 func (s *service) buildConversationContext(
 	ctx context.Context,
 	sess *dbr.Session,
@@ -863,7 +866,7 @@ func runtimeMessage(message, extraContext string) string {
 }
 
 // normalizeRuntimeMessage strips structured @mention spans before forwarding the
-// message to ZeroClaw. The orchestrator has already resolved the target agent,
+// message to the runtime pod. The orchestrator has already resolved the target agent,
 // so the runtime should receive only the user instruction rather than mobile
 // chat routing syntax like "@Wally ...".
 func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) string {
@@ -917,7 +920,7 @@ func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) st
 	return normalized
 }
 
-// ZeroClaw treats an empty agent_id as "use the default manager entrypoint".
+// The runtime treats an empty agent_id as "use the default manager entrypoint".
 // Sub-agents are addressed by slug so the runtime can activate the native
 // [agents.<slug>] config for that turn.
 func runtimeAgentID(agent *orchestrator.Agent) string {
