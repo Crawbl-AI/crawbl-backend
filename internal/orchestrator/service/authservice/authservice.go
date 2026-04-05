@@ -6,7 +6,9 @@ package authservice
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -391,14 +393,7 @@ func (s *service) ClearPushToken(ctx context.Context, opts *orchestratorservice.
 		return merrors.ErrInvalidInput
 	}
 
-	_, err := opts.Sess.DeleteFrom("user_push_tokens").
-		Where("user_id = ?", opts.UserID).
-		ExecContext(ctx)
-	if err != nil {
-		return merrors.WrapStdServerError(err, "clear push token")
-	}
-
-	return nil
+	return s.userRepo.ClearPushTokens(ctx, opts.Sess, opts.UserID)
 }
 
 // createUser creates a new user with an auto-generated unique nickname.
@@ -475,15 +470,14 @@ func (s *service) generateUniqueNickname(ctx context.Context, sess *dbr.Session,
 
 	// Try to generate a unique nickname
 	const maxAttempts = 5
-	const digits = "0123456789"
 
 	for range maxAttempts {
-		// Generate random 4-digit suffix
-		var randNum string
-		for range 4 {
-			randNum += string(digits[rand.Intn(len(digits))])
+		// Generate cryptographically random 4-digit suffix (0000–9999)
+		n, err := rand.Int(rand.Reader, big.NewInt(10000))
+		if err != nil {
+			return "", merrors.WrapStdServerError(err, "generate random nickname suffix")
 		}
-		nickname := emailPrefix + "#" + randNum
+		nickname := emailPrefix + "#" + fmt.Sprintf("%04d", n.Int64())
 
 		exists, mErr := s.userRepo.CheckNicknameExists(ctx, sess, nickname)
 		if mErr != nil {

@@ -17,6 +17,11 @@ func (s *service) RespondToActionCard(ctx context.Context, opts *orchestratorser
 		return nil, merrors.ErrInvalidInput
 	}
 
+	// Verify workspace ownership before allowing action card response.
+	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+		return nil, mErr
+	}
+
 	msg, mErr := s.messageRepo.GetByID(ctx, opts.Sess, opts.MessageID)
 	if mErr != nil {
 		return nil, mErr

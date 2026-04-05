@@ -227,7 +227,8 @@ type messageRow struct {
 
 // createAgentHistoryInput is the input for the create_agent_history tool.
 type createAgentHistoryInput struct {
-	AgentSlug      string `json:"agent_slug"`
+	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"description=Agent slug (deprecated - use agent_id)"`
+	AgentID        string `json:"agent_id,omitempty" jsonschema:"description=Agent UUID (preferred over agent_slug)"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle,omitempty"`
@@ -241,7 +242,8 @@ type createAgentHistoryOutput struct {
 
 // sendMessageInput is the typed input for the send_message_to_agent tool.
 type sendMessageInput struct {
-	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the target agent (e.g. 'wally', 'eve')"`
+	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the target agent (deprecated - use agent_id)"`
+	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the target agent (preferred over agent_slug)"`
 	Message        string `json:"message" jsonschema:"the message/task to send to the target agent"`
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID for context"`
 }
@@ -261,7 +263,8 @@ type createArtifactInput struct {
 	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
 	ContentType    string `json:"content_type,omitempty" jsonschema:"MIME type of the content (default: text/markdown)"`
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation to associate the artifact with"`
-	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the agent creating the artifact"`
+	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the agent creating the artifact (deprecated - use agent_id)"`
+	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the agent creating the artifact (preferred over agent_slug)"`
 }
 
 type createArtifactOutput struct {
@@ -297,7 +300,8 @@ type updateArtifactInput struct {
 	Content         string `json:"content" jsonschema:"the new content for the artifact"`
 	ChangeSummary   string `json:"change_summary,omitempty" jsonschema:"a brief summary of what changed"`
 	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"for optimistic locking — update fails if current version differs"`
-	AgentSlug       string `json:"agent_slug" jsonschema:"slug of the agent making the update"`
+	AgentSlug       string `json:"agent_slug,omitempty" jsonschema:"slug of the agent making the update (deprecated - use agent_id)"`
+	AgentID         string `json:"agent_id,omitempty" jsonschema:"UUID of the agent making the update (preferred over agent_slug)"`
 }
 
 type updateArtifactOutput struct {
@@ -310,7 +314,8 @@ type reviewArtifactInput struct {
 	Outcome    string `json:"outcome" jsonschema:"review outcome: approved, changes_requested, or commented"`
 	Comments   string `json:"comments" jsonschema:"review comments explaining the outcome"`
 	Version    int    `json:"version,omitempty" jsonschema:"specific version to review (default: current)"`
-	AgentSlug  string `json:"agent_slug" jsonschema:"slug of the reviewing agent"`
+	AgentSlug  string `json:"agent_slug,omitempty" jsonschema:"slug of the reviewing agent (deprecated - use agent_id)"`
+	AgentID    string `json:"agent_id,omitempty" jsonschema:"UUID of the reviewing agent (preferred over agent_slug)"`
 }
 
 type reviewArtifactOutput struct {

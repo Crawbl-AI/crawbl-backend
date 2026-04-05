@@ -163,6 +163,29 @@ func (r *agentRepo) GetByIDGlobal(ctx context.Context, sess orchestratorrepo.Ses
 	return row.ToDomain(), nil
 }
 
+// GetBySlug retrieves a specific agent by its slug within a workspace.
+// Returns ErrAgentNotFound if no agent with that slug exists in the workspace.
+// Returns ErrInvalidInput if sess is nil, workspaceID is empty, or slug is empty.
+func (r *agentRepo) GetBySlug(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, slug string) (*orchestrator.Agent, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(slug) == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	var row orchestratorrepo.AgentRow
+	err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
+		From("agents").
+		Where("workspace_id = ? AND slug = ?", workspaceID, slug).
+		LoadOneContext(ctx, &row)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return nil, merrors.ErrAgentNotFound
+		}
+		return nil, merrors.WrapStdServerError(err, "get agent by slug")
+	}
+
+	return row.ToDomain(), nil
+}
+
 // CountMessagesByAgentID counts the total number of messages attributed to an agent.
 // Returns ErrInvalidInput if sess is nil or agentID is empty.
 func (r *agentRepo) CountMessagesByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error) {

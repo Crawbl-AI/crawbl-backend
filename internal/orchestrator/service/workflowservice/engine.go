@@ -39,7 +39,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 	}
 
 	// Update execution to running.
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC()
 	execution.Status = string(workflowrepo.WorkflowStatusRunning)
 	execution.StartedAt = &now
 	_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
@@ -49,7 +49,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		WorkflowID:     definition.ID,
 		ExecutionID:    executionID,
 		WorkflowName:   definition.Name,
-		ConversationID: derefStr(execution.ConversationID),
+		ConversationID: orchestrator.DerefString(execution.ConversationID),
 		Status:         string(workflowrepo.WorkflowStatusRunning),
 	})
 
@@ -71,7 +71,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		}
 
 		// Create step execution row.
-		stepNow := time.Now().UTC().Format(time.RFC3339)
+		stepNow := time.Now().UTC()
 		stepExec := &workflowrepo.WorkflowStepExecutionRow{
 			ID:          uuid.NewString(),
 			ExecutionID: executionID,
@@ -90,7 +90,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			WorkflowID:     definition.ID,
 			ExecutionID:    executionID,
 			WorkflowName:   definition.Name,
-			ConversationID: derefStr(execution.ConversationID),
+			ConversationID: orchestrator.DerefString(execution.ConversationID),
 			Status:         string(workflowrepo.WorkflowStatusRunning),
 			StepIndex:      i,
 			StepName:       step.Name,
@@ -106,7 +106,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 				WorkflowID:     definition.ID,
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
-				ConversationID: derefStr(execution.ConversationID),
+				ConversationID: orchestrator.DerefString(execution.ConversationID),
 				Status:         string(workflowrepo.WorkflowStatusWaitingApproval),
 				StepIndex:      i,
 				StepName:       step.Name,
@@ -135,14 +135,14 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		cancel()
 
 		durationMs := int(time.Since(startTime).Milliseconds())
-		completedAt := time.Now().UTC().Format(time.RFC3339)
+		stepCompletedAt := time.Now().UTC()
 
 		if callErr != nil {
 			stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
 			errMsg := callErr.Error()
 			stepExec.OutputText = &errMsg
 			stepExec.DurationMs = &durationMs
-			stepExec.CompletedAt = &completedAt
+			stepExec.CompletedAt = &stepCompletedAt
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 			// Handle on_failure policy.
@@ -150,16 +150,17 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 				continue
 			}
 			// "stop" (default) -- fail the whole workflow.
+			execCompletedAt := time.Now().UTC()
 			execution.Status = string(workflowrepo.WorkflowStatusFailed)
 			execution.ErrorMessage = &errMsg
-			execution.CompletedAt = &completedAt
+			execution.CompletedAt = &execCompletedAt
 			_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
 			s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
 				WorkflowID:     definition.ID,
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
-				ConversationID: derefStr(execution.ConversationID),
+				ConversationID: orchestrator.DerefString(execution.ConversationID),
 				Status:         string(workflowrepo.WorkflowStatusFailed),
 				StepIndex:      i,
 				StepName:       step.Name,
@@ -181,7 +182,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		stepExec.Status = string(workflowrepo.WorkflowStatusCompleted)
 		stepExec.OutputText = &response
 		stepExec.DurationMs = &durationMs
-		stepExec.CompletedAt = &completedAt
+		stepExec.CompletedAt = &stepCompletedAt
 		_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 		// Store output in workflow context.
@@ -200,7 +201,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			WorkflowID:     definition.ID,
 			ExecutionID:    executionID,
 			WorkflowName:   definition.Name,
-			ConversationID: derefStr(execution.ConversationID),
+			ConversationID: orchestrator.DerefString(execution.ConversationID),
 			Status:         string(workflowrepo.WorkflowStatusCompleted),
 			StepIndex:      i,
 			StepName:       step.Name,
@@ -208,24 +209,35 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		})
 	}
 
-	// Workflow completed successfully.
-	completedAt := time.Now().UTC().Format(time.RFC3339)
+	// Determine final status based on whether the context was cancelled.
+	finalCompletedAt := time.Now().UTC()
+	execution.CompletedAt = &finalCompletedAt
+	if ctx.Err() != nil {
+		errMsg := ctx.Err().Error()
+		execution.Status = string(workflowrepo.WorkflowStatusFailed)
+		execution.ErrorMessage = &errMsg
+		_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
+
+		s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
+			WorkflowID:     definition.ID,
+			ExecutionID:    executionID,
+			WorkflowName:   definition.Name,
+			ConversationID: orchestrator.DerefString(execution.ConversationID),
+			Status:         string(workflowrepo.WorkflowStatusFailed),
+			Error:          errMsg,
+		})
+		return
+	}
+
 	execution.Status = string(workflowrepo.WorkflowStatusCompleted)
-	execution.CompletedAt = &completedAt
 	_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
 	s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowCompleted, realtime.WorkflowEventPayload{
 		WorkflowID:     definition.ID,
 		ExecutionID:    executionID,
 		WorkflowName:   definition.Name,
-		ConversationID: derefStr(execution.ConversationID),
+		ConversationID: orchestrator.DerefString(execution.ConversationID),
 		Status:         string(workflowrepo.WorkflowStatusCompleted),
 	})
 }
 
-func derefStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}

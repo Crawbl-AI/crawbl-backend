@@ -56,6 +56,9 @@ type UserRepo interface {
 	IsUserDeleted(ctx context.Context, sess SessionRunner, subject, email string) (bool, *merrors.Error)
 	// CheckNicknameExists checks if a nickname is already taken by another user.
 	CheckNicknameExists(ctx context.Context, sess SessionRunner, nickname string) (bool, *merrors.Error)
+	// ClearPushTokens removes all push notification tokens for a user.
+	// Called on logout so the user stops receiving push notifications.
+	ClearPushTokens(ctx context.Context, sess SessionRunner, userID string) *merrors.Error
 }
 
 // WorkspaceRepo defines the repository interface for workspace data access operations.
@@ -78,6 +81,9 @@ type AgentRepo interface {
 	GetByID(ctx context.Context, sess SessionRunner, workspaceID, agentID string) (*orchestrator.Agent, *merrors.Error)
 	// GetByIDGlobal retrieves a specific agent by ID without workspace filtering.
 	GetByIDGlobal(ctx context.Context, sess SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error)
+	// GetBySlug retrieves a specific agent by slug within a workspace.
+	// Returns ErrAgentNotFound if no agent with that slug exists in the workspace.
+	GetBySlug(ctx context.Context, sess SessionRunner, workspaceID, slug string) (*orchestrator.Agent, *merrors.Error)
 	// CountMessagesByAgentID counts the total number of messages attributed to an agent.
 	CountMessagesByAgentID(ctx context.Context, sess SessionRunner, agentID string) (int, *merrors.Error)
 	// Save persists agent data with a specified sort order.

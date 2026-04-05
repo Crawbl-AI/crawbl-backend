@@ -38,14 +38,28 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 
 		input.AgentSlug = strings.TrimSpace(input.AgentSlug)
+		input.AgentID = strings.TrimSpace(input.AgentID)
 		input.Message = strings.TrimSpace(input.Message)
-		if input.AgentSlug == "" || input.Message == "" {
-			return nil, sendMessageOutput{Error: "agent_slug and message are required"}, nil
+		if input.Message == "" {
+			return nil, sendMessageOutput{Error: "message is required"}, nil
+		}
+		if input.AgentID == "" && input.AgentSlug == "" {
+			return nil, sendMessageOutput{Error: "agent_id or agent_slug is required"}, nil
 		}
 
 		sess := deps.newSession()
 
+		// Extract calling agent slug from session ID format: {conversation_id}:{agent_slug}
+		callingSessionID := sessionIDFromContext(ctx)
+		callingSlug := ""
+		if parts := strings.SplitN(callingSessionID, ":", 2); len(parts) == 2 {
+			callingSlug = parts[1]
+		}
+
 		// 1. Resolve target agent and calling agent from the workspace.
+		// We always need the full list to find the calling (from) agent by slug and to
+		// build the available-agents error message. The target agent can be found in the
+		// same pass or resolved directly by UUID when agent_id is provided.
 		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID)
 		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
 		if mErr != nil {
@@ -54,15 +68,12 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 
 		var targetAgent *orchestrator.Agent
 		var fromAgent *orchestrator.Agent
-		// Extract calling agent slug from session ID format: {conversation_id}:{agent_slug}
-		callingSessionID := sessionIDFromContext(ctx)
-		callingSlug := ""
-		if parts := strings.SplitN(callingSessionID, ":", 2); len(parts) == 2 {
-			callingSlug = parts[1]
-		}
 
 		for _, a := range agents {
-			if a.Slug == input.AgentSlug {
+			// Match target by UUID (fast path) or slug (fallback).
+			if input.AgentID != "" && a.ID == input.AgentID {
+				targetAgent = a
+			} else if input.AgentID == "" && a.Slug == input.AgentSlug {
 				targetAgent = a
 			}
 			if callingSlug != "" && a.Slug == callingSlug {
@@ -77,13 +88,22 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 					available = append(available, a.Slug)
 				}
 			}
+			identifier := input.AgentID
+			if identifier == "" {
+				identifier = input.AgentSlug
+			}
 			return nil, sendMessageOutput{
-				Error: fmt.Sprintf("unknown agent '%s'. Available: %s", input.AgentSlug, strings.Join(available, ", ")),
+				Error: fmt.Sprintf("unknown agent '%s'. Available: %s", identifier, strings.Join(available, ", ")),
 			}, nil
 		}
 
+		// Populate AgentSlug from resolved target for downstream use.
+		if input.AgentSlug == "" {
+			input.AgentSlug = targetAgent.Slug
+		}
+
 		// Self-delegation guard: an agent cannot send a message to itself.
-		if callingSlug == input.AgentSlug {
+		if callingSlug != "" && callingSlug == targetAgent.Slug {
 			return nil, sendMessageOutput{
 				Error: "an agent cannot send a message to itself",
 			}, nil
@@ -256,6 +276,23 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 		return ""
 	}
 
+	// Pre-fetch all agents for the workspace once to avoid N+1 lookups per message.
+	agentMap := make(map[string]string)
+	if deps.AgentRepo != nil {
+		// Collect the unique agent IDs referenced by this message batch.
+		seen := make(map[string]struct{})
+		for _, msg := range messages {
+			if msg.Role == orchestrator.MessageRoleAgent && msg.Agent == nil && msg.AgentID != nil {
+				seen[*msg.AgentID] = struct{}{}
+			}
+		}
+		for agentID := range seen {
+			if a, err := deps.AgentRepo.GetByIDGlobal(ctx, sess, agentID); err == nil && a != nil {
+				agentMap[agentID] = a.Name
+			}
+		}
+	}
+
 	var sb strings.Builder
 	sb.WriteString("## Conversation Context\nRecent messages (oldest first):\n\n")
 
@@ -276,9 +313,8 @@ func buildAgentContext(ctx context.Context, deps *Deps, conversationID string, l
 			if msg.Agent != nil {
 				sender = msg.Agent.Name
 			} else if msg.AgentID != nil {
-				agent, _ := deps.AgentRepo.GetByIDGlobal(ctx, deps.newSession(), *msg.AgentID)
-				if agent != nil {
-					sender = agent.Name
+				if name, ok := agentMap[*msg.AgentID]; ok {
+					sender = name
 				}
 			}
 		}

@@ -2,6 +2,7 @@ package userrepo
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -190,8 +191,8 @@ func (r *userRepo) CheckNicknameExists(ctx context.Context, sess orchestratorrep
 }
 
 // loadPreferences loads user preferences from the user_preferences table
-// and applies them to the user model. Errors are silently ignored
-// as preferences are optional data.
+// and applies them to the user model. Not-found is silently ignored since
+// preferences are optional; all other errors are logged as warnings.
 func (r *userRepo) loadPreferences(ctx context.Context, sess orchestratorrepo.SessionRunner, user *orchestrator.User) {
 	var preferencesRow orchestratorrepo.UserPreferencesRow
 	err := sess.Select(orchestratorrepo.Columns(userPreferencesColumns...)...).
@@ -200,6 +201,10 @@ func (r *userRepo) loadPreferences(ctx context.Context, sess orchestratorrepo.Se
 		LoadOneContext(ctx, &preferencesRow)
 	if err == nil {
 		preferencesRow.ApplyToUser(user)
+		return
+	}
+	if !database.IsRecordNotFoundError(err) {
+		slog.Warn("failed to load user preferences", "user_id", user.ID, "error", err)
 	}
 }
 
@@ -229,6 +234,23 @@ func (r *userRepo) SavePushToken(ctx context.Context, sess orchestratorrepo.Sess
 	}
 
 	return r.saveUserPushTokenRow(ctx, sess, orchestratorrepo.NewUserPushTokenRow(userID, pushToken, time.Now().UTC()))
+}
+
+// ClearPushTokens removes all push notification tokens for a user.
+// Returns ErrInvalidInput if sess is nil or userID is empty.
+func (r *userRepo) ClearPushTokens(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) *merrors.Error {
+	if sess == nil || strings.TrimSpace(userID) == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	_, err := sess.DeleteFrom("user_push_tokens").
+		Where("user_id = ?", userID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "clear push tokens")
+	}
+
+	return nil
 }
 
 // saveUserRow inserts or updates a user record in the database.

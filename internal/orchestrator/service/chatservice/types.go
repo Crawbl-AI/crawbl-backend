@@ -6,6 +6,7 @@ package chatservice
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/gocraft/dbr/v2"
@@ -72,6 +73,9 @@ type service struct {
 	// defaultAgents contains the blueprint definitions for default agents
 	// that are automatically provisioned for each workspace.
 	defaultAgents []orchestrator.DefaultAgentBlueprint
+	// bootstrapCache tracks workspaces that have been fully bootstrapped so
+	// ensureWorkspaceBootstrap can skip the ~15 seed queries on subsequent calls.
+	bootstrapCache sync.Map // map[workspaceID]bool
 }
 
 // workspaceRepo defines the repository interface for workspace data operations.

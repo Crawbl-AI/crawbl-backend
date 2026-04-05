@@ -24,8 +24,8 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 		if input.Title == "" || input.Content == "" {
 			return nil, createArtifactOutput{Info: "title and content are required"}, nil
 		}
-		if input.AgentSlug == "" {
-			return nil, createArtifactOutput{Info: "agent_slug is required"}, nil
+		if input.AgentID == "" && input.AgentSlug == "" {
+			return nil, createArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
 		contentType := input.ContentType
@@ -40,25 +40,20 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 			return nil, createArtifactOutput{Info: "workspace not found"}, nil
 		}
 
-		// Resolve agent by slug to get agent ID.
-		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
-		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			return nil, createArtifactOutput{Info: "failed to look up agents: " + mErr.Error()}, nil
-		}
-
+		// Resolve agent: prefer UUID fast path, fall back to slug lookup.
 		var agentID string
-		for _, a := range agents {
-			if a.Slug == input.AgentSlug {
-				agentID = a.ID
-				break
+		if input.AgentID != "" {
+			agentID = input.AgentID
+		} else {
+			RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
+			var resolveErr error
+			agentID, resolveErr = resolveAgentBySlug(ctx, deps, sess, workspaceID, input.AgentSlug)
+			if resolveErr != nil {
+				return nil, createArtifactOutput{Info: resolveErr.Error()}, nil
 			}
 		}
-		if agentID == "" {
-			return nil, createArtifactOutput{Info: "agent not found with slug: " + input.AgentSlug}, nil
-		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := time.Now().UTC()
 		artifactID := uuid.NewString()
 		versionID := uuid.NewString()
 
@@ -189,7 +184,7 @@ func newReadArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[readArtifactInput,
 				ReviewerAgentSlug: r.ReviewerAgentSlug,
 				Outcome:           r.Outcome,
 				Comments:          r.Comments,
-				CreatedAt:         r.CreatedAt,
+				CreatedAt:         r.CreatedAt.Format(time.RFC3339),
 			})
 		}
 
@@ -217,8 +212,8 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 		if input.ArtifactID == "" || input.Content == "" {
 			return nil, updateArtifactOutput{Info: "artifact_id and content are required"}, nil
 		}
-		if input.AgentSlug == "" {
-			return nil, updateArtifactOutput{Info: "agent_slug is required"}, nil
+		if input.AgentID == "" && input.AgentSlug == "" {
+			return nil, updateArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
 		sess := deps.newSession()
@@ -242,26 +237,21 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 			}, nil
 		}
 
-		// Resolve agent by slug.
-		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
-		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			return nil, updateArtifactOutput{Info: "failed to look up agents: " + mErr.Error()}, nil
-		}
-
+		// Resolve agent: prefer UUID fast path, fall back to slug lookup.
 		var agentID string
-		for _, a := range agents {
-			if a.Slug == input.AgentSlug {
-				agentID = a.ID
-				break
+		if input.AgentID != "" {
+			agentID = input.AgentID
+		} else {
+			RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
+			var resolveErr error
+			agentID, resolveErr = resolveAgentBySlug(ctx, deps, sess, workspaceID, input.AgentSlug)
+			if resolveErr != nil {
+				return nil, updateArtifactOutput{Info: resolveErr.Error()}, nil
 			}
-		}
-		if agentID == "" {
-			return nil, updateArtifactOutput{Info: "agent not found with slug: " + input.AgentSlug}, nil
 		}
 
 		newVersion := artifact.CurrentVersion + 1
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := time.Now().UTC()
 
 		changeSummary := input.ChangeSummary
 		if changeSummary == "" {
@@ -322,8 +312,8 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 		if input.ArtifactID == "" || input.Outcome == "" || input.Comments == "" {
 			return nil, reviewArtifactOutput{Info: "artifact_id, outcome, and comments are required"}, nil
 		}
-		if input.AgentSlug == "" {
-			return nil, reviewArtifactOutput{Info: "agent_slug is required"}, nil
+		if input.AgentID == "" && input.AgentSlug == "" {
+			return nil, reviewArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
 		// Validate outcome.
@@ -350,22 +340,17 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 			return nil, reviewArtifactOutput{Info: "artifact not found"}, nil
 		}
 
-		// Resolve agent by slug.
-		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
-		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			return nil, reviewArtifactOutput{Info: "failed to look up agents: " + mErr.Error()}, nil
-		}
-
+		// Resolve agent: prefer UUID fast path, fall back to slug lookup.
 		var agentID string
-		for _, a := range agents {
-			if a.Slug == input.AgentSlug {
-				agentID = a.ID
-				break
+		if input.AgentID != "" {
+			agentID = input.AgentID
+		} else {
+			RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
+			var resolveErr error
+			agentID, resolveErr = resolveAgentBySlug(ctx, deps, sess, workspaceID, input.AgentSlug)
+			if resolveErr != nil {
+				return nil, reviewArtifactOutput{Info: resolveErr.Error()}, nil
 			}
-		}
-		if agentID == "" {
-			return nil, reviewArtifactOutput{Info: "agent not found with slug: " + input.AgentSlug}, nil
 		}
 
 		// Determine which version to review.
@@ -374,7 +359,7 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 			reviewVersion = artifact.CurrentVersion
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := time.Now().UTC()
 
 		// Create the review row.
 		RecordAPICall(ctx, fmt.Sprintf("DB:INSERT artifact_reviews artifact_id=%s version=%d", input.ArtifactID, reviewVersion))

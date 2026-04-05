@@ -3,11 +3,11 @@ package agentservice
 import (
 	"context"
 
+	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
 // GetAgent retrieves a single agent by ID with runtime status enrichment.
@@ -349,8 +349,8 @@ func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator
 		WaitForVerified: false,
 	})
 	if mErr != nil {
-		for _, agent := range agents {
-			agent.Status = orchestrator.AgentStatusOffline
+		for _, a := range agents {
+			a.Status = orchestrator.AgentStatusOffline
 		}
 		return
 	}
@@ -360,19 +360,11 @@ func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator
 // agentHistoryRowToDomain converts a repo history row to the domain type.
 func agentHistoryRowToDomain(row orchestratorrepo.AgentHistoryRow) orchestrator.AgentHistoryItem {
 	return orchestrator.AgentHistoryItem{
-		ConversationID: derefString(row.ConversationID),
+		ConversationID: orchestrator.DerefString(row.ConversationID),
 		Title:          row.Title,
 		Subtitle:       row.Subtitle,
 		CreatedAt:      &row.CreatedAt,
 	}
-}
-
-// derefString safely dereferences a *string, returning "" for nil.
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 // resolveModelDef looks up a model ID in the available models registry.

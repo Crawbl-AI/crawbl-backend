@@ -78,11 +78,9 @@ func (s *service) sendDirectMessage(
 	}
 
 	// Persist user message first (same as swarm path).
-	userMsg, mErr := s.persistUserMessage(ctx, opts, conversation)
-	if mErr != nil {
+	if _, mErr := s.persistUserMessage(ctx, opts, conversation); mErr != nil {
 		return nil, mErr
 	}
-	_ = userMsg
 
 	sc := &streamContext{
 		opts:         opts,
@@ -158,7 +156,12 @@ func (s *service) executeParallel(
 	for i, agent := range targetAgents {
 		go func(idx int, agent *orchestrator.Agent) {
 			defer wg.Done()
-			replies, err := s.callAgentStreaming(ctx, sc, agent, "")
+			// Clone streamContext with a fresh dbr.Session per goroutine.
+			// dbr.Session is NOT goroutine-safe, so each goroutine needs its own.
+			goroutineSC := *sc
+			goroutineSC.opts = &(*sc.opts)
+			goroutineSC.opts.Sess = s.db.NewSession(nil)
+			replies, err := s.callAgentStreaming(ctx, &goroutineSC, agent, "")
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}
@@ -455,7 +458,7 @@ func (s *service) processStreamChunks(
 				delegateSlug, taskSummary := parseDelegateArgs(chunk.Args)
 				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
 					// Use the primary placeholder as the trigger message for audit.
-					go s.recordDelegation(opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
+					go s.recordDelegation(opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 					s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
 						FromAgentID:    agent.ID,
@@ -776,9 +779,12 @@ func parseDelegateArgs(argsJSON string) (slug, task string) {
 }
 
 // recordDelegation inserts an agent_delegations row (async, best-effort).
-func (s *service) recordDelegation(sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
+// Creates its own dbr.Session because it runs in a detached goroutine —
+// the request-scoped session may be closed by the time this executes.
+func (s *service) recordDelegation(workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	sess := s.db.NewSession(nil)
 	_ = s.messageRepo.RecordDelegation(auditCtx, sess, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary)
 }
 

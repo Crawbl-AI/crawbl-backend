@@ -100,7 +100,7 @@ func SignIn(c *Context) http.HandlerFunc {
 
 		c.Logger.Info("handleAuthSignIn: sign in succeeded", "user_id", user.ID)
 
-		seedWorkspaceRuntime(c, r.Context(), user.ID, "sign_in")
+		go seedWorkspaceRuntime(c, r.Context(), user.ID, "sign_in")
 		httpserver.WriteNoContent(w)
 	}
 }
@@ -125,7 +125,7 @@ func SignUp(c *Context) http.HandlerFunc {
 			return
 		}
 
-		seedWorkspaceRuntime(c, r.Context(), user.ID, "sign_up")
+		go seedWorkspaceRuntime(c, r.Context(), user.ID, "sign_up")
 		httpserver.WriteNoContent(w)
 	}
 }

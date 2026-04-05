@@ -6,6 +6,7 @@ package workflowrepo
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -57,8 +58,8 @@ type WorkflowDefinitionRow struct {
 	TriggerPolicy    string          `db:"trigger_policy"`
 	IsActive         bool            `db:"is_active"`
 	CreatedByAgentID *string         `db:"created_by_agent_id"`
-	CreatedAt        string          `db:"created_at"`
-	UpdatedAt        string          `db:"updated_at"`
+	CreatedAt        time.Time       `db:"created_at"`
+	UpdatedAt        time.Time       `db:"updated_at"`
 }
 
 // WorkflowExecutionRow represents a database row for the workflow_executions table.
@@ -72,26 +73,26 @@ type WorkflowExecutionRow struct {
 	Context              json.RawMessage `db:"context"`
 	TriggeredBy          string          `db:"triggered_by"`
 	ErrorMessage         *string         `db:"error_message"`
-	StartedAt            *string         `db:"started_at"`
-	CompletedAt          *string         `db:"completed_at"`
-	CreatedAt            string          `db:"created_at"`
+	StartedAt            *time.Time      `db:"started_at"`
+	CompletedAt          *time.Time      `db:"completed_at"`
+	CreatedAt            time.Time       `db:"created_at"`
 }
 
 // WorkflowStepExecutionRow represents a database row for the workflow_step_executions table.
 type WorkflowStepExecutionRow struct {
-	ID          string  `db:"id"`
-	ExecutionID string  `db:"execution_id"`
-	StepIndex   int     `db:"step_index"`
-	StepName    string  `db:"step_name"`
-	AgentSlug   string  `db:"agent_slug"`
-	Status      string  `db:"status"`
-	InputText   string  `db:"input_text"`
-	OutputText  *string `db:"output_text"`
-	ArtifactID  *string `db:"artifact_id"`
-	DurationMs  *int    `db:"duration_ms"`
-	StartedAt   *string `db:"started_at"`
-	CompletedAt *string `db:"completed_at"`
-	CreatedAt   string  `db:"created_at"`
+	ID          string     `db:"id"`
+	ExecutionID string     `db:"execution_id"`
+	StepIndex   int        `db:"step_index"`
+	StepName    string     `db:"step_name"`
+	AgentSlug   string     `db:"agent_slug"`
+	Status      string     `db:"status"`
+	InputText   string     `db:"input_text"`
+	OutputText  *string    `db:"output_text"`
+	ArtifactID  *string    `db:"artifact_id"`
+	DurationMs  *int       `db:"duration_ms"`
+	StartedAt   *time.Time `db:"started_at"`
+	CompletedAt *time.Time `db:"completed_at"`
+	CreatedAt   time.Time  `db:"created_at"`
 }
 
 // WorkflowStep is the JSON structure stored in workflow_definitions.steps.

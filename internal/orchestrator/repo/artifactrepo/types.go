@@ -2,6 +2,7 @@ package artifactrepo
 
 import (
 	"context"
+	"time"
 
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -34,40 +35,40 @@ const (
 
 // ArtifactRow represents a row in the artifacts table.
 type ArtifactRow struct {
-	ID               string  `db:"id"`
-	WorkspaceID      string  `db:"workspace_id"`
-	ConversationID   *string `db:"conversation_id"`
-	Title            string  `db:"title"`
-	ContentType      string  `db:"content_type"`
-	CurrentVersion   int     `db:"current_version"`
-	Status           string  `db:"status"`
-	CreatedByAgentID *string `db:"created_by_agent_id"`
-	CreatedAt        string  `db:"created_at"`
-	UpdatedAt        string  `db:"updated_at"`
+	ID               string    `db:"id"`
+	WorkspaceID      string    `db:"workspace_id"`
+	ConversationID   *string   `db:"conversation_id"`
+	Title            string    `db:"title"`
+	ContentType      string    `db:"content_type"`
+	CurrentVersion   int       `db:"current_version"`
+	Status           string    `db:"status"`
+	CreatedByAgentID *string   `db:"created_by_agent_id"`
+	CreatedAt        time.Time `db:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at"`
 }
 
 // ArtifactVersionRow represents a row in artifact_versions.
 type ArtifactVersionRow struct {
-	ID            string  `db:"id"`
-	ArtifactID    string  `db:"artifact_id"`
-	Version       int     `db:"version"`
-	Content       string  `db:"content"`
-	ChangeSummary string  `db:"change_summary"`
-	AgentID       *string `db:"agent_id"`
-	AgentSlug     string  `db:"agent_slug"`
-	CreatedAt     string  `db:"created_at"`
+	ID            string    `db:"id"`
+	ArtifactID    string    `db:"artifact_id"`
+	Version       int       `db:"version"`
+	Content       string    `db:"content"`
+	ChangeSummary string    `db:"change_summary"`
+	AgentID       *string   `db:"agent_id"`
+	AgentSlug     string    `db:"agent_slug"`
+	CreatedAt     time.Time `db:"created_at"`
 }
 
 // ArtifactReviewRow represents a row in artifact_reviews.
 type ArtifactReviewRow struct {
-	ID                string `db:"id"`
-	ArtifactID        string `db:"artifact_id"`
-	Version           int    `db:"version"`
-	ReviewerAgentID   string `db:"reviewer_agent_id"`
-	ReviewerAgentSlug string `db:"reviewer_agent_slug"`
-	Outcome           string `db:"outcome"`
-	Comments          string `db:"comments"`
-	CreatedAt         string `db:"created_at"`
+	ID                string    `db:"id"`
+	ArtifactID        string    `db:"artifact_id"`
+	Version           int       `db:"version"`
+	ReviewerAgentID   string    `db:"reviewer_agent_id"`
+	ReviewerAgentSlug string    `db:"reviewer_agent_slug"`
+	Outcome           string    `db:"outcome"`
+	Comments          string    `db:"comments"`
+	CreatedAt         time.Time `db:"created_at"`
 }
 
 // Repo defines the interface for artifact operations.

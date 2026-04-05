@@ -94,7 +94,8 @@ func EnsureSchema(config Config) error {
 		return fmt.Errorf("ping db for schema bootstrap: %w", err)
 	}
 
-	_, err = db.ExecContext(context.Background(), `CREATE SCHEMA IF NOT EXISTS "`+config.Schema+`"`)
+	_, err = db.ExecContext(context.Background(),
+		"CREATE SCHEMA IF NOT EXISTS "+pq.QuoteIdentifier(config.Schema))
 	return err
 }
 

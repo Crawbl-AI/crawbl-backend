@@ -17,6 +17,23 @@ import (
 // ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
 // with default agents and conversations.
 func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Session, userID, workspaceID string) (*orchestrator.Workspace, []*orchestrator.Agent, []*orchestrator.Conversation, *merrors.Error) {
+	// Fast path: workspace already bootstrapped — skip the ~15 seed queries.
+	if _, ok := s.bootstrapCache.Load(workspaceID); ok {
+		workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
+		if mErr != nil {
+			return nil, nil, nil, mErr
+		}
+		agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
+		if mErr != nil {
+			return nil, nil, nil, mErr
+		}
+		conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspaceID)
+		if mErr != nil {
+			return nil, nil, nil, mErr
+		}
+		return workspace, agents, conversations, nil
+	}
+
 	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
 	if mErr != nil {
 		return nil, nil, nil, mErr
@@ -42,6 +59,9 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 	if mErr != nil {
 		return nil, nil, nil, mErr
 	}
+
+	// Mark workspace as bootstrapped so subsequent calls take the fast path.
+	s.bootstrapCache.Store(workspaceID, true)
 
 	return workspace, agents, conversations, nil
 }

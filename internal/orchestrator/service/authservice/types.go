@@ -63,6 +63,9 @@ type userRepo interface {
 	// CheckNicknameExists verifies if a nickname is already in use.
 	// This is used during user creation to ensure unique nicknames.
 	CheckNicknameExists(ctx context.Context, sess orchestratorrepo.SessionRunner, nickname string) (bool, *merrors.Error)
+	// ClearPushTokens removes all push notification tokens for a user.
+	// Called on logout so the user stops receiving push notifications.
+	ClearPushTokens(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) *merrors.Error
 }
 
 // workspaceBootstrapper defines the interface for workspace initialization.

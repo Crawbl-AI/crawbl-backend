@@ -3,6 +3,7 @@ package toolsrepo
 import (
 	"context"
 	"strings"
+	"sync"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
@@ -10,6 +11,28 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
+
+var (
+	toolCategoryMap     map[string]orchestrator.AgentToolCategory
+	toolCategoryMapOnce sync.Once
+)
+
+// getToolCategoryMap returns a lazily-initialized lookup map from category ID
+// to AgentToolCategory. Built once and reused for all rowToTool calls.
+func getToolCategoryMap() map[string]orchestrator.AgentToolCategory {
+	toolCategoryMapOnce.Do(func() {
+		cats := seed.ToolCategories()
+		toolCategoryMap = make(map[string]orchestrator.AgentToolCategory, len(cats))
+		for _, c := range cats {
+			toolCategoryMap[c.ID] = orchestrator.AgentToolCategory{
+				ID:       c.ID,
+				Name:     c.Name,
+				ImageURL: c.ImageURL,
+			}
+		}
+	})
+	return toolCategoryMap
+}
 
 func New() *toolsRepo {
 	return &toolsRepo{}
@@ -151,20 +174,11 @@ func (r *toolsRepo) Seed(ctx context.Context, sess orchestratorrepo.SessionRunne
 }
 
 func rowToTool(row orchestratorrepo.ToolRow) orchestrator.AgentTool {
-	// Build a lookup map from seed tool categories.
-	categories := seed.ToolCategories()
-	catMap := make(map[string]seed.CategoryEntry, len(categories))
-	for _, c := range categories {
-		catMap[c.ID] = c
-	}
+	catMap := getToolCategoryMap()
 
 	var cat orchestrator.AgentToolCategory
 	if meta, ok := catMap[row.Category]; ok {
-		cat = orchestrator.AgentToolCategory{
-			ID:       meta.ID,
-			Name:     meta.Name,
-			ImageURL: meta.ImageURL,
-		}
+		cat = meta
 	} else {
 		cat = orchestrator.AgentToolCategory{
 			ID:   row.Category,

@@ -178,47 +178,27 @@ func statusOrdinal(status orchestrator.MessageStatus) int {
 
 // UpdateStatus updates just the status and updated_at fields of a message.
 // This is a lightweight alternative to Save for status-only transitions.
-// A monotonic guard prevents status downgrades: if the stored ordinal is
-// already >= the new ordinal (and the stored status is not a terminal one),
-// the update is silently skipped.
+// A monotonic guard prevents status downgrades using an atomic SQL-side CASE
+// expression, eliminating the TOCTOU race of a separate SELECT + UPDATE.
 func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error {
 	if sess == nil || messageID == "" {
 		return merrors.ErrInvalidInput
 	}
 
-	// Fetch current status to enforce monotonic ordering.
-	var current struct {
-		Status string `db:"status"`
-	}
-	err := sess.Select("status").
-		From("messages").
-		Where("id = ?", messageID).
-		LoadOneContext(ctx, &current)
-	if err != nil {
-		if database.IsRecordNotFoundError(err) {
-			// Message gone — nothing to update.
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "select current message status for monotonic guard")
-	}
+	newOrd := statusOrdinal(status)
 
-	currentStatus := orchestrator.MessageStatus(current.Status)
-	// Skip downgrade: only allow the update when the new ordinal is strictly
-	// higher than the current one, OR when the new status is terminal (ordinal 99)
-	// which can always overwrite non-terminal statuses.
-	if statusOrdinal(status) <= statusOrdinal(currentStatus) {
-		// Already at this level or higher — no-op.
-		return nil
-	}
-
-	_, err = sess.Update("messages").
+	result, err := sess.Update("messages").
 		Set("status", string(status)).
 		Set("updated_at", time.Now().UTC()).
 		Where("id = ?", messageID).
+		Where("CASE status WHEN 'pending' THEN 0 WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 WHEN 'failed' THEN 99 WHEN 'incomplete' THEN 99 WHEN 'silent' THEN 99 ELSE -1 END < ?", newOrd).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "update message status")
 	}
+	// If no rows were affected the message either does not exist or is already
+	// at/past the target ordinal — both are silent no-ops.
+	_ = result
 	return nil
 }
 

@@ -115,7 +115,7 @@ func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowIn
 		}
 
 		stepsJSON, _ := json.Marshal(steps)
-		now := time.Now().UTC().Format(time.RFC3339)
+		now := time.Now().UTC()
 		defID := uuid.NewString()
 
 		sess := deps.newSession()
@@ -179,7 +179,6 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 			initialCtx = json.RawMessage(input.InitialContext)
 		}
 
-		now := time.Now().UTC().Format(time.RFC3339)
 		execID := uuid.NewString()
 
 		var convID *string
@@ -196,7 +195,7 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 			CurrentStep:          0,
 			Context:              initialCtx,
 			TriggeredBy:          string(workflowrepo.WorkflowTriggeredByAgent),
-			CreatedAt:            now,
+			CreatedAt:            time.Now().UTC(),
 		}
 
 		RecordAPICall(ctx, "DB:INSERT workflow_executions workspace_id="+workspaceID)
@@ -333,7 +332,7 @@ func newListWorkflowsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listWorkflowsInpu
 				Description: row.Description,
 				IsActive:    row.IsActive,
 				StepCount:   len(steps),
-				CreatedAt:   row.CreatedAt,
+				CreatedAt:   row.CreatedAt.Format(time.RFC3339),
 			})
 		}
 

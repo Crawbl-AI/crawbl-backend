@@ -19,17 +19,25 @@ func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentH
 			return nil, createAgentHistoryOutput{}, fmt.Errorf("unauthorized: no user identity")
 		}
 
-		if input.AgentSlug == "" || input.Title == "" {
-			return nil, createAgentHistoryOutput{Info: "agent_slug and title are required"}, nil
+		if input.Title == "" {
+			return nil, createAgentHistoryOutput{Info: "title is required"}, nil
 		}
 
 		sess := deps.newSession()
 
-		// Look up agent by slug + workspaceID
-		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
-		agentID, resolveErr := resolveAgentBySlug(ctx, deps, sess, workspaceID, input.AgentSlug)
-		if resolveErr != nil {
-			return nil, createAgentHistoryOutput{Info: resolveErr.Error()}, nil
+		// Resolve agent: prefer UUID fast path, fall back to slug lookup.
+		var agentID string
+		if input.AgentID != "" {
+			agentID = input.AgentID
+		} else if input.AgentSlug != "" {
+			RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
+			var resolveErr error
+			agentID, resolveErr = resolveAgentBySlug(ctx, deps, sess, workspaceID, input.AgentSlug)
+			if resolveErr != nil {
+				return nil, createAgentHistoryOutput{Info: resolveErr.Error()}, nil
+			}
+		} else {
+			return nil, createAgentHistoryOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
 		// Create history entry
@@ -52,6 +60,6 @@ func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentH
 			return nil, createAgentHistoryOutput{Info: "failed to create history entry: " + mErr.Error()}, nil
 		}
 
-		return nil, createAgentHistoryOutput{Created: true, Info: "history entry created for agent " + input.AgentSlug}, nil
+		return nil, createAgentHistoryOutput{Created: true, Info: "history entry created for agent " + agentID}, nil
 	}
 }

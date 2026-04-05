@@ -204,14 +204,10 @@ func ConversationDelete(c *Context) http.HandlerFunc {
 
 // SearchMessages searches conversation messages by text.
 // GET /v1/workspaces/{workspaceId}/conversations/{id}/messages/search?q=...
-// Mock implementation — real full-text search comes later.
+// Not yet implemented — real full-text search comes later.
 func SearchMessages(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Mock: return empty results
-		WriteSuccess(w, http.StatusOK, map[string]any{
-			"messages":   []any{},
-			"pagination": map[string]any{"total": 0, "limit": 20, "offset": 0, "has_next": false},
-		})
+		httpserver.WriteErrorResponse(w, http.StatusNotImplemented, "message search is not yet available")
 	}
 }
 

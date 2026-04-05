@@ -216,5 +216,5 @@ func IsErrUserFirebaseUIDMismatch(err *Error) bool {
 // but Firebase UID mismatch. This is a server error that occurs during
 // authentication when the email matches but the Firebase UID differs.
 func IsErrUserWrongFirebaseUID(err *Error) bool {
-	return err != nil && err.Type == ServerError && err.Err != nil && err.Err.Error() == "user found by email but Firebase UID does not match"
+	return err == ErrUserWrongFirebaseUID
 }

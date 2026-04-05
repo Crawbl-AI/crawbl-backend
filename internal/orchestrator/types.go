@@ -800,4 +800,12 @@ type OAuthConfig struct {
 	AdditionalParameters map[string]string
 }
 
+// DerefString returns the value of a *string, or empty string if nil.
+func DerefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 
