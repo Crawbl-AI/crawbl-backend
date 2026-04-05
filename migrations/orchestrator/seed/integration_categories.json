@@ -1,0 +1,5 @@
+[
+  {"id": "communication", "name": "Communication", "image_url": "https://cdn.crawbl.com/categories/communication.png"},
+  {"id": "productivity", "name": "Productivity", "image_url": "https://cdn.crawbl.com/categories/productivity.png"},
+  {"id": "development", "name": "Development", "image_url": "https://cdn.crawbl.com/categories/development.png"}
+]

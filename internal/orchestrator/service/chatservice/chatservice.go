@@ -63,6 +63,6 @@ func New(
 		agentHistoryRepo:  repos.AgentHistory,
 		runtimeClient:     runtimeClient,
 		broadcaster:       broadcaster,
-		defaultAgents:     append([]orchestrator.DefaultAgentBlueprint(nil), orchestrator.DefaultAgents...),
+		defaultAgents:     orchestrator.GetDefaultAgents(),
 	}
 }

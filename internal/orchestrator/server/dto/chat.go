@@ -162,6 +162,15 @@ type MessagesListResponse struct {
 	Pagination MessagesPaginationResponse `json:"pagination"`
 }
 
+// CreateConversationRequest represents the request body for creating a new conversation.
+type CreateConversationRequest struct {
+	// Type is the conversation type: "swarm" or "agent".
+	Type string `json:"type"`
+	// AgentID is the agent to associate with the conversation.
+	// Required when Type is "agent"; omitted for swarm conversations.
+	AgentID string `json:"agent_id,omitempty"`
+}
+
 // SendMessageRequest represents the request body for sending a new message.
 // Supports text content and file attachments.
 type SendMessageRequest struct {
@@ -184,6 +193,12 @@ type MentionPayload struct {
 	AgentName string `json:"agent_name"`
 	Offset    int    `json:"offset"`
 	Length    int    `json:"length"`
+}
+
+// ActionCardRequest represents the request body for responding to an action card message.
+type ActionCardRequest struct {
+	// ActionID is the ID of the action selected by the user.
+	ActionID string `json:"action_id"`
 }
 
 // ToConversationResponse converts a domain Conversation to the API response format.

@@ -8,19 +8,8 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
-
-var categoryMeta = map[string]orchestrator.AgentToolCategory{
-	"search":       {ID: "search", Name: "Search", ImageURL: "https://cdn.crawbl.com/categories/search.png"},
-	"files":        {ID: "files", Name: "Files", ImageURL: "https://cdn.crawbl.com/categories/files.png"},
-	"memory":       {ID: "memory", Name: "Memory", ImageURL: "https://cdn.crawbl.com/categories/memory.png"},
-	"scheduling":   {ID: "scheduling", Name: "Scheduling", ImageURL: "https://cdn.crawbl.com/categories/scheduling.png"},
-	"notification": {ID: "notification", Name: "Notification", ImageURL: "https://cdn.crawbl.com/categories/notification.png"},
-	"context":      {ID: "context", Name: "Context", ImageURL: "https://cdn.crawbl.com/categories/context.png"},
-	"utility":      {ID: "utility", Name: "Utility", ImageURL: "https://cdn.crawbl.com/categories/utility.png"},
-	"integration":  {ID: "integration", Name: "Integration", ImageURL: "https://cdn.crawbl.com/categories/integration.png"},
-	"shell":        {ID: "shell", Name: "Shell", ImageURL: "https://cdn.crawbl.com/categories/shell.png"},
-}
 
 func New() *toolsRepo {
 	return &toolsRepo{}
@@ -162,8 +151,21 @@ func (r *toolsRepo) Seed(ctx context.Context, sess orchestratorrepo.SessionRunne
 }
 
 func rowToTool(row orchestratorrepo.ToolRow) orchestrator.AgentTool {
-	cat, ok := categoryMeta[row.Category]
-	if !ok {
+	// Build a lookup map from seed tool categories.
+	categories := seed.ToolCategories()
+	catMap := make(map[string]seed.CategoryEntry, len(categories))
+	for _, c := range categories {
+		catMap[c.ID] = c
+	}
+
+	var cat orchestrator.AgentToolCategory
+	if meta, ok := catMap[row.Category]; ok {
+		cat = orchestrator.AgentToolCategory{
+			ID:       meta.ID,
+			Name:     meta.Name,
+			ImageURL: meta.ImageURL,
+		}
+	} else {
 		cat = orchestrator.AgentToolCategory{
 			ID:   row.Category,
 			Name: row.Category,

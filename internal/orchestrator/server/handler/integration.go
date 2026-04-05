@@ -6,8 +6,8 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/agent"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 // IntegrationsList returns both agent tools and third-party integrations
@@ -33,13 +33,13 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Build categories by merging tool categories (agent) and integration categories (orchestrator).
-		toolCats := agent.ToolCategories()
+		// Build categories by merging tool categories and integration categories from seed.
+		toolCats := seed.ToolCategories()
 		appCats := orchestrator.IntegrationCategories()
 		categories := make([]dto.CategoryResponse, 0, len(toolCats)+len(appCats))
 		for _, cat := range toolCats {
 			categories = append(categories, dto.CategoryResponse{
-				ID:       string(cat.ID),
+				ID:       cat.ID,
 				Name:     cat.Name,
 				ImageURL: cat.ImageURL,
 			})
@@ -53,7 +53,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 		}
 
 		// Build items: tools first, then integrations.
-		catalog := agent.DefaultToolCatalog()
+		catalog := seed.Tools()
 		itemsList := make([]dto.IntegrationItemResponse, 0, len(catalog)+len(items))
 
 		for _, t := range catalog {
@@ -61,7 +61,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 				Name:        t.DisplayName,
 				Description: t.Description,
 				IconURL:     t.IconURL,
-				CategoryID:  string(t.Category),
+				CategoryID:  t.Category,
 				Type:        string(orchestrator.ItemTypeTool),
 				Enabled:     true,
 			})

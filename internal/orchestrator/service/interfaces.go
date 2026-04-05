@@ -76,6 +76,13 @@ type AuthService interface {
 	//
 	// Returns a merrors.Error if the operation fails, or nil on success.
 	SavePushToken(ctx context.Context, opts *SavePushTokenOpts) *merrors.Error
+
+	// ClearPushToken removes all push notification tokens for a user.
+	// This is called on logout so the user stops receiving push notifications.
+	// Best-effort — callers may ignore the returned error.
+	//
+	// Returns a merrors.Error if the operation fails, or nil on success.
+	ClearPushToken(ctx context.Context, opts *ClearPushTokenOpts) *merrors.Error
 }
 
 // WorkspaceService defines the interface for workspace management operations.
@@ -143,6 +150,30 @@ type ChatService interface {
 	//
 	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
 	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
+
+	// CreateConversation creates a new conversation within a workspace.
+	// For agent-type conversations, the agent must exist in the workspace.
+	//
+	// Returns the created Conversation on success, or a merrors.Error on failure.
+	CreateConversation(ctx context.Context, opts *CreateConversationOpts) (*orchestrator.Conversation, *merrors.Error)
+
+	// DeleteConversation removes a conversation from a workspace.
+	// Verifies workspace ownership before deletion.
+	//
+	// Returns a merrors.Error if the conversation is not found or on failure.
+	DeleteConversation(ctx context.Context, opts *DeleteConversationOpts) *merrors.Error
+
+	// RespondToActionCard records the user's selection for an action card message.
+	// Sets the selected_action_id in the message content and persists the update.
+	//
+	// Returns the updated Message on success, or a merrors.Error on failure.
+	RespondToActionCard(ctx context.Context, opts *RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error)
+
+	// MarkConversationRead resets the unread count for a conversation to zero.
+	// Verifies workspace ownership before updating.
+	//
+	// Returns a merrors.Error if the conversation is not found or on failure, or nil on success.
+	MarkConversationRead(ctx context.Context, opts *MarkConversationReadOpts) *merrors.Error
 
 	// StartPendingMessageCleanup launches a background goroutine that periodically
 	// marks stale pending messages as failed. The goroutine stops when ctx is cancelled.

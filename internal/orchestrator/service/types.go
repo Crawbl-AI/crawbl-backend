@@ -237,6 +237,49 @@ type SendMessageOpts struct {
 	StatusReadOnce *sync.Once
 }
 
+// CreateConversationOpts contains the parameters for creating a new conversation
+// within a workspace.
+type CreateConversationOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user creating the conversation.
+	UserID string
+	// WorkspaceID is the unique identifier of the workspace to create the conversation in.
+	WorkspaceID string
+	// Type is the conversation type: "swarm" or "agent".
+	Type orchestrator.ConversationType
+	// AgentID is the agent to associate with the conversation.
+	// Required when Type is "agent"; empty for swarm conversations.
+	AgentID string
+}
+
+// DeleteConversationOpts contains the parameters for deleting a conversation
+// from a workspace.
+type DeleteConversationOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user requesting the deletion.
+	UserID string
+	// WorkspaceID is the unique identifier of the workspace containing the conversation.
+	WorkspaceID string
+	// ConversationID is the unique identifier of the conversation to delete.
+	ConversationID string
+}
+
+// RespondToActionCardOpts contains the parameters for recording a user's action card response.
+type RespondToActionCardOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user responding to the action card.
+	UserID string
+	// WorkspaceID is the unique identifier of the workspace containing the message.
+	WorkspaceID string
+	// MessageID is the unique identifier of the action card message being responded to.
+	MessageID string
+	// ActionID is the ID of the action the user selected.
+	ActionID string
+}
+
 // GetWorkspaceSummaryOpts contains options for the GetWorkspaceSummary method.
 type GetWorkspaceSummaryOpts struct {
 	// Sess is the database session for the transaction. Must be non-nil.
@@ -388,4 +431,24 @@ type OAuthCallbackOpts struct {
 	CodeVerifier string
 	// RedirectURL is the redirect URI used in the OAuth flow.
 	RedirectURL string
+}
+
+// MarkConversationReadOpts contains the parameters for marking a conversation as read.
+type MarkConversationReadOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the requesting user.
+	UserID string
+	// WorkspaceID is the unique identifier of the workspace containing the conversation.
+	WorkspaceID string
+	// ConversationID is the unique identifier of the conversation to mark as read.
+	ConversationID string
+}
+
+// ClearPushTokenOpts contains the parameters for clearing all push tokens for a user on logout.
+type ClearPushTokenOpts struct {
+	// Sess is the database session for the transaction. Must be non-nil.
+	Sess *dbr.Session
+	// UserID is the unique identifier of the user whose push tokens should be cleared.
+	UserID string
 }

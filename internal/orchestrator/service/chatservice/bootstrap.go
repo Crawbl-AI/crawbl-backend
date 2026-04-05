@@ -11,7 +11,7 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/agent"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 // ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
@@ -196,10 +196,10 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 	})
 }
 
-// ensureDefaultTools seeds the tool catalog from the agent package.
+// ensureDefaultTools seeds the tool catalog from the seed package.
 // This is idempotent — the repo's Seed method uses ON CONFLICT DO UPDATE.
 func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.SessionRunner) *merrors.Error {
-	catalog := agent.DefaultToolCatalog()
+	catalog := seed.Tools()
 	rows := make([]orchestratorrepo.ToolRow, 0, len(catalog))
 	now := time.Now().UTC()
 	for idx, tool := range catalog {
@@ -207,7 +207,7 @@ func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.
 			Name:        tool.Name,
 			DisplayName: tool.DisplayName,
 			Description: tool.Description,
-			Category:    string(tool.Category),
+			Category:    tool.Category,
 			IconURL:     tool.IconURL,
 			SortOrder:   idx,
 			CreatedAt:   now,

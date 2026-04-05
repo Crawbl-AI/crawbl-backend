@@ -9,7 +9,6 @@
 package orchestrator
 
 import (
-	"errors"
 	"time"
 )
 
@@ -23,33 +22,6 @@ const (
 
 	// DefaultAgentAvatarURL is the default avatar URL for agents (empty means no default).
 	DefaultAgentAvatarURL = ""
-)
-
-// Error variables define the sentinel errors used throughout the orchestrator package.
-var (
-	// ErrInvalidToken indicates the provided authentication token is malformed or invalid.
-	ErrInvalidToken = errors.New("invalid token")
-
-	// ErrUnauthorized indicates the request lacks valid authentication credentials.
-	ErrUnauthorized = errors.New("unauthorized")
-
-	// ErrUserNotFound indicates the requested user does not exist in the system.
-	ErrUserNotFound = errors.New("user not found")
-
-	// ErrUserDeleted indicates the user account has been deleted.
-	ErrUserDeleted = errors.New("user deleted")
-
-	// ErrNilPrincipal indicates a nil principal was provided where one is required.
-	ErrNilPrincipal = errors.New("principal is required")
-
-	// ErrEmptySubject indicates the principal subject field is empty.
-	ErrEmptySubject = errors.New("principal subject is required")
-
-	// ErrEmptyEmail indicates the principal email field is empty.
-	ErrEmptyEmail = errors.New("principal email is required")
-
-	// ErrNilUser indicates a nil user was provided where one is required.
-	ErrNilUser = errors.New("user is required")
 )
 
 // AgentStatus represents the operational status of an agent within a workspace.
@@ -152,6 +124,46 @@ const (
 
 	// MessageContentTypeLoading indicates a loading/placeholder state.
 	MessageContentTypeLoading MessageContentType = "loading"
+
+	// MessageContentTypeDelegation indicates an agent delegation card.
+	MessageContentTypeDelegation MessageContentType = "delegation"
+
+	// MessageContentTypeArtifact indicates an artifact/output card.
+	MessageContentTypeArtifact MessageContentType = "artifact"
+
+	// MessageContentTypeWorkflow indicates a workflow step card.
+	MessageContentTypeWorkflow MessageContentType = "workflow"
+)
+
+// DelegationStatus represents the state of an agent delegation.
+type DelegationStatus string
+
+const (
+	// DelegationStatusDelegating indicates the task is being handed off to a sub-agent.
+	DelegationStatusDelegating DelegationStatus = "delegating"
+
+	// DelegationStatusWorking indicates the sub-agent is actively working on the task.
+	DelegationStatusWorking DelegationStatus = "working"
+
+	// DelegationStatusCompleted indicates the delegation finished successfully.
+	DelegationStatusCompleted DelegationStatus = "completed"
+
+	// DelegationStatusFailed indicates the delegation failed.
+	DelegationStatusFailed DelegationStatus = "failed"
+)
+
+// ArtifactMessageStatus represents the state of an artifact in a message card.
+type ArtifactMessageStatus string
+
+const (
+	// ArtifactMessageStatusCreated indicates the artifact was just created.
+	ArtifactMessageStatusCreated ArtifactMessageStatus = "created"
+
+	// ArtifactMessageStatusUpdated indicates the artifact was updated.
+	ArtifactMessageStatusUpdated ArtifactMessageStatus = "updated"
+
+	// ArtifactMessageStatusFinalized indicates the artifact is complete and immutable.
+	ArtifactMessageStatusFinalized ArtifactMessageStatus = "finalized"
 )
 
 // ActionStyle represents the visual style of an action button.

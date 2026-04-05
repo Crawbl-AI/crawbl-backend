@@ -107,6 +107,14 @@ type conversationRepo interface {
 	FindDefaultSwarm(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) (*orchestrator.Conversation, *merrors.Error)
 	// Save persists a conversation to storage.
 	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error
+	// Create inserts a new conversation row. Returns an error if the conversation already exists.
+	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error
+	// Delete removes a conversation by workspace ID and conversation ID.
+	// Returns ErrConversationNotFound if the conversation does not exist.
+	Delete(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error
+	// MarkAsRead resets the unread_count to zero for a conversation.
+	// Returns ErrConversationNotFound if the conversation does not exist in the workspace.
+	MarkAsRead(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error
 }
 
 // messageRepo defines the repository interface for message data operations.
@@ -116,6 +124,8 @@ type messageRepo interface {
 	ListByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, opts *orchestratorrepo.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error)
 	// GetLatestByConversationID retrieves the most recent message in a conversation.
 	GetLatestByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error)
+	// GetByID retrieves a single message by its ID.
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) (*orchestrator.Message, *merrors.Error)
 	// Save persists a message to storage.
 	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error
 	// FailStalePending marks all messages with status "pending" created before

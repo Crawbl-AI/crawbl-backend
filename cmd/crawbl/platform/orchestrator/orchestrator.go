@@ -18,6 +18,7 @@ import (
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentpromptsrepo"
@@ -85,6 +86,13 @@ func runServer(ctx context.Context) error {
 
 	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
 	defer cleanup()
+
+	// Seed tool catalog and categories from embedded JSON.
+	// Idempotent — safe on every startup.
+	if err := seed.Run(ctx, db.NewSession(nil), logger); err != nil {
+		logger.Error("database seeding failed", "error", err)
+		return fmt.Errorf("database seeding failed: %w", err)
+	}
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {

@@ -24,15 +24,16 @@ const (
 // on the client side. Codes are prefixed by domain (AUTH, USR, WSP, etc.).
 const (
 	// Authentication error codes (AUTHxxxx)
-	ErrCodeUnauthorized = "AUTH0001" // User is not authenticated
-	ErrCodeInvalidToken = "AUTH0002" // Token is invalid or expired
+	ErrCodeUnauthorized            = "AUTH0001" // User is not authenticated
+	ErrCodeInvalidToken            = "AUTH0002" // Token is invalid or expired
+	ErrCodeAccountDeletionDisabled = "AUTH0003" // Account deletion not available in this environment
 
 	// User error codes (USRxxxx)
 	ErrCodeUserDeleted             = "USR0001" // User account has been deleted
 	ErrCodeUserNotFound            = "USR0002" // User does not exist
 	ErrCodeUserWrongFirebaseUID    = "USR0003" // Firebase UID mismatch during auth
 	ErrCodeUserFirebaseUIDMismatch = "USR0004" // Firebase UID does not match expected
-	ErrCodeUserAlreadyExists       = "USR0003" // User with this subject already exists
+	ErrCodeUserAlreadyExists       = "USR0005" // User with this subject already exists
 	ErrCodeLegalVersionMismatch    = "USR0012" // Legal document version does not match
 
 	// Workspace error codes (WSPxxxx)
@@ -70,8 +71,9 @@ const (
 // These can be used directly or compared against using IsCode.
 var (
 	// Authentication errors
-	ErrUnauthorized = NewBusinessError("Unauthorized", ErrCodeUnauthorized)
-	ErrInvalidToken = NewBusinessError("Invalid token", ErrCodeInvalidToken)
+	ErrUnauthorized            = NewBusinessError("Unauthorized", ErrCodeUnauthorized)
+	ErrInvalidToken            = NewBusinessError("Invalid token", ErrCodeInvalidToken)
+	ErrAccountDeletionDisabled = NewBusinessError("Account deletion is not available", ErrCodeAccountDeletionDisabled)
 
 	// User errors
 	ErrUserDeleted             = NewBusinessError("User is deleted", ErrCodeUserDeleted)
@@ -114,15 +116,16 @@ var (
 	ErrArtifactVersionNotFound = NewBusinessError("Artifact version not found", ErrCodeArtifactVersionNotFound)
 
 	// Validation errors (server-side, not exposed to clients)
-	ErrInvalidInput    = NewServerErrorText("invalid input provided")
-	ErrNilPrincipal    = NewServerErrorText("principal is required")
-	ErrEmptySubject    = NewServerErrorText("principal subject is required")
-	ErrEmptyEmail      = NewServerErrorText("principal email is required")
-	ErrNilUser         = NewServerErrorText("user is required")
-	ErrNilWorkspace    = NewServerErrorText("workspace is required")
-	ErrNilAgent        = NewServerErrorText("agent is required")
-	ErrNilConversation = NewServerErrorText("conversation is required")
-	ErrNilMessage      = NewServerErrorText("message is required")
+	ErrInvalidInput             = NewServerErrorText("invalid input provided")
+	ErrNilPrincipal             = NewServerErrorText("principal is required")
+	ErrEmptySubject             = NewServerErrorText("principal subject is required")
+	ErrEmptyEmail               = NewServerErrorText("principal email is required")
+	ErrNilUser                  = NewServerErrorText("user is required")
+	ErrNilWorkspace             = NewServerErrorText("workspace is required")
+	ErrNilAgent                 = NewServerErrorText("agent is required")
+	ErrNilConversation          = NewServerErrorText("conversation is required")
+	ErrNilMessage               = NewServerErrorText("message is required")
+	ErrNicknameGenerationFailed = NewServerErrorText("failed to generate unique nickname after max attempts")
 )
 
 // Error represents a structured error with type discrimination.

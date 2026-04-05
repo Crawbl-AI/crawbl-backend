@@ -206,7 +206,9 @@ func (s *service) callAgentStreaming(
 	opts := sc.opts
 	conversation := sc.conversation
 
-	// 1. Emit thinking status and create placeholder message in DB.
+	// 1. Signal that the agent is loading conversation context, then transition
+	//    to thinking once the LLM call is about to start.
+	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusReading), conversation.ID)
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 
 	placeholder, mErr := s.createPlaceholderMessage(ctx, opts.Sess, conversation.ID, agent)
@@ -449,12 +451,20 @@ func (s *service) processStreamChunks(
 			})
 
 			// Track delegation events for audit and UX.
-			if chunk.Tool == "delegate" {
+			if chunk.Tool == agentclient.ToolNameDelegate {
 				delegateSlug, taskSummary := parseDelegateArgs(chunk.Args)
 				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
 					// Use the primary placeholder as the trigger message for audit.
 					go s.recordDelegation(opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+					s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
+						FromAgentID:    agent.ID,
+						ToAgentID:      delegateAgent.ID,
+						ConversationID: conversation.ID,
+						Status:         string(orchestrator.DelegationStatusDelegating),
+						MessagePreview: taskSummary,
+						MessageID:      placeholder.ID,
+					})
 				}
 			}
 
@@ -473,11 +483,18 @@ func (s *service) processStreamChunks(
 			})
 
 			// Clear delegate agent status when delegation completes.
-			if chunk.Tool == "delegate" {
+			if chunk.Tool == agentclient.ToolNameDelegate {
 				delegateSlug, _ := parseDelegateArgs(chunk.Args)
 				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 					go s.completeDelegation(placeholder.ID, delegateAgent.ID)
+					s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
+						FromAgentID:    agent.ID,
+						ToAgentID:      delegateAgent.ID,
+						ConversationID: conversation.ID,
+						Status:         string(orchestrator.DelegationStatusCompleted),
+						MessageID:      placeholder.ID,
+					})
 				}
 			}
 

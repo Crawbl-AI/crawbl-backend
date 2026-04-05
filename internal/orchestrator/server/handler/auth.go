@@ -9,6 +9,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
@@ -138,7 +139,7 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 		// Block account deletion in production.
 		env := strings.ToLower(strings.TrimSpace(c.HTTPMiddleware.Environment))
 		if env == "production" || env == "prod" {
-			httpserver.WriteErrorResponse(w, http.StatusForbidden, "account deletion is not available")
+			WriteError(w, merrors.ErrAccountDeletionDisabled)
 			return
 		}
 
@@ -320,6 +321,28 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 			WriteError(w, mErr)
 			return
 		}
+
+		httpserver.WriteNoContent(w)
+	}
+}
+
+// Logout clears the push notification token for the authenticated user's device
+// so the user stops receiving push notifications after signing out.
+// The Firebase session remains valid (stateless auth); only the push token is cleared.
+// Returns 204 No Content on success.
+func Logout(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		// Best-effort: clear push tokens so the device stops receiving notifications.
+		_ = c.AuthService.ClearPushToken(r.Context(), &orchestratorservice.ClearPushTokenOpts{
+			Sess:   c.NewSession(),
+			UserID: user.ID,
+		})
 
 		httpserver.WriteNoContent(w)
 	}

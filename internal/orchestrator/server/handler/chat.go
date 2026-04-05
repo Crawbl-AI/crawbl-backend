@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -134,6 +135,108 @@ func MessagesList(c *Context) http.HandlerFunc {
 				HasPrev:      page.Pagination.HasPrev,
 			},
 		})
+	}
+}
+
+// ConversationCreate creates a new conversation within a workspace.
+// The request body must specify the conversation type ("swarm" or "agent").
+// For agent conversations, agent_id must be provided.
+func ConversationCreate(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		var reqBody dto.CreateConversationRequest
+		if err := DecodeJSON(r, &reqBody); err != nil {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		convType := orchestrator.ConversationType(strings.TrimSpace(reqBody.Type))
+		if convType != orchestrator.ConversationTypeSwarm && convType != orchestrator.ConversationTypeAgent {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid value for field 'type'")
+			return
+		}
+
+		conversation, mErr := c.ChatService.CreateConversation(r.Context(), &orchestratorservice.CreateConversationOpts{
+			Sess:        c.NewSession(),
+			UserID:      user.ID,
+			WorkspaceID: chi.URLParam(r, "workspaceId"),
+			Type:        convType,
+			AgentID:     strings.TrimSpace(reqBody.AgentID),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		WriteSuccess(w, http.StatusCreated, dto.ToConversationResponse(conversation))
+	}
+}
+
+// ConversationDelete removes a conversation from a workspace.
+// Returns 204 No Content on success.
+func ConversationDelete(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		mErr = c.ChatService.DeleteConversation(r.Context(), &orchestratorservice.DeleteConversationOpts{
+			Sess:           c.NewSession(),
+			UserID:         user.ID,
+			WorkspaceID:    chi.URLParam(r, "workspaceId"),
+			ConversationID: chi.URLParam(r, "id"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// SearchMessages searches conversation messages by text.
+// GET /v1/workspaces/{workspaceId}/conversations/{id}/messages/search?q=...
+// Mock implementation — real full-text search comes later.
+func SearchMessages(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Mock: return empty results
+		WriteSuccess(w, http.StatusOK, map[string]any{
+			"messages":   []any{},
+			"pagination": map[string]any{"total": 0, "limit": 20, "offset": 0, "has_next": false},
+		})
+	}
+}
+
+// ConversationMarkRead resets the unread count for a conversation to zero.
+// The conversation must belong to a workspace owned by the authenticated user.
+// Returns 204 No Content on success.
+func ConversationMarkRead(c *Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		if mErr := c.ChatService.MarkConversationRead(r.Context(), &orchestratorservice.MarkConversationReadOpts{
+			Sess:           c.NewSession(),
+			UserID:         user.ID,
+			WorkspaceID:    chi.URLParam(r, "workspaceId"),
+			ConversationID: chi.URLParam(r, "id"),
+		}); mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

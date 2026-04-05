@@ -1,0 +1,4 @@
+[
+  {"id": "auto", "name": "Auto", "description": "Platform selects the best model automatically"},
+  {"id": "gpt-5-mini", "name": "GPT-5 Mini", "description": "Fast and efficient model for everyday tasks"}
+]

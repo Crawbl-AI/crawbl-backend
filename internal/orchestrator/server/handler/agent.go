@@ -199,8 +199,9 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 // This is a public endpoint — no auth required (loaded by DictService before login).
 func ListModels(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		models := make([]dto.AgentModelResponse, 0, len(orchestrator.AvailableModels))
-		for _, m := range orchestrator.AvailableModels {
+		availableModels := orchestrator.GetAvailableModels()
+		models := make([]dto.AgentModelResponse, 0, len(availableModels))
+		for _, m := range availableModels {
 			models = append(models, dto.AgentModelResponse{
 				ID:          m.ID,
 				Name:        m.Name,
@@ -241,8 +242,22 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			return
 		}
 
-		items := make([]dto.AgentMemoryResponse, 0, len(memories))
-		for _, m := range memories {
+		// Apply handler-level pagination over the full list returned by the service.
+		// The service returns all matching memories; we slice here for the page window.
+		total := len(memories)
+		entries := memories
+		if offset >= total {
+			entries = nil
+		} else {
+			end := offset + limit
+			if end > total {
+				end = total
+			}
+			entries = entries[offset:end]
+		}
+
+		items := make([]dto.AgentMemoryResponse, 0, len(entries))
+		for _, m := range entries {
 			items = append(items, dto.AgentMemoryResponse{
 				Key:       m.Key,
 				Content:   m.Content,
@@ -255,10 +270,10 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 		WriteSuccess(w, http.StatusOK, dto.AgentMemoriesListResponse{
 			Data: items,
 			Pagination: dto.OffsetPaginationResponse{
-				Total:   len(memories),
+				Total:   total,
 				Limit:   limit,
 				Offset:  offset,
-				HasNext: offset+limit < len(memories),
+				HasNext: offset+limit < total,
 			},
 		})
 	}

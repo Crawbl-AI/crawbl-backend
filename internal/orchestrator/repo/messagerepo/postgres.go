@@ -155,13 +155,63 @@ func (r *messageRepo) FailStalePending(ctx context.Context, sess orchestratorrep
 	return int(n), nil
 }
 
+// statusOrdinal returns the monotonic ordering for message statuses.
+// Higher ordinals cannot be overwritten by lower ones.
+// Terminal statuses (failed, incomplete, silent) get the highest ordinal so
+// they can always be written but never overwritten once set.
+func statusOrdinal(status orchestrator.MessageStatus) int {
+	switch status {
+	case orchestrator.MessageStatusPending:
+		return 0
+	case orchestrator.MessageStatusSent:
+		return 1
+	case orchestrator.MessageStatusDelivered:
+		return 2
+	case orchestrator.MessageStatusRead:
+		return 3
+	case orchestrator.MessageStatusFailed, orchestrator.MessageStatusIncomplete, orchestrator.MessageStatusSilent:
+		return 99
+	default:
+		return -1
+	}
+}
+
 // UpdateStatus updates just the status and updated_at fields of a message.
 // This is a lightweight alternative to Save for status-only transitions.
+// A monotonic guard prevents status downgrades: if the stored ordinal is
+// already >= the new ordinal (and the stored status is not a terminal one),
+// the update is silently skipped.
 func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error {
 	if sess == nil || messageID == "" {
 		return merrors.ErrInvalidInput
 	}
-	_, err := sess.Update("messages").
+
+	// Fetch current status to enforce monotonic ordering.
+	var current struct {
+		Status string `db:"status"`
+	}
+	err := sess.Select("status").
+		From("messages").
+		Where("id = ?", messageID).
+		LoadOneContext(ctx, &current)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			// Message gone — nothing to update.
+			return nil
+		}
+		return merrors.WrapStdServerError(err, "select current message status for monotonic guard")
+	}
+
+	currentStatus := orchestrator.MessageStatus(current.Status)
+	// Skip downgrade: only allow the update when the new ordinal is strictly
+	// higher than the current one, OR when the new status is terminal (ordinal 99)
+	// which can always overwrite non-terminal statuses.
+	if statusOrdinal(status) <= statusOrdinal(currentStatus) {
+		// Already at this level or higher — no-op.
+		return nil
+	}
+
+	_, err = sess.Update("messages").
 		Set("status", string(status)).
 		Set("updated_at", time.Now().UTC()).
 		Where("id = ?", messageID).
@@ -184,6 +234,34 @@ func (r *messageRepo) DeleteByID(ctx context.Context, sess orchestratorrepo.Sess
 		return merrors.WrapStdServerError(err, "delete message by id")
 	}
 	return nil
+}
+
+// GetByID retrieves a single message by its ID.
+// Returns ErrMessageNotFound if the message does not exist.
+// Returns ErrInvalidInput if sess is nil or messageID is empty.
+func (r *messageRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) (*orchestrator.Message, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(messageID) == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	var row orchestratorrepo.MessageRow
+	err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+		From("messages").
+		Where("id = ?", messageID).
+		LoadOneContext(ctx, &row)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return nil, merrors.ErrMessageNotFound
+		}
+		return nil, merrors.WrapStdServerError(err, "select message by id")
+	}
+
+	message, decodeErr := row.ToDomain()
+	if decodeErr != nil {
+		return nil, merrors.WrapStdServerError(decodeErr, "decode message by id")
+	}
+
+	return message, nil
 }
 
 // ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.

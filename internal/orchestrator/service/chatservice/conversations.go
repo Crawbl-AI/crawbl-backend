@@ -2,8 +2,11 @@ package chatservice
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/gocraft/dbr/v2"
+	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
@@ -89,6 +92,88 @@ func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.Li
 	}
 
 	return page, nil
+}
+
+// CreateConversation creates a new conversation within a workspace.
+// For agent-type conversations, the specified agent must exist in the workspace.
+func (s *service) CreateConversation(ctx context.Context, opts *orchestratorservice.CreateConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
+	if opts == nil || opts.Sess == nil {
+		return nil, merrors.ErrInvalidInput
+	}
+	if strings.TrimSpace(opts.UserID) == "" || strings.TrimSpace(opts.WorkspaceID) == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+	if opts.Type != orchestrator.ConversationTypeSwarm && opts.Type != orchestrator.ConversationTypeAgent {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	// Verify workspace ownership.
+	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+		return nil, mErr
+	}
+
+	var agentID *string
+	if opts.Type == orchestrator.ConversationTypeAgent {
+		if strings.TrimSpace(opts.AgentID) == "" {
+			return nil, merrors.ErrInvalidInput
+		}
+		agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+		if mErr != nil {
+			return nil, mErr
+		}
+		id := agent.ID
+		agentID = &id
+	}
+
+	now := time.Now().UTC()
+	conversation := &orchestrator.Conversation{
+		ID:          uuid.NewString(),
+		WorkspaceID: opts.WorkspaceID,
+		AgentID:     agentID,
+		Type:        opts.Type,
+		Title:       "",
+		UnreadCount: 0,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if mErr := s.conversationRepo.Create(ctx, opts.Sess, conversation); mErr != nil {
+		return nil, mErr
+	}
+
+	return conversation, nil
+}
+
+// DeleteConversation removes a conversation from a workspace.
+// Verifies workspace ownership before performing the deletion.
+func (s *service) DeleteConversation(ctx context.Context, opts *orchestratorservice.DeleteConversationOpts) *merrors.Error {
+	if opts == nil || opts.Sess == nil {
+		return merrors.ErrInvalidInput
+	}
+	if strings.TrimSpace(opts.UserID) == "" || strings.TrimSpace(opts.WorkspaceID) == "" || strings.TrimSpace(opts.ConversationID) == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	// Verify workspace ownership.
+	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+		return mErr
+	}
+
+	return s.conversationRepo.Delete(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
+}
+
+// MarkConversationRead resets the unread count for a conversation to zero.
+// Verifies workspace ownership before updating.
+func (s *service) MarkConversationRead(ctx context.Context, opts *orchestratorservice.MarkConversationReadOpts) *merrors.Error {
+	if opts == nil || opts.Sess == nil {
+		return merrors.ErrInvalidInput
+	}
+
+	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+		return mErr
+	}
+
+	return s.conversationRepo.MarkAsRead(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
 }
 
 // attachConversationData enriches a conversation with agent info and last message.

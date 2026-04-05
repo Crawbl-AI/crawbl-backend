@@ -1,0 +1,261 @@
+[
+  {
+    "name": "web_search_tool",
+    "display_name": "Web Search",
+    "description": "Search the internet for current information, news, and real-time data",
+    "category": "search",
+    "icon_url": "https://cdn.crawbl.com/tools/web-search.png"
+  },
+  {
+    "name": "web_fetch",
+    "display_name": "Web Fetch",
+    "description": "Read and extract content from any webpage URL",
+    "category": "search",
+    "icon_url": "https://cdn.crawbl.com/tools/web-fetch.png"
+  },
+  {
+    "name": "http_request",
+    "display_name": "HTTP Request",
+    "description": "Make HTTP API calls to external services",
+    "category": "search",
+    "icon_url": "https://cdn.crawbl.com/tools/http-request.png"
+  },
+  {
+    "name": "file_read",
+    "display_name": "Read Files",
+    "description": "Read files from the agent's workspace",
+    "category": "files",
+    "icon_url": "https://cdn.crawbl.com/tools/file-read.png"
+  },
+  {
+    "name": "file_write",
+    "display_name": "Write Files",
+    "description": "Create and write files in the agent's workspace",
+    "category": "files",
+    "icon_url": "https://cdn.crawbl.com/tools/file-write.png"
+  },
+  {
+    "name": "file_edit",
+    "display_name": "Edit Files",
+    "description": "Edit existing files in the agent's workspace",
+    "category": "files",
+    "icon_url": "https://cdn.crawbl.com/tools/file-edit.png"
+  },
+  {
+    "name": "glob_search",
+    "display_name": "File Search",
+    "description": "Search for files by name pattern in the workspace",
+    "category": "files",
+    "icon_url": "https://cdn.crawbl.com/tools/glob-search.png"
+  },
+  {
+    "name": "content_search",
+    "display_name": "Content Search",
+    "description": "Search inside files for specific text or patterns",
+    "category": "files",
+    "icon_url": "https://cdn.crawbl.com/tools/content-search.png"
+  },
+  {
+    "name": "memory_store",
+    "display_name": "Remember",
+    "description": "Store important information for future conversations",
+    "category": "memory",
+    "icon_url": "https://cdn.crawbl.com/tools/memory-store.png"
+  },
+  {
+    "name": "memory_recall",
+    "display_name": "Recall",
+    "description": "Retrieve previously stored information and context",
+    "category": "memory",
+    "icon_url": "https://cdn.crawbl.com/tools/memory-recall.png"
+  },
+  {
+    "name": "memory_forget",
+    "display_name": "Forget",
+    "description": "Remove stored information from memory",
+    "category": "memory",
+    "icon_url": "https://cdn.crawbl.com/tools/memory-forget.png"
+  },
+  {
+    "name": "cron_add",
+    "display_name": "Schedule Task",
+    "description": "Create scheduled or recurring tasks",
+    "category": "scheduling",
+    "icon_url": "https://cdn.crawbl.com/tools/cron-add.png"
+  },
+  {
+    "name": "cron_list",
+    "display_name": "List Schedules",
+    "description": "View all scheduled tasks",
+    "category": "scheduling",
+    "icon_url": "https://cdn.crawbl.com/tools/cron-list.png"
+  },
+  {
+    "name": "cron_remove",
+    "display_name": "Remove Schedule",
+    "description": "Delete a scheduled task",
+    "category": "scheduling",
+    "icon_url": "https://cdn.crawbl.com/tools/cron-remove.png"
+  },
+  {
+    "name": "cron_update",
+    "display_name": "Update Schedule",
+    "description": "Modify an existing scheduled task",
+    "category": "scheduling",
+    "icon_url": "https://cdn.crawbl.com/tools/cron-update.png"
+  },
+  {
+    "name": "cron_run",
+    "display_name": "Run Now",
+    "description": "Execute a scheduled task immediately",
+    "category": "scheduling",
+    "icon_url": "https://cdn.crawbl.com/tools/cron-run.png"
+  },
+  {
+    "name": "cron_runs",
+    "display_name": "Run History",
+    "description": "View execution history for a scheduled task",
+    "category": "scheduling",
+    "icon_url": "https://cdn.crawbl.com/tools/cron-runs.png"
+  },
+  {
+    "name": "orchestrator__send_push_notification",
+    "display_name": "Push Notification",
+    "description": "Send push notifications to your mobile device",
+    "category": "notification",
+    "icon_url": "https://cdn.crawbl.com/tools/push-notification.png"
+  },
+  {
+    "name": "orchestrator__get_user_profile",
+    "display_name": "User Profile",
+    "description": "Access your profile information and preferences",
+    "category": "context",
+    "icon_url": "https://cdn.crawbl.com/tools/user-profile.png"
+  },
+  {
+    "name": "orchestrator__get_workspace_info",
+    "display_name": "Workspace Info",
+    "description": "Get workspace details and agent list",
+    "category": "context",
+    "icon_url": "https://cdn.crawbl.com/tools/workspace-info.png"
+  },
+  {
+    "name": "orchestrator__list_conversations",
+    "display_name": "Conversations",
+    "description": "List all conversations in your workspace",
+    "category": "context",
+    "icon_url": "https://cdn.crawbl.com/tools/conversations.png"
+  },
+  {
+    "name": "orchestrator__search_past_messages",
+    "display_name": "Search Messages",
+    "description": "Search through past conversation messages",
+    "category": "context",
+    "icon_url": "https://cdn.crawbl.com/tools/search-messages.png"
+  },
+  {
+    "name": "calculator",
+    "display_name": "Calculator",
+    "description": "Perform mathematical calculations",
+    "category": "utility",
+    "icon_url": "https://cdn.crawbl.com/tools/calculator.png"
+  },
+  {
+    "name": "weather",
+    "display_name": "Weather",
+    "description": "Get current weather information for any location",
+    "category": "utility",
+    "icon_url": "https://cdn.crawbl.com/tools/weather.png"
+  },
+  {
+    "name": "image_info",
+    "display_name": "Image Info",
+    "description": "Analyze and extract information from images",
+    "category": "utility",
+    "icon_url": "https://cdn.crawbl.com/tools/image-info.png"
+  },
+  {
+    "name": "shell",
+    "display_name": "Shell Commands",
+    "description": "Run shell commands in the agent's environment",
+    "category": "shell",
+    "icon_url": "https://cdn.crawbl.com/tools/shell.png"
+  },
+  {
+    "name": "orchestrator__create_agent_history",
+    "display_name": "Agent History",
+    "description": "Record notable events in an agent's history",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/agent-history.png"
+  },
+  {
+    "name": "delegate",
+    "display_name": "Delegate",
+    "description": "Hand off tasks to specialized sub-agents",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/delegate.png"
+  },
+  {
+    "name": "orchestrator__send_message_to_agent",
+    "display_name": "Agent Message",
+    "description": "Send messages between agents for collaboration",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/agent-message.png"
+  },
+  {
+    "name": "orchestrator__create_artifact",
+    "display_name": "Create Artifact",
+    "description": "Create a shared document or code artifact",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/artifact-create.png"
+  },
+  {
+    "name": "orchestrator__read_artifact",
+    "display_name": "Read Artifact",
+    "description": "Read a shared artifact created by any agent",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/artifact-read.png"
+  },
+  {
+    "name": "orchestrator__update_artifact",
+    "display_name": "Update Artifact",
+    "description": "Update a shared artifact with a new version",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/artifact-update.png"
+  },
+  {
+    "name": "orchestrator__review_artifact",
+    "display_name": "Review Artifact",
+    "description": "Review and approve or request changes on an artifact",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/artifact-review.png"
+  },
+  {
+    "name": "orchestrator__create_workflow",
+    "display_name": "Create Workflow",
+    "description": "Define a multi-step agent workflow",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/workflow-create.png"
+  },
+  {
+    "name": "orchestrator__trigger_workflow",
+    "display_name": "Start Workflow",
+    "description": "Trigger a defined workflow",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/workflow-trigger.png"
+  },
+  {
+    "name": "orchestrator__check_workflow_status",
+    "display_name": "Workflow Status",
+    "description": "Check the status of a running workflow",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/workflow-status.png"
+  },
+  {
+    "name": "orchestrator__list_workflows",
+    "display_name": "List Workflows",
+    "description": "List all available workflows",
+    "category": "integration",
+    "icon_url": "https://cdn.crawbl.com/tools/workflow-list.png"
+  }
+]

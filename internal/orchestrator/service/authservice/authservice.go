@@ -376,6 +376,31 @@ func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.S
 	})
 }
 
+// ClearPushToken removes all push notification tokens for a user.
+// This is called on logout so the user stops receiving push notifications.
+// The operation is best-effort — callers may safely ignore the returned error.
+//
+// Parameters:
+//   - ctx: Context for the operation.
+//   - opts: Options containing the session and user ID.
+//
+// Returns an error if the operation fails. Possible errors include:
+//   - ErrInvalidInput: nil options or session
+func (s *service) ClearPushToken(ctx context.Context, opts *orchestratorservice.ClearPushTokenOpts) *merrors.Error {
+	if opts == nil || opts.Sess == nil {
+		return merrors.ErrInvalidInput
+	}
+
+	_, err := opts.Sess.DeleteFrom("user_push_tokens").
+		Where("user_id = ?", opts.UserID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "clear push token")
+	}
+
+	return nil
+}
+
 // createUser creates a new user with an auto-generated unique nickname.
 // This is an internal helper method used by SignIn and SignUp.
 //
@@ -469,7 +494,7 @@ func (s *service) generateUniqueNickname(ctx context.Context, sess *dbr.Session,
 		}
 	}
 
-	return "", merrors.NewServerErrorText("failed to generate unique nickname after max attempts")
+	return "", merrors.ErrNicknameGenerationFailed
 }
 
 // saveUser persists user changes within a transaction.

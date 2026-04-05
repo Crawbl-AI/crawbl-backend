@@ -77,7 +77,7 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 func PrincipalFromRequest(r *http.Request) (*orchestrator.Principal, error) {
 	principal, ok := httpserver.PrincipalFromContext(r.Context())
 	if !ok || principal == nil {
-		return nil, orchestrator.ErrUnauthorized
+		return nil, merrors.ErrUnauthorized
 	}
 	return principal, nil
 }
@@ -134,6 +134,8 @@ func HTTPStatusForError(err *merrors.Error) int {
 		return http.StatusInternalServerError
 	case merrors.IsCode(err, merrors.ErrCodeUnauthorized), merrors.IsCode(err, merrors.ErrCodeInvalidToken):
 		return http.StatusUnauthorized
+	case merrors.IsCode(err, merrors.ErrCodeAccountDeletionDisabled):
+		return http.StatusForbidden
 	case merrors.IsCode(err, merrors.ErrCodeUserNotFound),
 		merrors.IsCode(err, merrors.ErrCodeWorkspaceNotFound),
 		merrors.IsCode(err, merrors.ErrCodeAgentNotFound),

@@ -95,6 +95,14 @@ type ConversationRepo interface {
 	FindDefaultSwarm(ctx context.Context, sess SessionRunner, workspaceID string) (*orchestrator.Conversation, *merrors.Error)
 	// Save persists conversation data, creating a new record or updating an existing one.
 	Save(ctx context.Context, sess SessionRunner, conversation *orchestrator.Conversation) *merrors.Error
+	// Create inserts a new conversation row. Returns an error if the conversation already exists.
+	Create(ctx context.Context, sess SessionRunner, conversation *orchestrator.Conversation) *merrors.Error
+	// Delete removes a conversation by workspace ID and conversation ID.
+	// Returns ErrConversationNotFound if the conversation does not exist.
+	Delete(ctx context.Context, sess SessionRunner, workspaceID, conversationID string) *merrors.Error
+	// MarkAsRead resets the unread_count to zero for a conversation.
+	// Returns ErrConversationNotFound if the conversation does not exist in the workspace.
+	MarkAsRead(ctx context.Context, sess SessionRunner, workspaceID, conversationID string) *merrors.Error
 }
 
 // ListMessagesOpts contains options for listing messages with pagination.
@@ -124,6 +132,9 @@ type MessageRepo interface {
 	UpdateStatus(ctx context.Context, sess SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
 	// DeleteByID removes a message by its ID.
 	DeleteByID(ctx context.Context, sess SessionRunner, messageID string) *merrors.Error
+	// GetByID retrieves a single message by its ID.
+	// Returns ErrMessageNotFound if the message does not exist.
+	GetByID(ctx context.Context, sess SessionRunner, messageID string) (*orchestrator.Message, *merrors.Error)
 	// ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
 	// Used for building conversation context to inject into agent calls.
 	ListRecent(ctx context.Context, sess SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)

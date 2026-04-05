@@ -3,6 +3,7 @@ package conversationrepo
 import (
 	"context"
 	"strings"
+	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
@@ -94,6 +95,56 @@ func (r *conversationRepo) FindDefaultSwarm(ctx context.Context, sess orchestrat
 	return row.ToDomain(), nil
 }
 
+// Create inserts a new conversation row into the database.
+// Returns ErrInvalidInput if sess is nil or conversation is nil.
+// Returns a server error if the insert fails.
+func (r *conversationRepo) Create(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error {
+	if sess == nil || conversation == nil {
+		return merrors.ErrInvalidInput
+	}
+
+	row := orchestratorrepo.NewConversationRow(conversation)
+
+	_, err := sess.InsertInto("conversations").
+		Pair("id", row.ID).
+		Pair("workspace_id", row.WorkspaceID).
+		Pair("agent_id", row.AgentID).
+		Pair("type", row.Type).
+		Pair("title", row.Title).
+		Pair("unread_count", row.UnreadCount).
+		Pair("created_at", row.CreatedAt).
+		Pair("updated_at", row.UpdatedAt).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "insert conversation")
+	}
+
+	return nil
+}
+
+// Delete removes a conversation from the database by workspace ID and conversation ID.
+// Returns ErrInvalidInput if sess is nil, workspaceID is empty, or conversationID is empty.
+// Returns ErrConversationNotFound if no matching row exists.
+func (r *conversationRepo) Delete(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error {
+	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	result, err := sess.DeleteFrom("conversations").
+		Where("workspace_id = ? AND id = ?", workspaceID, conversationID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "delete conversation")
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return merrors.ErrConversationNotFound
+	}
+
+	return nil
+}
+
 // Save persists conversation data to the database.
 // It handles both creating new conversations and updating existing ones by checking
 // if a conversation with the same ID exists first.
@@ -154,6 +205,31 @@ func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.Sessi
 			return nil
 		}
 		return merrors.WrapStdServerError(err, "insert conversation")
+	}
+
+	return nil
+}
+
+// MarkAsRead resets the unread_count to zero for a conversation identified by workspace and conversation ID.
+// Returns ErrInvalidInput if sess is nil or either ID is empty.
+// Returns ErrConversationNotFound if no matching row exists.
+func (r *conversationRepo) MarkAsRead(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error {
+	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
+		return merrors.ErrInvalidInput
+	}
+
+	result, err := sess.Update("conversations").
+		Set("unread_count", 0).
+		Set("updated_at", time.Now().UTC()).
+		Where("workspace_id = ? AND id = ?", workspaceID, conversationID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "mark conversation read")
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return merrors.ErrConversationNotFound
 	}
 
 	return nil

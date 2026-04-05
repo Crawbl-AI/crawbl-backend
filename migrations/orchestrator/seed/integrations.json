@@ -1,0 +1,10 @@
+[
+  {"provider": "google_calendar", "name": "Google Calendar", "description": "View and create calendar events, check availability", "icon_url": "https://cdn.crawbl.com/integrations/google-calendar.png", "category_id": "productivity", "is_enabled": true},
+  {"provider": "gmail", "name": "Gmail", "description": "Search and read emails, draft responses", "icon_url": "https://cdn.crawbl.com/integrations/gmail.png", "category_id": "communication", "is_enabled": true},
+  {"provider": "slack", "name": "Slack", "description": "Send messages, search channels, manage notifications", "icon_url": "https://cdn.crawbl.com/integrations/slack.png", "category_id": "communication", "is_enabled": false},
+  {"provider": "jira", "name": "Jira", "description": "Search and manage issues, track projects", "icon_url": "https://cdn.crawbl.com/integrations/jira.png", "category_id": "productivity", "is_enabled": false},
+  {"provider": "notion", "name": "Notion", "description": "Search pages, create documents, manage databases", "icon_url": "https://cdn.crawbl.com/integrations/notion.png", "category_id": "productivity", "is_enabled": false},
+  {"provider": "asana", "name": "Asana", "description": "Manage tasks, track project progress", "icon_url": "https://cdn.crawbl.com/integrations/asana.png", "category_id": "productivity", "is_enabled": false},
+  {"provider": "github", "name": "GitHub", "description": "Browse repositories, manage issues and pull requests", "icon_url": "https://cdn.crawbl.com/integrations/github.png", "category_id": "development", "is_enabled": false},
+  {"provider": "zoom", "name": "Zoom", "description": "Schedule and manage meetings", "icon_url": "https://cdn.crawbl.com/integrations/zoom.png", "category_id": "communication", "is_enabled": false}
+]

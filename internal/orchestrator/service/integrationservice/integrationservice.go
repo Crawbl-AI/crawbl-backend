@@ -8,6 +8,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/integration"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 // New creates a new IntegrationService.
@@ -19,27 +20,6 @@ func New(logger *slog.Logger) orchestratorservice.IntegrationService {
 	return &service{
 		logger: logger,
 	}
-}
-
-// providerCatalog defines all integrations the platform supports.
-// Each entry becomes visible in the mobile app's Connected Apps screen.
-// IsEnabled=false means "coming soon" (shown but not connectable).
-var providerCatalog = []struct {
-	Provider    string
-	Name        string
-	Description string
-	IconURL     string
-	CategoryID  string
-	IsEnabled   bool
-}{
-	{"google_calendar", "Google Calendar", "View and create calendar events, check availability", "https://cdn.crawbl.com/integrations/google-calendar.png", "productivity", true},
-	{"gmail", "Gmail", "Search and read emails, draft responses", "https://cdn.crawbl.com/integrations/gmail.png", "communication", true},
-	{"slack", "Slack", "Send messages, search channels, manage notifications", "https://cdn.crawbl.com/integrations/slack.png", "communication", false},
-	{"jira", "Jira", "Search and manage issues, track projects", "https://cdn.crawbl.com/integrations/jira.png", "productivity", false},
-	{"notion", "Notion", "Search pages, create documents, manage databases", "https://cdn.crawbl.com/integrations/notion.png", "productivity", false},
-	{"asana", "Asana", "Manage tasks, track project progress", "https://cdn.crawbl.com/integrations/asana.png", "productivity", false},
-	{"github", "GitHub", "Browse repositories, manage issues and pull requests", "https://cdn.crawbl.com/integrations/github.png", "development", false},
-	{"zoom", "Zoom", "Schedule and manage meetings", "https://cdn.crawbl.com/integrations/zoom.png", "communication", false},
 }
 
 // ListIntegrations returns all available integrations, merging the static catalog
@@ -70,9 +50,10 @@ func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservic
 		connectedProviders[r.Provider] = true
 	}
 
-	// Build the response by merging catalog with connection status.
-	items := make([]*orchestrator.IntegrationItem, 0, len(providerCatalog))
-	for _, p := range providerCatalog {
+	// Build the response by merging seed catalog with connection status.
+	providers := seed.IntegrationProviders()
+	items := make([]*orchestrator.IntegrationItem, 0, len(providers))
+	for _, p := range providers {
 		items = append(items, &orchestrator.IntegrationItem{
 			Provider:    p.Provider,
 			Name:        p.Name,
