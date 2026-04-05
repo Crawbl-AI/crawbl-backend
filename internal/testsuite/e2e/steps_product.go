@@ -223,7 +223,7 @@ func (tc *testContext) userRegistersPushToken(alias string) error {
 	if err := tc.assertStatus(200); err != nil {
 		return err
 	}
-	return tc.assertJSONEquals("success", "true")
+	return tc.assertJSONEquals("data.success", "true")
 }
 
 func (tc *testContext) pushTokenShouldBeStored(alias string) error {
