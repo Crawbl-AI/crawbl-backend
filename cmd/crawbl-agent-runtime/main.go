@@ -27,6 +27,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/agents"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/model"
@@ -130,6 +131,19 @@ func main() {
 		}
 	}()
 
+	// Step 4c: shared local tool slice (web_fetch, web_search_tool,
+	// memory_store, memory_recall, memory_forget) built once per pod
+	// and bound onto every agent in the graph.
+	localTools, err := agents.BuildCommonTools(agents.CommonToolDeps{
+		MemStore:        memStore,
+		WorkspaceID:     cfg.WorkspaceID,
+		SearXNGEndpoint: cfg.SearXNGEndpoint,
+	})
+	if err != nil {
+		logger.Error("init local tools", "error", err)
+		os.Exit(1)
+	}
+
 	// Step 5: agent graph + ADK runner. The runner owns the session
 	// service from this point forward; server.Shutdown calls
 	// runner.Close to tear it down on SIGTERM.
@@ -138,6 +152,7 @@ func main() {
 		MCPToolset:     mcpToolset,
 		SessionService: sessionSvc,
 		Blueprint:      blueprint,
+		LocalTools:     localTools,
 		Logger:         logger,
 	})
 	if err != nil {

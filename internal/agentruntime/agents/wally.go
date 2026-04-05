@@ -16,10 +16,10 @@ const WallyName = "wally"
 
 // NewWally constructs the research agent from a blueprint entry. The
 // instruction and description come from the orchestrator's
-// agent_prompts / agents rows; Wally's Go source holds no copy. The
-// toolbox currently wires web_fetch locally plus the shared MCP
-// toolset for orchestrator-mediated tools.
-func NewWally(model adkmodel.LLM, mcpToolset adktool.Toolset, instruction, description string) (adkagent.Agent, error) {
+// agent_prompts / agents rows; Wally's Go source holds no copy.
+// localTools is the shared local tool slice (web_fetch,
+// web_search_tool, memory_*) built by agents.BuildCommonTools.
+func NewWally(model adkmodel.LLM, mcpToolset adktool.Toolset, instruction, description string, localTools []adktool.Tool) (adkagent.Agent, error) {
 	if model == nil {
 		return nil, fmt.Errorf("agents: Wally requires a non-nil model.LLM")
 	}
@@ -27,17 +27,12 @@ func NewWally(model adkmodel.LLM, mcpToolset adktool.Toolset, instruction, descr
 		return nil, fmt.Errorf("agents: Wally requires a non-empty instruction from the blueprint")
 	}
 
-	webFetch, err := NewWebFetchTool()
-	if err != nil {
-		return nil, fmt.Errorf("agents: Wally tool setup: %w", err)
-	}
-
 	cfg := llmagent.Config{
 		Name:        WallyName,
 		Description: description,
 		Instruction: instruction,
 		Model:       model,
-		Tools:       []adktool.Tool{webFetch},
+		Tools:       localTools,
 	}
 	if mcpToolset != nil {
 		cfg.Toolsets = []adktool.Toolset{mcpToolset}

@@ -69,6 +69,13 @@ type Config struct {
 	// DefaultRedisSessionTTL (24h).
 	RedisSessionTTL time.Duration
 
+	// SearXNGEndpoint is the base URL of the internal SearXNG
+	// meta-search instance that backs the web_search_tool. Example:
+	// "http://searxng.backend.svc.cluster.local:8080". Defaults to
+	// the cluster-internal service address; set CRAWBL_SEARXNG_ENDPOINT
+	// to override.
+	SearXNGEndpoint string
+
 	// Startup holds operational knobs (graceful shutdown window, timeouts).
 	Startup StartupConfig
 }

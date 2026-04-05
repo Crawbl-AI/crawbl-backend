@@ -34,6 +34,12 @@ const (
 	// DefaultRedisSessionTTL caps how long an idle ADK session lives
 	// in Redis before Redis garbage collects it.
 	DefaultRedisSessionTTL = 24 * time.Hour
+
+	// DefaultSearXNGEndpoint points at the in-cluster SearXNG service
+	// deployed by crawbl-argocd-apps/components/searxng/. Local dev
+	// runs pointed at a different instance can override via
+	// CRAWBL_SEARXNG_ENDPOINT.
+	DefaultSearXNGEndpoint = "http://searxng.backend.svc.cluster.local:8080"
 )
 
 // DefaultConfig returns a Config populated with safe defaults for
@@ -64,6 +70,7 @@ func DefaultConfig() Config {
 			DB:   redisclient.DefaultDB,
 		},
 		RedisSessionTTL: DefaultRedisSessionTTL,
+		SearXNGEndpoint: DefaultSearXNGEndpoint,
 		Startup: StartupConfig{
 			GracefulShutdownTimeout: DefaultGracefulShutdownTimeout,
 			BlueprintFetchTimeout:   DefaultBlueprintFetchTimeout,

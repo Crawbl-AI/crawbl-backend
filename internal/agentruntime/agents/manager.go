@@ -22,11 +22,11 @@ const ManagerName = "manager"
 // migrations/orchestrator/seed/agents.json); the constructor does not
 // hold any hardcoded copy.
 //
-// Caller is responsible for passing a valid model.LLM, the two
-// sub-agents (Wally + Eve), the shared MCP toolset, and the blueprint
-// fields. All four must be non-nil for the LLM agent to build
-// correctly.
-func NewManager(model adkmodel.LLM, wally, eve adkagent.Agent, mcpToolset adktool.Toolset, instruction, description string) (adkagent.Agent, error) {
+// localTools is the shared local tool slice built by
+// agents.BuildCommonTools and handed to every agent so the Manager
+// can answer direct questions using memory or search without always
+// delegating to a sub-agent.
+func NewManager(model adkmodel.LLM, wally, eve adkagent.Agent, mcpToolset adktool.Toolset, instruction, description string, localTools []adktool.Tool) (adkagent.Agent, error) {
 	if model == nil {
 		return nil, fmt.Errorf("agents: Manager requires a non-nil model.LLM")
 	}
@@ -43,6 +43,7 @@ func NewManager(model adkmodel.LLM, wally, eve adkagent.Agent, mcpToolset adktoo
 		Instruction: instruction,
 		Model:       model,
 		SubAgents:   []adkagent.Agent{wally, eve},
+		Tools:       localTools,
 	}
 	if mcpToolset != nil {
 		cfg.Toolsets = []adktool.Toolset{mcpToolset}

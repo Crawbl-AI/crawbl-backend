@@ -2,12 +2,14 @@
 // the deployed container image. Subcommands are grouped by role:
 //
 //	orchestrator  — HTTP API server + database migrations
+//	userswarm     — Metacontroller webhook + reaper CronJob
 package platform
 
 import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform/userswarm"
 )
 
 // NewPlatformCommand creates the "platform" parent command that groups
@@ -23,6 +25,7 @@ func NewPlatformCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(orchestrator.NewOrchestratorCommand())
+	cmd.AddCommand(userswarm.NewUserSwarmCommand())
 
 	return cmd
 }

@@ -61,6 +61,11 @@ type BuildOptions struct {
 	// Blueprint carries per-agent instruction and description text
 	// sourced from the orchestrator's agents tables.
 	Blueprint *WorkspaceBlueprint
+	// LocalTools is the shared local tool slice (web_fetch,
+	// web_search_tool, memory_store, memory_recall, memory_forget)
+	// built once per pod by agents.BuildCommonTools and handed to
+	// every agent constructor.
+	LocalTools []adktool.Tool
 	// Logger for the runner. If nil, slog.Default() is used.
 	Logger *slog.Logger
 }
@@ -81,7 +86,7 @@ func New(opts BuildOptions) (*Runner, error) {
 		return nil, fmt.Errorf("runner: Blueprint is required")
 	}
 
-	graph, err := BuildGraph(opts.Model, opts.MCPToolset, opts.Blueprint)
+	graph, err := BuildGraph(opts.Model, opts.MCPToolset, opts.Blueprint, opts.LocalTools)
 	if err != nil {
 		return nil, fmt.Errorf("runner: build graph: %w", err)
 	}

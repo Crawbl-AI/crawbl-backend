@@ -51,16 +51,12 @@ func (e *notImplementedError) Unwrap() error {
 // drift-check cleanly in code review.
 func StubbedToolNames() []string {
 	return []string{
-		"web_search_tool",
 		"http_request",
 		"file_read",
 		"file_write",
 		"file_edit",
 		"glob_search",
 		"content_search",
-		"memory_store",
-		"memory_recall",
-		"memory_forget",
 		"cron_add",
 		"cron_list",
 		"cron_remove",

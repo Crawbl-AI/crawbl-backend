@@ -66,7 +66,7 @@ type Graph struct {
 // Manager because Manager's Config.SubAgents takes them by reference.
 // If any sub-agent fails to construct, BuildGraph returns the
 // underlying error and the caller aborts startup.
-func BuildGraph(model adkmodel.LLM, mcpToolset adktool.Toolset, bp *WorkspaceBlueprint) (*Graph, error) {
+func BuildGraph(model adkmodel.LLM, mcpToolset adktool.Toolset, bp *WorkspaceBlueprint, localTools []adktool.Tool) (*Graph, error) {
 	if model == nil {
 		return nil, fmt.Errorf("runner: BuildGraph requires a non-nil model.LLM")
 	}
@@ -81,17 +81,17 @@ func BuildGraph(model adkmodel.LLM, mcpToolset adktool.Toolset, bp *WorkspaceBlu
 		return nil, fmt.Errorf("runner: blueprint missing required agents (manager=%v wally=%v eve=%v)", managerOK, wallyOK, eveOK)
 	}
 
-	wally, err := agents.NewWally(model, mcpToolset, wallyBP.SystemPrompt, wallyBP.Description)
+	wally, err := agents.NewWally(model, mcpToolset, wallyBP.SystemPrompt, wallyBP.Description, localTools)
 	if err != nil {
 		return nil, fmt.Errorf("runner: build Wally: %w", err)
 	}
 
-	eve, err := agents.NewEve(model, mcpToolset, eveBP.SystemPrompt, eveBP.Description)
+	eve, err := agents.NewEve(model, mcpToolset, eveBP.SystemPrompt, eveBP.Description, localTools)
 	if err != nil {
 		return nil, fmt.Errorf("runner: build Eve: %w", err)
 	}
 
-	manager, err := agents.NewManager(model, wally, eve, mcpToolset, managerBP.SystemPrompt, managerBP.Description)
+	manager, err := agents.NewManager(model, wally, eve, mcpToolset, managerBP.SystemPrompt, managerBP.Description, localTools)
 	if err != nil {
 		return nil, fmt.Errorf("runner: build Manager: %w", err)
 	}

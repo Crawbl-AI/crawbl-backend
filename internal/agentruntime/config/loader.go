@@ -67,6 +67,8 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	fs.StringVar(&cfg.Redis.Addr, "redis-addr", cfg.Redis.Addr, "Redis address host:port")
 	redisTTLFlag := fs.String("redis-session-ttl", "", "Redis session TTL (Go duration, e.g. 24h)")
 
+	fs.StringVar(&cfg.SearXNGEndpoint, "searxng-endpoint", envOr("CRAWBL_SEARXNG_ENDPOINT", cfg.SearXNGEndpoint), "SearXNG meta-search base URL used by the web_search_tool")
+
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
