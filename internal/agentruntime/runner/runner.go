@@ -16,80 +16,83 @@ import (
 )
 
 // AppName is the ADK runner's AppName parameter. ADK uses it as a
-// namespace key for session storage + telemetry. We pin "crawbl" here
-// so every session row/event is tagged consistently across restarts.
+// namespace key for session storage and telemetry. We pin "crawbl"
+// here so every session row and event is tagged consistently across
+// restarts and shared Redis keyspaces.
 const AppName = "crawbl"
 
 // Runner is the crawbl-agent-runtime's wrapper around an ADK runner.
 // It owns the constructed agent graph, one ADK runner per agent
-// (shared session service), and exposes a single RunTurn entry point
-// that routes each turn to the agent named by the Converse request.
+// (sharing the injected session.Service), and exposes a single
+// RunTurn entry point that routes each turn to the agent named by the
+// Converse request.
 //
-// The Runner is safe to reuse across concurrent Converse streams
-// because adkrunner.Runner itself is concurrent-safe; session state
-// is keyed by (userID, sessionID), so two users streaming at the same
-// time get independent session rows even when the same per-agent
-// runner serves both.
+// Runner is safe to reuse across concurrent Converse streams:
+// adkrunner.Runner itself is concurrency-safe; session state is keyed
+// by (userID, sessionID), so two users streaming at the same time get
+// independent rows even when the same per-agent runner serves both.
 type Runner struct {
-	logger *slog.Logger
-	graph  *Graph
-	// rootRunner is the Manager-rooted runner. Used when a turn does
-	// not target a specific sub-agent (the common case — the Manager
-	// decides whether to delegate or answer directly).
+	logger     *slog.Logger
+	graph      *Graph
 	rootRunner *adkrunner.Runner
-	// byAgent maps an agent name (e.g. "manager", "wally", "eve") to a
-	// dedicated ADK runner whose root is that specific agent. Mention-
-	// routing turns with a non-empty Converse agent_id select the
-	// matching runner so the message bypasses the manager's delegation
-	// heuristics and lands directly on the intended sub-agent. Every
-	// per-agent runner shares the same in-memory session service so
-	// (userID, sessionID) history is a single conversation regardless
-	// of which agent handled each turn.
-	byAgent map[string]*adkrunner.Runner
-	// sess is held so Close() (Phase 2) can tear it down cleanly.
+	byAgent    map[string]*adkrunner.Runner
+	// sess is the durable session service (Redis-backed in production)
+	// shared across every per-agent runner. Close() calls the service's
+	// Close so main.go can tear it down cleanly on shutdown.
 	sess adksession.Service
 }
 
 // BuildOptions carries the already-constructed dependencies that New
-// needs. Passing them in explicitly instead of building them here keeps
-// the runner package free of direct LLM SDK / MCP imports — the main
-// package wires everything once and hands it over.
+// needs. Passing them in explicitly instead of building them here
+// keeps the runner package free of direct LLM SDK / MCP / storage
+// imports — main.go wires everything once and hands it over.
 type BuildOptions struct {
-	// Model is the LLM adapter (Phase 1: OpenAI via adk-utils-go).
+	// Model is the LLM adapter constructed by model.NewFromConfig.
 	Model adkmodel.LLM
 	// MCPToolset is the orchestrator-mediated tool bridge. May be nil
-	// for tests that don't exercise orchestrator tools.
+	// for integration environments that do not exercise orchestrator
+	// tools.
 	MCPToolset adktool.Toolset
+	// SessionService is the durable session service (Redis-backed in
+	// production). Required — every per-agent runner shares this
+	// instance so session history is a single conversation regardless
+	// of which agent handles each turn.
+	SessionService adksession.Service
+	// Blueprint carries per-agent instruction and description text
+	// sourced from the orchestrator's agents tables.
+	Blueprint *WorkspaceBlueprint
 	// Logger for the runner. If nil, slog.Default() is used.
 	Logger *slog.Logger
 }
 
-// New constructs a Runner: builds the three-agent graph, creates an
-// in-memory session service, and wires one ADK runner per agent so
-// @mention routing can dispatch directly to the named sub-agent.
-// The session service is in-memory for Phase 1 (lost on pod restart,
-// same trade-off as memory.InMemoryStore). Phase 2 swaps in a
-// Postgres-backed session service when the migrations land.
+// New constructs a Runner: builds the multi-agent graph from the
+// blueprint, wires one ADK runner per agent against the injected
+// session.Service so @mention routing can dispatch directly to the
+// named sub-agent, and returns the assembled Runner.
 func New(opts BuildOptions) (*Runner, error) {
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if opts.SessionService == nil {
+		return nil, fmt.Errorf("runner: SessionService is required")
+	}
+	if opts.Blueprint == nil {
+		return nil, fmt.Errorf("runner: Blueprint is required")
+	}
 
-	graph, err := BuildGraph(opts.Model, opts.MCPToolset)
+	graph, err := BuildGraph(opts.Model, opts.MCPToolset, opts.Blueprint)
 	if err != nil {
 		return nil, fmt.Errorf("runner: build graph: %w", err)
 	}
 
-	sessionService := adksession.InMemoryService()
-
 	// newAgentRunner is a small helper so the error wrapping stays
-	// uniform across the three per-agent runner constructions.
+	// uniform across the per-agent runner constructions.
 	newAgentRunner := func(agent adkagent.Agent) (*adkrunner.Runner, error) {
 		return adkrunner.New(adkrunner.Config{
 			AppName:           AppName,
 			Agent:             agent,
-			SessionService:    sessionService,
+			SessionService:    opts.SessionService,
 			AutoCreateSession: true,
 		})
 	}
@@ -101,10 +104,9 @@ func New(opts BuildOptions) (*Runner, error) {
 
 	// Per-agent runners: Manager, Wally, Eve. Each gets its own ADK
 	// runner so RunTurn can dispatch based on the Converse request's
-	// agent_id field. We register under both the agent's structural
-	// name (graph.Manager.Name()) and the Crawbl agent slug so the
-	// orchestrator's wire value ("wally", "eve") matches regardless
-	// of how the underlying ADK agent is named.
+	// agent_id field. We register under the agent's structural name
+	// so the orchestrator's wire value ("wally", "eve") matches how
+	// the underlying ADK agent is named.
 	byAgent := make(map[string]*adkrunner.Runner, 3)
 	register := func(key string, agent adkagent.Agent) error {
 		if key == "" || agent == nil {
@@ -135,15 +137,15 @@ func New(opts BuildOptions) (*Runner, error) {
 		graph:      graph,
 		rootRunner: rootRunner,
 		byAgent:    byAgent,
-		sess:       sessionService,
+		sess:       opts.SessionService,
 	}, nil
 }
 
 // RunTurn feeds a single user message through the agent graph and
 // returns an event stream. The caller iterates the returned iter.Seq2
 // and translates each session.Event into whatever wire format they
-// serve — for crawbl-agent-runtime that translation happens in
-// server/converse.go.
+// serve — server/converse.go performs that translation for the gRPC
+// bidi stream.
 //
 // targetAgent is the authoritative routing field carried on the wire
 // as ConverseRequest.agent_id:
@@ -157,14 +159,13 @@ func New(opts BuildOptions) (*Runner, error) {
 //   - unknown name  → fall back to the Manager root and log a warning.
 //
 // sessionID is client-supplied (from the gRPC ConverseRequest); ADK
-// auto-creates the session row if it doesn't exist yet because we
-// passed AutoCreateSession=true in New.
+// auto-creates the session row if it does not exist yet because the
+// runner was built with AutoCreateSession=true.
 //
-// systemPrompt, when non-empty, is injected as a GlobalInstruction-
-// equivalent by prepending a user-role turn to the message — Phase 1
-// shortcut because ADK llmagent's Instruction field is set at config
-// time, not per-turn. The orchestrator rarely overrides system prompts
-// today, so this trade-off is acceptable for the POC.
+// systemPrompt, when non-empty, is injected as a per-turn prefix on
+// the user message since ADK's llmagent.Config.Instruction is set at
+// construction time. Orchestrator callers rarely override system
+// prompts today, but the mechanism stays open for product personas.
 func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, targetAgent, message string) iter.Seq2[*adksession.Event, error] {
 	if r == nil || r.rootRunner == nil {
 		return errIter(fmt.Errorf("runner: not initialized"))
@@ -177,11 +178,9 @@ func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, t
 	// Manager root; a named sub-agent wins iff registered, otherwise
 	// we log once and fall back so unknown slugs never block traffic.
 	inner := r.rootRunner
-	routed := ""
 	if targetAgent != "" {
 		if ar, ok := r.byAgent[targetAgent]; ok {
 			inner = ar
-			routed = targetAgent
 		} else {
 			r.logger.Warn("runner: unknown target agent, routing to root",
 				"requested", targetAgent,
@@ -190,16 +189,12 @@ func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, t
 			)
 		}
 	}
-	_ = routed // reserved for future per-runner telemetry tags
 
 	// Build the user message as a genai.Content value. ADK expects a
 	// single *genai.Content per turn — a "user" role content with the
 	// message text as a single part.
 	text := message
 	if systemPrompt != "" {
-		// Inline the per-turn system prompt override. Crude but
-		// correct for Phase 1 — the orchestrator historically uses
-		// system_prompt overrides rarely and only for product personas.
 		text = "[system]\n" + systemPrompt + "\n[/system]\n\n" + message
 	}
 	content := genai.NewContentFromText(text, genai.RoleUser)
@@ -207,16 +202,29 @@ func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, t
 	runCfg := adkagent.RunConfig{
 		// StreamingMode=Sse is the ADK value for "yield partial chunks
 		// plus the final complete event". Matches the gRPC bidi
-		// semantics our ConverseEvent oneof expects.
+		// semantics the ConverseEvent oneof expects.
 		StreamingMode: adkagent.StreamingMode("sse"),
 	}
 	return inner.Run(ctx, userID, sessionID, content, runCfg)
 }
 
-// RootAgentName returns the name of the root agent (always "manager"
-// in Phase 1). Used by the Converse handler to tag ChunkEvents that
-// come from the root itself (not a delegated sub-agent) with the
-// correct agent_id.
+// Close releases the session service backing this runner. Safe to
+// call multiple times. main.go calls Close from server.Shutdown after
+// the gRPC server has drained so in-flight turns finish before the
+// Redis connection closes.
+func (r *Runner) Close() error {
+	if r == nil || r.sess == nil {
+		return nil
+	}
+	if closer, ok := r.sess.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// RootAgentName returns the name of the root agent. Used by the
+// Converse handler to tag ChunkEvents that come from the root itself
+// (not a delegated sub-agent) with the correct agent_id.
 func (r *Runner) RootAgentName() string {
 	if r == nil || r.graph == nil || r.graph.Root == nil {
 		return ""
@@ -224,9 +232,9 @@ func (r *Runner) RootAgentName() string {
 	return r.graph.Root.Name()
 }
 
-// knownAgentNames returns the sorted list of agent names the runner
-// can dispatch to. Exposed privately for log enrichment so unknown-
-// targetAgent warnings name the valid alternatives.
+// knownAgentNames returns the list of agent names the runner can
+// dispatch to. Exposed privately for log enrichment so unknown-target
+// warnings name the valid alternatives.
 func (r *Runner) knownAgentNames() []string {
 	if r == nil {
 		return nil
@@ -239,8 +247,8 @@ func (r *Runner) knownAgentNames() []string {
 }
 
 // errIter returns an iter.Seq2 that yields a single error and no
-// events. Used by RunTurn when preconditions fail so callers can treat
-// error propagation uniformly with normal event streams.
+// events. Used by RunTurn when preconditions fail so callers can
+// treat error propagation uniformly with normal event streams.
 func errIter(err error) iter.Seq2[*adksession.Event, error] {
 	return func(yield func(*adksession.Event, error) bool) {
 		yield(nil, err)

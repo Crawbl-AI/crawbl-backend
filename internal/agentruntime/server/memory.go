@@ -14,12 +14,11 @@ import (
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
-// memoryServer is the gRPC handler for runtimev1.MemoryServer. It's a thin
-// translation layer between proto messages and memory.Store — every real
-// storage concern (persistence, concurrency, ordering, pagination) lives
-// in the Store implementation behind the interface, so the handler stays
-// trivial and Phase 2's store swap (in-memory → Postgres-backed) does
-// not touch this file.
+// memoryServer is the gRPC handler for runtimev1.MemoryServer. It is a
+// thin translation layer between proto messages and memory.Store — every
+// real storage concern (persistence, concurrency, ordering, pagination)
+// lives in the Store implementation behind the interface, so swapping
+// the concrete backend does not touch this file.
 type memoryServer struct {
 	runtimev1.UnimplementedMemoryServer
 	logger *slog.Logger

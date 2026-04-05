@@ -1,42 +1,69 @@
 package config
 
-import "time"
+import (
+	"time"
 
-// Default values for every field that has a sensible zero-case. Loader
-// applies these to any field left unset by CLI flags or environment
-// variables.
-const (
-	// DefaultGRPCListen is the port the runtime serves gRPC on inside the
-	// workspace pod. Plan §6.4 pins 42618; 42617 is reserved for legacy
-	// the agent runtime during Phase 2 cutover and will be retired in Phase 4.
-	DefaultGRPCListen = ":42618"
-
-	// DefaultOpenAIModel is the Phase 1 OpenAI model identifier. Matches the
-	// agent runtime and orchestrator defaults (internal/agentruntime/toml.go:46,
-	// cmd/crawbl/platform/orchestrator/orchestrator.go:204, internal/orchestrator/types.go:453).
-	// Locked by plan §0 directive 6.
-	DefaultOpenAIModel = "gpt-5-mini"
-
-	// DefaultGracefulShutdownTimeout bounds the time the server waits for
-	// in-flight streams to finish on SIGTERM before forcing close. Matches
-	// the orchestrator's own shutdown window for symmetry.
-	DefaultGracefulShutdownTimeout = 30 * time.Second
-
-	// DefaultBlueprintFetchTimeout is how long main.go will wait for the
-	// orchestrator's GetWorkspaceBlueprint RPC before aborting startup.
-	DefaultBlueprintFetchTimeout = 15 * time.Second
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
-// DefaultConfig returns a Config populated with safe defaults for every
-// field that has one. Required fields (WorkspaceID, UserID, MCPSigningKey,
-// OpenAI.APIKey, orchestrator endpoints) are left empty and must be supplied
-// by the caller or validated by Load().
+// Default values for fields the agent runtime controls. Database and
+// Redis defaults live in internal/pkg/database and internal/pkg/redisclient
+// respectively and are composed in via DefaultConfig() below — the
+// agent runtime does not duplicate them.
+const (
+	// DefaultGRPCListen is the port the runtime serves gRPC on inside
+	// the workspace pod.
+	DefaultGRPCListen = ":42618"
+
+	// DefaultOpenAIModel is the OpenAI model identifier. Matches the
+	// orchestrator's default so a workspace that does not override its
+	// model setting resolves to the same model on both sides of the
+	// pipe.
+	DefaultOpenAIModel = "gpt-5-mini"
+
+	// DefaultGracefulShutdownTimeout bounds the time the server waits
+	// for in-flight streams to finish on SIGTERM before forcing close.
+	DefaultGracefulShutdownTimeout = 30 * time.Second
+
+	// DefaultBlueprintFetchTimeout is how long main.go will wait for
+	// the orchestrator's GetWorkspaceBlueprint call before aborting
+	// startup.
+	DefaultBlueprintFetchTimeout = 15 * time.Second
+
+	// DefaultRedisSessionTTL caps how long an idle ADK session lives
+	// in Redis before Redis garbage collects it.
+	DefaultRedisSessionTTL = 24 * time.Hour
+)
+
+// DefaultConfig returns a Config populated with safe defaults for
+// every field that has one. Required fields (WorkspaceID, UserID,
+// MCPSigningKey, OpenAI.APIKey, orchestrator endpoints, Postgres
+// password) are left empty and must be supplied by the caller or
+// validated by Load().
 func DefaultConfig() Config {
 	return Config{
 		GRPCListen: DefaultGRPCListen,
 		OpenAI: OpenAIConfig{
 			ModelName: DefaultOpenAIModel,
 		},
+		Postgres: database.Config{
+			Host:               database.DefaultHost,
+			Port:               database.DefaultPort,
+			User:               database.DefaultUser,
+			Password:           database.DefaultPassword,
+			Name:               database.DefaultName,
+			Schema:             database.DefaultSchema,
+			SSLMode:            database.DefaultSSLMode,
+			MaxOpenConnections: database.DefaultMaxOpenConnections,
+			MaxIdleConnections: database.DefaultMaxIdleConnections,
+			ConnMaxLifetime:    database.DefaultConnMaxLifetime,
+		},
+		Redis: redisclient.Config{
+			Addr: redisclient.DefaultAddr,
+			DB:   redisclient.DefaultDB,
+		},
+		RedisSessionTTL: DefaultRedisSessionTTL,
 		Startup: StartupConfig{
 			GracefulShutdownTimeout: DefaultGracefulShutdownTimeout,
 			BlueprintFetchTimeout:   DefaultBlueprintFetchTimeout,
