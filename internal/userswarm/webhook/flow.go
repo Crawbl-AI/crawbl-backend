@@ -5,9 +5,7 @@ import (
 	"log/slog"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
-	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // driveSync is the top-level decision point for every callback.
@@ -22,26 +20,16 @@ func driveSync(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runtimeCo
 }
 
 // reconcileGraph builds the full desired runtime shape for one UserSwarm.
+// The desired graph is: ServiceAccount + Service + Deployment. No PVC,
+// no ConfigMap, no backup Job — the agent runtime pod is stateless and
+// everything it needs comes from CLI flags plus the envSecretRef Secret.
 func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runtimeConfig) *syncResponse {
 	runtimeNamespace := runtimeNamespaceFor(swarm)
 
-	bootstrapFiles, err := buildBootstrapFiles(swarm, cfg)
-	if err != nil {
-		slog.Error("failed to build bootstrap files", "swarm", swarm.Name, "error", err)
-		return configError(err)
-	}
-
 	children := []interface{}{
 		buildServiceAccount(swarm, runtimeNamespace),
-		buildBootstrapConfigMap(swarm, runtimeNamespace, bootstrapFiles),
-		buildWorkspacePVC(swarm, runtimeNamespace),
-		buildHeadlessNetwork(swarm, runtimeNamespace),
 		buildRuntimeNetwork(swarm, runtimeNamespace),
-		buildRuntimeStatefulSet(swarm, runtimeNamespace, cfg.BootstrapImage, cfg.DefaultRuntimeImage, bootstrapFiles),
-	}
-
-	if shouldCreateBackupJob(swarm, cfg) {
-		children = append(children, buildBackupJob(swarm, runtimeNamespace, cfg))
+		buildRuntimeDeployment(swarm, runtimeNamespace, cfg),
 	}
 
 	phase, readyStatus, readyReason := readinessSnapshot(req, swarm)
@@ -60,33 +48,6 @@ func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runt
 	}
 }
 
-func buildBootstrapFiles(swarm *crawblv1alpha1.UserSwarm, cfg *runtimeConfig) (map[string]string, error) {
-	var opts zeroclaw.BuildBootstrapFilesOpts
-
-	if cfg.MCPEndpoint != "" && cfg.MCPSigningKey != "" {
-		workspaceID := workspaceIDFromSwarmName(swarm.Name)
-		token := crawblhmac.GenerateToken(cfg.MCPSigningKey, swarm.Spec.UserID, workspaceID)
-
-		opts.MCP = &zeroclaw.MCPBootstrapConfig{
-			Enabled:         true,
-			DeferredLoading: false,
-			Servers: []zeroclaw.MCPServerBootstrapConfig{{
-				Name:            "orchestrator",
-				Transport:       "http",
-				URL:             cfg.MCPEndpoint,
-				Headers:         map[string]string{"Authorization": "Bearer " + token},
-				ToolTimeoutSecs: 30,
-			}},
-		}
-	}
-
-	return zeroclaw.BuildBootstrapFiles(swarm, cfg.ZeroClawConfig, opts)
-}
-
-func shouldCreateBackupJob(swarm *crawblv1alpha1.UserSwarm, cfg *runtimeConfig) bool {
-	return cfg.BackupBucket != "" && swarm.Labels["crawbl.ai/e2e"] != "true"
-}
-
 func readinessSnapshot(req *syncRequest, swarm *crawblv1alpha1.UserSwarm) (phase, readyStatus, readyReason string) {
 	phase, readyStatus, readyReason = "Progressing", "False", "Reconciling"
 
@@ -99,8 +60,8 @@ func readinessSnapshot(req *syncRequest, swarm *crawblv1alpha1.UserSwarm) (phase
 	return phase, readyStatus, readyReason
 }
 
-// finalizeGraph asks Metacontroller to delete everything and waits until the
-// observed children map is empty before acknowledging completion.
+// finalizeGraph asks Metacontroller to delete everything and waits until
+// the observed children map is empty before acknowledging completion.
 func finalizeGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm) *syncResponse {
 	hasChildren := false
 	for _, group := range req.Children {
@@ -119,26 +80,17 @@ func finalizeGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm) *syncRespo
 	}
 }
 
-func configError(err error) *syncResponse {
-	return &syncResponse{
-		Status: map[string]interface{}{
-			"phase":      "Error",
-			"conditions": []interface{}{kube.StatusCondition("Ready", "False", "ConfigError", err.Error())},
-		},
-		Children: []interface{}{},
-	}
-}
-
-// observedReadyReplicas extracts the best available readiness signal from the
-// observed StatefulSet children Metacontroller sent us.
+// observedReadyReplicas reads the best available readiness signal off the
+// Deployment observed by Metacontroller. Replaces the old StatefulSet
+// branch — the runtime pod is a stateless Deployment now.
 func observedReadyReplicas(req *syncRequest) int32 {
-	stsGroup, ok := req.Children["StatefulSet.apps/v1"]
+	group, ok := req.Children["Deployment.apps/v1"]
 	if !ok {
 		return 0
 	}
 
-	for _, raw := range stsGroup {
-		var sts struct {
+	for _, raw := range group {
+		var dep struct {
 			Status struct {
 				ReadyReplicas     int32 `json:"readyReplicas"`
 				AvailableReplicas int32 `json:"availableReplicas"`
@@ -146,16 +98,16 @@ func observedReadyReplicas(req *syncRequest) int32 {
 				UpdatedReplicas   int32 `json:"updatedReplicas"`
 			} `json:"status"`
 		}
-		if err := json.Unmarshal(raw, &sts); err != nil {
+		if err := json.Unmarshal(raw, &dep); err != nil {
 			continue
 		}
 		switch {
-		case sts.Status.ReadyReplicas > 0:
-			return sts.Status.ReadyReplicas
-		case sts.Status.AvailableReplicas > 0:
-			return sts.Status.AvailableReplicas
-		case sts.Status.Replicas > 0 && sts.Status.UpdatedReplicas > 0:
-			return sts.Status.UpdatedReplicas
+		case dep.Status.ReadyReplicas > 0:
+			return dep.Status.ReadyReplicas
+		case dep.Status.AvailableReplicas > 0:
+			return dep.Status.AvailableReplicas
+		case dep.Status.Replicas > 0 && dep.Status.UpdatedReplicas > 0:
+			return dep.Status.UpdatedReplicas
 		}
 	}
 

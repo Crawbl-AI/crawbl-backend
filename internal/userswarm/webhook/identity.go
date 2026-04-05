@@ -8,39 +8,40 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
 
-// This file centralizes everything that gives the runtime graph its stable shape:
-// names, labels, selectors, and spec-default accessors.
+// This file centralizes everything that gives the runtime graph its stable
+// shape: names, labels, selectors, and spec-default accessors. All name
+// helpers use the "agent-runtime-" prefix so generated resources are easy
+// to eyeball in kubectl output.
 
+const (
+	// runtimePort is the fixed gRPC listen port for every crawbl-agent-runtime
+	// pod. The old ZeroClaw port 42617 is dead; the runtime always speaks
+	// gRPC on 42618. Spec.Runtime.Port can still override on a per-CR basis
+	// for local experiments.
+	runtimePort int32 = 42618
+
+	// runtimeAppName is the app.kubernetes.io/name label applied to every
+	// child resource. Used by the selector on Service and Deployment.
+	runtimeAppName = "crawbl-agent-runtime"
+)
+
+// workspaceIDFromSwarmName strips the "workspace-" prefix off a CR name to
+// recover the bare workspace ID. EnsureRuntime in the client package does
+// the inverse.
 func workspaceIDFromSwarmName(name string) string {
 	return strings.TrimPrefix(name, "workspace-")
 }
 
 func runtimeServiceAccountName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s", sw.Name), kube.MaxWorkloadNameLen)
-}
-
-func runtimeConfigName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s-config", sw.Name), kube.MaxNameLen)
-}
-
-func workspacePVCName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s-data", sw.Name), kube.MaxNameLen)
-}
-
-func headlessNetworkName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s-headless", sw.Name), kube.MaxNameLen)
+	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeServiceName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
 }
 
-func runtimeStatefulSetName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s", sw.Name), kube.MaxWorkloadNameLen)
-}
-
-func backupJobName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("zeroclaw-%s-backup", sw.Name), kube.MaxNameLen)
+func runtimeDeploymentName(sw *crawblv1alpha1.UserSwarm) string {
+	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeNamespaceFor(sw *crawblv1alpha1.UserSwarm) string {
@@ -54,14 +55,7 @@ func runtimePortFor(sw *crawblv1alpha1.UserSwarm) int32 {
 	if sw.Spec.Runtime.Port != 0 {
 		return sw.Spec.Runtime.Port
 	}
-	return crawblv1alpha1.DefaultGatewayPort
-}
-
-func runtimeModeFor(sw *crawblv1alpha1.UserSwarm) string {
-	if sw.Spec.Runtime.Mode != "" {
-		return sw.Spec.Runtime.Mode
-	}
-	return crawblv1alpha1.DefaultRuntimeMode
+	return runtimePort
 }
 
 func runtimeEnvSecretName(sw *crawblv1alpha1.UserSwarm) string {
@@ -80,7 +74,7 @@ func runtimeReplicaCount(sw *crawblv1alpha1.UserSwarm) int32 {
 
 func runtimeLabels(sw *crawblv1alpha1.UserSwarm) map[string]string {
 	return map[string]string{
-		"app.kubernetes.io/name":       "zeroclaw",
+		"app.kubernetes.io/name":       runtimeAppName,
 		"app.kubernetes.io/component":  "userswarm-runtime",
 		"app.kubernetes.io/managed-by": "metacontroller",
 		"crawbl.ai/userswarm":          sw.Name,
@@ -90,7 +84,7 @@ func runtimeLabels(sw *crawblv1alpha1.UserSwarm) map[string]string {
 
 func selectorLabels(sw *crawblv1alpha1.UserSwarm) map[string]string {
 	return map[string]string{
-		"app.kubernetes.io/name": "zeroclaw",
+		"app.kubernetes.io/name": runtimeAppName,
 		"crawbl.ai/userswarm":    sw.Name,
 	}
 }

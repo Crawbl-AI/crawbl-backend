@@ -1,71 +1,93 @@
 package webhook
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
 
-// This file holds the workload shape: the StatefulSet, pod security context,
-// init container, runtime container, and the two mounted data sources that
-// become the live ZeroClaw workspace.
+// This file holds the workload shape: a single Deployment (not a
+// StatefulSet — there is no durable per-pod state anymore, all persistence
+// flows through the orchestrator over gRPC) that runs the
+// crawbl-agent-runtime binary. No init containers, no PVCs, no TOML config,
+// no SOUL/IDENTITY/TOOLS markdown files — the pod boots from CLI flags
+// and the envSecretRef Secret and nothing else.
 
-func buildRuntimeStatefulSet(sw *crawblv1alpha1.UserSwarm, ns, bootstrapImage, defaultRuntimeImage string, bootstrapFiles map[string]string) *appsv1.StatefulSet {
+// buildRuntimeDeployment constructs the desired Deployment for one
+// UserSwarm. Replicas is 0 when the CR is suspended and 1 otherwise.
+func buildRuntimeDeployment(sw *crawblv1alpha1.UserSwarm, ns string, cfg *runtimeConfig) *appsv1.Deployment {
 	port := runtimePortFor(sw)
 	secretName := runtimeEnvSecretName(sw)
 	replicas := runtimeReplicaCount(sw)
+	image := resolveRuntimeImage(sw, cfg)
 
-	return &appsv1.StatefulSet{
-		TypeMeta:   kube.TypeMeta("apps/v1", "StatefulSet"),
-		ObjectMeta: objectMeta(runtimeStatefulSetName(sw), ns, sw),
-		Spec: appsv1.StatefulSetSpec{
-			Replicas:    &replicas,
-			ServiceName: headlessNetworkName(sw),
-			Selector:    &metav1.LabelSelector{MatchLabels: selectorLabels(sw)},
+	return &appsv1.Deployment{
+		TypeMeta:   kube.TypeMeta("apps/v1", "Deployment"),
+		ObjectMeta: objectMeta(runtimeDeploymentName(sw), ns, sw),
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels(sw)},
+			Strategy: appsv1.DeploymentStrategy{
+				// Recreate instead of RollingUpdate because a workspace
+				// always has exactly one active runtime pod — we do not
+				// want two instances racing on the same gRPC service.
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: runtimeLabels(sw),
 					Annotations: map[string]string{
-						"crawbl.ai/config-checksum": kube.ChecksumMap(bootstrapFiles),
-						"crawbl.ai/env-secret-ref":  kube.ChecksumString(secretName),
-						"crawbl.ai/bootstrap-image": kube.ChecksumString(bootstrapImage),
+						"crawbl.ai/runtime-image": kube.ChecksumString(image),
+						"crawbl.ai/env-secret":    kube.ChecksumString(secretName),
 					},
 				},
-				Spec: buildRuntimePodSpec(sw, port, bootstrapImage, defaultRuntimeImage, secretName),
+				Spec: buildRuntimePodSpec(sw, port, image, secretName, cfg),
 			},
 		},
 	}
 }
 
-func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, bootstrapImage, defaultRuntimeImage, secretName string) corev1.PodSpec {
+// buildRuntimePodSpec assembles the pod spec: one container, two emptyDir
+// volumes (cache + tmp), restricted security context, and no init work.
+func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secretName string, cfg *runtimeConfig) corev1.PodSpec {
 	return corev1.PodSpec{
 		ServiceAccountName: runtimeServiceAccountName(sw),
 		SecurityContext: &corev1.PodSecurityContext{
-			RunAsNonRoot:        kube.Ptr(true),
-			RunAsUser:           kube.Ptr(runtimeUID),
-			RunAsGroup:          kube.Ptr(runtimeGID),
-			FSGroup:             kube.Ptr(runtimeGID),
-			FSGroupChangePolicy: kube.Ptr(corev1.FSGroupChangeOnRootMismatch),
-			SeccompProfile:      &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+			RunAsNonRoot:   kube.Ptr(true),
+			RunAsUser:      kube.Ptr(runtimeUID),
+			RunAsGroup:     kube.Ptr(runtimeGID),
+			FSGroup:        kube.Ptr(runtimeGID),
+			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
-		InitContainers: []corev1.Container{buildBootstrapContainer(bootstrapImage, secretName)},
-		Containers:     []corev1.Container{buildZeroClawContainer(sw, port, defaultRuntimeImage, secretName)},
+		Containers: []corev1.Container{buildAgentRuntimeContainer(sw, port, image, secretName, cfg)},
 		Volumes: []corev1.Volume{
 			{
-				Name: "data",
+				// /cache holds transient artifacts the runtime may materialize
+				// while a turn is in flight (MCP cache, model scratch space).
+				// Backed by an emptyDir capped at 512Mi so a runaway cache
+				// can never fill the node.
+				Name: "cache",
 				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: workspacePVCName(sw)},
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						SizeLimit: kube.Ptr(resource.MustParse("512Mi")),
+					},
 				},
 			},
 			{
-				Name: "bootstrap-config",
+				// /tmp is a tmpfs so the container filesystem can stay
+				// read-only. 128Mi is enough for ADK temporary buffers and
+				// Go's os.TempDir scratch files.
+				Name: "tmp",
 				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: runtimeConfigName(sw)},
-						DefaultMode:          kube.Ptr(bootstrapConfigMode),
+					EmptyDir: &corev1.EmptyDirVolumeSource{
+						Medium:    corev1.StorageMediumMemory,
+						SizeLimit: kube.Ptr(resource.MustParse("128Mi")),
 					},
 				},
 			},
@@ -73,78 +95,97 @@ func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, bootstrapImag
 	}
 }
 
-func buildBootstrapContainer(bootstrapImage, secretName string) corev1.Container {
-	container := corev1.Container{
-		Name:            "bootstrap-config",
-		Image:           bootstrapImage,
-		ImagePullPolicy: corev1.PullAlways,
-		Command:         []string{"/crawbl", "platform", "userswarm", "bootstrap"},
-		Args: []string{
-			"--bootstrap-config=/bootstrap/config.toml",
-			"--live-config=/zeroclaw-data/.zeroclaw/config.toml",
-			"--workspace=/zeroclaw-data/workspace",
-		},
-		SecurityContext: kube.RestrictedSecurityContext(runtimeUID, runtimeGID),
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "data", MountPath: "/zeroclaw-data"},
-			{Name: "bootstrap-config", MountPath: "/bootstrap", ReadOnly: true},
-		},
-	}
-	if secretName != "" {
-		container.EnvFrom = kube.SecretEnvFrom(secretName)
-	}
-	return container
-}
+// buildAgentRuntimeContainer is the single container in the runtime pod.
+// It runs /crawbl-agent-runtime with CLI flags for identity and endpoints,
+// pulls secrets (OPENAI_API_KEY, CRAWBL_MCP_SIGNING_KEY, ...) from the
+// envSecretRef Secret, and reports health via the gRPC Health service.
+func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image, secretName string, cfg *runtimeConfig) corev1.Container {
+	workspaceID := workspaceIDFromSwarmName(sw.Name)
 
-func buildZeroClawContainer(sw *crawblv1alpha1.UserSwarm, port int32, defaultRuntimeImage, secretName string) corev1.Container {
-	healthCommand := []string{"/usr/local/bin/zeroclaw", "status", "--format=exit-code"}
+	args := []string{
+		fmt.Sprintf("--grpc-listen=:%d", port),
+		"--workspace-id=" + workspaceID,
+		"--user-id=" + sw.Spec.UserID,
+	}
+	if cfg.OrchestratorGRPCEndpoint != "" {
+		args = append(args, "--orchestrator-endpoint="+cfg.OrchestratorGRPCEndpoint)
+	}
+	if cfg.MCPEndpoint != "" {
+		args = append(args, "--mcp-endpoint="+cfg.MCPEndpoint)
+	}
+	if model := sw.Spec.Config.DefaultModel; model != "" {
+		args = append(args, "--openai-model="+model)
+	}
 
+	// Native gRPC probe against grpc.health.v1.Health/Check. Kubernetes
+	// v1.24+ ships this built-in, so there's no sidecar and no exec shell.
 	healthProbe := &corev1.Probe{
-		ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: healthCommand}},
-		InitialDelaySeconds: 10,
-		PeriodSeconds:       30,
-		TimeoutSeconds:      10,
+		ProbeHandler: corev1.ProbeHandler{
+			GRPC: &corev1.GRPCAction{Port: port},
+		},
+		InitialDelaySeconds: 5,
+		PeriodSeconds:       10,
+		TimeoutSeconds:      5,
 		FailureThreshold:    3,
 	}
 	startupProbe := &corev1.Probe{
-		ProbeHandler:     corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: healthCommand}},
-		PeriodSeconds:    10,
-		TimeoutSeconds:   10,
-		FailureThreshold: 18,
-	}
-
-	// Webhook-level default takes precedence so that updating the webhook
-	// deployment rolls all swarms forward on the next Metacontroller resync.
-	// Falls back to the CR spec, then to a hardcoded default.
-	image := defaultRuntimeImage
-	if image == "" {
-		image = sw.Spec.Runtime.Image
-	}
-	if image == "" {
-		image = "registry.digitalocean.com/crawbl/zeroclaw:latest"
+		ProbeHandler: corev1.ProbeHandler{
+			GRPC: &corev1.GRPCAction{Port: port},
+		},
+		PeriodSeconds:    5,
+		TimeoutSeconds:   5,
+		FailureThreshold: 24, // 2 minutes to boot
 	}
 
 	container := corev1.Container{
-		Name:            "zeroclaw",
+		Name:            "agent-runtime",
 		Image:           image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Args:            []string{runtimeModeFor(sw)},
-		Ports:           []corev1.ContainerPort{{Name: "http", ContainerPort: port}},
-		Resources:       sw.Spec.Runtime.Resources,
-		Env:             runtimeGatewayEnv(port),
-		SecurityContext: kube.RestrictedSecurityContext(runtimeUID, runtimeGID),
+		Command:         []string{"/crawbl-agent-runtime"},
+		Args:            args,
+		Ports: []corev1.ContainerPort{{
+			Name:          "grpc",
+			ContainerPort: port,
+			Protocol:      corev1.ProtocolTCP,
+		}},
+		Resources: sw.Spec.Runtime.Resources,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot:             kube.Ptr(true),
+			RunAsUser:                kube.Ptr(runtimeUID),
+			RunAsGroup:               kube.Ptr(runtimeGID),
+			AllowPrivilegeEscalation: kube.Ptr(false),
+			ReadOnlyRootFilesystem:   kube.Ptr(true),
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: "data", MountPath: "/zeroclaw-data"},
-			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/SOUL.md", SubPath: "SOUL.md", ReadOnly: true},
-			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/IDENTITY.md", SubPath: "IDENTITY.md", ReadOnly: true},
-			{Name: "bootstrap-config", MountPath: "/zeroclaw-data/workspace/TOOLS.md", SubPath: "TOOLS.md", ReadOnly: true},
+			{Name: "cache", MountPath: "/cache"},
+			{Name: "tmp", MountPath: "/tmp"},
 		},
 		ReadinessProbe: healthProbe,
 		LivenessProbe:  healthProbe,
 		StartupProbe:   startupProbe,
 	}
+
 	if secretName != "" {
 		container.EnvFrom = kube.SecretEnvFrom(secretName)
 	}
+
 	return container
+}
+
+// resolveRuntimeImage picks the image in this order:
+//  1. Webhook env var CRAWBL_AGENT_RUNTIME_IMAGE (rolls every swarm forward
+//     on webhook redeploy — used by the CI pipeline).
+//  2. Spec.Runtime.Image on the CR (per-workspace override).
+//  3. A hardcoded fallback so a misconfigured webhook still produces a pod
+//     instead of an invalid PodSpec error.
+func resolveRuntimeImage(sw *crawblv1alpha1.UserSwarm, cfg *runtimeConfig) string {
+	if cfg != nil && cfg.AgentRuntimeImage != "" {
+		return cfg.AgentRuntimeImage
+	}
+	if sw.Spec.Runtime.Image != "" {
+		return sw.Spec.Runtime.Image
+	}
+	return "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"
 }

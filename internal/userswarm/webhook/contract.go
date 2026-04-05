@@ -1,34 +1,34 @@
 package webhook
 
-import (
-	"encoding/json"
+import "encoding/json"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
-)
-
-// ListenConfig contains only the knobs needed to boot the webhook process.
-// Callers do not need to know about MCP wiring, backup destinations, or
-// bootstrap images; those come from environment variables inside the package.
+// ListenConfig contains the knobs needed to boot the webhook process.
+// Every runtime-shaping concern (image refs, MCP wiring, etc.) comes
+// from environment variables read by runtimeConfigFromEnv().
 type ListenConfig struct {
 	// Addr is the host:port the webhook listens on, for example ":8080".
 	Addr string
-	// ZeroClawCfgPath points at the operator-managed ZeroClaw config file.
-	ZeroClawCfgPath string
 }
 
-// runtimeConfig is the fully-expanded runtime context used while building the
-// desired child graph for a single UserSwarm.
+// runtimeConfig is the fully-expanded runtime context used while building
+// the desired child graph for a single UserSwarm. It is derived from the
+// webhook process environment at startup and then held read-only for the
+// lifetime of the process.
 type runtimeConfig struct {
-	BootstrapImage      string
-	DefaultRuntimeImage string
-	ZeroClawConfig      *zeroclaw.ZeroClawConfig
+	// AgentRuntimeImage is the container image for the crawbl-agent-runtime
+	// pod. Sourced from CRAWBL_AGENT_RUNTIME_IMAGE; per-CR overrides via
+	// Spec.Runtime.Image still win when non-empty.
+	AgentRuntimeImage string
 
-	MCPEndpoint   string
-	MCPSigningKey string
+	// OrchestratorGRPCEndpoint is the internal orchestrator gRPC address
+	// (host:port) that every runtime pod uses to fetch its workspace
+	// blueprint and talk to the memory facade. Injected via
+	// --orchestrator-endpoint on the runtime container.
+	OrchestratorGRPCEndpoint string
 
-	BackupBucket     string
-	BackupRegion     string
-	BackupSecretName string
+	// MCPEndpoint is the orchestrator MCP HTTP URL. Injected via
+	// --mcp-endpoint on the runtime container.
+	MCPEndpoint string
 }
 
 // syncRequest is the request envelope Metacontroller POSTs to /sync.
@@ -56,7 +56,6 @@ type syncResponse struct {
 
 // Security constants shared by the generated runtime pod shape.
 const (
-	runtimeUID          int64 = 65532
-	runtimeGID          int64 = 65532
-	bootstrapConfigMode int32 = 0o444
+	runtimeUID int64 = 65532
+	runtimeGID int64 = 65532
 )

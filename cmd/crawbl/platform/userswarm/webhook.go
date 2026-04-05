@@ -19,7 +19,6 @@ func newWebhookCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&cfg.Addr, "addr", ":8080", "Address to listen on")
-	cmd.Flags().StringVar(&cfg.ZeroClawCfgPath, "zeroclaw-config", "config/zeroclaw.yaml", "Path to the ZeroClaw config YAML")
 
 	return cmd
 }
