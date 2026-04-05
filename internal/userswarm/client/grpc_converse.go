@@ -151,28 +151,42 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 		return nil, wrapGRPCError(closeErr, "close send")
 	}
 
+	// Structured logging policy for this stream: one INFO at close time
+	// carrying the full turn summary (duration, agent_id, chunk count).
+	// Stream open is DEBUG so long-lived sessions don't flood the log
+	// with noise. Errors log at WARN/ERROR with enough context to tell
+	// which workspace + agent combination failed.
 	streamStart := time.Now()
-	slog.Info("grpc converse stream opened",
-		"service", opts.Runtime.ServiceName,
+	slog.Debug("runtime converse stream opened",
 		"workspace_id", opts.Runtime.WorkspaceID,
-		"agent_id", opts.AgentID,
+		"target_agent", orDefault(opts.AgentID, "<manager>"),
+		"service", opts.Runtime.ServiceName,
 	)
 
 	ch := make(chan StreamChunk, 16)
 	go func() {
 		defer close(ch)
+		var chunkCount int
+		var doneSeen bool
 		for {
 			event, recvErr := stream.Recv()
 			if errors.Is(recvErr, io.EOF) {
-				slog.Info("grpc converse stream EOF",
-					"service", opts.Runtime.ServiceName,
-					"elapsed_ms", time.Since(streamStart).Milliseconds(),
-				)
+				if !doneSeen {
+					slog.Warn("runtime converse stream closed before DoneEvent",
+						"workspace_id", opts.Runtime.WorkspaceID,
+						"target_agent", orDefault(opts.AgentID, "<manager>"),
+						"chunks_received", chunkCount,
+						"duration_ms", time.Since(streamStart).Milliseconds(),
+					)
+				}
 				return
 			}
 			if recvErr != nil {
-				slog.Warn("grpc converse stream error",
-					"service", opts.Runtime.ServiceName,
+				slog.Error("runtime converse stream error",
+					"workspace_id", opts.Runtime.WorkspaceID,
+					"target_agent", orDefault(opts.AgentID, "<manager>"),
+					"chunks_received", chunkCount,
+					"duration_ms", time.Since(streamStart).Milliseconds(),
 					"error", recvErr.Error(),
 				)
 				return
@@ -181,18 +195,26 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 			if !ok {
 				continue
 			}
+			chunkCount++
 			select {
 			case ch <- chunk:
 			case <-ctx.Done():
-				slog.Warn("grpc converse stream context cancelled",
-					"service", opts.Runtime.ServiceName,
+				slog.Warn("runtime converse stream context cancelled",
+					"workspace_id", opts.Runtime.WorkspaceID,
+					"target_agent", orDefault(opts.AgentID, "<manager>"),
+					"chunks_delivered", chunkCount,
+					"duration_ms", time.Since(streamStart).Milliseconds(),
 				)
 				return
 			}
 			if chunk.Type == StreamEventDone {
-				slog.Info("grpc converse stream done",
-					"service", opts.Runtime.ServiceName,
-					"elapsed_ms", time.Since(streamStart).Milliseconds(),
+				doneSeen = true
+				slog.Info("runtime converse turn complete",
+					"workspace_id", opts.Runtime.WorkspaceID,
+					"target_agent", orDefault(opts.AgentID, "<manager>"),
+					"chunks_delivered", chunkCount,
+					"model", chunk.Model,
+					"duration_ms", time.Since(streamStart).Milliseconds(),
 				)
 				return
 			}
@@ -246,6 +268,17 @@ func translateEvent(event *runtimev1.ConverseEvent) (StreamChunk, bool) {
 		}, true
 	}
 	return StreamChunk{}, false
+}
+
+// orDefault returns fallback when s is empty. Used to substitute a
+// human-readable placeholder ("<manager>") in target_agent log fields
+// when the caller passes an empty agent_id, so operators can tell the
+// intended routing without having to know the wire contract.
+func orDefault(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 // wrapGRPCError converts a gRPC call error into a *merrors.Error the
