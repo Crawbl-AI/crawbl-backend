@@ -1000,6 +1000,7 @@ go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/semconv/v1.17.0
 go.opentelemetry.io/otel/semconv/v1.26.0
+go.opentelemetry.io/otel/semconv/v1.36.0
 go.opentelemetry.io/otel/semconv/v1.37.0
 go.opentelemetry.io/otel/semconv/v1.37.0/httpconv
 go.opentelemetry.io/otel/semconv/v1.39.0
@@ -1018,6 +1019,12 @@ go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/internal/observ
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/internal/otlpconfig
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/internal/retry
 go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc/internal/x
+# go.opentelemetry.io/otel/log v0.16.0
+## explicit; go 1.24.0
+go.opentelemetry.io/otel/log
+go.opentelemetry.io/otel/log/embedded
+go.opentelemetry.io/otel/log/global
+go.opentelemetry.io/otel/log/internal/global
 # go.opentelemetry.io/otel/metric v1.41.0
 ## explicit; go 1.24.0
 go.opentelemetry.io/otel/metric
@@ -1171,7 +1178,23 @@ golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
 # google.golang.org/adk v1.0.0
 ## explicit; go 1.25.0
+google.golang.org/adk/agent
+google.golang.org/adk/artifact
+google.golang.org/adk/internal/agent
+google.golang.org/adk/internal/context
+google.golang.org/adk/internal/converters
+google.golang.org/adk/internal/plugininternal/plugincontext
+google.golang.org/adk/internal/sessionutils
+google.golang.org/adk/internal/telemetry
+google.golang.org/adk/internal/toolinternal
+google.golang.org/adk/internal/toolinternal/toolutils
+google.golang.org/adk/internal/version
+google.golang.org/adk/memory
 google.golang.org/adk/model
+google.golang.org/adk/session
+google.golang.org/adk/tool
+google.golang.org/adk/tool/mcptoolset
+google.golang.org/adk/tool/toolconfirmation
 # google.golang.org/genai v1.52.1
 ## explicit; go 1.24
 google.golang.org/genai
@@ -1598,6 +1621,12 @@ k8s.io/utils/ptr
 # lukechampine.com/frand v1.5.1
 ## explicit; go 1.23.1
 lukechampine.com/frand
+# rsc.io/omap v1.2.0
+## explicit; go 1.23rc1
+rsc.io/omap
+# rsc.io/ordered v1.1.1
+## explicit; go 1.22.0
+rsc.io/ordered
 # sigs.k8s.io/controller-runtime v0.22.4
 ## explicit; go 1.24.0
 sigs.k8s.io/controller-runtime/pkg/client
