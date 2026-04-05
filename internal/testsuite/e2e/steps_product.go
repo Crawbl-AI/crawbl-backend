@@ -489,11 +489,11 @@ func (tc *testContext) currentConversationShouldExposePaginationMetadata() error
 	if err := tc.assertStatus(200); err != nil {
 		return err
 	}
-	if !gjson.GetBytes(tc.lastBody, "pagination.has_next").Exists() {
-		return fmt.Errorf("pagination.has_next missing from response")
+	if !gjson.GetBytes(tc.lastBody, "data.pagination.has_next").Exists() {
+		return fmt.Errorf("data.pagination.has_next missing from response")
 	}
-	if !gjson.GetBytes(tc.lastBody, "pagination.has_prev").Exists() {
-		return fmt.Errorf("pagination.has_prev missing from response")
+	if !gjson.GetBytes(tc.lastBody, "data.pagination.has_prev").Exists() {
+		return fmt.Errorf("data.pagination.has_prev missing from response")
 	}
 	return nil
 }
