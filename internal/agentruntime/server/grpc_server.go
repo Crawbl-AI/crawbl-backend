@@ -9,23 +9,25 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
+	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 )
 
 // Server is the top-level gRPC server wrapper for crawbl-agent-runtime. It
-// owns the net.Listener, the *grpc.Server, and the HealthServer. main.go
-// constructs one Server via New(), calls Start() in a goroutine, and
-// Shutdown() on SIGTERM.
+// owns the net.Listener, the *grpc.Server, the HealthServer, and the
+// in-memory Memory store (Phase 1). main.go constructs one Server via
+// New(), calls Start() in a goroutine, and Shutdown() on SIGTERM.
 //
-// Concrete AgentRuntime and Memory service implementations are stubs in
-// this iteration (US-AR-003). US-AR-009 fills in the Converse bidi stream
-// against the ADK runner.
+// The AgentRuntime service is still a stub in this iteration — US-AR-009
+// fills in the Converse bidi stream against the ADK runner. The Memory
+// service landed in US-AR-007 and is real (backed by memory.InMemoryStore).
 type Server struct {
 	cfg       config.Config
 	logger    *slog.Logger
 	listener  net.Listener
 	grpcSrv   *grpc.Server
 	health    *HealthServer
+	memStore  memory.Store
 }
 
 // New wires a Server ready to Start(). It registers the HMAC auth
@@ -44,14 +46,17 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 	healthSrv := NewHealthServer()
 	healthpb.RegisterHealthServer(grpcSrv, healthSrv.Inner())
 
+	memStore := memory.NewInMemoryStore(nil)
+
 	runtimev1.RegisterAgentRuntimeServer(grpcSrv, &agentRuntimeStub{logger: logger})
-	runtimev1.RegisterMemoryServer(grpcSrv, &memoryStub{logger: logger})
+	runtimev1.RegisterMemoryServer(grpcSrv, newMemoryServer(logger, memStore))
 
 	return &Server{
-		cfg:     cfg,
-		logger:  logger,
-		grpcSrv: grpcSrv,
-		health:  healthSrv,
+		cfg:      cfg,
+		logger:   logger,
+		grpcSrv:  grpcSrv,
+		health:   healthSrv,
+		memStore: memStore,
 	}, nil
 }
 
@@ -75,7 +80,9 @@ func (s *Server) Health() *HealthServer {
 
 // Shutdown initiates a graceful stop of the gRPC server. In-flight RPCs are
 // allowed to finish up to the graceful shutdown timeout configured in
-// cfg.Startup; after that, the server force-closes.
+// cfg.Startup; after that, the server force-closes. The in-memory memory
+// store is closed last (no-op today, but US-AR-007's facade will evolve
+// in Phase 2 to a network-backed store that needs explicit cleanup).
 func (s *Server) Shutdown() {
 	if s == nil || s.grpcSrv == nil {
 		return
@@ -92,5 +99,10 @@ func (s *Server) Shutdown() {
 	case <-timerAfter(s.cfg.Startup.GracefulShutdownTimeout):
 		s.logger.Warn("agent runtime gRPC graceful shutdown timed out, forcing stop")
 		s.grpcSrv.Stop()
+	}
+	if s.memStore != nil {
+		if err := s.memStore.Close(); err != nil {
+			s.logger.Warn("memory store close returned error", "error", err)
+		}
 	}
 }
