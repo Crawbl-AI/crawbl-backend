@@ -82,6 +82,11 @@ func runtimeConfigFromEnv() *runtimeConfig {
 		PostgresSchema:           os.Getenv("CRAWBL_DATABASE_SCHEMA"),
 		PostgresSSLMode:          os.Getenv("CRAWBL_DATABASE_SSLMODE"),
 		RedisAddr:                os.Getenv("CRAWBL_REDIS_ADDR"),
+		OTelEnabled:              os.Getenv("CRAWBL_OTEL_ENABLED"),
+		OTelMetricsEndpoint:      os.Getenv("CRAWBL_OTEL_METRICS_ENDPOINT"),
+		OTelEnvironment:          os.Getenv("CRAWBL_OTEL_ENVIRONMENT"),
+		OTelNamespace:            os.Getenv("CRAWBL_OTEL_NAMESPACE"),
+		OTelExportInterval:       os.Getenv("CRAWBL_OTEL_EXPORT_INTERVAL"),
 	}
 }
 

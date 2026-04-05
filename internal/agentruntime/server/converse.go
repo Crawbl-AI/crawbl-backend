@@ -15,6 +15,7 @@ import (
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 )
 
 // converseHandler implements runtimev1.AgentRuntimeServer.Converse as
@@ -24,8 +25,9 @@ import (
 // through here.
 type converseHandler struct {
 	runtimev1.UnimplementedAgentRuntimeServer
-	logger *slog.Logger
-	runner *runner.Runner
+	logger  *slog.Logger
+	runner  *runner.Runner
+	metrics *telemetry.TurnMetrics
 }
 
 // newConverseHandler wires the handler against an already-constructed
@@ -36,7 +38,11 @@ func newConverseHandler(logger *slog.Logger, r *runner.Runner) *converseHandler 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &converseHandler{logger: logger, runner: r}
+	return &converseHandler{
+		logger:  logger,
+		runner:  r,
+		metrics: telemetry.NewTurnMetrics(),
+	}
 }
 
 // Converse is the bidirectional streaming RPC. For each incoming
@@ -245,6 +251,7 @@ func (h *converseHandler) runOneTurn(
 			"message_preview", preview(message, 120),
 			"error", iterErr.Error(),
 		)
+		h.metrics.Record(ctx, principal.Object, orDefault(targetAgent, runner.AppName), "error", start)
 		return sendError(stream, sessionID, codes.Internal, fmt.Sprintf("runner: %v", iterErr))
 	}
 
@@ -284,6 +291,11 @@ func (h *converseHandler) runOneTurn(
 			baseFields...,
 		)
 	}
+	turnStatus := "ok"
+	if !state.finalSeen {
+		turnStatus = "empty"
+	}
+	h.metrics.Record(ctx, principal.Object, orDefault(state.finalAgent, orDefault(targetAgent, runner.AppName)), turnStatus, start)
 	return stream.Send(done)
 }
 

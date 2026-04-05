@@ -51,6 +51,18 @@ type runtimeConfig struct {
 	// matching CRAWBL_REDIS_PASSWORD is projected through the
 	// envSecretRef Secret alongside CRAWBL_DATABASE_PASSWORD.
 	RedisAddr string
+
+	// OTelEnabled / OTelMetricsEndpoint / OTelEnvironment /
+	// OTelNamespace / OTelExportInterval propagate the OpenTelemetry
+	// metrics configuration into every runtime pod. The webhook
+	// reads these from its own process env (CRAWBL_OTEL_*) so a
+	// single webhook redeploy moves every workspace onto a new
+	// observability endpoint without per-Secret edits.
+	OTelEnabled         string
+	OTelMetricsEndpoint string
+	OTelEnvironment     string
+	OTelNamespace       string
+	OTelExportInterval  string
 }
 
 // syncRequest is the request envelope Metacontroller POSTs to /sync.

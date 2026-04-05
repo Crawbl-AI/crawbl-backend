@@ -213,6 +213,21 @@ func runtimeBackendEnv(cfg *runtimeConfig) []corev1.EnvVar {
 	if cfg.RedisAddr != "" {
 		out = append(out, corev1.EnvVar{Name: "CRAWBL_REDIS_ADDR", Value: cfg.RedisAddr})
 	}
+	if cfg.OTelEnabled != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_OTEL_ENABLED", Value: cfg.OTelEnabled})
+	}
+	if cfg.OTelMetricsEndpoint != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_OTEL_METRICS_ENDPOINT", Value: cfg.OTelMetricsEndpoint})
+	}
+	if cfg.OTelEnvironment != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_OTEL_ENVIRONMENT", Value: cfg.OTelEnvironment})
+	}
+	if cfg.OTelNamespace != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_OTEL_NAMESPACE", Value: cfg.OTelNamespace})
+	}
+	if cfg.OTelExportInterval != "" {
+		out = append(out, corev1.EnvVar{Name: "CRAWBL_OTEL_EXPORT_INTERVAL", Value: cfg.OTelExportInterval})
+	}
 	return out
 }
 

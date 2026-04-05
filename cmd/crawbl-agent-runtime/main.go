@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/agents"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
@@ -37,6 +38,7 @@ import (
 	agentmcp "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 )
 
 // version is set by the Makefile build target via -ldflags at link time.
@@ -68,6 +70,24 @@ func main() {
 		"postgres_host", cfg.Postgres.Host,
 		"redis_addr", cfg.Redis.Addr,
 	)
+
+	// Step 1.5: wire OpenTelemetry metrics export to VictoriaMetrics.
+	// Disabled when CRAWBL_OTEL_METRICS_ENDPOINT is empty so local dev
+	// runs stay quiet; cluster deployments inject the endpoint through
+	// the webhook env and get metrics automatically.
+	telCtx, telCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	telemetryShutdown, tErr := telemetry.Init(telCtx, telemetry.ConfigFromEnv("crawbl-agent-runtime", version), logger)
+	telCancel()
+	if tErr != nil {
+		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			logger.Warn("telemetry shutdown returned error", "error", err)
+		}
+	}()
 
 	// Step 2a: Postgres.
 	dbConn, err := database.New(cfg.Postgres)

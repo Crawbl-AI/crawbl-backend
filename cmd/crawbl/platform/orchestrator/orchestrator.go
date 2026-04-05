@@ -43,6 +43,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -78,6 +79,25 @@ func runServer(ctx context.Context) error {
 		logLevel = slog.LevelError
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+	slog.SetDefault(logger)
+
+	// Telemetry: wire the OpenTelemetry meter provider up to
+	// VictoriaMetrics via the cluster's /opentelemetry/v1/metrics
+	// endpoint. Disabled automatically when CRAWBL_OTEL_METRICS_ENDPOINT
+	// is empty (local dev) so the same code path runs everywhere. Logs
+	// stay on stdout and are scraped into VictoriaLogs by Fluent Bit —
+	// we never double-ship them.
+	telemetryShutdown, tErr := telemetry.Init(ctx, telemetry.ConfigFromEnv("orchestrator", os.Getenv("CRAWBL_VERSION")), logger)
+	if tErr != nil {
+		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			logger.Warn("telemetry shutdown returned error", "error", err)
+		}
+	}()
 
 	// Auto-migrate: run pending migrations on startup.
 	// Migrations are embedded in the container image at /migrations/orchestrator.
