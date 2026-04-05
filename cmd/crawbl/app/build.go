@@ -20,9 +20,6 @@ const (
 
 	buildWebsiteRepoDir = "crawbl-website"
 
-	buildZeroClawImageRepo = "registry.digitalocean.com/crawbl/zeroclaw"
-	buildZeroClawRepoDir   = "crawbl-zeroclaw"
-
 	// crawbl-agent-runtime — the Phase 2 in-tree Go replacement for the
 	// Rust ZeroClaw runtime. Built from the same repo as the platform
 	// image but uses a dedicated, minimal Dockerfile (distroless nonroot,
@@ -43,13 +40,12 @@ func newBuildCommand() *cobra.Command {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, zeroclaw)", args[0])
+			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter)", args[0])
 		},
 	}
 
 	cmd.AddCommand(newBuildPlatformCommand())
 	cmd.AddCommand(newBuildAuthFilterCommand())
-	cmd.AddCommand(newBuildZeroClawCommand())
 
 	return cmd
 }
@@ -126,41 +122,3 @@ func newBuildAuthFilterCommand() *cobra.Command {
 	return cmd
 }
 
-func newBuildZeroClawCommand() *cobra.Command {
-	var (
-		tag      string
-		platform string
-		push     bool
-		path     string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "zeroclaw",
-		Short: "Build the ZeroClaw agent runtime image",
-		Long:  "Build the ZeroClaw agent runtime Docker image using docker buildx.",
-		Example: `  crawbl app build zeroclaw --tag v1.0.0
-  crawbl app build zeroclaw --tag latest --push
-  crawbl app build zeroclaw --tag v1.0.0 --path /custom/path/crawbl-zeroclaw`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if tag == "" {
-				return fmt.Errorf("--tag is required")
-			}
-			zeroClawDir, err := gitutil.ResolveSiblingRepo(path, buildZeroClawRepoDir)
-			if err != nil {
-				return err
-			}
-			return runDockerBuild(buildOpts{
-				imageRepo:  buildZeroClawImageRepo,
-				contextDir: zeroClawDir,
-				tag:        tag,
-				platform:   platform,
-				push:       push,
-				target:     "release",
-			})
-		},
-	}
-
-	addBuildFlags(cmd, &tag, &platform, &push)
-	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-zeroclaw repo (default: ../crawbl-zeroclaw)")
-	return cmd
-}

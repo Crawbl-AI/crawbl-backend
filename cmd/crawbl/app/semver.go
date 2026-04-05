@@ -41,22 +41,3 @@ func resolveDeployTag(explicit string, requireClean bool, repoPath string) (tagP
 	return calculateSemverForRepo(repoPath)
 }
 
-// calculateCrawblForkTag calculates the next tag for the zeroclaw fork.
-func calculateCrawblForkTag(repoPath string) (tagPair, error) {
-	result, err := versioning.CalculateForCrawblFork(repoPath)
-	if err != nil {
-		return tagPair{}, err
-	}
-	out.Step(style.Deploy, "Last tag: %s", result.LastTag)
-	out.Step(style.Deploy, "Calculated next version: %s", result.Tag)
-	return tagPair{Tag: result.Tag, PrevTag: result.LastTag}, nil
-}
-
-// resolveZeroClawTag returns the tag for zeroclaw — either explicit --tag or
-// auto-calculated crawbl fork tag (v<upstream>-crawbl.<N+1>).
-func resolveZeroClawTag(explicit, repoPath string) (tagPair, error) {
-	if explicit != "" {
-		return tagPair{Tag: explicit}, nil
-	}
-	return calculateCrawblForkTag(repoPath)
-}

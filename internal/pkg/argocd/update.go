@@ -80,10 +80,8 @@ func (u *Update) UpdateAuthFilter() error {
 }
 
 // UpdateAgentRuntime updates the crawbl-agent-runtime image tag in the
-// orchestrator chart values and the userswarm webhook manifest. This is
-// Phase 2's counterpart to UpdateZeroClaw — once the webhook stops
-// shelling out to ZeroClaw and starts scheduling the new agent-runtime
-// image, this function owns the per-deploy tag bump.
+// orchestrator chart values and the userswarm webhook manifest. It owns
+// the per-deploy tag bump for the Phase 2 in-tree Go runtime.
 //
 // The orchestrator chart key lives at .config.runtime.agentRuntimeImage
 // (added in the Phase 2 argocd-apps change). The webhook env var lives
@@ -117,31 +115,6 @@ func (u *Update) UpdateAgentRuntime() error {
 		return fmt.Errorf("read userswarm-webhook.yaml: %w", err)
 	}
 	imageBase := RegistryBase + "/crawbl-agent-runtime:"
-	updated := ReplaceImageTag(string(data), imageBase, u.Tag)
-	return os.WriteFile(webhookPath, []byte(updated), 0o644)
-}
-
-// UpdateZeroClaw updates the zeroclaw image reference in orchestrator values and the webhook manifest.
-func (u *Update) UpdateZeroClaw() error {
-	out.Step(style.Deploy, "Updating zeroclaw image ref to %s", u.Tag)
-
-	zeroClawImage := fmt.Sprintf("%s/zeroclaw:%s", RegistryBase, u.Tag)
-
-	// 1. Update .config.runtime.image in orchestrator chart values.
-	if err := u.RunYQ(
-		fmt.Sprintf(`.config.runtime.image = "%s"`, zeroClawImage),
-		"components/orchestrator/chart/values.yaml",
-	); err != nil {
-		return err
-	}
-
-	// 2. Replace ZEROCLAW_DEFAULT_IMAGE value in userswarm-webhook.yaml.
-	webhookPath := filepath.Join(u.RepoPath, "components/metacontroller/resources/userswarm-webhook.yaml")
-	data, err := os.ReadFile(webhookPath)
-	if err != nil {
-		return fmt.Errorf("read userswarm-webhook.yaml: %w", err)
-	}
-	imageBase := RegistryBase + "/zeroclaw:"
 	updated := ReplaceImageTag(string(data), imageBase, u.Tag)
 	return os.WriteFile(webhookPath, []byte(updated), 0o644)
 }

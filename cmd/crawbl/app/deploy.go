@@ -20,7 +20,7 @@ func newDeployCommand() *cobra.Command {
 		Short: "Build, push, and deploy a component",
 		Long:  "Build and deploy a component. Backend components use Docker + ArgoCD. Docs and website deploy to Cloudflare Pages.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
-  crawbl app deploy zeroclaw --tag v1.0.0
+  crawbl app deploy agent-runtime --tag v1.0.0
   crawbl app deploy docs
   crawbl app deploy website
   crawbl app deploy all --tag v1.0.0`,
@@ -28,13 +28,12 @@ func newDeployCommand() *cobra.Command {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, zeroclaw, docs, website, all)", args[0])
+			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, agent-runtime, docs, website, all)", args[0])
 		},
 	}
 
 	cmd.AddCommand(newDeployPlatformCommand())
 	cmd.AddCommand(newDeployAuthFilterCommand())
-	cmd.AddCommand(newDeployZeroClawCommand())
 	cmd.AddCommand(newDeployAgentRuntimeCommand())
 	cmd.AddCommand(newDeployDocsCommand())
 	cmd.AddCommand(newDeployWebsiteCommand())
@@ -273,77 +272,6 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 	return cmd
 }
 
-func newDeployZeroClawCommand() *cobra.Command {
-	var (
-		tag        string
-		platform   string
-		argocdRepo string
-		path       string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "zeroclaw",
-		Short: "Deploy the ZeroClaw agent runtime",
-		Long:  "Build and push the zeroclaw image, then update the image reference in crawbl-argocd-apps. Auto-increments the crawbl fork suffix (e.g. v0.6.8-crawbl.1 → v0.6.8-crawbl.2).",
-		Example: `  crawbl app deploy zeroclaw
-  crawbl app deploy zeroclaw --tag v0.6.8-crawbl.2
-  crawbl app deploy zeroclaw --path /custom/path/crawbl-zeroclaw`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := checkAllTools(); err != nil {
-				return err
-			}
-
-			zeroClawDir, err := gitutil.ResolveSiblingRepo(path, buildZeroClawRepoDir)
-			if err != nil {
-				return err
-			}
-
-			resolved, err := resolveZeroClawTag(tag, zeroClawDir)
-			if err != nil {
-				return err
-			}
-			tag = resolved.Tag
-
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildZeroClawImageRepo,
-				contextDir: zeroClawDir,
-				tag:        tag,
-				platform:   platform,
-				push:       true,
-				target:     "release",
-			}); err != nil {
-				return err
-			}
-
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(); err != nil {
-				return err
-			}
-			if err := u.UpdateZeroClaw(); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush("zeroclaw"); err != nil {
-				return err
-			}
-
-			return release.TagAndRelease(release.Config{
-				RepoPath: zeroClawDir,
-				RepoSlug: "Crawbl-AI/crawbl-zeroclaw",
-				Tag:      tag,
-				PrevTag:  resolved.PrevTag,
-			})
-		},
-	}
-
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
-	cmd.Flags().StringVar(&path, "path", "", "Path to crawbl-zeroclaw repo (default: ../crawbl-zeroclaw)")
-	return cmd
-}
-
 func newDeployDocsCommand() *cobra.Command {
 	var (
 		tag  string
@@ -454,7 +382,7 @@ func newDeployAllCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "all",
 		Short: "Deploy all backend components",
-		Long:  "Build, push, and update argocd for platform and auth-filter. External components (docs, website, zeroclaw) must be deployed individually.",
+		Long:  "Build, push, and update argocd for platform and auth-filter. External components (docs, website, agent-runtime) must be deployed individually.",
 		Example: `  crawbl app deploy all --tag v1.0.0
   crawbl app deploy all --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(_ *cobra.Command, _ []string) error {

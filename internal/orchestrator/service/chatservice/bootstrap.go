@@ -7,11 +7,11 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/google/uuid"
 
+	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/zeroclaw"
 )
 
 // ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
@@ -196,10 +196,11 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 	})
 }
 
-// ensureDefaultTools seeds the tool catalog from the zeroclaw package.
-// This is idempotent — the repo's Seed method uses ON CONFLICT DO UPDATE.
+// ensureDefaultTools seeds the tool catalog from the crawbl-agent-runtime
+// tools package. Idempotent — the repo's Seed method uses ON CONFLICT DO
+// UPDATE.
 func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.SessionRunner) *merrors.Error {
-	catalog := zeroclaw.DefaultToolCatalog()
+	catalog := agentruntimetools.DefaultCatalog()
 	rows := make([]orchestratorrepo.ToolRow, 0, len(catalog))
 	now := time.Now().UTC()
 	for idx, tool := range catalog {
