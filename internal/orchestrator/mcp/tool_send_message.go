@@ -143,9 +143,18 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 
 		// 4. Emit Socket.IO delegation event.
 		if deps.Broadcaster != nil {
+			fromName, fromSlug := "", ""
+			if fromAgent != nil {
+				fromName = fromAgent.Name
+				fromSlug = fromAgent.Slug
+			}
 			deps.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
 				FromAgentID:    fromAgentID,
+				FromAgentName:  fromName,
+				FromAgentSlug:  fromSlug,
 				ToAgentID:      targetAgent.ID,
+				ToAgentName:    targetAgent.Name,
+				ToAgentSlug:    targetAgent.Slug,
 				ConversationID: input.ConversationID,
 				Status:         realtime.AgentDelegationStatusRunning,
 				MessagePreview: truncateStr(input.Message, delegationMessagePreviewMaxRunes),
@@ -178,7 +187,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		if rErr != nil {
 			duration := time.Since(startTime).Milliseconds()
 			updateAgentMessageFailed(ctx, sess, msgID, rErr.Error(), duration)
-			emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
+			emitDelegationDone(ctx, deps, workspaceID, fromAgent, targetAgent, input.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
 			return nil, sendMessageOutput{
 				AgentSlug: input.AgentSlug,
 				Error:     "runtime not ready: " + rErr.Error(),
@@ -199,7 +208,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		// 6. Update agent_messages row and handle result.
 		if callErr != nil {
 			updateAgentMessageFailed(ctx, sess, msgID, callErr.Error(), duration)
-			emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
+			emitDelegationDone(ctx, deps, workspaceID, fromAgent, targetAgent, input.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
 			return nil, sendMessageOutput{
 				AgentSlug: input.AgentSlug,
 				Error:     callErr.Error(),
@@ -232,7 +241,7 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			ExecContext(ctx)
 
 		// 7. Clear agent status and emit completion.
-		emitDelegationDone(ctx, deps, workspaceID, fromAgentID, targetAgent.ID, input.ConversationID, msgID, realtime.AgentDelegationStatusCompleted)
+		emitDelegationDone(ctx, deps, workspaceID, fromAgent, targetAgent, input.ConversationID, msgID, realtime.AgentDelegationStatusCompleted)
 
 		deps.Logger.Info("send_message_to_agent: completed",
 			"from_slug", fromAgentSlug,
@@ -315,14 +324,24 @@ func truncateStr(s string, maxLen int) string {
 }
 
 // emitDelegationDone emits status updates after a delegation completes or fails.
-func emitDelegationDone(ctx context.Context, deps *Deps, workspaceID, fromAgentID, toAgentID, conversationID, msgID, status string) {
-	if deps.Broadcaster == nil {
+func emitDelegationDone(ctx context.Context, deps *Deps, workspaceID string, fromAgent, toAgent *orchestrator.Agent, conversationID, msgID, status string) {
+	if deps.Broadcaster == nil || toAgent == nil {
 		return
 	}
-	deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, toAgentID, string(orchestrator.AgentStatusOnline), conversationID)
+	var fromID, fromName, fromSlug string
+	if fromAgent != nil {
+		fromID = fromAgent.ID
+		fromName = fromAgent.Name
+		fromSlug = fromAgent.Slug
+	}
+	deps.Broadcaster.EmitAgentStatus(ctx, workspaceID, toAgent.ID, string(orchestrator.AgentStatusOnline), conversationID)
 	deps.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
-		FromAgentID:    fromAgentID,
-		ToAgentID:      toAgentID,
+		FromAgentID:    fromID,
+		FromAgentName:  fromName,
+		FromAgentSlug:  fromSlug,
+		ToAgentID:      toAgent.ID,
+		ToAgentName:    toAgent.Name,
+		ToAgentSlug:    toAgent.Slug,
 		ConversationID: conversationID,
 		Status:         status,
 		MessageID:      msgID,

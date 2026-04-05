@@ -140,10 +140,14 @@ const (
 	AgentToolStatusDone    = "done"
 )
 
-// AgentDelegationPayload reports agent-to-agent message activity.
+// AgentDelegationPayload reports agent-to-agent delegation activity.
 type AgentDelegationPayload struct {
-	FromAgentID    string `json:"from_agent_id"`
-	ToAgentID      string `json:"to_agent_id"`
+	FromAgentID   string `json:"from_agent_id"`
+	FromAgentName string `json:"from_agent_name"`
+	FromAgentSlug string `json:"from_agent_slug"`
+	ToAgentID     string `json:"to_agent_id"`
+	ToAgentName   string `json:"to_agent_name"`
+	ToAgentSlug   string `json:"to_agent_slug"`
 	ConversationID string `json:"conversation_id"`
 	// Status is one of AgentDelegationStatus* (running | completed | failed).
 	Status         string `json:"status"`

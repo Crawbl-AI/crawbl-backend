@@ -370,7 +370,11 @@ func (s *service) callAgentStreaming(
 		// the delegation was triggered.
 		s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
 			FromAgentID:    agent.ID,
+			FromAgentName:  agent.Name,
+			FromAgentSlug:  agent.Slug,
 			ToAgentID:      subAgent.ID,
+			ToAgentName:    subAgent.Name,
+			ToAgentSlug:    subAgent.Slug,
 			ConversationID: conversation.ID,
 			Status:         realtime.AgentDelegationStatusRunning,
 			MessageID:      subPlaceholder.ID,
@@ -681,7 +685,11 @@ func (s *service) callAgentStreaming(
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 			s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
 				FromAgentID:    agent.ID,
+				FromAgentName:  agent.Name,
+				FromAgentSlug:  agent.Slug,
 				ToAgentID:      st.agent.ID,
+				ToAgentName:    st.agent.Name,
+				ToAgentSlug:    st.agent.Slug,
 				ConversationID: conversation.ID,
 				Status:         realtime.AgentDelegationStatusCompleted,
 				MessageID:      st.placeholder.ID,
