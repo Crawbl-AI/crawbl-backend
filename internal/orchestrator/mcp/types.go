@@ -227,8 +227,8 @@ type messageRow struct {
 
 // createAgentHistoryInput is the input for the create_agent_history tool.
 type createAgentHistoryInput struct {
-	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"description=Agent slug (deprecated - use agent_id)"`
-	AgentID        string `json:"agent_id,omitempty" jsonschema:"description=Agent UUID (preferred over agent_slug)"`
+	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"Agent slug (deprecated - use agent_id)"`
+	AgentID        string `json:"agent_id,omitempty" jsonschema:"Agent UUID (preferred over agent_slug)"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle,omitempty"`
