@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
@@ -57,6 +58,15 @@ func New(cfg config.Config, logger *slog.Logger, r *runner.Runner) (*Server, err
 
 	runtimev1.RegisterAgentRuntimeServer(grpcSrv, newConverseHandler(logger, r))
 	runtimev1.RegisterMemoryServer(grpcSrv, newMemoryServer(logger, memStore))
+
+	// Register gRPC server reflection so local debugging tools
+	// (grpcurl, evans) can enumerate services without a .proto file.
+	// The reflection paths are in exemptMethods so they bypass HMAC
+	// auth, and reflection.Register is idempotent. Safe to leave on
+	// in production — it exposes service/method names (which are not
+	// secret) but does NOT expose any RPCs beyond what's already
+	// registered.
+	reflection.Register(grpcSrv)
 
 	return &Server{
 		cfg:      cfg,

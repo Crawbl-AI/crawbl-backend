@@ -41,6 +41,18 @@ func withPrincipal(ctx context.Context, p Principal) context.Context {
 	return context.WithValue(ctx, authCtxKey{}, p)
 }
 
+// exemptMethods is the allow-list of unauthenticated gRPC methods. k8s
+// readiness / liveness probes hit grpc.health.v1.Health without any
+// credentials (kubelet cannot sign HMAC tokens), so those methods MUST
+// bypass the auth chain. The grpc.reflection service is also listed
+// because local debugging via grpcurl --reflection relies on it.
+var exemptMethods = map[string]struct{}{
+	"/grpc.health.v1.Health/Check":                  {},
+	"/grpc.health.v1.Health/Watch":                  {},
+	"/grpc.reflection.v1.ServerReflection/ServerReflectionInfo":      {},
+	"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo": {},
+}
+
 // HMACAuth builds unary and stream gRPC interceptors that validate the
 // "authorization: Bearer <token>" metadata header against the shared
 // signingKey using internal/pkg/hmac. On success the resolved Principal is
@@ -49,15 +61,24 @@ func withPrincipal(ctx context.Context, p Principal) context.Context {
 // This is the runtime's server-side mirror of the token-generation path used
 // by cmd/crawbl/platform/orchestrator/orchestrator.go:269 and
 // internal/orchestrator/mcp/server.go:66, which share the same HMAC scheme.
+//
+// Methods in exemptMethods (notably grpc.health.v1.Health) bypass auth so
+// kubelet probes and local grpcurl reflection keep working.
 func HMACAuth(signingKey string) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
-	unary := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	unary := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if _, exempt := exemptMethods[info.FullMethod]; exempt {
+			return handler(ctx, req)
+		}
 		newCtx, err := authorizeContext(ctx, signingKey)
 		if err != nil {
 			return nil, err
 		}
 		return handler(newCtx, req)
 	}
-	stream := func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	stream := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if _, exempt := exemptMethods[info.FullMethod]; exempt {
+			return handler(srv, ss)
+		}
 		newCtx, err := authorizeContext(ss.Context(), signingKey)
 		if err != nil {
 			return err
