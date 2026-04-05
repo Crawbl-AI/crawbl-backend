@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/integration"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
@@ -57,7 +58,7 @@ func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservic
 	var rows []connRow
 	_, err := opts.Sess.Select("provider").
 		From("integration_connections").
-		Where("user_id = ? AND status = 'active'", opts.UserID).
+		Where("user_id = ? AND status = ?", opts.UserID, integration.StatusActive).
 		LoadContext(ctx, &rows)
 	if err != nil {
 		// Table may not exist yet — log and continue with empty connections.
@@ -100,10 +101,7 @@ func (s *service) GetOAuthConfig(ctx context.Context, opts *orchestratorservice.
 		slog.String("user_id", opts.UserID),
 	)
 
-	return nil, merrors.NewBusinessError(
-		"integration "+opts.Provider+" is not yet available — coming soon",
-		merrors.ErrCodeIntegrationNotConfigured,
-	)
+	return nil, merrors.ErrIntegrationProviderNotSupported
 }
 
 // HandleOAuthCallback exchanges the authorization code for access/refresh tokens
@@ -120,8 +118,5 @@ func (s *service) HandleOAuthCallback(ctx context.Context, opts *orchestratorser
 		slog.String("user_id", opts.UserID),
 	)
 
-	return merrors.NewBusinessError(
-		"OAuth callback for "+opts.Provider+" is not yet implemented",
-		merrors.ErrCodeIntegrationNotConfigured,
-	)
+	return merrors.ErrIntegrationCallbackFailed
 }

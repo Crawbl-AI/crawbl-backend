@@ -32,6 +32,8 @@ const (
 	ErrCodeUserNotFound            = "USR0002" // User does not exist
 	ErrCodeUserWrongFirebaseUID    = "USR0003" // Firebase UID mismatch during auth
 	ErrCodeUserFirebaseUIDMismatch = "USR0004" // Firebase UID does not match expected
+	ErrCodeUserAlreadyExists       = "USR0003" // User with this subject already exists
+	ErrCodeLegalVersionMismatch    = "USR0012" // Legal document version does not match
 
 	// Workspace error codes (WSPxxxx)
 	ErrCodeWorkspaceNotFound = "WSP0001" // Workspace does not exist
@@ -50,7 +52,18 @@ const (
 	ErrCodeRuntimeNotReady = "RTM0001" // User swarm runtime is not ready
 
 	// Integration error codes (INTxxxx)
-	ErrCodeIntegrationNotConfigured = "INT0001" // Integration provider is not yet configured
+	ErrCodeIntegrationNotConfigured        = "INT0001" // Integration provider is not yet configured
+	ErrCodeIntegrationProviderNotSupported = "INT0002" // Provider is not supported
+	ErrCodeIntegrationCallbackFailed       = "INT0003" // OAuth callback failed
+
+	// Workflow error codes (WFLxxxx)
+	ErrCodeWorkflowNotFound          = "WFL0001" // Workflow definition not found
+	ErrCodeWorkflowExecutionNotFound = "WFL0002" // Workflow execution not found
+	ErrCodeWorkflowStepNotFound      = "WFL0003" // Workflow step execution not found
+
+	// Artifact error codes (ARTxxxx)
+	ErrCodeArtifactNotFound        = "ART0001" // Artifact not found
+	ErrCodeArtifactVersionNotFound = "ART0002" // Artifact version not found
 )
 
 // Predefined business errors for common error conditions.
@@ -83,7 +96,22 @@ var (
 	ErrRuntimeNotReady = NewBusinessError("Assistant is still starting", ErrCodeRuntimeNotReady)
 
 	// Integration errors
-	ErrIntegrationNotConfigured = NewBusinessError("Integration is not yet available", ErrCodeIntegrationNotConfigured)
+	ErrIntegrationNotConfigured        = NewBusinessError("Integration is not yet available", ErrCodeIntegrationNotConfigured)
+	ErrIntegrationProviderNotSupported = NewBusinessError("Provider is not supported", ErrCodeIntegrationProviderNotSupported)
+	ErrIntegrationCallbackFailed       = NewBusinessError("OAuth token exchange failed", ErrCodeIntegrationCallbackFailed)
+
+	// User errors (continued)
+	ErrUserAlreadyExists    = NewBusinessError("User already exists", ErrCodeUserAlreadyExists)
+	ErrLegalVersionMismatch = NewBusinessError("Legal document version does not match current version", ErrCodeLegalVersionMismatch)
+
+	// Workflow errors
+	ErrWorkflowNotFound          = NewBusinessError("Workflow definition not found", ErrCodeWorkflowNotFound)
+	ErrWorkflowExecutionNotFound = NewBusinessError("Workflow execution not found", ErrCodeWorkflowExecutionNotFound)
+	ErrWorkflowStepNotFound      = NewBusinessError("Workflow step execution not found", ErrCodeWorkflowStepNotFound)
+
+	// Artifact errors
+	ErrArtifactNotFound        = NewBusinessError("Artifact not found", ErrCodeArtifactNotFound)
+	ErrArtifactVersionNotFound = NewBusinessError("Artifact version not found", ErrCodeArtifactVersionNotFound)
 
 	// Validation errors (server-side, not exposed to clients)
 	ErrInvalidInput    = NewServerErrorText("invalid input provided")

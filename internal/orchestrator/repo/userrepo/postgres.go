@@ -129,7 +129,7 @@ func (r *userRepo) CreateUser(ctx context.Context, opts *orchestratorrepo.Create
 		ExecContext(ctx)
 	if err != nil {
 		if database.IsRecordExistsError(err) {
-			return merrors.NewBusinessError("User already exists", "USR0003")
+			return merrors.ErrUserAlreadyExists
 		}
 		return merrors.WrapStdServerError(err, "insert user")
 	}
@@ -232,22 +232,19 @@ func (r *userRepo) SavePushToken(ctx context.Context, sess orchestratorrepo.Sess
 }
 
 // saveUserRow inserts or updates a user record in the database.
-// It first attempts to find an existing user by subject, then either updates
-// the existing record or inserts a new one.
-// Handles race conditions by retrying with an update if insert fails due to duplicate key.
+// It checks for an existing record by subject first; if found, all mutable fields
+// are updated. Otherwise a new row is inserted.
 func (r *userRepo) saveUserRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.UserRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existingUserRow orchestratorrepo.UserRow
-	err := sess.Select(orchestratorrepo.Columns(userColumns...)...).
-		From("users").
-		Where("subject = ?", row.Subject).
-		LoadOneContext(ctx, &existingUserRow)
-	switch {
-	case err == nil:
+	var existing orchestratorrepo.UserRow
+	err := sess.Select("*").From("users").Where("subject = ?", row.Subject).LoadOneContext(ctx, &existing)
+	if err == nil {
+		// Record exists — update all mutable fields.
 		_, err = sess.Update("users").
+			Where("subject = ?", row.Subject).
 			Set("email", row.Email).
 			Set("nickname", row.Nickname).
 			Set("name", row.Name).
@@ -260,55 +257,22 @@ func (r *userRepo) saveUserRow(ctx context.Context, sess orchestratorrepo.Sessio
 			Set("has_agreed_with_privacy_policy", row.HasAgreedWithPrivacyPolicy).
 			Set("updated_at", row.UpdatedAt).
 			Set("deleted_at", row.DeletedAt).
-			Where("subject = ?", row.Subject).
 			ExecContext(ctx)
 		if err != nil {
 			return merrors.WrapStdServerError(err, "update user")
 		}
 		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select user by subject for save")
 	}
 
+	// Record does not exist — insert.
 	_, err = sess.InsertInto("users").
-		Pair("id", row.ID).
-		Pair("subject", row.Subject).
-		Pair("email", row.Email).
-		Pair("nickname", row.Nickname).
-		Pair("name", row.Name).
-		Pair("surname", row.Surname).
-		Pair("avatar_url", row.AvatarURL).
-		Pair("country_code", row.CountryCode).
-		Pair("date_of_birth", row.DateOfBirth).
-		Pair("is_banned", row.IsBanned).
-		Pair("has_agreed_with_terms", row.HasAgreedWithTerms).
-		Pair("has_agreed_with_privacy_policy", row.HasAgreedWithPrivacyPolicy).
-		Pair("created_at", row.CreatedAt).
-		Pair("updated_at", row.UpdatedAt).
-		Pair("deleted_at", row.DeletedAt).
+		Columns("id", "subject", "email", "nickname", "name", "surname",
+			"avatar_url", "country_code", "date_of_birth", "is_banned",
+			"has_agreed_with_terms", "has_agreed_with_privacy_policy",
+			"created_at", "updated_at", "deleted_at").
+		Record(row).
 		ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("users").
-				Set("email", row.Email).
-				Set("nickname", row.Nickname).
-				Set("name", row.Name).
-				Set("surname", row.Surname).
-				Set("avatar_url", row.AvatarURL).
-				Set("country_code", row.CountryCode).
-				Set("date_of_birth", row.DateOfBirth).
-				Set("is_banned", row.IsBanned).
-				Set("has_agreed_with_terms", row.HasAgreedWithTerms).
-				Set("has_agreed_with_privacy_policy", row.HasAgreedWithPrivacyPolicy).
-				Set("updated_at", row.UpdatedAt).
-				Set("deleted_at", row.DeletedAt).
-				Where("subject = ?", row.Subject).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update user after duplicate insert")
-			}
-			return nil
-		}
 		return merrors.WrapStdServerError(err, "insert user")
 	}
 
@@ -316,107 +280,71 @@ func (r *userRepo) saveUserRow(ctx context.Context, sess orchestratorrepo.Sessio
 }
 
 // saveUserPreferencesRow inserts or updates user preferences in the database.
-// It handles both creating new preferences and updating existing ones.
-// Handles race conditions by retrying with an update if insert fails due to duplicate key.
+// It checks for an existing record by user_id first; if found, all preference fields
+// are updated. Otherwise a new row is inserted.
 func (r *userRepo) saveUserPreferencesRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.UserPreferencesRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existingRow orchestratorrepo.UserPreferencesRow
-	err := sess.Select(orchestratorrepo.Columns(userPreferencesColumns...)...).
-		From("user_preferences").
-		Where("user_id = ?", row.UserID).
-		LoadOneContext(ctx, &existingRow)
-	switch {
-	case err == nil:
+	var existing orchestratorrepo.UserPreferencesRow
+	err := sess.Select("*").From("user_preferences").Where("user_id = ?", row.UserID).LoadOneContext(ctx, &existing)
+	if err == nil {
+		// Record exists — update all preference fields.
 		_, err = sess.Update("user_preferences").
+			Where("user_id = ?", row.UserID).
 			Set("platform_theme", row.PlatformTheme).
 			Set("platform_language", row.PlatformLanguage).
 			Set("currency_code", row.CurrencyCode).
 			Set("updated_at", row.UpdatedAt).
-			Where("user_id = ?", row.UserID).
 			ExecContext(ctx)
 		if err != nil {
 			return merrors.WrapStdServerError(err, "update user preferences")
 		}
 		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select user preferences by user id for save")
 	}
 
+	// Record does not exist — insert.
 	_, err = sess.InsertInto("user_preferences").
-		Pair("user_id", row.UserID).
-		Pair("platform_theme", row.PlatformTheme).
-		Pair("platform_language", row.PlatformLanguage).
-		Pair("currency_code", row.CurrencyCode).
-		Pair("updated_at", row.UpdatedAt).
+		Columns("user_id", "platform_theme", "platform_language", "currency_code", "updated_at").
+		Record(row).
 		ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("user_preferences").
-				Set("platform_theme", row.PlatformTheme).
-				Set("platform_language", row.PlatformLanguage).
-				Set("currency_code", row.CurrencyCode).
-				Set("updated_at", row.UpdatedAt).
-				Where("user_id = ?", row.UserID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update user preferences after duplicate insert")
-			}
-			return nil
-		}
 		return merrors.WrapStdServerError(err, "insert user preferences")
 	}
 
 	return nil
 }
 
-// saveUserPushTokenRow inserts or updates a user push token in the database.
-// It handles both creating new tokens and updating existing ones for a user.
-// Handles race conditions by retrying with an update if insert fails due to duplicate key.
+// saveUserPushTokenRow inserts or updates a push notification token in the database.
+// It checks for an existing record by user_id first; if found, the token and timestamp
+// are updated. Otherwise a new row is inserted.
 func (r *userRepo) saveUserPushTokenRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.UserPushTokenRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existingRow orchestratorrepo.UserPushTokenRow
-	err := sess.Select("user_id", "push_token", "updated_at").
-		From("user_push_tokens").
-		Where("user_id = ?", row.UserID).
-		LoadOneContext(ctx, &existingRow)
-	switch {
-	case err == nil:
+	var existing orchestratorrepo.UserPushTokenRow
+	err := sess.Select("*").From("user_push_tokens").Where("user_id = ?", row.UserID).LoadOneContext(ctx, &existing)
+	if err == nil {
+		// Record exists — update token and timestamp.
 		_, err = sess.Update("user_push_tokens").
+			Where("user_id = ?", row.UserID).
 			Set("push_token", row.PushToken).
 			Set("updated_at", row.UpdatedAt).
-			Where("user_id = ?", row.UserID).
 			ExecContext(ctx)
 		if err != nil {
 			return merrors.WrapStdServerError(err, "update user push token")
 		}
 		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select user push token by user id for save")
 	}
 
+	// Record does not exist — insert.
 	_, err = sess.InsertInto("user_push_tokens").
-		Pair("user_id", row.UserID).
-		Pair("push_token", row.PushToken).
-		Pair("updated_at", row.UpdatedAt).
+		Columns("user_id", "push_token", "updated_at").
+		Record(row).
 		ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("user_push_tokens").
-				Set("push_token", row.PushToken).
-				Set("updated_at", row.UpdatedAt).
-				Where("user_id = ?", row.UserID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update user push token after duplicate insert")
-			}
-			return nil
-		}
 		return merrors.WrapStdServerError(err, "insert user push token")
 	}
 

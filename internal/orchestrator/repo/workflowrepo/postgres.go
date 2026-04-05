@@ -14,10 +14,6 @@ func New() *workflowRepo {
 	return &workflowRepo{}
 }
 
-// ---------------------------------------------------------------------------
-// Definitions
-// ---------------------------------------------------------------------------
-
 func (r *workflowRepo) CreateDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowDefinitionRow) *merrors.Error {
 	if sess == nil || row == nil {
 		return merrors.ErrInvalidInput
@@ -57,7 +53,7 @@ func (r *workflowRepo) GetDefinition(ctx context.Context, sess orchestratorrepo.
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.NewBusinessError("Workflow definition not found", "WFL0001")
+			return nil, merrors.ErrWorkflowNotFound
 		}
 		return nil, merrors.WrapStdServerError(err, "select workflow definition by id")
 	}
@@ -82,10 +78,6 @@ func (r *workflowRepo) ListDefinitions(ctx context.Context, sess orchestratorrep
 
 	return rows, nil
 }
-
-// ---------------------------------------------------------------------------
-// Executions
-// ---------------------------------------------------------------------------
 
 func (r *workflowRepo) CreateExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowExecutionRow) *merrors.Error {
 	if sess == nil || row == nil {
@@ -128,7 +120,7 @@ func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.S
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.NewBusinessError("Workflow execution not found", "WFL0002")
+			return nil, merrors.ErrWorkflowExecutionNotFound
 		}
 		return nil, merrors.WrapStdServerError(err, "select workflow execution by id")
 	}
@@ -174,10 +166,6 @@ func (r *workflowRepo) ListActiveExecutions(ctx context.Context, sess orchestrat
 
 	return rows, nil
 }
-
-// ---------------------------------------------------------------------------
-// Step executions
-// ---------------------------------------------------------------------------
 
 func (r *workflowRepo) CreateStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowStepExecutionRow) *merrors.Error {
 	if sess == nil || row == nil {
@@ -242,7 +230,7 @@ func (r *workflowRepo) GetStepExecution(ctx context.Context, sess orchestratorre
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.NewBusinessError("Workflow step execution not found", "WFL0003")
+			return nil, merrors.ErrWorkflowStepNotFound
 		}
 		return nil, merrors.WrapStdServerError(err, "select workflow step execution")
 	}

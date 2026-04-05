@@ -19,7 +19,7 @@ func HealthCheck(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		WriteSuccess(w, http.StatusOK, &dto.HealthCheckResponse{
 			Online:  true,
-			Version: "1.0.0",
+			Version: orchestrator.APIVersion,
 		})
 	}
 }
@@ -331,11 +331,11 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 func toUserProfileResponse(user *orchestrator.User) *dto.UserProfileResponse {
 	subscriptionName := user.Subscription.Name
 	if subscriptionName == "" {
-		subscriptionName = "Freemium"
+		subscriptionName = orchestrator.DefaultSubscriptionName
 	}
 	subscriptionCode := user.Subscription.Code
 	if subscriptionCode == "" {
-		subscriptionCode = "freemium"
+		subscriptionCode = orchestrator.DefaultSubscriptionCode
 	}
 
 	return &dto.UserProfileResponse{

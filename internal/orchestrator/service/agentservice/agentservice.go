@@ -7,30 +7,25 @@ import (
 
 // New creates a new AgentService with the provided dependencies.
 func New(
-	workspaceRepo workspaceRepo,
-	agentRepo agentRepo,
-	toolsRepo toolsRepo,
-	agentSettingsRepo agentSettingsRepo,
-	agentPromptsRepo agentPromptsRepo,
-	agentHistoryRepo agentHistoryRepo,
+	repos Repos,
 	runtimeClient agentclient.Client,
 ) orchestratorservice.AgentService {
-	if workspaceRepo == nil {
+	if repos.Workspace == nil {
 		panic("agent service workspace repo cannot be nil")
 	}
-	if agentRepo == nil {
+	if repos.Agent == nil {
 		panic("agent service agent repo cannot be nil")
 	}
-	if toolsRepo == nil {
+	if repos.Tools == nil {
 		panic("agent service tools repo cannot be nil")
 	}
-	if agentSettingsRepo == nil {
+	if repos.AgentSettings == nil {
 		panic("agent service agent settings repo cannot be nil")
 	}
-	if agentPromptsRepo == nil {
+	if repos.AgentPrompts == nil {
 		panic("agent service agent prompts repo cannot be nil")
 	}
-	if agentHistoryRepo == nil {
+	if repos.AgentHistory == nil {
 		panic("agent service agent history repo cannot be nil")
 	}
 	if runtimeClient == nil {
@@ -38,12 +33,12 @@ func New(
 	}
 
 	return &service{
-		workspaceRepo:     workspaceRepo,
-		agentRepo:         agentRepo,
-		toolsRepo:         toolsRepo,
-		agentSettingsRepo: agentSettingsRepo,
-		agentPromptsRepo:  agentPromptsRepo,
-		agentHistoryRepo:  agentHistoryRepo,
+		workspaceRepo:     repos.Workspace,
+		agentRepo:         repos.Agent,
+		toolsRepo:         repos.Tools,
+		agentSettingsRepo: repos.AgentSettings,
+		agentPromptsRepo:  repos.AgentPrompts,
+		agentHistoryRepo:  repos.AgentHistory,
 		runtimeClient:     runtimeClient,
 	}
 }

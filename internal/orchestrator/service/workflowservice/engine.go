@@ -40,7 +40,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 
 	// Update execution to running.
 	now := time.Now().UTC().Format(time.RFC3339)
-	execution.Status = "running"
+	execution.Status = string(workflowrepo.WorkflowStatusRunning)
 	execution.StartedAt = &now
 	_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
@@ -50,7 +50,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		ExecutionID:    executionID,
 		WorkflowName:   definition.Name,
 		ConversationID: derefStr(execution.ConversationID),
-		Status:         "running",
+		Status:         string(workflowrepo.WorkflowStatusRunning),
 	})
 
 	// Execute steps sequentially.
@@ -78,7 +78,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			StepIndex:   i,
 			StepName:    step.Name,
 			AgentSlug:   step.AgentSlug,
-			Status:      "running",
+			Status:      string(workflowrepo.WorkflowStatusRunning),
 			InputText:   prompt,
 			StartedAt:   &stepNow,
 			CreatedAt:   stepNow,
@@ -91,7 +91,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			ExecutionID:    executionID,
 			WorkflowName:   definition.Name,
 			ConversationID: derefStr(execution.ConversationID),
-			Status:         "running",
+			Status:         string(workflowrepo.WorkflowStatusRunning),
 			StepIndex:      i,
 			StepName:       step.Name,
 			AgentSlug:      step.AgentSlug,
@@ -99,7 +99,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 
 		// Check if step requires approval.
 		if step.RequiresApproval {
-			stepExec.Status = "waiting_approval"
+			stepExec.Status = string(workflowrepo.WorkflowStatusWaitingApproval)
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 			s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowStepApproval, realtime.WorkflowEventPayload{
@@ -107,14 +107,14 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
 				ConversationID: derefStr(execution.ConversationID),
-				Status:         "waiting_approval",
+				Status:         string(workflowrepo.WorkflowStatusWaitingApproval),
 				StepIndex:      i,
 				StepName:       step.Name,
 				AgentSlug:      step.AgentSlug,
 			})
 
 			// TODO: Wait for approval via channel/polling. For now, auto-approve.
-			stepExec.Status = "approved"
+			stepExec.Status = string(workflowrepo.WorkflowStatusApproved)
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 		}
 
@@ -138,7 +138,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		completedAt := time.Now().UTC().Format(time.RFC3339)
 
 		if callErr != nil {
-			stepExec.Status = "failed"
+			stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
 			errMsg := callErr.Error()
 			stepExec.OutputText = &errMsg
 			stepExec.DurationMs = &durationMs
@@ -146,11 +146,11 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			_ = s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec)
 
 			// Handle on_failure policy.
-			if step.OnFailure == "skip" {
+			if step.OnFailure == string(workflowrepo.WorkflowOnFailureSkip) {
 				continue
 			}
 			// "stop" (default) -- fail the whole workflow.
-			execution.Status = "failed"
+			execution.Status = string(workflowrepo.WorkflowStatusFailed)
 			execution.ErrorMessage = &errMsg
 			execution.CompletedAt = &completedAt
 			_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
@@ -160,7 +160,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
 				ConversationID: derefStr(execution.ConversationID),
-				Status:         "failed",
+				Status:         string(workflowrepo.WorkflowStatusFailed),
 				StepIndex:      i,
 				StepName:       step.Name,
 				Error:          errMsg,
@@ -178,7 +178,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		response := strings.Join(responseParts, "\n")
 
 		// Step succeeded.
-		stepExec.Status = "completed"
+		stepExec.Status = string(workflowrepo.WorkflowStatusCompleted)
 		stepExec.OutputText = &response
 		stepExec.DurationMs = &durationMs
 		stepExec.CompletedAt = &completedAt
@@ -201,7 +201,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			ExecutionID:    executionID,
 			WorkflowName:   definition.Name,
 			ConversationID: derefStr(execution.ConversationID),
-			Status:         "completed",
+			Status:         string(workflowrepo.WorkflowStatusCompleted),
 			StepIndex:      i,
 			StepName:       step.Name,
 			AgentSlug:      step.AgentSlug,
@@ -210,7 +210,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 
 	// Workflow completed successfully.
 	completedAt := time.Now().UTC().Format(time.RFC3339)
-	execution.Status = "completed"
+	execution.Status = string(workflowrepo.WorkflowStatusCompleted)
 	execution.CompletedAt = &completedAt
 	_ = s.workflowRepo.UpdateExecution(ctx, sess, execution)
 
@@ -219,7 +219,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		ExecutionID:    executionID,
 		WorkflowName:   definition.Name,
 		ConversationID: derefStr(execution.ConversationID),
-		Status:         "completed",
+		Status:         string(workflowrepo.WorkflowStatusCompleted),
 	})
 }
 

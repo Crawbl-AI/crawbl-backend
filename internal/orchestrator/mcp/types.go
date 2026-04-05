@@ -42,6 +42,32 @@ const (
 	ctxKeyAPICalls    contextKey = "mcp_api_calls"
 )
 
+const (
+	// mcpServerVersion is the MCP server protocol version.
+	mcpServerVersion = "1.0.0"
+
+	// auditMaxResponseBytes caps the response body size logged in audit entries.
+	auditMaxResponseBytes = 2048
+
+	// auditWriteTimeout is the timeout for writing audit log entries to the database.
+	auditWriteTimeout = 5 * time.Second
+
+	// mcpToolCallMethod is the JSON-RPC method name for MCP tool invocations.
+	mcpToolCallMethod = "tools/call"
+
+	// agentMessageMaxStoredBytes is the maximum response size stored in agent_messages.
+	agentMessageMaxStoredBytes = 32768
+
+	// agentContextMaxTextLen caps message text length in agent conversation context.
+	agentContextMaxTextLen = 500
+
+	// defaultSearchLimit is the default number of results for message search.
+	defaultSearchLimit = 20
+
+	// maxSearchLimit is the maximum number of results for message search.
+	maxSearchLimit = 50
+)
+
 // Deps holds all dependencies needed by the MCP server and tool handlers.
 type Deps struct {
 	DB               *dbr.Connection
@@ -104,10 +130,7 @@ func (d *Deps) newSession() *dbr.Session {
 	return d.DB.NewSession(nil)
 }
 
-// ---------------------------------------------------------------------------
-// Tool input/output types — push notifications
-// ---------------------------------------------------------------------------
-
+// pushInput is the typed input for the send_push_notification tool.
 type pushInput struct {
 	Title   string `json:"title" jsonschema:"the notification title shown on the device"`
 	Message string `json:"message" jsonschema:"the notification body text"`
@@ -117,10 +140,6 @@ type pushOutput struct {
 	Sent bool   `json:"sent"`
 	Info string `json:"info"`
 }
-
-// ---------------------------------------------------------------------------
-// Tool input/output types — user context
-// ---------------------------------------------------------------------------
 
 // Note: empty input structs need at least one field to generate valid OpenAI tool schemas.
 // OpenAI rejects {"type":"object","additionalProperties":false} without "properties".
@@ -164,13 +183,8 @@ type agentBrief struct {
 	Slug string `json:"slug"`
 }
 
-// ---------------------------------------------------------------------------
-// Tool input/output types — conversations
-// ---------------------------------------------------------------------------
-
-type listConversationsInput struct {
-	IncludeArchived bool `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
-}
+// listConversationsInput is the typed input for the list_conversations tool.
+type listConversationsInput struct{}
 
 type listConversationsOutput struct {
 	Conversations []conversationBrief `json:"conversations"`
@@ -211,10 +225,6 @@ type messageRow struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-// ---------------------------------------------------------------------------
-// Tool input/output types — agent history
-// ---------------------------------------------------------------------------
-
 // createAgentHistoryInput is the input for the create_agent_history tool.
 type createAgentHistoryInput struct {
 	AgentSlug      string `json:"agent_slug"`
@@ -228,10 +238,6 @@ type createAgentHistoryOutput struct {
 	Created bool   `json:"created"`
 	Info    string `json:"info"`
 }
-
-// ---------------------------------------------------------------------------
-// Tool input/output types — send_message_to_agent
-// ---------------------------------------------------------------------------
 
 // sendMessageInput is the typed input for the send_message_to_agent tool.
 type sendMessageInput struct {
@@ -249,10 +255,7 @@ type sendMessageOutput struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// Tool input/output types — artifacts
-// ---------------------------------------------------------------------------
-
+// createArtifactInput is the typed input for the create_artifact tool.
 type createArtifactInput struct {
 	Title          string `json:"title" jsonschema:"the title of the artifact"`
 	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
@@ -314,10 +317,6 @@ type reviewArtifactOutput struct {
 	Reviewed bool   `json:"reviewed"`
 	Info     string `json:"info"`
 }
-
-// ---------------------------------------------------------------------------
-// Audit log types
-// ---------------------------------------------------------------------------
 
 // auditEntry holds the fields for a single MCP tool call audit record.
 type auditEntry struct {

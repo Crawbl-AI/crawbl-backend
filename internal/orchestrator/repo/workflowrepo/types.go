@@ -11,12 +11,41 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// WorkflowStatus represents the execution state of a workflow or step.
+type WorkflowStatus string
+
+const (
+	WorkflowStatusPending         WorkflowStatus = "pending"
+	WorkflowStatusRunning         WorkflowStatus = "running"
+	WorkflowStatusCompleted       WorkflowStatus = "completed"
+	WorkflowStatusFailed          WorkflowStatus = "failed"
+	WorkflowStatusWaitingApproval WorkflowStatus = "waiting_approval"
+	WorkflowStatusApproved        WorkflowStatus = "approved"
+)
+
+// WorkflowOnFailure controls step behavior on failure.
+type WorkflowOnFailure string
+
+const (
+	WorkflowOnFailureSkip WorkflowOnFailure = "skip"
+)
+
+// WorkflowTriggerPolicy controls how a workflow is triggered.
+type WorkflowTriggerPolicy string
+
+const (
+	WorkflowTriggerManual WorkflowTriggerPolicy = "manual"
+)
+
+// WorkflowTriggeredBy identifies who triggered a workflow execution.
+type WorkflowTriggeredBy string
+
+const (
+	WorkflowTriggeredByAgent WorkflowTriggeredBy = "agent"
+)
+
 // workflowRepo is the PostgreSQL implementation of the Repo interface.
 type workflowRepo struct{}
-
-// ---------------------------------------------------------------------------
-// Row types
-// ---------------------------------------------------------------------------
 
 // WorkflowDefinitionRow represents a database row for the workflow_definitions table.
 type WorkflowDefinitionRow struct {
@@ -77,10 +106,6 @@ type WorkflowStep struct {
 	MaxRetries       int    `json:"max_retries"`
 }
 
-// ---------------------------------------------------------------------------
-// Column lists
-// ---------------------------------------------------------------------------
-
 var definitionColumns = []string{
 	"id",
 	"workspace_id",
@@ -124,10 +149,6 @@ var stepExecutionColumns = []string{
 	"completed_at",
 	"created_at",
 }
-
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
 
 // Repo defines the data access interface for workflow persistence.
 type Repo interface {

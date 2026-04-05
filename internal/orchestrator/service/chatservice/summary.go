@@ -38,7 +38,7 @@ func (s *service) GetWorkspaceSummary(ctx context.Context, opts *orchestratorser
 		return summary, nil
 	}
 
-	senderName := "You"
+	senderName := orchestrator.UserSenderDisplayName
 	if latestMsg.AgentID != nil {
 		// Look up agent name from the already-fetched agents list.
 		for _, agent := range agents {

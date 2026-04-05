@@ -2,7 +2,6 @@ package agentservice
 
 import (
 	"context"
-	"strings"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
@@ -342,10 +341,6 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
 func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &agentclient.EnsureRuntimeOpts{
@@ -359,27 +354,7 @@ func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator
 		}
 		return
 	}
-	for _, agent := range agents {
-		agent.Status = statusForRuntime(runtimeState)
-	}
-}
-
-// statusForRuntime maps a runtime status to an agent status.
-func statusForRuntime(runtimeState *orchestrator.RuntimeStatus) orchestrator.AgentStatus {
-	if runtimeState == nil {
-		return orchestrator.AgentStatusOffline
-	}
-	if runtimeState.Verified {
-		return orchestrator.AgentStatusOnline
-	}
-	switch strings.ToLower(strings.TrimSpace(runtimeState.Phase)) {
-	case "progressing", "pending":
-		return orchestrator.AgentStatusPending
-	case "failed", "error":
-		return orchestrator.AgentStatusError
-	default:
-		return orchestrator.AgentStatusOffline
-	}
+	orchestrator.EnrichAgentStatus(agents, runtimeState)
 }
 
 // agentHistoryRowToDomain converts a repo history row to the domain type.

@@ -48,8 +48,7 @@ func New(userRepo userRepo, workspaceBootstrapper workspaceBootstrapper, legalDo
 
 // SignIn authenticates a user. If the user doesn't exist, it creates one.
 // This follows the Skatts hybrid auth pattern where sign-in creates users on first access.
-// The method validates the principal, checks for existing users (by email then subject),
-// handles deleted user accounts, and creates new users when necessary.
+// Users created via SignIn do not have legal agreements pre-accepted.
 //
 // Parameters:
 //   - ctx: Context for the operation.
@@ -62,55 +61,11 @@ func New(userRepo userRepo, workspaceBootstrapper workspaceBootstrapper, legalDo
 //   - ErrEmptyEmail: empty email in principal
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID mismatch detected
-//
-//nolint:cyclop
 func (s *service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
 	}
-
-	principal, mErr := validatePrincipal(opts.Principal)
-	if mErr != nil {
-		return nil, mErr
-	}
-
-	// Try to find user by email first, then by subject
-	user, mErr := s.userRepo.GetUser(ctx, opts.Sess, principal.Subject, principal.Email)
-	if mErr == nil && user != nil {
-		// User found - check if deleted
-		if user.DeletedAt != nil {
-			return nil, merrors.ErrUserDeleted
-		}
-		// Update user info and return
-		user.Email = principal.Email
-		user.Name = principal.Name
-		user.UpdatedAt = time.Now().UTC()
-		if mErr := s.saveUser(ctx, opts.Sess, user); mErr != nil {
-			return nil, mErr
-		}
-		return user, nil
-	}
-
-	// Handle Firebase UID mismatch
-	if merrors.IsErrUserWrongFirebaseUID(mErr) {
-		return nil, merrors.ErrUserFirebaseUIDMismatch
-	}
-
-	// User not found - check if deleted
-	if merrors.IsErrUserNotFound(mErr) {
-		isDeleted, derr := s.userRepo.IsUserDeleted(ctx, opts.Sess, principal.Subject, principal.Email)
-		if derr != nil {
-			return nil, merrors.WrapServerError(derr, "check deleted user state")
-		}
-		if isDeleted {
-			return nil, merrors.ErrUserDeleted
-		}
-
-		// Create new user for sign-in
-		return s.createUser(ctx, opts.Sess, principal, false)
-	}
-
-	return nil, merrors.WrapServerError(mErr, "get user from database")
+	return s.signInOrUp(ctx, opts.Sess, opts.Principal, false)
 }
 
 // SignUp registers a new user. If the user already exists, returns the existing user.
@@ -128,43 +83,57 @@ func (s *service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOp
 //   - ErrEmptyEmail: empty email in principal
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID mismatch detected
-//
-//nolint:cyclop
 func (s *service) SignUp(ctx context.Context, opts *orchestratorservice.SignUpOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	return s.signInOrUp(ctx, opts.Sess, opts.Principal, true)
+}
 
-	principal, mErr := validatePrincipal(opts.Principal)
+// signInOrUp implements the shared authentication flow for both SignIn and SignUp.
+// It validates the principal, looks up the user by email and subject, handles deleted
+// accounts, refreshes info on existing users, and creates a new user when not found.
+//
+// The requireLegalConsent parameter controls whether a newly created user has legal
+// agreements pre-accepted:
+//   - false (SignIn): user is created without pre-accepted legal agreements
+//   - true (SignUp): user is created with HasAgreedWithTerms and HasAgreedWithPrivacyPolicy set
+//
+// Possible errors include:
+//   - ErrNilPrincipal / ErrEmptySubject / ErrEmptyEmail: invalid principal
+//   - ErrUserDeleted: account has been soft-deleted
+//   - ErrUserFirebaseUIDMismatch: Firebase UID collision detected
+func (s *service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipal *orchestrator.Principal, requireLegalConsent bool) (*orchestrator.User, *merrors.Error) {
+	principal, mErr := validatePrincipal(rawPrincipal)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	// Try to find user by email first, then by subject
-	user, mErr := s.userRepo.GetUser(ctx, opts.Sess, principal.Subject, principal.Email)
+	// Try to find user by email first, then by subject.
+	user, mErr := s.userRepo.GetUser(ctx, sess, principal.Subject, principal.Email)
 	if mErr == nil && user != nil {
-		// User found - check if deleted
+		// User found - check if deleted.
 		if user.DeletedAt != nil {
 			return nil, merrors.ErrUserDeleted
 		}
-		// Return existing user (sign-up is idempotent)
+		// Refresh mutable identity fields and persist.
 		user.Email = principal.Email
 		user.Name = principal.Name
 		user.UpdatedAt = time.Now().UTC()
-		if mErr := s.saveUser(ctx, opts.Sess, user); mErr != nil {
+		if mErr := s.saveUser(ctx, sess, user); mErr != nil {
 			return nil, mErr
 		}
 		return user, nil
 	}
 
-	// Handle Firebase UID mismatch
+	// Handle Firebase UID mismatch before the not-found branch.
 	if merrors.IsErrUserWrongFirebaseUID(mErr) {
 		return nil, merrors.ErrUserFirebaseUIDMismatch
 	}
 
-	// User not found - check if deleted
+	// User not found - check whether a soft-deleted record exists.
 	if merrors.IsErrUserNotFound(mErr) {
-		isDeleted, derr := s.userRepo.IsUserDeleted(ctx, opts.Sess, principal.Subject, principal.Email)
+		isDeleted, derr := s.userRepo.IsUserDeleted(ctx, sess, principal.Subject, principal.Email)
 		if derr != nil {
 			return nil, merrors.WrapServerError(derr, "check deleted user state")
 		}
@@ -172,8 +141,7 @@ func (s *service) SignUp(ctx context.Context, opts *orchestratorservice.SignUpOp
 			return nil, merrors.ErrUserDeleted
 		}
 
-		// Create new user for sign-up (with legal agreements accepted)
-		return s.createUser(ctx, opts.Sess, principal, true)
+		return s.createUser(ctx, sess, principal, requireLegalConsent)
 	}
 
 	return nil, merrors.WrapServerError(mErr, "get user from database")
@@ -353,13 +321,13 @@ func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.Acc
 
 	if opts.TermsOfServiceVersion != nil && strings.TrimSpace(*opts.TermsOfServiceVersion) != "" {
 		if strings.TrimSpace(*opts.TermsOfServiceVersion) != s.legalDocuments.TermsOfServiceVersion {
-			return nil, merrors.NewBusinessError("Legal document version does not match current version", "USR0012")
+			return nil, merrors.ErrLegalVersionMismatch
 		}
 		user.HasAgreedWithTerms = true
 	}
 	if opts.PrivacyPolicyVersion != nil && strings.TrimSpace(*opts.PrivacyPolicyVersion) != "" {
 		if strings.TrimSpace(*opts.PrivacyPolicyVersion) != s.legalDocuments.PrivacyPolicyVersion {
-			return nil, merrors.NewBusinessError("Legal document version does not match current version", "USR0012")
+			return nil, merrors.ErrLegalVersionMismatch
 		}
 		user.HasAgreedWithPrivacyPolicy = true
 	}

@@ -105,13 +105,27 @@ func runServer(ctx context.Context) error {
 
 	chatService := chatservice.New(
 		db,
-		workspaceRepo, agentRepo, conversationRepo, messageRepo,
-		toolsRepo, agentSettingsRepo, agentPromptsRepo, agentHistoryRepo,
+		chatservice.Repos{
+			Workspace:     workspaceRepo,
+			Agent:         agentRepo,
+			Conversation:  conversationRepo,
+			Message:       messageRepo,
+			Tools:         toolsRepo,
+			AgentSettings: agentSettingsRepo,
+			AgentPrompts:  agentPromptsRepo,
+			AgentHistory:  agentHistoryRepo,
+		},
 		runtimeClient, broadcaster,
 	)
 	agentService := agentservice.New(
-		workspaceRepo, agentRepo,
-		toolsRepo, agentSettingsRepo, agentPromptsRepo, agentHistoryRepo,
+		agentservice.Repos{
+			Workspace:     workspaceRepo,
+			Agent:         agentRepo,
+			Tools:         toolsRepo,
+			AgentSettings: agentSettingsRepo,
+			AgentPrompts:  agentPromptsRepo,
+			AgentHistory:  agentHistoryRepo,
+		},
 		runtimeClient,
 	)
 	integrationService := integrationservice.New(logger)
@@ -130,7 +144,15 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster)
+	mcpHandler := buildMCPHandler(logger, db, mcpRepos{
+		user:         userRepo,
+		workspace:    workspaceRepo,
+		agent:        agentRepo,
+		conversation: conversationRepo,
+		message:      messageRepo,
+		agentHistory: agentHistoryRepo,
+		artifact:     artifactRepo,
+	}, runtimeClient, broadcaster)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -214,16 +236,23 @@ func legalDocumentsFromEnv() *orch.LegalDocuments {
 }
 
 
+// mcpRepos groups the repository dependencies needed to build the MCP handler.
+// Passing a single struct instead of 7 individual parameters keeps the
+// function signature manageable.
+type mcpRepos struct {
+	user         orchestratorrepo.UserRepo
+	workspace    orchestratorrepo.WorkspaceRepo
+	agent        orchestratorrepo.AgentRepo
+	conversation orchestratorrepo.ConversationRepo
+	message      orchestratorrepo.MessageRepo
+	agentHistory orchestratorrepo.AgentHistoryRepo
+	artifact     artifactrepo.Repo
+}
+
 func buildMCPHandler(
 	logger *slog.Logger,
 	db *dbr.Connection,
-	userRepo orchestratorrepo.UserRepo,
-	workspaceRepo orchestratorrepo.WorkspaceRepo,
-	agentRepo orchestratorrepo.AgentRepo,
-	conversationRepo orchestratorrepo.ConversationRepo,
-	messageRepo orchestratorrepo.MessageRepo,
-	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
-	artifactRepo artifactrepo.Repo,
+	repos mcpRepos,
 	runtimeClient agentclient.Client,
 	broadcaster realtime.Broadcaster,
 ) http.Handler {
@@ -252,13 +281,13 @@ func buildMCPHandler(
 	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
 		DB:               db,
 		Logger:           logger,
-		UserRepo:         userRepo,
-		WorkspaceRepo:    workspaceRepo,
-		AgentRepo:        agentRepo,
-		ConversationRepo: conversationRepo,
-		MessageRepo:      messageRepo,
-		AgentHistoryRepo: agentHistoryRepo,
-		ArtifactRepo:     artifactRepo,
+		UserRepo:         repos.user,
+		WorkspaceRepo:    repos.workspace,
+		AgentRepo:        repos.agent,
+		ConversationRepo: repos.conversation,
+		MessageRepo:      repos.message,
+		AgentHistoryRepo: repos.agentHistory,
+		ArtifactRepo:     repos.artifact,
 		SigningKey:       signingKey,
 		FCM:              fcm,
 		RuntimeClient:    runtimeClient,

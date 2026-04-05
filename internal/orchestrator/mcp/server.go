@@ -24,7 +24,7 @@ func NewHandler(deps *Deps) http.Handler {
 	server := sdkmcp.NewServer(
 		&sdkmcp.Implementation{
 			Name:    "crawbl-orchestrator",
-			Version: "1.0.0",
+			Version: mcpServerVersion,
 		},
 		&sdkmcp.ServerOptions{
 			Instructions: strings.Join([]string{
@@ -84,7 +84,7 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
 		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
 			// Only audit tool calls, not initialize/list/etc.
-			if method != "tools/call" {
+			if method != mcpToolCallMethod {
 				return next(ctx, method, req)
 			}
 
@@ -105,7 +105,7 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 
 			// Log the audit entry asynchronously to avoid slowing down the response.
 			go func() {
-				auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				auditCtx, cancel := context.WithTimeout(context.Background(), auditWriteTimeout)
 				defer cancel()
 				logAudit(auditCtx, deps, auditEntry{
 					UserID:      userID,
@@ -148,10 +148,10 @@ func extractResultJSON(result sdkmcp.Result) string {
 	if err != nil {
 		return "{}"
 	}
-	// Truncate to 2KB to avoid bloating audit logs with large responses.
+	// Truncate to avoid bloating audit logs with large responses.
 	s := string(data)
-	if len(s) > 2048 {
-		return s[:2048] + "..."
+	if len(s) > auditMaxResponseBytes {
+		return s[:auditMaxResponseBytes] + "..."
 	}
 	return s
 }

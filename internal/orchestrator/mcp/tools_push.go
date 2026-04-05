@@ -31,7 +31,7 @@ func newPushHandler(deps *Deps) sdkmcp.ToolHandlerFor[pushInput, pushOutput] {
 			return nil, pushOutput{Info: "user has no push token registered — they need to open the mobile app first"}, nil
 		}
 
-		RecordAPICall(ctx, "FCM:POST /v1/projects/crawbl-dev/messages:send")
+		RecordAPICall(ctx, "FCM:SEND_PUSH")
 		if err := deps.FCM.Send(ctx, pushToken, input.Title, input.Message); err != nil {
 			deps.Logger.ErrorContext(ctx, "fcm send failed",
 				slog.String("error", err.Error()),

@@ -182,7 +182,25 @@ const (
 
 	// ToolStateFailed indicates the tool execution failed.
 	ToolStateFailed ToolState = "failed"
+
+	// ToolStateDone indicates the tool has finished (alias used in streaming events).
+	ToolStateDone ToolState = "done"
 )
+
+// SilentResponseToken is the sentinel value agents use to indicate a message
+// should not be surfaced to the user.
+const SilentResponseToken = "[SILENT]"
+
+// DefaultContextMessageLimit is the default number of recent messages included
+// as conversation context when calling the agent runtime.
+const DefaultContextMessageLimit = 20
+
+// ConversationContextMaxTextLen is the maximum character length for message text
+// in conversation context summaries.
+const ConversationContextMaxTextLen = 500
+
+// UserSenderDisplayName is the display name shown for user messages in summaries.
+const UserSenderDisplayName = "You"
 
 // AttachmentType represents the type of file attachment.
 type AttachmentType string
@@ -372,6 +390,34 @@ const (
 	RuntimeStateFailed RuntimeState = "failed"
 )
 
+// RuntimePhase represents the lifecycle phase of an agent runtime.
+// These phases come from Kubernetes resource status conditions.
+type RuntimePhase string
+
+// Runtime phase constants define the possible phases of a swarm deployment.
+const (
+	// RuntimePhaseProgressing indicates the runtime is actively being deployed or updated.
+	RuntimePhaseProgressing RuntimePhase = "progressing"
+
+	// RuntimePhasePending indicates the runtime is waiting to be scheduled or initialized.
+	RuntimePhasePending RuntimePhase = "pending"
+
+	// RuntimePhaseFailed indicates the runtime deployment failed.
+	RuntimePhaseFailed RuntimePhase = "failed"
+
+	// RuntimePhaseError indicates the runtime encountered an error condition.
+	RuntimePhaseError RuntimePhase = "error"
+
+	// RuntimePhaseRunning indicates the runtime is actively running.
+	RuntimePhaseRunning RuntimePhase = "running"
+
+	// RuntimePhaseDeleting indicates the runtime is being deleted.
+	RuntimePhaseDeleting RuntimePhase = "deleting"
+
+	// RuntimePhaseSuspended indicates the runtime is suspended.
+	RuntimePhaseSuspended RuntimePhase = "suspended"
+)
+
 // AgentRole constants define the swarm hierarchy roles.
 const (
 	// AgentRoleSubAgent is a delegate agent under the Manager.
@@ -441,16 +487,6 @@ type AgentModelDef struct {
 	ID          string
 	Name        string
 	Description string
-}
-
-// DefaultAgentModel is the model ID assigned to new agents.
-// "auto" means the platform selects the best model (currently gpt-5-mini, future: AWS Bedrock routing).
-const DefaultAgentModel = "auto"
-
-// AvailableModels is the registry of models users can choose from.
-var AvailableModels = []AgentModelDef{
-	{ID: "auto", Name: "Auto", Description: "Platform selects the best model automatically"},
-	{ID: "gpt-5-mini", Name: "GPT-5 Mini", Description: "Fast and efficient model for everyday tasks"},
 }
 
 // ResponseLength represents the response verbosity preference.
@@ -697,102 +733,6 @@ type RuntimeStatus struct {
 	LastError string
 }
 
-// DefaultAgentBlueprint defines the configuration for a default agent in a new workspace.
-type DefaultAgentBlueprint struct {
-	// Name is the display name of the agent.
-	Name string
-
-	// Slug is the routing identifier.
-	Slug string
-
-	// Role is the swarm hierarchy role.
-	Role string
-
-	// SystemPrompt is the LLM system message for this agent's personality.
-	SystemPrompt string
-
-	// Description is a short human-readable summary of the agent's purpose.
-	Description string
-
-	// AllowedTools is the list of tool name strings this agent is permitted to use.
-	AllowedTools []string
-}
-
-// DefaultAgents is the list of agents created by default in new workspaces.
-var DefaultAgents = []DefaultAgentBlueprint{
-	{
-		Name:         "Manager",
-		Slug:         "manager",
-		Role:         AgentRoleManager,
-		SystemPrompt: "You are Manager, the coordinator of this group chat. " +
-			"Your PRIMARY job is to delegate tasks to your sub-agents using the delegate tool. " +
-			"When the user asks something that sub-agents can handle, delegate to them — do NOT answer yourself. " +
-			"When you delegate, your response should ONLY contain your own brief synthesis or follow-up question — " +
-			"do NOT repeat or summarize what the sub-agents said, they have their own messages visible to the user. " +
-			"Only answer directly for simple coordination questions (\"who are you?\", \"what can you do?\"). " +
-			"If you delegated and have nothing original to add, respond with [SILENT]. " +
-			"Stay calm, decisive, and brief. Never respond to messages from other agents — avoid feedback loops.",
-		Description:  "Your swarm coordinator. Delegates tasks and manages the team.",
-		AllowedTools: []string{
-			"web_search_tool", "web_fetch", "file_read", "file_write",
-			"memory_recall", "memory_store", "delegate",
-			"orchestrator__send_push_notification",
-			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
-			"orchestrator__list_conversations", "orchestrator__search_past_messages",
-			"orchestrator__create_agent_history",
-			"orchestrator__send_message_to_agent",
-			"orchestrator__create_artifact", "orchestrator__read_artifact",
-			"orchestrator__update_artifact", "orchestrator__review_artifact",
-			"orchestrator__create_workflow", "orchestrator__trigger_workflow",
-			"orchestrator__check_workflow_status", "orchestrator__list_workflows",
-		},
-	},
-	{
-		Name:         "Wally",
-		Slug:         "wally",
-		Role:         AgentRoleSubAgent,
-		SystemPrompt: "You are Wally, a versatile research and analysis specialist. " +
-			"Only speak when you have a relevant opinion, insight, or something genuinely helpful. " +
-			"Keep replies short and direct — 1-3 sentences. " +
-			"If the topic isn't relevant to you or you have nothing to add, respond with [SILENT]. " +
-			"Real people don't reply to every message. " +
-			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
-		Description:  "A versatile assistant that handles research, writing, analysis, and general help.",
-		AllowedTools: []string{
-			"web_search_tool", "web_fetch", "file_read", "file_write",
-			"memory_recall", "memory_store",
-			"orchestrator__send_push_notification",
-			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
-			"orchestrator__list_conversations", "orchestrator__search_past_messages",
-			"orchestrator__send_message_to_agent",
-			"orchestrator__create_artifact", "orchestrator__read_artifact",
-			"orchestrator__update_artifact", "orchestrator__review_artifact",
-		},
-	},
-	{
-		Name:         "Eve",
-		Slug:         "eve",
-		Role:         AgentRoleSubAgent,
-		SystemPrompt: "You are Eve, a creative and communication specialist. " +
-			"Reply only when you have something creative, empathetic, or clarifying to add. " +
-			"Ask questions back to the group naturally. Be clear and concise. " +
-			"If you have nothing useful to add, respond with [SILENT]. " +
-			"Silence is normal — real people don't reply to every message. " +
-			"Never respond to messages from other agents unless the user explicitly asks you to — avoid feedback loops.",
-		Description:  "A creative and communication specialist that handles content creation, email drafting, brainstorming, summarization, and presentation prep.",
-		AllowedTools: []string{
-			"web_search_tool", "web_fetch", "file_read", "file_write",
-			"memory_recall", "memory_store",
-			"orchestrator__send_push_notification",
-			"orchestrator__get_user_profile", "orchestrator__get_workspace_info",
-			"orchestrator__list_conversations", "orchestrator__search_past_messages",
-			"orchestrator__send_message_to_agent",
-			"orchestrator__create_artifact", "orchestrator__read_artifact",
-			"orchestrator__update_artifact", "orchestrator__review_artifact",
-		},
-	},
-}
-
 // Mention represents an @-mention of an agent in a swarm message.
 type Mention struct {
 	AgentID   string `json:"agent_id"`
@@ -800,10 +740,6 @@ type Mention struct {
 	Offset    int    `json:"offset"`
 	Length    int    `json:"length"`
 }
-
-// ---------------------------------------------------------------------------
-// Integration categories and items (for API responses)
-// ---------------------------------------------------------------------------
 
 // ItemType distinguishes tools from third-party integrations in the API response.
 type ItemType string
@@ -814,24 +750,6 @@ const (
 	// ItemTypeApp is a third-party integration (Gmail, Slack, etc.).
 	ItemTypeApp ItemType = "app"
 )
-
-// CategoryMeta holds display metadata for an item category.
-// Used by the handler to build the categories list for GET /v1/integrations.
-type CategoryMeta struct {
-	ID       string
-	Name     string
-	ImageURL string
-}
-
-// IntegrationCategories returns display metadata for integration (app) categories.
-// Tool categories live in the agent package; these are merged at the handler level.
-func IntegrationCategories() []CategoryMeta {
-	return []CategoryMeta{
-		{"communication", "Communication", "https://cdn.crawbl.com/categories/communication.png"},
-		{"productivity", "Productivity", "https://cdn.crawbl.com/categories/productivity.png"},
-		{"development", "Development", "https://cdn.crawbl.com/categories/development.png"},
-	}
-}
 
 // IntegrationItem represents an available integration with its connection status.
 // Returned by GET /v1/integrations for the mobile app's Connected Apps screen.
@@ -870,26 +788,4 @@ type OAuthConfig struct {
 	AdditionalParameters map[string]string
 }
 
-// ResolveRuntimeState determines the runtime state based on Kubernetes phase
-// and verification status. A verified swarm is always ready. Otherwise, the
-// state is derived from the phase:
-//   - Pending, Progressing, Deleting, or empty -> Provisioning
-//   - Error -> Failed
-//   - Suspended or unknown -> Offline
-func ResolveRuntimeState(phase string, verified bool) RuntimeState {
-	if verified {
-		return RuntimeStateReady
-	}
-
-	switch phase {
-	case "Pending", "Progressing", "Deleting", "":
-		return RuntimeStateProvisioning
-	case "Error":
-		return RuntimeStateFailed
-	case "Suspended":
-		return RuntimeStateOffline
-	default:
-		return RuntimeStateOffline
-	}
-}
 

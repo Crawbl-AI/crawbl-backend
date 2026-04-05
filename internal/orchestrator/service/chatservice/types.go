@@ -12,10 +12,35 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
+
+// Repos groups the repository dependencies used by the chat service.
+// Passing a single struct instead of 8 individual parameters keeps the
+// constructor signature clean and makes adding new repos a one-line change.
+type Repos struct {
+	Workspace     workspaceRepo
+	Agent         agentRepo
+	Conversation  conversationRepo
+	Message       messageRepo
+	Tools         toolsRepo
+	AgentSettings agentSettingsRepo
+	AgentPrompts  agentPromptsRepo
+	AgentHistory  agentHistoryRepo
+}
+
+// streamContext bundles the shared state needed throughout the streaming pipeline.
+// Passing a single struct instead of 6+ individual parameters keeps function
+// signatures clean and makes adding new fields a one-line change.
+type streamContext struct {
+	opts         *orchestratorservice.SendMessageOpts
+	conversation *orchestrator.Conversation
+	runtimeState *orchestrator.RuntimeStatus
+	lookups      agentLookups
+}
 
 // service implements the orchestratorservice.ChatService interface.
 // It manages workspace bootstrapping, agent provisioning, conversation management,
@@ -103,6 +128,12 @@ type messageRepo interface {
 	// ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
 	// Used for building conversation context to inject into agent calls.
 	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
+	// RecordDelegation inserts an agent_delegations row to track when one agent
+	// delegates a task to another. Best-effort — callers may discard the error.
+	RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) *merrors.Error
+	// CompleteDelegation marks a running delegation as completed, recording the
+	// completion timestamp and elapsed duration. Best-effort — callers may discard the error.
+	CompleteDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error
 }
 
 // toolsRepo defines the repository interface for tool catalog operations.

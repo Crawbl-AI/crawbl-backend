@@ -12,10 +12,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
-// ---------------------------------------------------------------------------
-// create_artifact
-// ---------------------------------------------------------------------------
-
+// newCreateArtifactHandler creates a new artifact in the workspace.
 func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactInput, createArtifactOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input createArtifactInput) (*sdkmcp.CallToolResult, createArtifactOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -79,7 +76,7 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 			Title:            input.Title,
 			ContentType:      contentType,
 			CurrentVersion:   1,
-			Status:           "draft",
+			Status:           string(artifactrepo.ArtifactStatusDraft),
 			CreatedByAgentID: &agentID,
 			CreatedAt:        now,
 			UpdatedAt:        now,
@@ -111,7 +108,7 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 				ConversationID: stringFromPtr(convID),
 				Title:          input.Title,
 				Version:        1,
-				Action:         "created",
+				Action:         string(artifactrepo.ArtifactActionCreated),
 				AgentID:        agentID,
 				AgentSlug:      input.AgentSlug,
 			})
@@ -125,10 +122,7 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 	}
 }
 
-// ---------------------------------------------------------------------------
-// read_artifact
-// ---------------------------------------------------------------------------
-
+// newReadArtifactHandler reads an artifact from the workspace.
 func newReadArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[readArtifactInput, readArtifactOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input readArtifactInput) (*sdkmcp.CallToolResult, readArtifactOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -211,10 +205,7 @@ func newReadArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[readArtifactInput,
 	}
 }
 
-// ---------------------------------------------------------------------------
-// update_artifact
-// ---------------------------------------------------------------------------
-
+// newUpdateArtifactHandler updates an artifact with new content.
 func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactInput, updateArtifactOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input updateArtifactInput) (*sdkmcp.CallToolResult, updateArtifactOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -306,7 +297,7 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 				ConversationID: stringFromPtr(artifact.ConversationID),
 				Title:          artifact.Title,
 				Version:        newVersion,
-				Action:         "updated",
+				Action:         string(artifactrepo.ArtifactActionUpdated),
 				AgentID:        agentID,
 				AgentSlug:      input.AgentSlug,
 			})
@@ -319,10 +310,7 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 	}
 }
 
-// ---------------------------------------------------------------------------
-// review_artifact
-// ---------------------------------------------------------------------------
-
+// newReviewArtifactHandler reviews an artifact and updates its status.
 func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactInput, reviewArtifactOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input reviewArtifactInput) (*sdkmcp.CallToolResult, reviewArtifactOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -340,7 +328,9 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 
 		// Validate outcome.
 		switch input.Outcome {
-		case "approved", "changes_requested", "commented":
+		case string(artifactrepo.ArtifactReviewApproved),
+			string(artifactrepo.ArtifactReviewChangesRequested),
+			string(artifactrepo.ArtifactReviewCommented):
 			// valid
 		default:
 			return nil, reviewArtifactOutput{Info: "outcome must be one of: approved, changes_requested, commented"}, nil
@@ -403,10 +393,10 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 		}
 
 		// If approved, update artifact status.
-		if input.Outcome == "approved" {
+		if input.Outcome == string(artifactrepo.ArtifactReviewApproved) {
 			RecordAPICall(ctx, "DB:UPDATE artifacts SET status=approved WHERE id="+input.ArtifactID)
 			_, err := sess.Update("artifacts").
-				Set("status", "approved").
+				Set("status", string(artifactrepo.ArtifactReviewApproved)).
 				Set("updated_at", now).
 				Where("id = ?", input.ArtifactID).
 				ExecContext(ctx)
@@ -422,7 +412,7 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 				ConversationID: stringFromPtr(artifact.ConversationID),
 				Title:          artifact.Title,
 				Version:        reviewVersion,
-				Action:         "reviewed",
+				Action:         string(artifactrepo.ArtifactActionReviewed),
 				AgentID:        agentID,
 				AgentSlug:      input.AgentSlug,
 			})
@@ -435,10 +425,7 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 	}
 }
 
-// ---------------------------------------------------------------------------
 // registerArtifactTools adds all artifact MCP tools to the server.
-// ---------------------------------------------------------------------------
-
 func registerArtifactTools(server *sdkmcp.Server, deps *Deps) {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "create_artifact",
@@ -461,10 +448,7 @@ func registerArtifactTools(server *sdkmcp.Server, deps *Deps) {
 	}, newReviewArtifactHandler(deps))
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
+// stringFromPtr safely dereferences a *string, returning "" for nil.
 func stringFromPtr(s *string) string {
 	if s == nil {
 		return ""

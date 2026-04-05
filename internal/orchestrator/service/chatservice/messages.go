@@ -51,7 +51,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	}
 
 	for _, agent := range agents {
-		agent.Status = statusForRuntime(runtimeState)
+		agent.Status = orchestrator.StatusForRuntime(runtimeState)
 	}
 
 	if conversation.Type == orchestrator.ConversationTypeSwarm {
@@ -84,8 +84,15 @@ func (s *service) sendDirectMessage(
 	}
 	_ = userMsg
 
+	sc := &streamContext{
+		opts:         opts,
+		conversation: conversation,
+		runtimeState: runtimeState,
+		lookups:      lookups,
+	}
+
 	// Stream response from the agent.
-	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, primaryResponder, lookups, "")
+	return s.callAgentStreaming(ctx, sc, primaryResponder, "")
 }
 
 // sendSwarmMessage handles swarm group chat: persist user message first,
@@ -105,12 +112,19 @@ func (s *service) sendSwarmMessage(
 
 	lookups := newAgentLookups(agents)
 
+	sc := &streamContext{
+		opts:         opts,
+		conversation: conversation,
+		runtimeState: runtimeState,
+		lookups:      lookups,
+	}
+
 	// 2. Resolve target agents: mentions first, then Manager.
 	responders := resolveResponders(conversation, agents, opts.Mentions)
 
 	if responders != nil {
 		// Mentions resolved — send directly to mentioned agents (parallel).
-		return s.executeParallel(ctx, opts, conversation, runtimeState, responders, lookups)
+		return s.executeParallel(ctx, sc, responders)
 	}
 
 	// 3. No mentions — send to Manager. Manager has full context (memory,
@@ -121,20 +135,17 @@ func (s *service) sendSwarmMessage(
 	}
 
 	// Build conversation context so Manager sees recent chat history.
-	conversationContext := s.buildConversationContext(ctx, opts.Sess, conversation.ID, lookups, 20)
+	conversationContext := s.buildConversationContext(ctx, opts.Sess, conversation.ID, lookups, orchestrator.DefaultContextMessageLimit)
 
-	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, lookups.manager, lookups, conversationContext)
+	return s.callAgentStreaming(ctx, sc, lookups.manager, conversationContext)
 }
 
 // executeParallel fires all agent calls concurrently. Each agent responds
 // independently without seeing other agents' current responses.
 func (s *service) executeParallel(
 	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
-	runtimeState *orchestrator.RuntimeStatus,
+	sc *streamContext,
 	targetAgents []*orchestrator.Agent,
-	lookups agentLookups,
 ) ([]*orchestrator.Message, *merrors.Error) {
 	type agentResult struct {
 		replies []*orchestrator.Message
@@ -147,7 +158,7 @@ func (s *service) executeParallel(
 	for i, agent := range targetAgents {
 		go func(idx int, agent *orchestrator.Agent) {
 			defer wg.Done()
-			replies, err := s.callAgentStreaming(ctx, opts, conversation, runtimeState, agent, lookups, "")
+			replies, err := s.callAgentStreaming(ctx, sc, agent, "")
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}
@@ -183,59 +194,30 @@ type subAgentStream struct {
 }
 
 // callAgentStreaming handles a single agent's streaming webhook call.
-// Creates a placeholder message, reads streaming chunks from the agent runtime,
-// emits Socket.IO events for each chunk, and persists the final message.
-//
-// Phase 5 multi-agent support: the agent runtime may send chunk/done pairs with
-// different agent_id values (e.g. "wally", "eve", "manager"). Each distinct
-// agent_id gets its own placeholder message so the mobile client shows
-// separate message bubbles per sub-agent.
+// It coordinates three phases: placeholder creation, stream chunk processing,
+// and message finalization. The agent runtime may send chunks with different
+// agent_id values (Phase 5 multi-agent), each getting its own message bubble.
 func (s *service) callAgentStreaming(
 	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
-	runtimeState *orchestrator.RuntimeStatus,
+	sc *streamContext,
 	agent *orchestrator.Agent,
-	lookups agentLookups,
 	extraContext string,
 ) ([]*orchestrator.Message, *merrors.Error) {
-	// 1. Emit thinking status.
+	opts := sc.opts
+	conversation := sc.conversation
+
+	// 1. Emit thinking status and create placeholder message in DB.
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 
-	// 2. Create placeholder message in DB (status: pending).
-	now := time.Now().UTC()
-	var agentID *string
-	if agent != nil {
-		agentID = &agent.ID
-	}
-	placeholder := &orchestrator.Message{
-		ID:             uuid.NewString(),
-		ConversationID: conversation.ID,
-		Role:           orchestrator.MessageRoleAgent,
-		Content: orchestrator.MessageContent{
-			Type: orchestrator.MessageContentTypeText,
-			Text: "",
-		},
-		Status:      orchestrator.MessageStatusPending,
-		AgentID:     agentID,
-		Attachments: []orchestrator.Attachment{},
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-
-	if _, mErr := database.WithTransaction(opts.Sess, "create placeholder message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
-		if mErr := s.messageRepo.Save(ctx, tx, placeholder); mErr != nil {
-			return nil, mErr
-		}
-		return placeholder, nil
-	}); mErr != nil {
+	placeholder, mErr := s.createPlaceholderMessage(ctx, opts.Sess, conversation.ID, agent)
+	if mErr != nil {
 		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError))
 		return nil, mErr
 	}
 
-	// 3. Start streaming from the agent runtime.
+	// 2. Start streaming from the agent runtime.
 	streamCh, mErr := s.runtimeClient.SendTextStream(ctx, &agentclient.SendTextOpts{
-		Runtime:   runtimeState,
+		Runtime:   sc.runtimeState,
 		Message:   runtimeMessage(normalizeRuntimeMessage(opts.Content.Text, opts.Mentions), extraContext),
 		SessionID: conversation.ID,
 		AgentID:   runtimeAgentID(agent),
@@ -252,7 +234,7 @@ func (s *service) callAgentStreaming(
 		return nil, mErr
 	}
 
-	// User message reached the agent runtime → mark as delivered (once across parallel agents).
+	// User message reached the agent runtime — mark as delivered (once across parallel agents).
 	if opts.UserMessageID != "" && opts.StatusDeliveredOnce != nil {
 		opts.StatusDeliveredOnce.Do(func() {
 			s.broadcaster.EmitMessageStatus(ctx, opts.WorkspaceID, realtime.MessageStatusPayload{
@@ -266,13 +248,140 @@ func (s *service) callAgentStreaming(
 		})
 	}
 
-	// 4. Read chunks and emit events.
-	//
-	// Multi-agent streaming (Phase 5): chunks arriving with different agent_id
-	// values are routed to separate subAgentStream entries. Each entry holds its
-	// own placeholder and accumulator. The primary agent's entry is pre-seeded so
-	// single-agent behaviour is unchanged.
-	streamStart := time.Now()
+	// 3. Read streaming chunks and emit real-time events.
+	streams, totalChunks, globalStreamDone := s.processStreamChunks(ctx, sc, agent, placeholder, streamCh)
+
+	slog.Info("callAgentStreaming: stream complete",
+		"agent_slug", agent.Slug,
+		"agent_id", agent.ID,
+		"conversation_id", conversation.ID,
+		"sub_agent_count", len(streams),
+		"total_chunks", totalChunks,
+	)
+
+	// 4. Finalize each sub-agent stream: persist messages, broadcast done events.
+	return s.finalizeAgentMessages(ctx, sc, agent, streams, globalStreamDone)
+}
+
+// createPlaceholderMessage inserts an empty pending message in the database to
+// reserve a message ID for streaming. The placeholder is updated with the final
+// text once streaming completes, or deleted if the agent produces no output.
+func (s *service) createPlaceholderMessage(
+	ctx context.Context,
+	sess *dbr.Session,
+	conversationID string,
+	agent *orchestrator.Agent,
+) (*orchestrator.Message, *merrors.Error) {
+	now := time.Now().UTC()
+	var agentID *string
+	if agent != nil {
+		agentID = &agent.ID
+	}
+	placeholder := &orchestrator.Message{
+		ID:             uuid.NewString(),
+		ConversationID: conversationID,
+		Role:           orchestrator.MessageRoleAgent,
+		Content: orchestrator.MessageContent{
+			Type: orchestrator.MessageContentTypeText,
+			Text: "",
+		},
+		Status:      orchestrator.MessageStatusPending,
+		AgentID:     agentID,
+		Attachments: []orchestrator.Attachment{},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if _, mErr := database.WithTransaction(sess, "create placeholder message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
+		if mErr := s.messageRepo.Save(ctx, tx, placeholder); mErr != nil {
+			return nil, mErr
+		}
+		return placeholder, nil
+	}); mErr != nil {
+		return nil, mErr
+	}
+
+	return placeholder, nil
+}
+
+// resolveSubAgentStream returns the subAgentStream for the given chunk agent slug,
+// creating a new placeholder and DB row if this is the first chunk for that
+// sub-agent. Falls back to the primary agent stream when the slug is unknown or
+// placeholder creation fails.
+func (s *service) resolveSubAgentStream(
+	ctx context.Context,
+	sc *streamContext,
+	primaryAgent *orchestrator.Agent,
+	streams map[string]*subAgentStream,
+	chunkAgentSlug string,
+) *subAgentStream {
+	// Empty slug or primary agent slug — use primary stream.
+	if chunkAgentSlug == "" || chunkAgentSlug == primaryAgent.Slug {
+		return streams[primaryAgent.ID]
+	}
+
+	// Look up sub-agent by slug.
+	subAgent := sc.lookups.bySlug[chunkAgentSlug]
+	if subAgent == nil {
+		// Unknown slug — fall back to primary to avoid data loss.
+		slog.Warn("callAgentStreaming: unknown sub-agent slug, routing to primary",
+			"slug", chunkAgentSlug,
+			"primary_agent_id", primaryAgent.ID,
+		)
+		return streams[primaryAgent.ID]
+	}
+
+	// Already have a stream for this agent.
+	if st, exists := streams[subAgent.ID]; exists {
+		return st
+	}
+
+	conversationID := sc.conversation.ID
+
+	// First chunk for this sub-agent — create a new placeholder.
+	slog.Info("callAgentStreaming: new sub-agent stream",
+		"sub_agent_slug", subAgent.Slug,
+		"sub_agent_id", subAgent.ID,
+		"conversation_id", conversationID,
+	)
+
+	subPlaceholder, mErr := s.createPlaceholderMessage(ctx, sc.opts.Sess, conversationID, subAgent)
+	if mErr != nil {
+		slog.Warn("callAgentStreaming: failed to create sub-agent placeholder, routing to primary",
+			"sub_agent_slug", subAgent.Slug,
+			"sub_agent_id", subAgent.ID,
+			"error", mErr.Error(),
+		)
+		return streams[primaryAgent.ID]
+	}
+
+	s.broadcaster.EmitAgentStatus(ctx, sc.opts.WorkspaceID, subAgent.ID, string(orchestrator.AgentStatusThinking), conversationID)
+
+	st := &subAgentStream{
+		agent:       subAgent,
+		placeholder: subPlaceholder,
+		firstChunk:  true,
+	}
+	streams[subAgent.ID] = st
+	return st
+}
+
+// processStreamChunks reads chunks from the agent runtime stream channel and
+// routes them to the appropriate sub-agent streams. It handles chunk/thinking
+// events (text accumulation), tool_call/tool_result events (broadcasting), and
+// done events (stream completion tracking). Returns the populated streams map,
+// total chunk count, and whether the global stream completed cleanly.
+func (s *service) processStreamChunks(
+	ctx context.Context,
+	sc *streamContext,
+	agent *orchestrator.Agent,
+	placeholder *orchestrator.Message,
+	streamCh <-chan agentclient.StreamChunk,
+) (map[string]*subAgentStream, int, bool) {
+	opts := sc.opts
+	conversation := sc.conversation
+	lookups := sc.lookups
+
 	totalChunks := 0
 	globalStreamDone := false
 	globalFirstChunk := true // guards the "user message read" once-emit
@@ -285,83 +394,10 @@ func (s *service) callAgentStreaming(
 		firstChunk:  true,
 	}
 
-	// resolveStream returns the subAgentStream for the given chunk.AgentID slug,
-	// creating a new placeholder and DB row if this is the first chunk for that
-	// sub-agent. Falls back to the primary agent stream when the slug is unknown.
-	resolveStream := func(chunkAgentSlug string) *subAgentStream {
-		// Empty slug or primary agent slug → use primary stream.
-		if chunkAgentSlug == "" || chunkAgentSlug == agent.Slug {
-			return streams[agent.ID]
-		}
-
-		// Look up sub-agent by slug.
-		subAgent := lookups.bySlug[chunkAgentSlug]
-		if subAgent == nil {
-			// Unknown slug — fall back to primary to avoid data loss.
-			slog.Warn("callAgentStreaming: unknown sub-agent slug, routing to primary",
-				"slug", chunkAgentSlug,
-				"primary_agent_id", agent.ID,
-			)
-			return streams[agent.ID]
-		}
-
-		// Already have a stream for this agent.
-		if st, exists := streams[subAgent.ID]; exists {
-			return st
-		}
-
-		// First chunk for this sub-agent — create a new placeholder.
-		slog.Info("callAgentStreaming: new sub-agent stream",
-			"sub_agent_slug", subAgent.Slug,
-			"sub_agent_id", subAgent.ID,
-			"conversation_id", conversation.ID,
-		)
-
-		subNow := time.Now().UTC()
-		subAgentIDPtr := &subAgent.ID
-		subPlaceholder := &orchestrator.Message{
-			ID:             uuid.NewString(),
-			ConversationID: conversation.ID,
-			Role:           orchestrator.MessageRoleAgent,
-			Content: orchestrator.MessageContent{
-				Type: orchestrator.MessageContentTypeText,
-				Text: "",
-			},
-			Status:      orchestrator.MessageStatusPending,
-			AgentID:     subAgentIDPtr,
-			Attachments: []orchestrator.Attachment{},
-			CreatedAt:   subNow,
-			UpdatedAt:   subNow,
-		}
-		if _, mErr := database.WithTransaction(opts.Sess, "create sub-agent placeholder", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
-			if mErr := s.messageRepo.Save(ctx, tx, subPlaceholder); mErr != nil {
-				return nil, mErr
-			}
-			return subPlaceholder, nil
-		}); mErr != nil {
-			slog.Warn("callAgentStreaming: failed to create sub-agent placeholder, routing to primary",
-				"sub_agent_slug", subAgent.Slug,
-				"sub_agent_id", subAgent.ID,
-				"error", mErr.Error(),
-			)
-			return streams[agent.ID]
-		}
-
-		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, subAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
-
-		st := &subAgentStream{
-			agent:       subAgent,
-			placeholder: subPlaceholder,
-			firstChunk:  true,
-		}
-		streams[subAgent.ID] = st
-		return st
-	}
-
 	for chunk := range streamCh {
 		switch chunk.Type {
 		case agentclient.StreamEventChunk, agentclient.StreamEventThinking:
-			st := resolveStream(chunk.AgentID)
+			st := s.resolveSubAgentStream(ctx, sc, agent, streams, chunk.AgentID)
 
 			// Once per stream: mark user message as read.
 			if globalFirstChunk {
@@ -408,7 +444,7 @@ func (s *service) callAgentStreaming(
 				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
 				Tool:           chunk.Tool,
-				Status:         "running",
+				Status:         string(orchestrator.ToolStateRunning),
 				Query:          chunk.Args,
 			})
 
@@ -417,7 +453,7 @@ func (s *service) callAgentStreaming(
 				delegateSlug, taskSummary := parseDelegateArgs(chunk.Args)
 				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
 					// Use the primary placeholder as the trigger message for audit.
-					go s.recordDelegation(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
+					go s.recordDelegation(opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, delegateAgent.ID, taskSummary)
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
 				}
 			}
@@ -433,7 +469,7 @@ func (s *service) callAgentStreaming(
 				AgentID:        toolAgentID,
 				ConversationID: conversation.ID,
 				Tool:           chunk.Tool,
-				Status:         "done",
+				Status:         string(orchestrator.ToolStateDone),
 			})
 
 			// Clear delegate agent status when delegation completes.
@@ -441,7 +477,7 @@ func (s *service) callAgentStreaming(
 				delegateSlug, _ := parseDelegateArgs(chunk.Args)
 				if delegateAgent := lookups.bySlug[delegateSlug]; delegateAgent != nil {
 					s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, delegateAgent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
-					go s.completeDelegation(opts.WorkspaceID, conversation.ID, placeholder.ID, delegateAgent.ID)
+					go s.completeDelegation(placeholder.ID, delegateAgent.ID)
 				}
 			}
 
@@ -455,7 +491,7 @@ func (s *service) callAgentStreaming(
 					st.done = true
 				}
 			} else {
-				st := resolveStream(chunk.AgentID)
+				st := s.resolveSubAgentStream(ctx, sc, agent, streams, chunk.AgentID)
 				st.done = true
 				slog.Info("callAgentStreaming: sub-agent done event received",
 					"agent_slug", st.agent.Slug,
@@ -477,21 +513,28 @@ func (s *service) callAgentStreaming(
 		}
 	}
 
-	slog.Info("callAgentStreaming: stream complete",
-		"agent_slug", agent.Slug,
-		"agent_id", agent.ID,
-		"conversation_id", conversation.ID,
-		"sub_agent_count", len(streams),
-		"total_chunks", totalChunks,
-		"elapsed_ms", time.Since(streamStart).Milliseconds(),
-	)
+	return streams, totalChunks, globalStreamDone
+}
 
-	// 5. Finalize each sub-agent stream independently.
+// finalizeAgentMessages processes each sub-agent stream after the runtime stream
+// has closed. It persists final message text, updates statuses, broadcasts done
+// events, and returns the collected agent replies. Manager bubbles are suppressed
+// when sub-agents have answered (delegation pattern).
+func (s *service) finalizeAgentMessages(
+	ctx context.Context,
+	sc *streamContext,
+	primaryAgent *orchestrator.Agent,
+	streams map[string]*subAgentStream,
+	globalStreamDone bool,
+) ([]*orchestrator.Message, *merrors.Error) {
+	opts := sc.opts
+	conversation := sc.conversation
+
 	var replies []*orchestrator.Message
 
 	for _, st := range streams {
 		finalText := strings.TrimSpace(st.accumulated.String())
-		isPrimary := st.agent.ID == agent.ID
+		isPrimary := st.agent.ID == primaryAgent.ID
 
 		slog.Info("callAgentStreaming: finalizing agent stream",
 			"agent_slug", st.agent.Slug,
@@ -547,13 +590,13 @@ func (s *service) callAgentStreaming(
 		}
 
 		// Case B: [SILENT] response.
-		if finalText == "[SILENT]" {
+		if finalText == orchestrator.SilentResponseToken {
 			slog.Info("callAgentStreaming: agent responded SILENT",
 				"agent_slug", st.agent.Slug,
 				"agent_id", st.agent.ID,
 				"conversation_id", conversation.ID,
 			)
-			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, "", orchestrator.MessageStatusSilent, lookups)
+			reply := s.finalizeStreamMessage(ctx, sc, st.placeholder, "", orchestrator.MessageStatusSilent)
 			s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
 				MessageID:      st.placeholder.ID,
 				ConversationID: conversation.ID,
@@ -576,7 +619,7 @@ func (s *service) callAgentStreaming(
 				"chunks", st.chunkCount,
 				"text_len", len(finalText),
 			)
-			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusIncomplete, lookups)
+			reply := s.finalizeStreamMessage(ctx, sc, st.placeholder, finalText, orchestrator.MessageStatusIncomplete)
 			s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
 				MessageID:      st.placeholder.ID,
 				ConversationID: conversation.ID,
@@ -591,7 +634,7 @@ func (s *service) callAgentStreaming(
 		}
 
 		// Case C: Normal delivered response.
-		reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusDelivered, lookups)
+		reply := s.finalizeStreamMessage(ctx, sc, st.placeholder, finalText, orchestrator.MessageStatusDelivered)
 		s.broadcaster.EmitMessageDone(ctx, opts.WorkspaceID, realtime.MessageDonePayload{
 			MessageID:      st.placeholder.ID,
 			ConversationID: conversation.ID,
@@ -604,11 +647,11 @@ func (s *service) callAgentStreaming(
 		}
 	}
 
-	// Issue 1: Safety sweep — clear all sub-agent statuses to online.
+	// Safety sweep — clear all sub-agent statuses to online.
 	// Guards against race conditions in Go map iteration order leaving a
 	// sub-agent (e.g. Wally) stuck in "writing" status on the client.
 	for _, st := range streams {
-		if st.agent.ID != agent.ID {
+		if st.agent.ID != primaryAgent.ID {
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 		}
 	}
@@ -623,23 +666,21 @@ func (s *service) callAgentStreaming(
 // persists it, and broadcasts message.new.
 func (s *service) finalizeStreamMessage(
 	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
+	sc *streamContext,
 	placeholder *orchestrator.Message,
 	text string,
 	status orchestrator.MessageStatus,
-	lookups agentLookups,
 ) *orchestrator.Message {
 	now := time.Now().UTC()
 	placeholder.Content.Text = text
 	placeholder.Status = status
 	placeholder.UpdatedAt = now
 
-	convCopy := *conversation
+	convCopy := *sc.conversation
 	convCopy.UpdatedAt = now
 	convCopy.LastMessage = placeholder
 
-	if _, mErr := database.WithTransaction(opts.Sess, "finalize stream message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
+	if _, mErr := database.WithTransaction(sc.opts.Sess, "finalize stream message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
 		if mErr := s.messageRepo.Save(ctx, tx, placeholder); mErr != nil {
 			return nil, mErr
 		}
@@ -653,10 +694,10 @@ func (s *service) finalizeStreamMessage(
 	}
 
 	if placeholder.AgentID != nil {
-		placeholder.Agent = lookups.byID[*placeholder.AgentID]
+		placeholder.Agent = sc.lookups.byID[*placeholder.AgentID]
 	}
 
-	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, placeholder)
+	s.broadcaster.EmitMessageNew(ctx, sc.opts.WorkspaceID, placeholder)
 	return placeholder
 }
 
@@ -671,7 +712,7 @@ func (s *service) buildConversationContext(
 	limit int,
 ) string {
 	if limit == 0 {
-		limit = 20
+		limit = orchestrator.DefaultContextMessageLimit
 	}
 
 	messages, mErr := s.messageRepo.ListRecent(ctx, sess, conversationID, limit)
@@ -692,8 +733,8 @@ func (s *service) buildConversationContext(
 		}
 
 		text := msg.Content.Text
-		if len(text) > 500 {
-			text = text[:500] + "..."
+		if len(text) > orchestrator.ConversationContextMaxTextLen {
+			text = text[:orchestrator.ConversationContextMaxTextLen] + "..."
 		}
 		if text == "" || msg.Status == orchestrator.MessageStatusSilent {
 			continue
@@ -718,32 +759,18 @@ func parseDelegateArgs(argsJSON string) (slug, task string) {
 }
 
 // recordDelegation inserts an agent_delegations row (async, best-effort).
-func (s *service) recordDelegation(ctx context.Context, sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
+func (s *service) recordDelegation(sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, _ = sess.InsertInto("agent_delegations").
-		Pair("workspace_id", workspaceID).
-		Pair("conversation_id", conversationID).
-		Pair("trigger_message_id", triggerMsgID).
-		Pair("delegator_agent_id", delegatorAgentID).
-		Pair("delegate_agent_id", delegateAgentID).
-		Pair("task_summary", taskSummary).
-		Pair("status", "running").
-		ExecContext(auditCtx)
+	_ = s.messageRepo.RecordDelegation(auditCtx, sess, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary)
 }
 
 // completeDelegation marks a delegation as completed (async, best-effort).
-func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, delegateAgentID string) {
+func (s *service) completeDelegation(triggerMsgID, delegateAgentID string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sess := s.db.NewSession(nil)
-	_, _ = sess.Update("agent_delegations").
-		Set("status", "completed").
-		Set("completed_at", time.Now().UTC()).
-		Set("duration_ms", dbr.Expr("EXTRACT(EPOCH FROM (NOW() - created_at))::INTEGER * 1000")).
-		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = 'running'",
-			triggerMsgID, delegateAgentID).
-		ExecContext(auditCtx)
+	_ = s.messageRepo.CompleteDelegation(auditCtx, sess, triggerMsgID, delegateAgentID)
 }
 
 // persistUserMessage saves the user message in its own transaction and
@@ -789,69 +816,6 @@ func (s *service) persistUserMessage(
 	opts.StatusReadOnce = &sync.Once{}
 
 	return userMsg, nil
-}
-
-// persistAgentMessage saves one agent reply in its own transaction, updates
-// conversation metadata, attaches the agent object, and broadcasts message.new.
-// Safe for concurrent calls on the same conversation — last writer wins for
-// conversation.UpdatedAt which is acceptable.
-func (s *service) persistAgentMessage(
-	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
-	agent *orchestrator.Agent,
-	text string,
-	agentByID map[string]*orchestrator.Agent,
-) (*orchestrator.Message, *merrors.Error) {
-	now := time.Now().UTC()
-	reply := newAgentMessage(conversation.ID, agent, text, now)
-
-	// Shallow-copy the conversation so concurrent goroutines don't race on
-	// UpdatedAt / LastMessage fields of the shared pointer.
-	convCopy := *conversation
-	convCopy.UpdatedAt = now
-	convCopy.LastMessage = reply
-
-	if _, mErr := database.WithTransaction(opts.Sess, "persist agent message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
-		if mErr := s.messageRepo.Save(ctx, tx, reply); mErr != nil {
-			return nil, mErr
-		}
-		if mErr := s.conversationRepo.Save(ctx, tx, &convCopy); mErr != nil {
-			return nil, mErr
-		}
-		return reply, nil
-	}); mErr != nil {
-		return nil, mErr
-	}
-
-	if reply.AgentID != nil {
-		reply.Agent = agentByID[*reply.AgentID]
-	}
-
-	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, reply)
-	return reply, nil
-}
-
-func newAgentMessage(conversationID string, agent *orchestrator.Agent, text string, at time.Time) *orchestrator.Message {
-	var agentID *string
-	if agent != nil {
-		agentID = &agent.ID
-	}
-
-	return &orchestrator.Message{
-		ID:             uuid.NewString(),
-		ConversationID: conversationID,
-		Role:           orchestrator.MessageRoleAgent,
-		Content: orchestrator.MessageContent{
-			Type: orchestrator.MessageContentTypeText,
-			Text: text,
-		},
-		Status:      orchestrator.MessageStatusDelivered,
-		AgentID:     agentID,
-		Attachments: []orchestrator.Attachment{},
-		CreatedAt:   at,
-		UpdatedAt:   at,
-	}
 }
 
 func runtimeMessage(message, extraContext string) string {

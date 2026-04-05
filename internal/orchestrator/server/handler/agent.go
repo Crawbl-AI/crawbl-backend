@@ -98,7 +98,7 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 			historyItems = append(historyItems, h)
 		}
 
-		WriteJSON(w, http.StatusOK, dto.AgentHistoryResponse{
+		WriteSuccess(w, http.StatusOK, dto.AgentHistoryResponse{
 			Items: historyItems,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   pagination.Total,
@@ -183,7 +183,7 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 			tools = append(tools, dto.ToAgentToolResponse(t))
 		}
 
-		WriteJSON(w, http.StatusOK, dto.AgentToolsResponse{
+		WriteSuccess(w, http.StatusOK, dto.AgentToolsResponse{
 			Data: tools,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   page.Pagination.Total,
@@ -241,20 +241,8 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Slice pagination over the full list from the agent runtime.
-		total := len(memories)
-		start := offset
-		if start > total {
-			start = total
-		}
-		end := start + limit
-		if end > total {
-			end = total
-		}
-		page := memories[start:end]
-
-		items := make([]dto.AgentMemoryResponse, 0, len(page))
-		for _, m := range page {
+		items := make([]dto.AgentMemoryResponse, 0, len(memories))
+		for _, m := range memories {
 			items = append(items, dto.AgentMemoryResponse{
 				Key:       m.Key,
 				Content:   m.Content,
@@ -264,13 +252,13 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteJSON(w, http.StatusOK, dto.AgentMemoriesListResponse{
+		WriteSuccess(w, http.StatusOK, dto.AgentMemoriesListResponse{
 			Data: items,
 			Pagination: dto.OffsetPaginationResponse{
-				Total:   total,
+				Total:   len(memories),
 				Limit:   limit,
 				Offset:  offset,
-				HasNext: end < total,
+				HasNext: offset+limit < len(memories),
 			},
 		})
 	}

@@ -125,7 +125,7 @@ func MessagesList(c *Context) http.HandlerFunc {
 			response = append(response, dto.ToMessageResponse(message))
 		}
 
-		WriteJSON(w, http.StatusOK, &dto.MessagesListResponse{
+		WriteSuccess(w, http.StatusOK, &dto.MessagesListResponse{
 			Data: response,
 			Pagination: dto.MessagesPaginationResponse{
 				NextScrollID: page.Pagination.NextScrollID,

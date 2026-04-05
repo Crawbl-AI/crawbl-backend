@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
+
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
@@ -288,5 +290,45 @@ func (r *messageRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRun
 		return merrors.WrapStdServerError(err, "insert message")
 	}
 
+	return nil
+}
+
+// RecordDelegation inserts an agent_delegations row to track when one agent
+// delegates a task to another. This is called asynchronously and is best-effort.
+func (r *messageRepo) RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) *merrors.Error {
+	if sess == nil {
+		return merrors.ErrInvalidInput
+	}
+	_, err := sess.InsertInto("agent_delegations").
+		Pair("workspace_id", workspaceID).
+		Pair("conversation_id", conversationID).
+		Pair("trigger_message_id", triggerMsgID).
+		Pair("delegator_agent_id", delegatorAgentID).
+		Pair("delegate_agent_id", delegateAgentID).
+		Pair("task_summary", taskSummary).
+		Pair("status", "running").
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "insert agent delegation")
+	}
+	return nil
+}
+
+// CompleteDelegation marks a running delegation as completed, recording the
+// completion timestamp and elapsed duration in milliseconds.
+func (r *messageRepo) CompleteDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error {
+	if sess == nil {
+		return merrors.ErrInvalidInput
+	}
+	_, err := sess.Update("agent_delegations").
+		Set("status", "completed").
+		Set("completed_at", time.Now().UTC()).
+		Set("duration_ms", dbr.Expr("EXTRACT(EPOCH FROM (NOW() - created_at))::INTEGER * 1000")).
+		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = 'running'",
+			triggerMsgID, delegateAgentID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "complete agent delegation")
+	}
 	return nil
 }

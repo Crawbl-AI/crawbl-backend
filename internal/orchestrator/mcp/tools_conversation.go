@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -9,10 +10,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ---------------------------------------------------------------------------
-// list_conversations
-// ---------------------------------------------------------------------------
-
+// newListConversationsHandler creates the MCP handler for listing conversations in the authenticated workspace.
 func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversationsInput, listConversationsOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ listConversationsInput) (*sdkmcp.CallToolResult, listConversationsOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -49,10 +47,7 @@ func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversat
 	}
 }
 
-// ---------------------------------------------------------------------------
-// search_past_messages
-// ---------------------------------------------------------------------------
-
+// newSearchMessagesHandler creates the MCP handler for full-text search over past messages.
 func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesInput, searchMessagesOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input searchMessagesInput) (*sdkmcp.CallToolResult, searchMessagesOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -75,10 +70,10 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 
 		limit := input.Limit
 		if limit <= 0 {
-			limit = 20
+			limit = defaultSearchLimit
 		}
-		if limit > 50 {
-			limit = 50
+		if limit > maxSearchLimit {
+			limit = maxSearchLimit
 		}
 
 		// Search messages by content text. The content column is JSONB;
@@ -105,7 +100,7 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 			briefs = append(briefs, messageBrief{
 				ID:        r.ID,
 				Role:      r.Role,
-				Text:      truncate(text, 500),
+				Text:      truncateStr(text, agentContextMaxTextLen),
 				CreatedAt: r.CreatedAt.Format(time.RFC3339),
 			})
 		}
@@ -124,30 +119,11 @@ func sanitizeLike(s string) string {
 
 // extractTextFromContent pulls the "text" field from a JSON content string.
 func extractTextFromContent(content string) string {
-	// Fast path: find "text":" in the JSON and extract the value.
-	// This avoids a full JSON unmarshal for every row.
-	idx := strings.Index(content, `"text":"`)
-	if idx < 0 {
-		// Try without escaping
-		idx = strings.Index(content, `"text": "`)
-		if idx < 0 {
-			return content
-		}
-		idx += len(`"text": "`)
-	} else {
-		idx += len(`"text":"`)
+	var parsed struct {
+		Text string `json:"text"`
 	}
-
-	end := strings.Index(content[idx:], `"`)
-	if end < 0 {
-		return content[idx:]
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		return ""
 	}
-	return content[idx : idx+end]
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+	return parsed.Text
 }

@@ -7,6 +7,31 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// ArtifactStatus represents the lifecycle state of an artifact.
+type ArtifactStatus string
+
+const (
+	ArtifactStatusDraft ArtifactStatus = "draft"
+)
+
+// ArtifactReviewOutcome represents the result of an artifact review.
+type ArtifactReviewOutcome string
+
+const (
+	ArtifactReviewApproved         ArtifactReviewOutcome = "approved"
+	ArtifactReviewChangesRequested ArtifactReviewOutcome = "changes_requested"
+	ArtifactReviewCommented        ArtifactReviewOutcome = "commented"
+)
+
+// ArtifactAction represents a recorded action on an artifact.
+type ArtifactAction string
+
+const (
+	ArtifactActionCreated  ArtifactAction = "created"
+	ArtifactActionUpdated  ArtifactAction = "updated"
+	ArtifactActionReviewed ArtifactAction = "reviewed"
+)
+
 // ArtifactRow represents a row in the artifacts table.
 type ArtifactRow struct {
 	ID               string  `db:"id"`

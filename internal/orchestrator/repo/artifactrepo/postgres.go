@@ -93,7 +93,7 @@ func (r *artifactRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessio
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.NewBusinessError("artifact not found", "ARTIFACT_NOT_FOUND")
+			return nil, merrors.ErrArtifactNotFound
 		}
 		return nil, merrors.WrapStdServerError(err, "select artifact by id")
 	}
@@ -160,7 +160,7 @@ func (r *artifactRepo) GetLatestVersion(ctx context.Context, sess orchestratorre
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.NewBusinessError("artifact version not found", "ARTIFACT_VERSION_NOT_FOUND")
+			return nil, merrors.ErrArtifactVersionNotFound
 		}
 		return nil, merrors.WrapStdServerError(err, "select latest artifact version")
 	}

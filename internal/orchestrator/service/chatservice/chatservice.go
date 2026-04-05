@@ -13,42 +13,35 @@ import (
 // db is required for background operations (e.g. pending message cleanup).
 func New(
 	db *dbr.Connection,
-	workspaceRepo workspaceRepo,
-	agentRepo agentRepo,
-	conversationRepo conversationRepo,
-	messageRepo messageRepo,
-	toolsRepo toolsRepo,
-	agentSettingsRepo agentSettingsRepo,
-	agentPromptsRepo agentPromptsRepo,
-	agentHistoryRepo agentHistoryRepo,
+	repos Repos,
 	runtimeClient agentclient.Client,
 	broadcaster realtime.Broadcaster,
 ) orchestratorservice.ChatService {
 	if db == nil {
 		panic("chat service db cannot be nil")
 	}
-	if workspaceRepo == nil {
+	if repos.Workspace == nil {
 		panic("chat service workspace repo cannot be nil")
 	}
-	if agentRepo == nil {
+	if repos.Agent == nil {
 		panic("chat service agent repo cannot be nil")
 	}
-	if conversationRepo == nil {
+	if repos.Conversation == nil {
 		panic("chat service conversation repo cannot be nil")
 	}
-	if messageRepo == nil {
+	if repos.Message == nil {
 		panic("chat service message repo cannot be nil")
 	}
-	if toolsRepo == nil {
+	if repos.Tools == nil {
 		panic("chat service tools repo cannot be nil")
 	}
-	if agentSettingsRepo == nil {
+	if repos.AgentSettings == nil {
 		panic("chat service agent settings repo cannot be nil")
 	}
-	if agentPromptsRepo == nil {
+	if repos.AgentPrompts == nil {
 		panic("chat service agent prompts repo cannot be nil")
 	}
-	if agentHistoryRepo == nil {
+	if repos.AgentHistory == nil {
 		panic("chat service agent history repo cannot be nil")
 	}
 	if runtimeClient == nil {
@@ -60,14 +53,14 @@ func New(
 
 	return &service{
 		db:                db,
-		workspaceRepo:     workspaceRepo,
-		agentRepo:         agentRepo,
-		conversationRepo:  conversationRepo,
-		messageRepo:       messageRepo,
-		toolsRepo:         toolsRepo,
-		agentSettingsRepo: agentSettingsRepo,
-		agentPromptsRepo:  agentPromptsRepo,
-		agentHistoryRepo:  agentHistoryRepo,
+		workspaceRepo:     repos.Workspace,
+		agentRepo:         repos.Agent,
+		conversationRepo:  repos.Conversation,
+		messageRepo:       repos.Message,
+		toolsRepo:         repos.Tools,
+		agentSettingsRepo: repos.AgentSettings,
+		agentPromptsRepo:  repos.AgentPrompts,
+		agentHistoryRepo:  repos.AgentHistory,
 		runtimeClient:     runtimeClient,
 		broadcaster:       broadcaster,
 		defaultAgents:     append([]orchestrator.DefaultAgentBlueprint(nil), orchestrator.DefaultAgents...),

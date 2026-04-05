@@ -13,6 +13,18 @@ import (
 	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
+// Repos groups the repository dependencies used by the agent service.
+// Passing a single struct instead of 6 individual parameters keeps the
+// constructor signature clean and makes adding new repos a one-line change.
+type Repos struct {
+	Workspace     workspaceRepo
+	Agent         agentRepo
+	Tools         toolsRepo
+	AgentSettings agentSettingsRepo
+	AgentPrompts  agentPromptsRepo
+	AgentHistory  agentHistoryRepo
+}
+
 // service implements the orchestratorservice.AgentService interface.
 type service struct {
 	// workspaceRepo provides access to workspace data storage.

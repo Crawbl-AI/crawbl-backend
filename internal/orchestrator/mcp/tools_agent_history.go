@@ -27,20 +27,9 @@ func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentH
 
 		// Look up agent by slug + workspaceID
 		RecordAPICall(ctx, "DB:SELECT agents WHERE workspace_id="+workspaceID+" AND slug="+input.AgentSlug)
-		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			return nil, createAgentHistoryOutput{Info: "failed to look up agents: " + mErr.Error()}, nil
-		}
-
-		var agentID string
-		for _, a := range agents {
-			if a.Slug == input.AgentSlug {
-				agentID = a.ID
-				break
-			}
-		}
-		if agentID == "" {
-			return nil, createAgentHistoryOutput{Info: "agent not found with slug: " + input.AgentSlug}, nil
+		agentID, resolveErr := resolveAgentBySlug(ctx, deps, sess, workspaceID, input.AgentSlug)
+		if resolveErr != nil {
+			return nil, createAgentHistoryOutput{Info: resolveErr.Error()}, nil
 		}
 
 		// Create history entry

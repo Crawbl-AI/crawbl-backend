@@ -8,12 +8,9 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ---------------------------------------------------------------------------
-// get_user_profile
-// ---------------------------------------------------------------------------
-
+// newUserProfileHandler creates the MCP handler for retrieving the authenticated user's profile.
 func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, userProfileOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ userProfileInput) (*sdkmcp.CallToolResult, userProfileOutput, error) {
+	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input userProfileInput) (*sdkmcp.CallToolResult, userProfileOutput, error) {
 		userID := userIDFromContext(ctx)
 		if userID == "" {
 			return nil, userProfileOutput{}, fmt.Errorf("unauthorized")
@@ -41,17 +38,6 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 			return nil, userProfileOutput{}, fmt.Errorf("user not found")
 		}
 
-		// Load preferences separately.
-		var prefs struct {
-			Theme    *string `db:"platform_theme"`
-			Language *string `db:"platform_language"`
-			Currency *string `db:"currency_code"`
-		}
-		_ = sess.Select("platform_theme", "platform_language", "currency_code").
-			From("user_preferences").
-			Where("user_id = ?", userID).
-			LoadOneContext(ctx, &prefs)
-
 		out := userProfileOutput{
 			ID:          row.ID,
 			Email:       row.Email,
@@ -61,11 +47,25 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 			CountryCode: row.CountryCode,
 			CreatedAt:   row.CreatedAt.Format(time.RFC3339),
 		}
-		if prefs.Theme != nil || prefs.Language != nil || prefs.Currency != nil {
-			out.Preferences = &userPrefs{
-				Theme:    prefs.Theme,
-				Language: prefs.Language,
-				Currency: prefs.Currency,
+
+		// Only load preferences when explicitly requested.
+		if input.IncludePreferences {
+			var prefs struct {
+				Theme    *string `db:"platform_theme"`
+				Language *string `db:"platform_language"`
+				Currency *string `db:"currency_code"`
+			}
+			_ = sess.Select("platform_theme", "platform_language", "currency_code").
+				From("user_preferences").
+				Where("user_id = ?", userID).
+				LoadOneContext(ctx, &prefs)
+
+			if prefs.Theme != nil || prefs.Language != nil || prefs.Currency != nil {
+				out.Preferences = &userPrefs{
+					Theme:    prefs.Theme,
+					Language: prefs.Language,
+					Currency: prefs.Currency,
+				}
 			}
 		}
 
@@ -73,12 +73,9 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 	}
 }
 
-// ---------------------------------------------------------------------------
-// get_workspace_info
-// ---------------------------------------------------------------------------
-
+// newWorkspaceInfoHandler creates the MCP handler for retrieving workspace details and agent list.
 func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInput, workspaceInfoOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ workspaceInfoInput) (*sdkmcp.CallToolResult, workspaceInfoOutput, error) {
+	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input workspaceInfoInput) (*sdkmcp.CallToolResult, workspaceInfoOutput, error) {
 		userID := userIDFromContext(ctx)
 		workspaceID := workspaceIDFromContext(ctx)
 		if userID == "" || workspaceID == "" {
@@ -94,27 +91,31 @@ func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInpu
 			return nil, workspaceInfoOutput{}, fmt.Errorf("workspace not found")
 		}
 
-		// List agents in the workspace.
-		agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr != nil {
-			agents = nil // non-fatal
-		}
-
-		briefs := make([]agentBrief, 0, len(agents))
-		for _, a := range agents {
-			briefs = append(briefs, agentBrief{
-				ID:   a.ID,
-				Name: a.Name,
-				Role: a.Role,
-				Slug: a.Slug,
-			})
-		}
-
-		return nil, workspaceInfoOutput{
+		out := workspaceInfoOutput{
 			ID:        ws.ID,
 			Name:      ws.Name,
 			CreatedAt: ws.CreatedAt.Format(time.RFC3339),
-			Agents:    briefs,
-		}, nil
+		}
+
+		// Only list agents when explicitly requested.
+		if input.IncludeAgents {
+			agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
+			if mErr != nil {
+				agents = nil // non-fatal
+			}
+
+			briefs := make([]agentBrief, 0, len(agents))
+			for _, a := range agents {
+				briefs = append(briefs, agentBrief{
+					ID:   a.ID,
+					Name: a.Name,
+					Role: a.Role,
+					Slug: a.Slug,
+				})
+			}
+			out.Agents = briefs
+		}
+
+		return nil, out, nil
 	}
 }

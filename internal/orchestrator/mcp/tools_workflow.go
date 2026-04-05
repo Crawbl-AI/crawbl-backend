@@ -13,10 +13,6 @@ import (
 	agentclient "github.com/Crawbl-AI/crawbl-backend/internal/agent"
 )
 
-// ---------------------------------------------------------------------------
-// Input/output types
-// ---------------------------------------------------------------------------
-
 // createWorkflowInput is the typed input for the create_workflow tool.
 type createWorkflowInput struct {
 	Name        string `json:"name" jsonschema:"name for the workflow"`
@@ -88,10 +84,7 @@ type workflowBrief struct {
 	CreatedAt   string `json:"created_at"`
 }
 
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
-
+// newCreateWorkflowHandler creates the MCP handler for defining a new multi-step workflow.
 func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowInput, createWorkflowOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input createWorkflowInput) (*sdkmcp.CallToolResult, createWorkflowOutput, error) {
 		if deps.WorkflowRepo == nil {
@@ -134,7 +127,7 @@ func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowIn
 			Name:          input.Name,
 			Description:   input.Description,
 			Steps:         stepsJSON,
-			TriggerPolicy: "manual",
+			TriggerPolicy: string(workflowrepo.WorkflowTriggerManual),
 			IsActive:      true,
 			CreatedAt:     now,
 			UpdatedAt:     now,
@@ -199,10 +192,10 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 			WorkflowDefinitionID: input.WorkflowID,
 			WorkspaceID:          workspaceID,
 			ConversationID:       convID,
-			Status:               "pending",
+			Status:               string(workflowrepo.WorkflowStatusPending),
 			CurrentStep:          0,
 			Context:              initialCtx,
-			TriggeredBy:          "agent",
+			TriggeredBy:          string(workflowrepo.WorkflowTriggeredByAgent),
 			CreatedAt:            now,
 		}
 
