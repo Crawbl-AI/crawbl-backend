@@ -608,10 +608,6 @@ type AgentService interface {
 	CreateAgentMemory(ctx context.Context, opts *CreateAgentMemoryOpts) *merrors.Error
 }
 
-// ---------------------------------------------------------------------------
-// Integration service
-// ---------------------------------------------------------------------------
-
 // ListIntegrationsOpts contains parameters for listing available integrations.
 type ListIntegrationsOpts struct {
 	// Sess is the database session for the transaction. Must be non-nil.

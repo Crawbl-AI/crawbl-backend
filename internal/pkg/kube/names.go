@@ -15,10 +15,6 @@ import (
 	"strings"
 )
 
-// ---------------------------------------------------------------------------
-// Name truncation
-// ---------------------------------------------------------------------------
-
 // TruncateName safely shortens a Kubernetes resource name to fit within maxLen.
 //
 // If the name already fits, it is returned lowercased and trimmed.
@@ -56,10 +52,6 @@ func TruncateName(name string, maxLen int) string {
 	}
 	return fmt.Sprintf("%s-%s", prefix, hash)
 }
-
-// ---------------------------------------------------------------------------
-// Checksums (for config-change detection)
-// ---------------------------------------------------------------------------
 
 // ChecksumString returns a hex-encoded SHA-256 hash of s.
 // Used in pod template annotations to trigger rolling updates when config changes.

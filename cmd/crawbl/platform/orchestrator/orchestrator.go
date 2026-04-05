@@ -43,6 +43,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
+	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -86,6 +88,12 @@ func runServer(ctx context.Context) error {
 
 	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
 	defer cleanup()
+
+	// Seed global catalogs (tools, models, tool categories, integration categories,
+	// integration providers) from embedded data on every startup (idempotent).
+	if err := seedCatalogs(ctx, db, logger); err != nil {
+		return err
+	}
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
@@ -357,4 +365,159 @@ func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig)
 
 	logger.Info("realtime enabled: socket.io + redis")
 	return broadcaster, handler, io, cleanup
+}
+
+// seedCatalogs upserts all reference catalogs into the database on startup.
+// Covers tools, models, tool categories, integration categories, and
+// integration providers. Idempotent — safe to run on every boot.
+func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) error {
+	sess := db.NewSession(nil)
+
+	// 1. Tools — uses the existing repo Seed method (dbr builder pattern).
+	catalog := agentruntimetools.DefaultCatalog()
+	toolRows := make([]orchestratorrepo.ToolRow, len(catalog))
+	for i, t := range catalog {
+		toolRows[i] = orchestratorrepo.ToolRow{
+			Name:        t.Name,
+			DisplayName: t.DisplayName,
+			Description: t.Description,
+			Category:    string(t.Category),
+			IconURL:     t.IconURL,
+			SortOrder:   i,
+			CreatedAt:   time.Now(),
+		}
+	}
+	repo := toolsrepo.New()
+	if mErr := repo.Seed(ctx, sess, toolRows); mErr != nil {
+		logger.Error("tool catalog seed failed", "error", mErr.Error())
+		return fmt.Errorf("tool catalog seed: %s", mErr.Error())
+	}
+
+	// 2. Models
+	for i, m := range seed.AvailableModels() {
+		var existing orchestratorrepo.ModelRow
+		err := sess.Select("id").From("models").Where("id = ?", m.ID).LoadOneContext(ctx, &existing)
+		if err != nil && !database.IsRecordNotFoundError(err) {
+			return fmt.Errorf("seed model %q: %w", m.ID, err)
+		}
+		if existing.ID != "" {
+			_, err = sess.Update("models").
+				Set("name", m.Name).
+				Set("description", m.Description).
+				Set("sort_order", i).
+				Where("id = ?", m.ID).
+				ExecContext(ctx)
+		} else {
+			_, err = sess.InsertInto("models").
+				Pair("id", m.ID).
+				Pair("name", m.Name).
+				Pair("description", m.Description).
+				Pair("sort_order", i).
+				Pair("created_at", time.Now()).
+				ExecContext(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("seed model %q: %w", m.ID, err)
+		}
+	}
+
+	// 3. Tool categories
+	for i, c := range agentruntimetools.ToolCategories() {
+		catID := string(c.ID)
+		var existing orchestratorrepo.ToolCategoryRow
+		err := sess.Select("id").From("tool_categories").Where("id = ?", catID).LoadOneContext(ctx, &existing)
+		if err != nil && !database.IsRecordNotFoundError(err) {
+			return fmt.Errorf("seed tool category %q: %w", catID, err)
+		}
+		if existing.ID != "" {
+			_, err = sess.Update("tool_categories").
+				Set("name", c.Name).
+				Set("image_url", c.ImageURL).
+				Set("sort_order", i).
+				Where("id = ?", catID).
+				ExecContext(ctx)
+		} else {
+			_, err = sess.InsertInto("tool_categories").
+				Pair("id", catID).
+				Pair("name", c.Name).
+				Pair("image_url", c.ImageURL).
+				Pair("sort_order", i).
+				Pair("created_at", time.Now()).
+				ExecContext(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("seed tool category %q: %w", catID, err)
+		}
+	}
+
+	// 4. Integration categories
+	for i, c := range seed.IntegrationCategories() {
+		var existing orchestratorrepo.IntegrationCategoryRow
+		err := sess.Select("id").From("integration_categories").Where("id = ?", c.ID).LoadOneContext(ctx, &existing)
+		if err != nil && !database.IsRecordNotFoundError(err) {
+			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
+		}
+		if existing.ID != "" {
+			_, err = sess.Update("integration_categories").
+				Set("name", c.Name).
+				Set("image_url", c.ImageURL).
+				Set("sort_order", i).
+				Where("id = ?", c.ID).
+				ExecContext(ctx)
+		} else {
+			_, err = sess.InsertInto("integration_categories").
+				Pair("id", c.ID).
+				Pair("name", c.Name).
+				Pair("image_url", c.ImageURL).
+				Pair("sort_order", i).
+				Pair("created_at", time.Now()).
+				ExecContext(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
+		}
+	}
+
+	// 5. Integration providers
+	for i, p := range seed.IntegrationProviders() {
+		var existing orchestratorrepo.IntegrationProviderRow
+		err := sess.Select("provider").From("integration_providers").Where("provider = ?", p.Provider).LoadOneContext(ctx, &existing)
+		if err != nil && !database.IsRecordNotFoundError(err) {
+			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)
+		}
+		if existing.Provider != "" {
+			_, err = sess.Update("integration_providers").
+				Set("name", p.Name).
+				Set("description", p.Description).
+				Set("icon_url", p.IconURL).
+				Set("category_id", p.CategoryID).
+				Set("is_enabled", p.IsEnabled).
+				Set("sort_order", i).
+				Where("provider = ?", p.Provider).
+				ExecContext(ctx)
+		} else {
+			_, err = sess.InsertInto("integration_providers").
+				Pair("provider", p.Provider).
+				Pair("name", p.Name).
+				Pair("description", p.Description).
+				Pair("icon_url", p.IconURL).
+				Pair("category_id", p.CategoryID).
+				Pair("is_enabled", p.IsEnabled).
+				Pair("sort_order", i).
+				Pair("created_at", time.Now()).
+				ExecContext(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)
+		}
+	}
+
+	logger.Info("catalogs seeded",
+		slog.Int("tools", len(catalog)),
+		slog.Int("models", len(seed.AvailableModels())),
+		slog.Int("tool_categories", len(agentruntimetools.ToolCategories())),
+		slog.Int("integration_categories", len(seed.IntegrationCategories())),
+		slog.Int("integration_providers", len(seed.IntegrationProviders())),
+	)
+	return nil
 }

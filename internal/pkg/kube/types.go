@@ -1,9 +1,5 @@
 package kube
 
-// ---------------------------------------------------------------------------
-// Name length limits
-// ---------------------------------------------------------------------------
-
 const (
 	// MaxNameLen is the general Kubernetes object name limit (63 characters).
 	MaxNameLen = 63

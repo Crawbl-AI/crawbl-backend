@@ -199,8 +199,9 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 // This is a public endpoint — no auth required (loaded by DictService before login).
 func ListModels(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		models := make([]dto.AgentModelResponse, 0, len(orchestrator.AvailableModels))
-		for _, m := range orchestrator.AvailableModels {
+		available := orchestrator.GetAvailableModels()
+		models := make([]dto.AgentModelResponse, 0, len(available))
+		for _, m := range available {
 			models = append(models, dto.AgentModelResponse{
 				ID:          m.ID,
 				Name:        m.Name,

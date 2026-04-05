@@ -5,11 +5,11 @@ import (
 	"strings"
 	"sync"
 
+	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 var (
@@ -21,11 +21,11 @@ var (
 // to AgentToolCategory. Built once and reused for all rowToTool calls.
 func getToolCategoryMap() map[string]orchestrator.AgentToolCategory {
 	toolCategoryMapOnce.Do(func() {
-		cats := seed.ToolCategories()
+		cats := agentruntimetools.ToolCategories()
 		toolCategoryMap = make(map[string]orchestrator.AgentToolCategory, len(cats))
 		for _, c := range cats {
-			toolCategoryMap[c.ID] = orchestrator.AgentToolCategory{
-				ID:       c.ID,
+			toolCategoryMap[string(c.ID)] = orchestrator.AgentToolCategory{
+				ID:       string(c.ID),
 				Name:     c.Name,
 				ImageURL: c.ImageURL,
 			}

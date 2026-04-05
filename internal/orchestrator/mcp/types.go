@@ -126,10 +126,6 @@ func (d *Deps) newSession() *dbr.Session {
 	return d.DB.NewSession(nil)
 }
 
-// ---------------------------------------------------------------------------
-// Tool input/output types — push notifications
-// ---------------------------------------------------------------------------
-
 type pushInput struct {
 	Title   string `json:"title" jsonschema:"the notification title shown on the device"`
 	Message string `json:"message" jsonschema:"the notification body text"`
@@ -139,10 +135,6 @@ type pushOutput struct {
 	Sent bool   `json:"sent"`
 	Info string `json:"info"`
 }
-
-// ---------------------------------------------------------------------------
-// Tool input/output types — user context
-// ---------------------------------------------------------------------------
 
 // Note: empty input structs need at least one field to generate valid OpenAI tool schemas.
 // OpenAI rejects {"type":"object","additionalProperties":false} without "properties".
@@ -185,10 +177,6 @@ type agentBrief struct {
 	Role string `json:"role"`
 	Slug string `json:"slug"`
 }
-
-// ---------------------------------------------------------------------------
-// Tool input/output types — conversations
-// ---------------------------------------------------------------------------
 
 type listConversationsInput struct {
 	IncludeArchived bool `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
@@ -233,10 +221,6 @@ type messageRow struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-// ---------------------------------------------------------------------------
-// Tool input/output types — agent history
-// ---------------------------------------------------------------------------
-
 // createAgentHistoryInput is the input for the create_agent_history tool.
 type createAgentHistoryInput struct {
 	AgentID        string `json:"agent_id,omitempty"`
@@ -251,10 +235,6 @@ type createAgentHistoryOutput struct {
 	Created bool   `json:"created"`
 	Info    string `json:"info"`
 }
-
-// ---------------------------------------------------------------------------
-// Tool input/output types — send_message_to_agent
-// ---------------------------------------------------------------------------
 
 // sendMessageInput is the typed input for the send_message_to_agent tool.
 type sendMessageInput struct {
@@ -271,10 +251,6 @@ type sendMessageOutput struct {
 	MessageID string `json:"message_id"`
 	Error     string `json:"error,omitempty"`
 }
-
-// ---------------------------------------------------------------------------
-// Tool input/output types — artifacts
-// ---------------------------------------------------------------------------
 
 type createArtifactInput struct {
 	Title          string `json:"title" jsonschema:"the title of the artifact"`
@@ -340,10 +316,6 @@ type reviewArtifactOutput struct {
 	Reviewed bool   `json:"reviewed"`
 	Info     string `json:"info"`
 }
-
-// ---------------------------------------------------------------------------
-// Audit log types
-// ---------------------------------------------------------------------------
 
 // auditEntry holds the fields for a single MCP tool call audit record.
 type auditEntry struct {

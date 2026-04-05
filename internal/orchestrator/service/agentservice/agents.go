@@ -348,10 +348,6 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
 func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
@@ -409,13 +405,14 @@ func derefString(s *string) string {
 // resolveModelDef looks up a model ID in the available models registry.
 // Falls back to the first available model if the ID is not found.
 func resolveModelDef(modelID string) orchestrator.AgentModelDef {
-	for _, m := range orchestrator.AvailableModels {
+	models := orchestrator.GetAvailableModels()
+	for _, m := range models {
 		if m.ID == modelID {
 			return m
 		}
 	}
-	if len(orchestrator.AvailableModels) > 0 {
-		return orchestrator.AvailableModels[0]
+	if len(models) > 0 {
+		return models[0]
 	}
 	return orchestrator.AgentModelDef{ID: modelID, Name: modelID}
 }
