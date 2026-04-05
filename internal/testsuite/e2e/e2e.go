@@ -70,6 +70,11 @@ type Config struct {
 	SpacesBucket    string
 	SpacesAccessKey string
 	SpacesSecretKey string
+
+	// Category restricts the test run to a single subfolder under
+	// test-features/ (e.g. "chat", "tools", "auth"). When empty,
+	// all subfolders are included.
+	Category string
 }
 
 // Results holds the aggregate outcome of a test run.
@@ -87,6 +92,12 @@ type suiteUsers struct {
 // Run executes the godog test suite and returns results.
 func Run(cfg *Config) *Results {
 	featuresDir := findFeaturesDir()
+	if cfg.Category != "" {
+		featuresDir = filepath.Join(featuresDir, cfg.Category)
+		if info, err := os.Stat(featuresDir); err != nil || !info.IsDir() {
+			return &Results{Exit: 1}
+		}
+	}
 
 	// Create exactly 3 test users for the entire suite run.
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
