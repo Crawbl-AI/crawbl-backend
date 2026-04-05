@@ -92,13 +92,16 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 				)
 			} else if settings != nil {
 				b.Model = settings.Model.ID
+				// AllowedTools comes from agent_settings.allowed_tools
+				// in Postgres. When the column is empty the runtime
+				// falls back to each agent's hardcoded default toolset
+				// (e.g. Wally's web_fetch + web_search_tool pair).
+				// Forwarding the slice verbatim — the runtime decides
+				// enforcement policy, not the orchestrator.
+				if len(settings.AllowedTools) > 0 {
+					b.AllowedTools = settings.AllowedTools
+				}
 			}
-			// allowed_tools enrichment via GetAgentTools is a follow-up
-			// (Phase 2B): the runtime's current consumer doesn't read
-			// the field at agent-construction time (it uses the
-			// hardcoded Wally/Eve whitelists in agents/wally.go,
-			// agents/eve.go). Leaving empty here so the wire shape
-			// is stable when Phase 2B flips to dynamic construction.
 			blueprints = append(blueprints, b)
 		}
 

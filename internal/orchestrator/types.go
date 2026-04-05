@@ -486,6 +486,15 @@ type AgentSettings struct {
 	Model          AgentModelDef
 	ResponseLength ResponseLength
 	Prompts        []AgentPrompt
+	// AllowedTools is the list of tool name strings this agent is
+	// permitted to invoke. Sourced from agent_settings.allowed_tools
+	// in Postgres (pq.StringArray column). An empty slice means the
+	// agent has no explicit whitelist and the runtime falls back to
+	// each agent's hardcoded default toolset (e.g. Wally's web_fetch
+	// + web_search_tool pair). The crawbl-agent-runtime blueprint
+	// endpoint forwards this field so runtime pods can enforce the
+	// whitelist at tool-call time without a second round-trip.
+	AllowedTools []string
 }
 
 // AgentPrompt represents a customizable agent prompt file.

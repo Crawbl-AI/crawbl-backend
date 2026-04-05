@@ -130,10 +130,15 @@ func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservic
 	// Default settings when no row exists yet.
 	modelID := orchestrator.DefaultAgentModel
 	responseLength := orchestrator.ResponseLengthAuto
+	var allowedTools []string
 
 	if settingsRow != nil {
 		modelID = settingsRow.Model
 		responseLength = orchestrator.ResponseLength(settingsRow.ResponseLength)
+		if len(settingsRow.AllowedTools) > 0 {
+			allowedTools = make([]string, len(settingsRow.AllowedTools))
+			copy(allowedTools, settingsRow.AllowedTools)
+		}
 	}
 
 	modelDef := resolveModelDef(modelID)
@@ -157,6 +162,7 @@ func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservic
 		Model:          modelDef,
 		ResponseLength: responseLength,
 		Prompts:        prompts,
+		AllowedTools:   allowedTools,
 	}, nil
 }
 
