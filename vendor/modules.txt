@@ -441,6 +441,14 @@ github.com/google/s2a-go/internal/v2/remotesigner
 github.com/google/s2a-go/internal/v2/tlsconfigstore
 github.com/google/s2a-go/retry
 github.com/google/s2a-go/stream
+# github.com/google/safehtml v0.1.0
+## explicit; go 1.14
+github.com/google/safehtml
+github.com/google/safehtml/internal/raw
+github.com/google/safehtml/internal/safehtmlutil
+github.com/google/safehtml/internal/template/raw
+github.com/google/safehtml/template
+github.com/google/safehtml/uncheckedconversions
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -1146,6 +1154,7 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+golang.org/x/text/unicode/rangetable
 # golang.org/x/time v0.14.0
 ## explicit; go 1.24.0
 golang.org/x/time/rate
@@ -1179,20 +1188,29 @@ golang.org/x/tools/internal/versions
 # google.golang.org/adk v1.0.0
 ## explicit; go 1.25.0
 google.golang.org/adk/agent
+google.golang.org/adk/agent/llmagent
 google.golang.org/adk/artifact
 google.golang.org/adk/internal/agent
+google.golang.org/adk/internal/agent/parentmap
+google.golang.org/adk/internal/agent/runconfig
 google.golang.org/adk/internal/context
 google.golang.org/adk/internal/converters
+google.golang.org/adk/internal/llminternal
+google.golang.org/adk/internal/llminternal/converters
+google.golang.org/adk/internal/llminternal/googlellm
 google.golang.org/adk/internal/plugininternal/plugincontext
 google.golang.org/adk/internal/sessionutils
 google.golang.org/adk/internal/telemetry
 google.golang.org/adk/internal/toolinternal
 google.golang.org/adk/internal/toolinternal/toolutils
+google.golang.org/adk/internal/typeutil
+google.golang.org/adk/internal/utils
 google.golang.org/adk/internal/version
 google.golang.org/adk/memory
 google.golang.org/adk/model
 google.golang.org/adk/session
 google.golang.org/adk/tool
+google.golang.org/adk/tool/functiontool
 google.golang.org/adk/tool/mcptoolset
 google.golang.org/adk/tool/toolconfirmation
 # google.golang.org/genai v1.52.1
