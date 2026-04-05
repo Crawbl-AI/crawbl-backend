@@ -11,6 +11,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
+	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
 // memoryServer is the gRPC handler for runtimev1.MemoryServer. It's a thin
@@ -91,15 +92,17 @@ func (s *memoryServer) DeleteMemory(ctx context.Context, req *runtimev1.DeleteMe
 }
 
 // resolveWorkspaceID prefers the value carried in the authenticated
-// Principal over any caller-supplied workspace_id, so an agent can't
-// ever read or mutate memories outside its own workspace even if the
-// request body lies. If the request carries a workspace_id that disagrees
-// with the principal's workspace_id, the principal wins silently — this
-// matches how the orchestrator's HMAC scheme is designed: token identity
-// is authoritative.
+// Identity (crawblgrpc.IdentityFromContext) over any caller-supplied
+// workspace_id, so an agent can't read or mutate memories outside its
+// own workspace even if the request body lies. If the request carries
+// a workspace_id that disagrees with the identity's workspace, the
+// identity wins silently — token identity is authoritative.
+//
+// The Identity.Object field carries the workspace ID in crawbl's HMAC
+// scheme (Subject = userID, Object = workspaceID).
 func resolveWorkspaceID(ctx context.Context, requested string) (string, error) {
-	if p, ok := PrincipalFromContext(ctx); ok && p.WorkspaceID != "" {
-		return p.WorkspaceID, nil
+	if id, ok := crawblgrpc.IdentityFromContext(ctx); ok && id.Object != "" {
+		return id.Object, nil
 	}
 	if requested == "" {
 		return "", status.Error(codes.InvalidArgument, "memory: workspace_id is required")

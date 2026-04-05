@@ -673,7 +673,10 @@ type Pagination struct {
 }
 
 // RuntimeStatus represents the current state of a user's swarm runtime.
-// This is populated from Kubernetes UserSwarm custom resource status.
+// This is populated from Kubernetes UserSwarm custom resource status,
+// plus the identity fields (UserID, WorkspaceID) stamped by the runtime
+// client so downstream gRPC calls can sign HMAC bearer tokens without
+// a second lookup.
 type RuntimeStatus struct {
 	// SwarmName is the name of the swarm instance.
 	SwarmName string
@@ -683,6 +686,18 @@ type RuntimeStatus struct {
 
 	// ServiceName is the Kubernetes service name for the swarm.
 	ServiceName string
+
+	// UserID is the platform user ID that owns this workspace. Populated
+	// by the runtime client on EnsureRuntime; used by downstream
+	// SendText/Memory calls to sign HMAC bearer tokens for gRPC auth
+	// against the per-workspace crawbl-agent-runtime pod.
+	UserID string
+
+	// WorkspaceID is the Crawbl workspace ID this runtime serves.
+	// Populated alongside UserID so gRPC calls from the orchestrator to
+	// the per-workspace pod can authenticate without a second lookup
+	// into the workspaces table.
+	WorkspaceID string
 
 	// Phase is the current phase from the UserSwarm status.
 	Phase string

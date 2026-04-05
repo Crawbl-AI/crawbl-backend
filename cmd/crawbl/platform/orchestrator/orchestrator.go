@@ -203,23 +203,29 @@ func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
 			DefaultProvider:     envOrDefault("CRAWBL_RUNTIME_DEFAULT_PROVIDER", "openai"),
 			DefaultModel:        envOrDefault("CRAWBL_RUNTIME_DEFAULT_MODEL", "gpt-5-mini"),
 			EnvSecretName:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_ENV_SECRET_NAME")),
-			TOMLOverrides:       strings.TrimSpace(os.Getenv("CRAWBL_RUNTIME_TOML_OVERRIDES")),
+			MCPSigningKey:       strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY")),
 			PollTimeout:         durationFromEnv("CRAWBL_RUNTIME_POLL_TIMEOUT", userswarmclient.DefaultPollTimeout),
 			PollInterval:        durationFromEnv("CRAWBL_RUNTIME_POLL_INTERVAL", userswarmclient.DefaultPollInterval),
 			Port:                int32FromEnv("CRAWBL_RUNTIME_PORT", userswarmclient.DefaultRuntimePort),
 		},
 	}
 
-	switch strings.ToLower(strings.TrimSpace(cfg.Driver)) {
+	// Accept the legacy driver string "userswarm" as an alias for
+	// "crawbl-runtime" during the Phase 2B transition window so dev-cluster
+	// ConfigMaps that still carry the old value keep working. The plan is
+	// to flip CRAWBL_RUNTIME_DRIVER to "crawbl-runtime" in argocd-apps as
+	// part of US-P2-010 and then this branch becomes dead code.
+	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
+	switch driver {
 	case "", userswarmclient.DriverFake:
 		logger.Info("configured fake runtime client")
 		return userswarmclient.NewFakeClient(cfg), nil
-	case userswarmclient.DriverUserSwarm:
+	case userswarmclient.DriverCrawblRuntime, "userswarm":
 		client, err := userswarmclient.NewUserSwarmClient(cfg)
 		if err != nil {
 			return nil, err
 		}
-		logger.Info("configured userswarm runtime client", slog.String("namespace", cfg.UserSwarm.RuntimeNamespace))
+		logger.Info("configured crawbl-runtime client (gRPC)", slog.String("namespace", cfg.UserSwarm.RuntimeNamespace))
 		return client, nil
 	default:
 		return nil, fmt.Errorf("unsupported runtime driver %q", cfg.Driver)

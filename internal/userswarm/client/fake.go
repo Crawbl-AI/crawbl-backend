@@ -139,3 +139,8 @@ func (f *fakeClient) DeleteMemory(_ context.Context, _ *DeleteMemoryOpts) *merro
 func (f *fakeClient) CreateMemory(_ context.Context, _ *CreateMemoryOpts) *merrors.Error {
 	return nil
 }
+
+// Close is a no-op for the fake client — it holds no resources.
+func (f *fakeClient) Close() error {
+	return nil
+}

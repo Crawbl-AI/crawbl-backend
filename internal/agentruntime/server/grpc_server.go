@@ -13,13 +13,20 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
+	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
-// Server is the top-level gRPC server wrapper for crawbl-agent-runtime. It
-// owns the net.Listener, the *grpc.Server, the HealthServer, the in-memory
-// Memory store, and the runner.Runner that drives Converse turns.
-// main.go constructs one Server via New(), calls Start() in a goroutine,
-// and Shutdown() on SIGTERM.
+// Server is the top-level gRPC server wrapper for crawbl-agent-runtime.
+// It owns the net.Listener, the *grpc.Server, the HealthServer, the
+// in-memory Memory store, and the runner.Runner that drives Converse
+// turns. main.go constructs one Server via New(), calls Start() in a
+// goroutine, and Shutdown() on SIGTERM.
+//
+// Every piece of generic gRPC infrastructure (HMAC auth interceptor,
+// graceful shutdown, PerRPC credentials symmetry with the client) lives
+// in internal/pkg/grpc. This package only contains agentruntime-specific
+// wiring: the Server struct, the Converse + Memory service handlers,
+// and the HealthServer lifecycle.
 type Server struct {
 	cfg      config.Config
 	logger   *slog.Logger
@@ -30,22 +37,20 @@ type Server struct {
 	runner   *runner.Runner
 }
 
-// New wires a Server ready to Start(). It registers the HMAC auth
-// interceptor, the health service, the real AgentRuntime handler (wired
-// to the provided runner), and the Memory service. It does NOT open
-// the listener — Start() does that.
+// New wires a Server ready to Start(). It installs the shared
+// internal/pkg/grpc HMAC auth interceptor, registers the health +
+// reflection services, and registers the AgentRuntime + Memory
+// handlers. It does NOT open the listener — Start() does that.
 //
 // The caller owns the runner — pass nil only for tests that never
-// exercise Converse. The health server flips to SERVING inside main.go
-// immediately after New returns, on the assumption that the runner was
-// constructed successfully (because a nil runner produces a handler
-// that returns codes.Unavailable, which is the correct unhealthy
-// state).
+// exercise Converse. main.go calls srv.Health().SetServing() right
+// after New returns once every dependency (model, MCP toolset, runner)
+// is constructed.
 func New(cfg config.Config, logger *slog.Logger, r *runner.Runner) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	unary, stream := HMACAuth(cfg.MCPSigningKey)
+	unary, stream := crawblgrpc.NewHMACServerAuth(cfg.MCPSigningKey, nil)
 	grpcSrv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(unary),
 		grpc.ChainStreamInterceptor(stream),
@@ -61,11 +66,11 @@ func New(cfg config.Config, logger *slog.Logger, r *runner.Runner) (*Server, err
 
 	// Register gRPC server reflection so local debugging tools
 	// (grpcurl, evans) can enumerate services without a .proto file.
-	// The reflection paths are in exemptMethods so they bypass HMAC
-	// auth, and reflection.Register is idempotent. Safe to leave on
-	// in production — it exposes service/method names (which are not
-	// secret) but does NOT expose any RPCs beyond what's already
-	// registered.
+	// The reflection paths are in crawblgrpc.DefaultAuthExemptMethods so
+	// they bypass HMAC auth, and reflection.Register is idempotent.
+	// Safe to leave on in production — it exposes service/method names
+	// (which are not secret) but does NOT expose any RPCs beyond what's
+	// already registered.
 	reflection.Register(grpcSrv)
 
 	return &Server{
@@ -90,34 +95,25 @@ func (s *Server) Start() error {
 	return s.grpcSrv.Serve(l)
 }
 
-// Health exposes the HealthServer so callers (e.g. the runner in US-AR-009)
-// can flip the status to SERVING once the agent graph is loaded.
+// Health exposes the HealthServer so main.go can flip the status to
+// SERVING once the agent graph is loaded.
 func (s *Server) Health() *HealthServer {
 	return s.health
 }
 
-// Shutdown initiates a graceful stop of the gRPC server. In-flight RPCs are
-// allowed to finish up to the graceful shutdown timeout configured in
-// cfg.Startup; after that, the server force-closes. The in-memory memory
-// store is closed last (no-op today, but US-AR-007's facade will evolve
-// in Phase 2 to a network-backed store that needs explicit cleanup).
+// Shutdown initiates a graceful stop of the gRPC server. In-flight
+// RPCs are allowed to finish up to cfg.Startup.GracefulShutdownTimeout;
+// after that, the server force-closes. The in-memory memory store is
+// closed after the gRPC server has drained.
+//
+// The graceful-stop dance itself lives in internal/pkg/grpc so every
+// gRPC server in crawbl-backend shares the same implementation.
 func (s *Server) Shutdown() {
 	if s == nil || s.grpcSrv == nil {
 		return
 	}
 	s.health.SetNotServing()
-	done := make(chan struct{})
-	go func() {
-		s.grpcSrv.GracefulStop()
-		close(done)
-	}()
-	select {
-	case <-done:
-		s.logger.Info("agent runtime gRPC stopped gracefully")
-	case <-timerAfter(s.cfg.Startup.GracefulShutdownTimeout):
-		s.logger.Warn("agent runtime gRPC graceful shutdown timed out, forcing stop")
-		s.grpcSrv.Stop()
-	}
+	crawblgrpc.GracefulShutdown(s.grpcSrv, s.cfg.Startup.GracefulShutdownTimeout, s.logger)
 	if s.memStore != nil {
 		if err := s.memStore.Close(); err != nil {
 			s.logger.Warn("memory store close returned error", "error", err)

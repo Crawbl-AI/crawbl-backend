@@ -12,6 +12,7 @@ import (
 
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
+	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
 // converseHandler implements runtimev1.AgentRuntimeServer.Converse as a
@@ -47,7 +48,7 @@ func newConverseHandler(logger *slog.Logger, r *runner.Runner) *converseHandler 
 //
 // Authentication is already enforced by the HMAC interceptor chain
 // installed in grpc_server.go — by the time Converse is invoked the
-// context carries a validated Principal. We use the Principal's
+// context carries a validated crawblgrpc.Identity. We use the crawblgrpc.Identity's
 // workspace_id and user_id as the authoritative identity; any
 // workspace_id / user_id carried in the request body is ignored for
 // security (mirrors the resolveWorkspaceID helper used by the memory
@@ -57,16 +58,16 @@ func (h *converseHandler) Converse(stream runtimev1.AgentRuntime_ConverseServer)
 		return status.Error(codes.Unavailable, "converse: runner not initialized")
 	}
 	ctx := stream.Context()
-	principal, ok := PrincipalFromContext(ctx)
+	principal, ok := crawblgrpc.IdentityFromContext(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "converse: missing authenticated principal")
 	}
-	h.logger.Info("converse stream opened", "user_id", principal.UserID, "workspace_id", principal.WorkspaceID)
+	h.logger.Info("converse stream opened", "user_id", principal.Subject, "workspace_id", principal.Object)
 
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
-			h.logger.Info("converse stream closed by client", "user_id", principal.UserID)
+			h.logger.Info("converse stream closed by client", "user_id", principal.Subject)
 			return nil
 		}
 		if err != nil {
@@ -86,7 +87,7 @@ func (h *converseHandler) Converse(stream runtimev1.AgentRuntime_ConverseServer)
 			// a workspace can have multiple concurrent conversations —
 			// but the current orchestrator always passes a real
 			// session ID, so this is a safety net, not the happy path.
-			sessionID = principal.WorkspaceID
+			sessionID = principal.Object
 		}
 
 		// Drive one turn through the ADK runner. RunTurn returns an
@@ -109,7 +110,7 @@ func (h *converseHandler) Converse(stream runtimev1.AgentRuntime_ConverseServer)
 // synthesized via sendError and returns nil so the stream stays open.
 func (h *converseHandler) runOneTurn(
 	stream runtimev1.AgentRuntime_ConverseServer,
-	principal Principal,
+	principal crawblgrpc.Identity,
 	sessionID string,
 	systemPrompt string,
 	message string,
@@ -122,7 +123,7 @@ func (h *converseHandler) runOneTurn(
 		finalAgent string
 		iterErr    error
 	)
-	for event, err := range h.runner.RunTurn(ctx, principal.UserID, sessionID, systemPrompt, message) {
+	for event, err := range h.runner.RunTurn(ctx, principal.Subject, sessionID, systemPrompt, message) {
 		if err != nil {
 			iterErr = err
 			break
@@ -166,7 +167,7 @@ func (h *converseHandler) runOneTurn(
 		}
 	}
 	if iterErr != nil {
-		h.logger.Error("converse: runner iterator error", "error", iterErr, "user_id", principal.UserID, "session_id", sessionID)
+		h.logger.Error("converse: runner iterator error", "error", iterErr, "user_id", principal.Subject, "session_id", sessionID)
 		return sendError(stream, sessionID, codes.Internal, fmt.Sprintf("runner: %v", iterErr))
 	}
 
@@ -182,9 +183,9 @@ func (h *converseHandler) runOneTurn(
 		},
 	}
 	if !finalSeen {
-		h.logger.Warn("converse: turn completed with no final response event", "user_id", principal.UserID, "session_id", sessionID)
+		h.logger.Warn("converse: turn completed with no final response event", "user_id", principal.Subject, "session_id", sessionID)
 	} else {
-		h.logger.Info("converse turn complete", "user_id", principal.UserID, "session_id", sessionID, "final_agent", finalAgent, "turns", len(turns), "model", modelName)
+		h.logger.Info("converse turn complete", "user_id", principal.Subject, "session_id", sessionID, "final_agent", finalAgent, "turns", len(turns), "model", modelName)
 	}
 	return stream.Send(done)
 }
