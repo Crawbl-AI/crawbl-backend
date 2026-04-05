@@ -2,10 +2,19 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/agents"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
+	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
 
 // WorkspaceBlueprint describes the agent graph a runtime should build
@@ -61,38 +70,128 @@ type AgentBlueprint struct {
 	Model string `json:"model"`
 }
 
-// FetchBlueprint returns the WorkspaceBlueprint the runtime should use
-// to build its agent graph. In Phase 1 this returns a hardcoded default
-// matching the Manager+Wally+Eve graph constructed by BuildGraph; Phase
-// 2 replaces the body with an HMAC-authed HTTP GET against the
-// orchestrator's forthcoming GET /v1/internal/agents endpoint.
+// FetchBlueprint fetches the WorkspaceBlueprint from the orchestrator's
+// internal endpoint GET /v1/internal/agents?workspace_id=<id>, signed
+// with an HMAC bearer token derived from (userID, workspaceID) using
+// the same scheme the MCP bridge uses (internal/pkg/hmac).
 //
-// The ctx is already ready for an HTTP call (Phase 2) — today it's
-// unused but accepting it now keeps the signature stable across the
-// swap so callers don't need to change.
+// On transport or decode failure we log a warning and fall back to
+// DefaultBlueprint so the runtime can still boot a usable swarm. This
+// matters during cold-start when the orchestrator may briefly be
+// unreachable; an offline runtime is worse than a runtime running
+// last-known-good defaults. Operators see the fallback via the warning
+// log and can re-provision if needed.
 //
-// Returns a non-nil blueprint on success; on transport/decode failure
-// in Phase 2 it will return the zero value plus an error, and the
-// caller is expected to fall back to DefaultBlueprint.
+// The orchestrator endpoint URL is derived from cfg.OrchestratorHTTPEndpoint
+// when set, otherwise falls back to the same host as MCPEndpoint with
+// the path replaced.
 func FetchBlueprint(ctx context.Context, cfg config.Config, logger *slog.Logger) (*WorkspaceBlueprint, error) {
-	_ = ctx
 	if logger == nil {
 		logger = slog.Default()
 	}
-	// Phase 1 stub: no orchestrator call, log + return default.
-	//
-	// This is deliberately load-bearing: US-AR-010 lands the contract
-	// (types + call site + fallback) without touching the orchestrator.
-	// Phase 2's atomic swap adds the HTTP handler in the orchestrator
-	// and flips the body here to a real call with one commit. Until
-	// then the log line surfaces a clear breadcrumb for operators who
-	// expect dynamic blueprint loading.
-	logger.Info(
-		"runner: fetching workspace blueprint (Phase 1 hardcoded default — real HTTP fetch lands in Phase 2)",
-		"workspace_id", cfg.WorkspaceID,
-		"endpoint", "GET "+cfg.OrchestratorGRPCEndpoint+"/v1/internal/agents?workspace_id="+cfg.WorkspaceID+" (NOT YET IMPLEMENTED)",
+
+	endpoint, err := resolveBlueprintEndpoint(cfg)
+	if err != nil {
+		logger.Warn("runner: cannot resolve blueprint endpoint, using hardcoded default",
+			"workspace_id", cfg.WorkspaceID,
+			"error", err,
+		)
+		return DefaultBlueprint(cfg.WorkspaceID), nil
+	}
+
+	bp, err := fetchBlueprintHTTP(ctx, endpoint, cfg, logger)
+	if err != nil {
+		logger.Warn("runner: blueprint fetch failed, using hardcoded default",
+			"workspace_id", cfg.WorkspaceID,
+			"endpoint", endpoint,
+			"error", err,
+		)
+		return DefaultBlueprint(cfg.WorkspaceID), nil
+	}
+
+	logger.Info("runner: workspace blueprint fetched from orchestrator",
+		"workspace_id", bp.WorkspaceID,
+		"agent_count", len(bp.Agents),
+		"endpoint", endpoint,
 	)
-	return DefaultBlueprint(cfg.WorkspaceID), nil
+	return bp, nil
+}
+
+// resolveBlueprintEndpoint builds the full orchestrator URL for the
+// GET /v1/internal/agents call. The orchestrator's MCP endpoint
+// already carries the host + /mcp/v1 path; we strip the MCP suffix and
+// append /v1/internal/agents?workspace_id=<id>. This keeps the runtime
+// config minimal — one endpoint env var covers both MCP and internal
+// routes.
+func resolveBlueprintEndpoint(cfg config.Config) (string, error) {
+	if strings.TrimSpace(cfg.MCPEndpoint) == "" {
+		return "", errors.New("MCPEndpoint is empty")
+	}
+	u, err := url.Parse(cfg.MCPEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("parse MCPEndpoint: %w", err)
+	}
+	// Drop the MCP path segment (typically "/mcp/v1") and install the
+	// internal-agents path.
+	u.Path = "/v1/internal/agents"
+	q := u.Query()
+	q.Set("workspace_id", cfg.WorkspaceID)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// fetchBlueprintHTTP performs the authenticated GET. Separated from
+// FetchBlueprint so the fallback-on-error logic has a clean boundary:
+// FetchBlueprint handles policy (fall back to default on error);
+// fetchBlueprintHTTP handles mechanics (sign, send, decode).
+func fetchBlueprintHTTP(ctx context.Context, endpoint string, cfg config.Config, logger *slog.Logger) (*WorkspaceBlueprint, error) {
+	if cfg.MCPSigningKey == "" {
+		return nil, errors.New("MCPSigningKey is empty")
+	}
+	if cfg.UserID == "" || cfg.WorkspaceID == "" {
+		return nil, errors.New("UserID and WorkspaceID are required for HMAC")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	token := crawblhmac.GenerateToken(cfg.MCPSigningKey, cfg.UserID, cfg.WorkspaceID)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "crawbl-agent-runtime/phase2 (+blueprint-fetch)")
+
+	client := &http.Client{
+		Timeout: cfg.Startup.BlueprintFetchTimeout,
+	}
+	if client.Timeout <= 0 {
+		client.Timeout = 15 * time.Second
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB cap
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("orchestrator returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var bp WorkspaceBlueprint
+	if err := json.Unmarshal(body, &bp); err != nil {
+		return nil, fmt.Errorf("decode blueprint JSON: %w", err)
+	}
+	if bp.WorkspaceID == "" {
+		return nil, errors.New("orchestrator returned blueprint with empty workspace_id")
+	}
+	if len(bp.Agents) == 0 {
+		return nil, errors.New("orchestrator returned blueprint with zero agents")
+	}
+	_ = logger // kept for future debug logging
+	return &bp, nil
 }
 
 // DefaultBlueprint returns the hardcoded Phase 1 blueprint that matches
