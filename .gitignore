@@ -6,8 +6,3 @@ e2e/*.log
 e2e/*.xml
 bin/
 .omc/
-
-# Generated protobuf/gRPC code — regenerated via `make generate`.
-# See proto/agentruntime/v1/*.proto for source of truth.
-internal/agentruntime/proto/**/*.pb.go
-internal/agentruntime/proto/**/*_grpc.pb.go
