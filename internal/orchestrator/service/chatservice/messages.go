@@ -567,11 +567,39 @@ func (s *service) callAgentStreaming(
 	)
 
 	// 5. Finalize each sub-agent stream independently.
+	//
+	// Process the primary agent (Manager) FIRST to guarantee the delegation
+	// message has an earlier timestamp than sub-agent responses. Go maps
+	// have random iteration order, so we must handle the primary explicitly.
 	var replies []*orchestrator.Message
 
+	// 5a. Finalize the primary agent (Manager) first when delegation occurred.
+	if primarySt := streams[agent.ID]; primarySt != nil && len(streams) > 1 {
+		finalText := strings.TrimSpace(primarySt.accumulated.String())
+		slog.Info("callAgentStreaming: persisting Manager delegation decision",
+			"agent_slug", primarySt.agent.Slug,
+			"sub_agent_count", len(streams)-1,
+			"text_len", len(finalText),
+		)
+		primarySt.placeholder.Content.Type = orchestrator.MessageContentTypeDelegation
+		reply := s.finalizeStreamMessage(ctx, opts, conversation, primarySt.placeholder, finalText, orchestrator.MessageStatusDelegated, lookups)
+		s.updateDelegationSummary(placeholder.ID, finalText)
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, primarySt.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+		if reply != nil {
+			replies = append(replies, reply)
+		}
+	}
+
+	// 5b. Finalize remaining streams (sub-agents, or primary when no delegation).
 	for _, st := range streams {
-		finalText := strings.TrimSpace(st.accumulated.String())
 		isPrimary := st.agent.ID == agent.ID
+
+		// Already handled above when delegation occurred.
+		if isPrimary && len(streams) > 1 {
+			continue
+		}
+
+		finalText := strings.TrimSpace(st.accumulated.String())
 
 		slog.Info("callAgentStreaming: finalizing agent stream",
 			"agent_slug", st.agent.Slug,
@@ -581,28 +609,6 @@ func (s *service) callAgentStreaming(
 			"text_len", len(finalText),
 			"chunks", st.chunkCount,
 		)
-
-		// When sub-agents answered, persist Manager's reasoning as a
-		// delegation message instead of deleting it. The mobile app
-		// renders delegation messages as a dimmed/collapsible card so
-		// the full conversation history is visible on reload.
-		if isPrimary && len(streams) > 1 {
-			slog.Info("callAgentStreaming: persisting Manager delegation decision",
-				"agent_slug", st.agent.Slug,
-				"sub_agent_count", len(streams)-1,
-				"text_len", len(finalText),
-			)
-			st.placeholder.Content.Type = orchestrator.MessageContentTypeDelegation
-			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusDelegated, lookups)
-			// Backfill the delegation task_summary now that Manager's
-			// full reasoning text is available.
-			s.updateDelegationSummary(placeholder.ID, finalText)
-			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
-			if reply != nil {
-				replies = append(replies, reply)
-			}
-			continue
-		}
 
 		// Determine effective done status for this stream.
 		// If the global stream closed properly (all done events received or legacy
