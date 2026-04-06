@@ -53,6 +53,7 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		httpMiddleware:     opts.HTTPMiddleware,
 		broadcaster:        broadcaster,
 		runtimeClient:      opts.RuntimeClient,
+		mcpSigningKey:      opts.MCPSigningKey,
 		cfg:                config,
 	}
 
@@ -135,8 +136,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 // validateNewServer checks that all required server configuration and options are present.
 // It panics with a descriptive message if any required field is nil or empty.
 // This fail-fast behavior ensures configuration errors are caught at startup.
-//
-//nolint:cyclop
 func validateNewServer(config *Config, opts *NewServerOpts) {
 	if config == nil || opts == nil {
 		panic("server config and options are required")

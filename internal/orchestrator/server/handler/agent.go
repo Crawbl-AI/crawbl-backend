@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -311,7 +310,7 @@ func CreateAgentMemory(c *Context) http.HandlerFunc {
 		}
 
 		var body dto.CreateAgentMemoryRequest
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := DecodeJSON(r, &body); err != nil {
 			WriteError(w, merrors.ErrInvalidInput)
 			return
 		}

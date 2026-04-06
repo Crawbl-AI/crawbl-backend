@@ -7,11 +7,6 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-// workspaceRepo is a type alias for the WorkspaceRepo interface from the
-// repository package. This alias provides a shorter, local name for the
-// repository interface used by this service.
-type workspaceRepo = workspacerepo.WorkspaceRepo
-
 // service implements the WorkspaceService interface, providing workspace
 // management capabilities backed by a repository and runtime client.
 //

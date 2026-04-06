@@ -22,7 +22,6 @@ const (
 	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
 	// This prevents slowloris attacks by timing out slow clients.
 	DefaultReadHeaderTimeout = 5 * time.Second
-
 )
 
 // Config holds the configuration settings for the HTTP server.
@@ -79,6 +78,9 @@ type NewServerOpts struct {
 	// IntegrationService manages third-party OAuth connections.
 	// If nil, integration endpoints return service-unavailable errors.
 	IntegrationService orchestratorservice.IntegrationService
+
+	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
+	MCPSigningKey string
 }
 
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.
@@ -119,7 +121,9 @@ type Server struct {
 	// integrationService manages third-party OAuth connections.
 	integrationService orchestratorservice.IntegrationService
 
+	// mcpSigningKey is the HMAC signing key for internal bearer tokens.
+	mcpSigningKey string
+
 	// cfg holds the server configuration.
 	cfg *Config
 }
-

@@ -24,6 +24,7 @@ func registerRoutes(s *Server) http.Handler {
 		HTTPMiddleware:     s.httpMiddleware,
 		Broadcaster:        s.broadcaster,
 		RuntimeClient:      s.runtimeClient,
+		MCPSigningKey:      s.mcpSigningKey,
 	}
 
 	router := chi.NewRouter()
@@ -32,9 +33,11 @@ func registerRoutes(s *Server) http.Handler {
 	// 1. RequestID - generates unique ID for each request
 	// 2. RealIP - extracts real client IP from headers
 	// 3. PanicRecoverer - catches panics and logs them
+	// 4. RequestLogger - logs every incoming request
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
-	router.Use(PanicRecoverer(s.logger))
+	router.Use(httpserver.PanicRecoverer(s.logger))
+	router.Use(httpserver.RequestLogger(s.logger))
 
 	router.Route("/v1", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck(h))

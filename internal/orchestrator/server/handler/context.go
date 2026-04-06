@@ -51,6 +51,9 @@ type Context struct {
 
 	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
 	RuntimeClient userswarmclient.Client
+
+	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
+	MCPSigningKey string
 }
 
 // NewSession creates a new database session.

@@ -149,7 +149,8 @@ func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservic
 	}
 
 	prompts := make([]orchestrator.AgentPrompt, 0, len(promptRows))
-	for _, row := range promptRows {
+	for i := range promptRows {
+		row := &promptRows[i]
 		prompts = append(prompts, orchestrator.AgentPrompt{
 			ID:          row.ID,
 			Name:        row.Name,

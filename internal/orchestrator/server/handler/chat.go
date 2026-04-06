@@ -198,7 +198,7 @@ func ConversationDelete(c *Context) http.HandlerFunc {
 			return
 		}
 
-		w.WriteHeader(http.StatusNoContent)
+		httpserver.WriteNoContent(w)
 	}
 }
 
@@ -232,7 +232,7 @@ func ConversationMarkRead(c *Context) http.HandlerFunc {
 			return
 		}
 
-		w.WriteHeader(http.StatusNoContent)
+		httpserver.WriteNoContent(w)
 	}
 }
 

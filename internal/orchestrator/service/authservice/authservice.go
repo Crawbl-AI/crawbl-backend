@@ -33,7 +33,7 @@ import (
 //   - legalDocuments: Configuration for legal document URLs and versions. May be nil for defaults.
 //
 // Returns an AuthService implementation ready for use.
-func New(userRepo userRepo, workspaceBootstrapper workspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments) orchestratorservice.AuthService {
+func New(userRepo orchestratorrepo.UserRepo, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments) orchestratorservice.AuthService {
 	if userRepo == nil {
 		panic("auth service user repo cannot be nil")
 	}
@@ -215,8 +215,6 @@ func (s *service) GetBySubject(ctx context.Context, opts *orchestratorservice.Ge
 //   - ErrInvalidInput: nil options or session
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
-//
-//nolint:cyclop
 func (s *service) UpdateProfile(ctx context.Context, opts *orchestratorservice.UpdateProfileOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -301,8 +299,6 @@ func (s *service) GetLegalDocuments(_ context.Context) (*orchestrator.LegalDocum
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - Business error if version doesn't match current version
-//
-//nolint:cyclop
 func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.AcceptLegalOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -473,7 +469,8 @@ func (s *service) generateUniqueNickname(ctx context.Context, sess *dbr.Session,
 
 	for range maxAttempts {
 		// Generate cryptographically random 4-digit suffix (0000–9999)
-		n, err := rand.Int(rand.Reader, big.NewInt(10000))
+		const nicknameSuffixRange = 10000
+		n, err := rand.Int(rand.Reader, big.NewInt(nicknameSuffixRange))
 		if err != nil {
 			return "", merrors.WrapStdServerError(err, "generate random nickname suffix")
 		}

@@ -196,6 +196,7 @@ func runServer(ctx context.Context) error {
 		RuntimeClient:      runtimeClient,
 		MCPHandler:         mcpHandler,
 		IntegrationService: integrationService,
+		MCPSigningKey:      strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY")),
 	})
 
 	return srv.Run(ctx, shutdownTimeout)

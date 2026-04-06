@@ -15,9 +15,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	workspacerepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
 // New creates a new WorkspaceService instance with the provided dependencies.
@@ -32,7 +33,7 @@ import (
 //   - logger: Structured logger for diagnostic and error logging.
 //
 // Returns an orchestratorservice.WorkspaceService implementation.
-func New(workspaceRepo workspaceRepo, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+func New(workspaceRepo workspacerepo.WorkspaceRepo, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
 	if workspaceRepo == nil {
 		panic("workspace service repo cannot be nil")
 	}

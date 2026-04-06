@@ -15,7 +15,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
-	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -54,54 +53,6 @@ type Service interface {
 	ListWorkflows(ctx context.Context, sess *dbr.Session, userID, workspaceID string) ([]WorkflowBriefResult, error)
 }
 
-// ---------------------------------------------------------------------------
-// Local repo interfaces (narrow contracts for what mcpservice actually uses)
-// ---------------------------------------------------------------------------
-
-type mcpRepo = mcprepo.Repo
-
-type workspaceRepo interface {
-	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
-}
-
-type conversationRepo interface {
-	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error)
-	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) (*orchestrator.Conversation, *merrors.Error)
-}
-
-type agentRepo interface {
-	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error)
-	GetByIDGlobal(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error)
-}
-
-type agentHistoryRepo interface {
-	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentHistoryRow) *merrors.Error
-}
-
-type messageRepo interface {
-	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
-}
-
-type artifactRepoI interface {
-	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *artifactrepo.ArtifactRow) *merrors.Error
-	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, artifactID string) (*artifactrepo.ArtifactRow, *merrors.Error)
-	UpdateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, newVersion int) *merrors.Error
-	CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *artifactrepo.ArtifactVersionRow) *merrors.Error
-	GetLatestVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (*artifactrepo.ArtifactVersionRow, *merrors.Error)
-	ListVersions(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) ([]artifactrepo.ArtifactVersionRow, *merrors.Error)
-	CreateReview(ctx context.Context, sess orchestratorrepo.SessionRunner, row *artifactrepo.ArtifactReviewRow) *merrors.Error
-	ListReviews(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, version int) ([]artifactrepo.ArtifactReviewRow, *merrors.Error)
-}
-
-type workflowRepoI interface {
-	CreateDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, row *workflowrepo.WorkflowDefinitionRow) *merrors.Error
-	GetDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, definitionID string) (*workflowrepo.WorkflowDefinitionRow, *merrors.Error)
-	ListDefinitions(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]workflowrepo.WorkflowDefinitionRow, *merrors.Error)
-	CreateExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *workflowrepo.WorkflowExecutionRow) *merrors.Error
-	GetExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string) (*workflowrepo.WorkflowExecutionRow, *merrors.Error)
-	GetStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string, stepIndex int) (*workflowrepo.WorkflowStepExecutionRow, *merrors.Error)
-}
-
 // WorkflowExecutor runs a workflow execution asynchronously.
 type WorkflowExecutor interface {
 	ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
@@ -113,14 +64,14 @@ type WorkflowExecutor interface {
 
 // Repos groups the repository dependencies.
 type Repos struct {
-	MCP          mcpRepo
-	Workspace    workspaceRepo
-	Conversation conversationRepo
-	Agent        agentRepo
-	AgentHistory agentHistoryRepo
-	Message      messageRepo
-	Artifact     artifactRepoI
-	Workflow     workflowRepoI
+	MCP          mcprepo.Repo
+	Workspace    orchestratorrepo.WorkspaceRepo
+	Conversation orchestratorrepo.ConversationRepo
+	Agent        orchestratorrepo.AgentRepo
+	AgentHistory orchestratorrepo.AgentHistoryRepo
+	Message      orchestratorrepo.MessageRepo
+	Artifact     artifactrepo.Repo
+	Workflow     workflowrepo.Repo
 }
 
 // Infra groups non-repo infrastructure dependencies.

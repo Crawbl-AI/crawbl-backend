@@ -8,8 +8,47 @@ import (
 	"runtime/debug"
 	"strings"
 
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
+
+// PanicRecoverer is middleware that recovers from panics and logs them with full context.
+// It returns a 500 Internal Server Error to the client.
+func PanicRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rvr := recover(); rvr != nil {
+					requestID := chimiddleware.GetReqID(r.Context())
+					logger.Error("panic recovered",
+						"method", r.Method,
+						"path", r.URL.Path,
+						"request_id", requestID,
+						"panic", fmt.Sprintf("%v", rvr),
+						"stack", string(debug.Stack()),
+					)
+					WriteErrorResponse(w, http.StatusInternalServerError, "internal server error")
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequestLogger is middleware that logs every incoming HTTP request at Info level.
+func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger.Info("request started",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"request_id", chimiddleware.GetReqID(r.Context()),
+			)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // AuthMiddleware returns middleware that extracts user identity from
 // Envoy Gateway-forwarded headers.
@@ -22,18 +61,6 @@ import (
 func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
-				if rvr := recover(); rvr != nil {
-					logger.Error("panic in auth middleware",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"panic", fmt.Sprintf("%v", rvr),
-						"stack", string(debug.Stack()),
-					)
-					WriteErrorResponse(w, http.StatusInternalServerError, "internal server error")
-				}
-			}()
-
 			// In local/test environments, inject a default principal and skip auth.
 			env := strings.ToLower(strings.TrimSpace(cfg.Environment))
 			if env == EnvironmentLocal || env == "test" {

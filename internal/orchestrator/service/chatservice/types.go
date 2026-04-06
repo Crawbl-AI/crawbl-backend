@@ -5,16 +5,10 @@
 package chatservice
 
 import (
-	"context"
-	"sync"
-	"time"
-
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -23,168 +17,28 @@ import (
 // Passing a single struct instead of 8 individual parameters keeps the
 // constructor signature clean and makes adding new repos a one-line change.
 type Repos struct {
-	Workspace     workspaceRepo
-	Agent         agentRepo
-	Conversation  conversationRepo
-	Message       messageRepo
-	Tools         toolsRepo
-	AgentSettings agentSettingsRepo
-	AgentPrompts  agentPromptsRepo
-	AgentHistory  agentHistoryRepo
+	Workspace     orchestratorrepo.WorkspaceRepo
+	Agent         orchestratorrepo.AgentRepo
+	Conversation  orchestratorrepo.ConversationRepo
+	Message       orchestratorrepo.MessageRepo
+	Tools         orchestratorrepo.ToolsRepo
+	AgentSettings orchestratorrepo.AgentSettingsRepo
+	AgentPrompts  orchestratorrepo.AgentPromptsRepo
+	AgentHistory  orchestratorrepo.AgentHistoryRepo
 }
 
-// streamContext bundles the shared state needed throughout the streaming pipeline.
-// Passing a single struct instead of 6+ individual parameters keeps function
-// signatures clean and makes adding new fields a one-line change.
-type streamContext struct {
-	opts         *orchestratorservice.SendMessageOpts
-	conversation *orchestrator.Conversation
-	runtimeState *orchestrator.RuntimeStatus
-	lookups      agentLookups
-}
-
-// service implements the orchestratorservice.ChatService interface.
-// It manages workspace bootstrapping, agent provisioning, conversation management,
-// and message handling for the chat subsystem.
+// service implements the ChatService interface.
 type service struct {
-	// db is the database connection used for background operations such as
-	// the pending-message cleanup goroutine, which runs outside of request scope.
-	db *dbr.Connection
-	// workspaceRepo provides access to workspace data storage.
-	workspaceRepo workspaceRepo
-	// agentRepo provides access to agent data storage.
-	agentRepo agentRepo
-	// conversationRepo provides access to conversation data storage.
-	conversationRepo conversationRepo
-	// messageRepo provides access to message data storage.
-	messageRepo messageRepo
-	// toolsRepo provides access to the tool catalog storage.
-	toolsRepo toolsRepo
-	// agentSettingsRepo provides access to agent settings storage.
-	agentSettingsRepo agentSettingsRepo
-	// agentPromptsRepo provides access to agent prompt storage.
-	agentPromptsRepo agentPromptsRepo
-	// agentHistoryRepo provides access to agent history storage.
-	agentHistoryRepo agentHistoryRepo
-	// runtimeClient communicates with the agent runtime for chat operations.
-	runtimeClient userswarmclient.Client
-	// broadcaster emits real-time events to connected WebSocket clients.
-	broadcaster realtime.Broadcaster
-	// defaultAgents contains the blueprint definitions for default agents
-	// that are automatically provisioned for each workspace.
-	defaultAgents []orchestrator.DefaultAgentBlueprint
-	// bootstrapCache tracks workspaces that have been fully bootstrapped so
-	// ensureWorkspaceBootstrap can skip the ~15 seed queries on subsequent calls.
-	bootstrapCache sync.Map // map[workspaceID]bool
-}
-
-// workspaceRepo defines the repository interface for workspace data operations.
-// Implementations must handle workspace lookup and retrieval by user and workspace IDs.
-type workspaceRepo interface {
-	// GetByID retrieves a workspace by its ID within the context of a specific user.
-	// Returns an error if the workspace does not exist or the user lacks access.
-	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
-}
-
-// agentRepo defines the repository interface for agent data operations.
-// Implementations must handle agent creation, updates, and listing within workspaces.
-type agentRepo interface {
-	// ListByWorkspaceID retrieves all agents belonging to a specific workspace.
-	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error)
-	// GetByIDGlobal retrieves an agent by ID without workspace filtering.
-	GetByIDGlobal(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error)
-	// CountMessagesByAgentID counts the total number of messages attributed to an agent.
-	CountMessagesByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error)
-	// Save persists an agent to storage with an optional sort order for consistent listing.
-	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, agent *orchestrator.Agent, sortOrder int) *merrors.Error
-}
-
-// conversationRepo defines the repository interface for conversation data operations.
-// Implementations must handle conversation CRUD operations and default swarm conversation lookup.
-type conversationRepo interface {
-	// ListByWorkspaceID retrieves all conversations belonging to a specific workspace.
-	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error)
-	// GetByID retrieves a specific conversation by its ID within a workspace.
-	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) (*orchestrator.Conversation, *merrors.Error)
-	// FindDefaultSwarm finds the default swarm conversation for a workspace.
-	// Returns an error with ErrCodeConversationNotFound if no default swarm exists.
-	FindDefaultSwarm(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) (*orchestrator.Conversation, *merrors.Error)
-	// Save persists a conversation to storage.
-	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error
-	// Create inserts a new conversation row. Returns an error if the conversation already exists.
-	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error
-	// Delete removes a conversation by workspace ID and conversation ID.
-	// Returns ErrConversationNotFound if the conversation does not exist.
-	Delete(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error
-	// MarkAsRead resets the unread_count to zero for a conversation.
-	// Returns ErrConversationNotFound if the conversation does not exist in the workspace.
-	MarkAsRead(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error
-}
-
-// messageRepo defines the repository interface for message data operations.
-// Implementations must handle message persistence and retrieval within conversations.
-type messageRepo interface {
-	// ListByConversationID retrieves a paginated list of messages for a conversation.
-	ListByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, opts *orchestratorrepo.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error)
-	// GetLatestByConversationID retrieves the most recent message in a conversation.
-	GetLatestByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error)
-	// GetByID retrieves a single message by its ID.
-	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) (*orchestrator.Message, *merrors.Error)
-	// Save persists a message to storage.
-	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error
-	// FailStalePending marks all messages with status "pending" created before
-	// the cutoff time as "failed". Returns the number of affected rows.
-	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
-	// UpdateStatus updates just the status and updated_at of a message by ID.
-	UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
-	// DeleteByID removes a message by its ID. Used to clean up empty failed placeholders.
-	DeleteByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) *merrors.Error
-	// ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
-	// Used for building conversation context to inject into agent calls.
-	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
-	// RecordDelegation inserts an agent_delegations row to track when one agent
-	// delegates a task to another. Best-effort — callers may discard the error.
-	RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) *merrors.Error
-	// CompleteDelegation marks a running delegation as completed, recording the
-	// completion timestamp and elapsed duration. Best-effort — callers may discard the error.
-	CompleteDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error
-	// UpdateDelegationSummary backfills the task_summary on delegation rows
-	// for a given trigger message. Best-effort — callers may discard the error.
-	UpdateDelegationSummary(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, summary string) *merrors.Error
-}
-
-// toolsRepo defines the repository interface for tool catalog operations.
-type toolsRepo interface {
-	// List retrieves a paginated list of tools, optionally filtered by category.
-	List(ctx context.Context, sess orchestratorrepo.SessionRunner, limit, offset int, category string) ([]orchestrator.AgentTool, *merrors.Error)
-	// Count returns the total number of tools, optionally filtered by category.
-	Count(ctx context.Context, sess orchestratorrepo.SessionRunner, category string) (int, *merrors.Error)
-	// GetByNames retrieves tools matching the given name list.
-	GetByNames(ctx context.Context, sess orchestratorrepo.SessionRunner, names []string) ([]orchestrator.AgentTool, *merrors.Error)
-	// Seed inserts or updates the tool catalog from the canonical list.
-	Seed(ctx context.Context, sess orchestratorrepo.SessionRunner, tools []orchestratorrepo.ToolRow) *merrors.Error
-}
-
-// agentSettingsRepo defines the repository interface for agent settings operations.
-type agentSettingsRepo interface {
-	// GetByAgentID retrieves settings for a specific agent.
-	GetByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestratorrepo.AgentSettingsRow, *merrors.Error)
-	// Save persists agent settings.
-	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentSettingsRow) *merrors.Error
-}
-
-// agentPromptsRepo defines the repository interface for agent prompt operations.
-type agentPromptsRepo interface {
-	// ListByAgentID retrieves all prompts for a specific agent.
-	ListByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) ([]orchestratorrepo.AgentPromptRow, *merrors.Error)
-	// BulkSave inserts multiple prompt rows in a single operation.
-	BulkSave(ctx context.Context, sess orchestratorrepo.SessionRunner, rows []orchestratorrepo.AgentPromptRow) *merrors.Error
-}
-
-// agentHistoryRepo defines the repository interface for agent history operations.
-type agentHistoryRepo interface {
-	// ListByAgentID retrieves paginated history items for a specific agent.
-	ListByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string, limit, offset int) ([]orchestratorrepo.AgentHistoryRow, *merrors.Error)
-	// CountByAgentID returns the total number of history items for an agent.
-	CountByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error)
+	db                *dbr.Connection
+	workspaceRepo     orchestratorrepo.WorkspaceRepo
+	agentRepo         orchestratorrepo.AgentRepo
+	conversationRepo  orchestratorrepo.ConversationRepo
+	messageRepo       orchestratorrepo.MessageRepo
+	toolsRepo         orchestratorrepo.ToolsRepo
+	agentSettingsRepo orchestratorrepo.AgentSettingsRepo
+	agentPromptsRepo  orchestratorrepo.AgentPromptsRepo
+	agentHistoryRepo  orchestratorrepo.AgentHistoryRepo
+	runtimeClient     userswarmclient.Client
+	broadcaster       realtime.Broadcaster
+	defaultAgents     []orchestrator.DefaultAgentBlueprint
 }

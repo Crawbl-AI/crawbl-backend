@@ -79,7 +79,7 @@ func (s *service) sendDirectMessage(
 	}
 
 	// Persist user message first (same as swarm path).
-	if _, mErr := s.persistUserMessage(ctx, opts, conversation); mErr != nil {
+	if mErr := s.persistUserMessage(ctx, opts, conversation); mErr != nil {
 		return nil, mErr
 	}
 
@@ -97,7 +97,7 @@ func (s *service) sendSwarmMessage(
 	runtimeState *orchestrator.RuntimeStatus,
 ) ([]*orchestrator.Message, *merrors.Error) {
 	// 1. Persist user message first so it's visible immediately.
-	_, mErr := s.persistUserMessage(ctx, opts, conversation)
+	mErr := s.persistUserMessage(ctx, opts, conversation)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -212,7 +212,9 @@ func (s *service) callAgentStreaming(
 	extraContext string,
 ) ([]*orchestrator.Message, *merrors.Error) {
 	// 1. Emit thinking status.
-	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+	if agent != nil {
+		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+	}
 
 	// 2. Create placeholder message in DB (status: pending).
 	now := time.Now().UTC()
@@ -845,7 +847,7 @@ func parseToolCallArgs(toolName, argsJSON string) toolCallArgs {
 	return toolCallArgs{Parsed: parsed, Query: query}
 }
 
-func (s *service) recordDelegation(ctx context.Context, sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
+func (s *service) recordDelegation(_ context.Context, sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if mErr := s.messageRepo.RecordDelegation(auditCtx, sess, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary); mErr != nil {
@@ -873,7 +875,7 @@ func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
 	}
 }
 
-func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, delegateAgentID string) {
+func (s *service) completeDelegation(_, _, triggerMsgID, delegateAgentID string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sess := s.db.NewSession(nil)
@@ -887,12 +889,12 @@ func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, 
 }
 
 // persistUserMessage saves the user message in its own transaction and
-// broadcasts message.new. Returns the persisted message.
+// broadcasts message.new.
 func (s *service) persistUserMessage(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
-) (*orchestrator.Message, *merrors.Error) {
+) *merrors.Error {
 	now := time.Now().UTC()
 
 	userMsg := &orchestrator.Message{
@@ -913,7 +915,7 @@ func (s *service) persistUserMessage(
 		}
 		return userMsg, nil
 	}); mErr != nil {
-		return nil, mErr
+		return mErr
 	}
 
 	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMsg)
@@ -928,70 +930,7 @@ func (s *service) persistUserMessage(
 	opts.StatusDeliveredOnce = &sync.Once{}
 	opts.StatusReadOnce = &sync.Once{}
 
-	return userMsg, nil
-}
-
-// persistAgentMessage saves one agent reply in its own transaction, updates
-// conversation metadata, attaches the agent object, and broadcasts message.new.
-// Safe for concurrent calls on the same conversation — last writer wins for
-// conversation.UpdatedAt which is acceptable.
-func (s *service) persistAgentMessage(
-	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	conversation *orchestrator.Conversation,
-	agent *orchestrator.Agent,
-	text string,
-	agentByID map[string]*orchestrator.Agent,
-) (*orchestrator.Message, *merrors.Error) {
-	now := time.Now().UTC()
-	reply := newAgentMessage(conversation.ID, agent, text, now)
-
-	// Shallow-copy the conversation so concurrent goroutines don't race on
-	// UpdatedAt / LastMessage fields of the shared pointer.
-	convCopy := *conversation
-	convCopy.UpdatedAt = now
-	convCopy.LastMessage = reply
-
-	if _, mErr := database.WithTransaction(opts.Sess, "persist agent message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
-		if mErr := s.messageRepo.Save(ctx, tx, reply); mErr != nil {
-			return nil, mErr
-		}
-		if mErr := s.conversationRepo.Save(ctx, tx, &convCopy); mErr != nil {
-			return nil, mErr
-		}
-		return reply, nil
-	}); mErr != nil {
-		return nil, mErr
-	}
-
-	if reply.AgentID != nil {
-		reply.Agent = agentByID[*reply.AgentID]
-	}
-
-	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, reply)
-	return reply, nil
-}
-
-func newAgentMessage(conversationID string, agent *orchestrator.Agent, text string, at time.Time) *orchestrator.Message {
-	var agentID *string
-	if agent != nil {
-		agentID = &agent.ID
-	}
-
-	return &orchestrator.Message{
-		ID:             uuid.NewString(),
-		ConversationID: conversationID,
-		Role:           orchestrator.MessageRoleAgent,
-		Content: orchestrator.MessageContent{
-			Type: orchestrator.MessageContentTypeText,
-			Text: text,
-		},
-		Status:      orchestrator.MessageStatusDelivered,
-		AgentID:     agentID,
-		Attachments: []orchestrator.Attachment{},
-		CreatedAt:   at,
-		UpdatedAt:   at,
-	}
+	return nil
 }
 
 func runtimeMessage(message, extraContext string) string {

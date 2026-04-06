@@ -1,6 +1,5 @@
 package httpserver
 
-
 // HTTP header constants used throughout the application.
 const (
 	// AuthorizationHeader is the standard Authorization header.

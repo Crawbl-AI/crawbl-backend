@@ -47,8 +47,6 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 }
 
 // ensureDefaultAgents ensures all default agents exist for the workspace.
-//
-//nolint:cyclop
 func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Agent, *merrors.Error) {
 	agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
 	if mErr != nil {

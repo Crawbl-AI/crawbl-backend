@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -33,7 +32,7 @@ import (
 // translation layer.
 func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
+		signingKey := strings.TrimSpace(c.MCPSigningKey)
 		if signingKey == "" {
 			http.Error(w, "internal: signing key not configured", http.StatusServiceUnavailable)
 			return
@@ -75,7 +74,7 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 		for _, agent := range agents {
 			b := internalAgentBlueprint{
 				Slug:         agent.Slug,
-				Role:         string(agent.Role),
+				Role:         agent.Role,
 				SystemPrompt: agent.SystemPrompt,
 				Description:  agent.Description,
 			}
