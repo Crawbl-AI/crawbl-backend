@@ -16,7 +16,7 @@ concurrency:
 jobs:
   e2e-test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -41,11 +41,57 @@ jobs:
       - name: Save kubeconfig
         run: doctl kubernetes cluster kubeconfig save crawbl-dev
 
+      - name: Start port-forwards
+        run: |
+          # Port-forward postgres + redis for DB and session assertions.
+          # Orchestrator is accessed via the external gateway URL.
+          kubectl port-forward svc/backend-postgresql 5432:5432 -n backend &
+          kubectl port-forward svc/backend-redis-master 6379:6379 -n backend &
+
+          # Wait for both to become reachable.
+          for port in 5432 6379; do
+            for _ in $(seq 1 20); do
+              if nc -z localhost $port 2>/dev/null; then
+                echo "Port $port ready"
+                break
+              fi
+              sleep 1
+            done
+          done
+
+      - name: Fetch cluster secrets
+        id: secrets
+        run: |
+          PG_PASS=$(kubectl get secret backend-postgresql-auth -n backend -o jsonpath='{.data.postgres-password}' | base64 -d)
+          REDIS_PASS=$(kubectl get secret backend-redis-auth -n backend -o jsonpath='{.data.redis-password}' | base64 -d)
+          SPACES_AK=$(kubectl get secret runtime-openai-secrets -n userswarms -o jsonpath='{.data.CRAWBL_SPACES_ACCESS_KEY}' | base64 -d)
+          SPACES_SK=$(kubectl get secret runtime-openai-secrets -n userswarms -o jsonpath='{.data.CRAWBL_SPACES_SECRET_KEY}' | base64 -d)
+
+          # Mask secrets in logs.
+          echo "::add-mask::$PG_PASS"
+          echo "::add-mask::$REDIS_PASS"
+          echo "::add-mask::$SPACES_AK"
+          echo "::add-mask::$SPACES_SK"
+
+          echo "pg_pass=$PG_PASS" >> "$GITHUB_OUTPUT"
+          echo "redis_pass=$REDIS_PASS" >> "$GITHUB_OUTPUT"
+          echo "spaces_ak=$SPACES_AK" >> "$GITHUB_OUTPUT"
+          echo "spaces_sk=$SPACES_SK" >> "$GITHUB_OUTPUT"
+
       - name: Run E2E tests
         env:
           CRAWBL_E2E_TOKEN: ${{ secrets.CRAWBL_E2E_TOKEN }}
+          CRAWBL_E2E_DATABASE_DSN: "postgres://postgres:${{ steps.secrets.outputs.pg_pass }}@localhost:5432/crawbl?sslmode=disable&search_path=orchestrator"
+          CRAWBL_E2E_REDIS_ADDR: "localhost:6379"
+          CRAWBL_E2E_REDIS_PASSWORD: ${{ steps.secrets.outputs.redis_pass }}
+          CRAWBL_E2E_SPACES_ENDPOINT: "https://fra1.digitaloceanspaces.com"
+          CRAWBL_E2E_SPACES_REGION: "fra1"
+          CRAWBL_E2E_SPACES_BUCKET: "crawbl-workspaces-dev"
+          CRAWBL_E2E_SPACES_ACCESS_KEY: ${{ steps.secrets.outputs.spaces_ak }}
+          CRAWBL_E2E_SPACES_SECRET_KEY: ${{ steps.secrets.outputs.spaces_sk }}
         run: |
           ./.artifacts/bin/crawbl test e2e \
             --base-url https://dev.api.crawbl.com \
             --e2e-token "$CRAWBL_E2E_TOKEN" \
-            --timeout 30s
+            --timeout 60s \
+            --verbose
