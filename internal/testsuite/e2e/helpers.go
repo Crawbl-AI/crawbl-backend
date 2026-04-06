@@ -128,6 +128,8 @@ func (tc *testContext) captureDefaultWorkspace(alias string) error {
 	}
 	state.workspaceID = workspaceID
 	state.workspaceName = gjson.GetBytes(tc.lastBody, "data.0.name").String()
+	// Expose to generic HTTP steps so {workspace_id} interpolation works.
+	tc.saved["workspace_id"] = workspaceID
 	return nil
 }
 
