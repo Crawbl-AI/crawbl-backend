@@ -85,7 +85,7 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("web_fetch: build request for %s: %w", url, err)
 	}
@@ -94,18 +94,23 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 	req.Header.Set("User-Agent", "crawbl-agent-runtime/phase1 (+https://crawbl.com)")
 	req.Header.Set("Accept", "text/html, text/plain, application/json, */*;q=0.5")
 
+	const (
+		webFetchErrorStatusThresh = 400
+		webFetchErrorBodyPreview  = 256
+	)
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("web_fetch: GET %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
 	if err != nil {
 		return "", fmt.Errorf("web_fetch: read body from %s: %w", url, err)
 	}
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("web_fetch: %s returned status %d: %s", url, resp.StatusCode, truncate(string(body), 256))
+	if resp.StatusCode >= webFetchErrorStatusThresh {
+		return "", fmt.Errorf("web_fetch: %s returned status %d: %s", url, resp.StatusCode, truncate(string(body), webFetchErrorBodyPreview))
 	}
 	return string(body), nil
 }

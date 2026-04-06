@@ -26,7 +26,7 @@ func driveSync(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runtimeCo
 func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runtimeConfig) *syncResponse {
 	runtimeNamespace := runtimeNamespaceFor(swarm)
 
-	children := []interface{}{
+	children := []any{
 		buildServiceAccount(swarm, runtimeNamespace),
 		buildRuntimeNetwork(swarm, runtimeNamespace),
 		buildRuntimeDeployment(swarm, runtimeNamespace, cfg),
@@ -34,17 +34,20 @@ func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runt
 
 	phase, readyStatus, readyReason := readinessSnapshot(req, swarm)
 
+	// resyncPeriodSeconds is the Metacontroller resync interval for UserSwarm
+	// reconciliation. 30s balances responsiveness with API server load.
+	const resyncPeriodSeconds = 30
 	return &syncResponse{
-		Status: map[string]interface{}{
+		Status: map[string]any{
 			"observedGeneration": swarm.Generation,
 			"phase":              phase,
 			"runtimeNamespace":   runtimeNamespace,
 			"serviceName":        runtimeServiceName(swarm),
 			"readyReplicas":      observedReadyReplicas(req),
-			"conditions":         []interface{}{kube.StatusCondition("Ready", readyStatus, readyReason, "")},
+			"conditions":         []any{kube.StatusCondition("Ready", readyStatus, readyReason, "")},
 		},
 		Children:           children,
-		ResyncAfterSeconds: 30,
+		ResyncAfterSeconds: resyncPeriodSeconds,
 	}
 }
 
@@ -74,8 +77,8 @@ func finalizeGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm) *syncRespo
 	slog.Info("finalize", "swarm", swarm.Name, "hasChildren", hasChildren)
 
 	return &syncResponse{
-		Status:    map[string]interface{}{"phase": "Deleting"},
-		Children:  []interface{}{},
+		Status:    map[string]any{"phase": "Deleting"},
+		Children:  []any{},
 		Finalized: !hasChildren,
 	}
 }

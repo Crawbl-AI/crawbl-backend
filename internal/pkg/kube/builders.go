@@ -37,8 +37,8 @@ func RestrictedSecurityContext(uid, gid int64) *corev1.SecurityContext {
 // StatusCondition builds a Kubernetes-style status condition as a generic map.
 // This is the format Metacontroller expects when setting conditions on a CR's status.
 // For typed conditions, use metav1.Condition directly.
-func StatusCondition(typ, status, reason, message string) map[string]interface{} {
-	c := map[string]interface{}{
+func StatusCondition(typ, status, reason, message string) map[string]any {
+	c := map[string]any{
 		"type":   typ,
 		"status": status,
 		"reason": reason,

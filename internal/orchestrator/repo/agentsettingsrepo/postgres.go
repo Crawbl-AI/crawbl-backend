@@ -1,3 +1,5 @@
+// Package agentsettingsrepo provides PostgreSQL-based implementation of the AgentSettingsRepo interface.
+// It handles persistence and retrieval of per-agent settings.
 package agentsettingsrepo
 
 import (

@@ -11,6 +11,6 @@ import (
 
 // service implements orchestratorservice.IntegrationService.
 type service struct {
-	logger  *slog.Logger
+	logger   *slog.Logger
 	connRepo orchestratorrepo.IntegrationConnRepo
 }

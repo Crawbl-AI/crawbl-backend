@@ -5,8 +5,8 @@
 //
 // Usage:
 //
-//	1. Create a client: firebase.NewFCMClient("crawbl-dev", "/path/to/sa.json")
-//	2. Send a notification: client.Send(ctx, deviceToken, title, body)
+//  1. Create a client: firebase.NewFCMClient("crawbl-dev", "/path/to/sa.json")
+//  2. Send a notification: client.Send(ctx, deviceToken, title, body)
 //
 // The service account JSON is obtained from Firebase Console → Project Settings
 // → Service Accounts → Generate new private key.

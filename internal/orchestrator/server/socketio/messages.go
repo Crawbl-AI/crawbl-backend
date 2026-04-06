@@ -75,7 +75,7 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 
 	// Cancel the context when the socket disconnects, stopping in-flight
 	// the agent runtime requests and saving LLM tokens for disconnected clients.
-	s.On("disconnect", func(...any) {
+	_ = s.On("disconnect", func(...any) {
 		cancel()
 	})
 
@@ -137,7 +137,7 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 		Attachments:    attachments,
 		Mentions:       mentions,
 		OnPersisted: func(userMsg *orchestrator.Message) {
-			s.Emit(eventMessageSendAck, messageSendAckPayload{
+			_ = s.Emit(eventMessageSendAck, messageSendAckPayload{
 				LocalID:   localID,
 				MessageID: userMsg.ID,
 				Status:    "sent",
@@ -161,7 +161,7 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 
 // emitError sends a message.send.error event to the sender socket.
 func (h *messageHandler) emitError(s *socket.Socket, localID, errMsg string) {
-	s.Emit(eventMessageSendErr, messageSendErrPayload{
+	_ = s.Emit(eventMessageSendErr, messageSendErrPayload{
 		LocalID: localID,
 		Error:   errMsg,
 	})
@@ -188,35 +188,39 @@ func parseMessageSendPayload(raw any) (messageSendPayload, bool) {
 
 	if mentions, ok := data["mentions"].([]any); ok {
 		for _, m := range mentions {
-			if mm, ok := m.(map[string]any); ok {
-				mention := messageSendMention{}
-				mention.AgentID, _ = mm["agent_id"].(string)
-				mention.AgentName, _ = mm["agent_name"].(string)
-				if offset, ok := mm["offset"].(float64); ok {
-					mention.Offset = int(offset)
-				}
-				if length, ok := mm["length"].(float64); ok {
-					mention.Length = int(length)
-				}
-				p.Mentions = append(p.Mentions, mention)
+			mm, ok := m.(map[string]any)
+			if !ok {
+				continue
 			}
+			mention := messageSendMention{}
+			mention.AgentID, _ = mm["agent_id"].(string)
+			mention.AgentName, _ = mm["agent_name"].(string)
+			if offset, ok := mm["offset"].(float64); ok {
+				mention.Offset = int(offset)
+			}
+			if length, ok := mm["length"].(float64); ok {
+				mention.Length = int(length)
+			}
+			p.Mentions = append(p.Mentions, mention)
 		}
 	}
 
 	if attachments, ok := data["attachments"].([]any); ok {
 		for _, a := range attachments {
-			if aa, ok := a.(map[string]any); ok {
-				att := messageSendAttachment{}
-				att.ID, _ = aa["id"].(string)
-				att.Name, _ = aa["name"].(string)
-				att.URL, _ = aa["url"].(string)
-				att.Type, _ = aa["type"].(string)
-				att.MIMEType, _ = aa["mime_type"].(string)
-				if size, ok := aa["size"].(float64); ok {
-					att.Size = int64(size)
-				}
-				p.Attachments = append(p.Attachments, att)
+			aa, ok := a.(map[string]any)
+			if !ok {
+				continue
 			}
+			att := messageSendAttachment{}
+			att.ID, _ = aa["id"].(string)
+			att.Name, _ = aa["name"].(string)
+			att.URL, _ = aa["url"].(string)
+			att.Type, _ = aa["type"].(string)
+			att.MIMEType, _ = aa["mime_type"].(string)
+			if size, ok := aa["size"].(float64); ok {
+				att.Size = int64(size)
+			}
+			p.Attachments = append(p.Attachments, att)
 		}
 	}
 

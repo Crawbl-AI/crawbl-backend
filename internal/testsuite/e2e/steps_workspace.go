@@ -35,7 +35,7 @@ func (tc *testContext) userOpensDefaultWorkspace(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(200)
+	return tc.assertStatus(statusOK)
 }
 
 func (tc *testContext) userShouldSeeRuntimeDetails(alias string) error {
@@ -64,7 +64,7 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
 			return err
 		}
-		if err := tc.assertStatus(200); err != nil {
+		if err := tc.assertStatus(statusOK); err != nil {
 			return err
 		}
 		snapshot := runtimeSnapshotFromBody(tc.lastBody)
@@ -73,9 +73,9 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 				return err
 			}
 			switch tc.lastStatus {
-			case 200:
+			case statusOK:
 				return nil
-			case 0, 500, 503:
+			case 0, 500, statusServiceUnavailable:
 				// Runtime reports ready but still warming up internally.
 			default:
 				return fmt.Errorf("assistant warmup failed with unexpected status %d; body: %s", tc.lastStatus, abbreviatedBody(tc.lastBody))
@@ -122,4 +122,3 @@ func (tc *testContext) userOpensMissingConversation(alias string) error {
 	_, err := tc.doRequest("GET", path, alias, nil)
 	return err
 }
-

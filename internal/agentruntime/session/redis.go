@@ -520,12 +520,12 @@ type redisSession struct {
 	updatedAt time.Time
 }
 
-func (s *redisSession) ID() string                 { return s.sessionID }
-func (s *redisSession) AppName() string            { return s.appName }
-func (s *redisSession) UserID() string             { return s.userID }
-func (s *redisSession) LastUpdateTime() time.Time  { return s.updatedAt }
-func (s *redisSession) State() adksession.State    { return &redisState{owner: s} }
-func (s *redisSession) Events() adksession.Events  { return &redisEvents{owner: s} }
+func (s *redisSession) ID() string                { return s.sessionID }
+func (s *redisSession) AppName() string           { return s.appName }
+func (s *redisSession) UserID() string            { return s.userID }
+func (s *redisSession) LastUpdateTime() time.Time { return s.updatedAt }
+func (s *redisSession) State() adksession.State   { return &redisState{owner: s} }
+func (s *redisSession) Events() adksession.Events { return &redisEvents{owner: s} }
 
 // redisState satisfies adksession.State against the session's in-memory
 // map. Mutations via Set() update the map in place; durable persistence

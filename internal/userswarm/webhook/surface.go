@@ -130,6 +130,6 @@ func syncSurface(cfg *runtimeConfig) http.HandlerFunc {
 func healthz() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ok")
+		_, _ = fmt.Fprint(w, "ok")
 	}
 }

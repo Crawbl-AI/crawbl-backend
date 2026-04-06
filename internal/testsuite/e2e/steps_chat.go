@@ -94,7 +94,7 @@ func (tc *testContext) userOpensSwarmConversation(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.type", "swarm")
@@ -114,7 +114,7 @@ func (tc *testContext) userOpensDirectConversation(alias, role string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.type", "agent")
@@ -134,11 +134,11 @@ func (tc *testContext) userOpensMessagesInCurrentConversation(alias string) erro
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(200)
+	return tc.assertStatus(statusOK)
 }
 
 func (tc *testContext) currentConversationShouldExposePaginationMetadata() error {
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	for _, field := range []string{"data.pagination.has_next", "data.pagination.has_prev"} {
@@ -171,8 +171,8 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 	}
 	agentName := state.agentNamesBySlug[normalizeKey(role)]
 	body := map[string]any{
-		"local_id": tc.nextLocalID(alias, "mention"),
-		"content":  map[string]any{"type": "text", "text": text},
+		"local_id":    tc.nextLocalID(alias, "mention"),
+		"content":     map[string]any{"type": "text", "text": text},
 		"attachments": []any{},
 		"mentions": []map[string]string{
 			{"id": agentID, "name": agentName, "type": "agent"},
@@ -184,7 +184,7 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 
 // --- Reply assertions ------------------------------------------------
 
-func (tc *testContext) assistantReplyShouldSucceed() error { return tc.assertStatus(200) }
+func (tc *testContext) assistantReplyShouldSucceed() error { return tc.assertStatus(statusOK) }
 
 func (tc *testContext) assistantReplyShouldContainText() error {
 	return tc.assertJSONNotEmpty("data.0.content.text")

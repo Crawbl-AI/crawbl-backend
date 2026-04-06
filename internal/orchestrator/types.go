@@ -477,7 +477,6 @@ type AgentModelDef struct {
 // "auto" means the platform selects the best model (currently gpt-5-mini, future: AWS Bedrock routing).
 const DefaultAgentModel = "auto"
 
-
 // ResponseLength represents the response verbosity preference.
 type ResponseLength string
 
@@ -767,7 +766,6 @@ type DefaultAgentBlueprint struct {
 	AllowedTools []string
 }
 
-
 // Mention represents an @-mention of an agent in a swarm message.
 type Mention struct {
 	AgentID   string `json:"agent_id"`
@@ -936,4 +934,3 @@ func ResolveRuntimeState(phase string, verified bool) RuntimeState {
 		return RuntimeStateOffline
 	}
 }
-

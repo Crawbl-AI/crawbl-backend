@@ -121,7 +121,7 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 // For each authenticated socket it registers workspace.subscribe/unsubscribe
 // event handlers for dynamic room management and a disconnect handler for cleanup.
 func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
-	nsp.On("connection", func(args ...any) {
+	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {
 			return
@@ -135,7 +135,7 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 		)
 
 		// workspace.subscribe — join rooms and acknowledge.
-		s.On(eventWorkspaceSubscribe, func(args ...any) {
+		_ = s.On(eventWorkspaceSubscribe, func(args ...any) {
 			ids := parseWorkspaceIDs(args)
 			if len(ids) == 0 {
 				return
@@ -148,11 +148,11 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 				"subject", subject,
 				"workspace_ids", ids,
 			)
-			s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: ids})
+			_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: ids})
 		})
 
 		// workspace.unsubscribe — leave rooms.
-		s.On(eventWorkspaceUnsubscribe, func(args ...any) {
+		_ = s.On(eventWorkspaceUnsubscribe, func(args ...any) {
 			ids := parseWorkspaceIDs(args)
 			if len(ids) == 0 {
 				return
@@ -167,7 +167,7 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 			)
 		})
 
-		s.On("disconnect", func(args ...any) {
+		_ = s.On("disconnect", func(args ...any) {
 			reason := ""
 			if len(args) > 0 {
 				if r, ok := args[0].(string); ok {
@@ -205,12 +205,12 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 	}
 
 	nsp := io.Of(socketNamespace, nil)
-	nsp.On("connection", func(args ...any) {
+	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {
 			return
 		}
-		s.On(eventMessageSend, func(msgArgs ...any) {
+		_ = s.On(eventMessageSend, func(msgArgs ...any) {
 			h.handleMessageSend(s, msgArgs...)
 		})
 	})

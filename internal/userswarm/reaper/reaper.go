@@ -58,7 +58,7 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	conn.Dialect = dialect.PostgreSQL
 	conn.SetMaxOpenConns(2)
 	conn.SetMaxIdleConns(1)
@@ -105,7 +105,7 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 		swarm := &swarmList.Items[i]
 
 		// Skip CRs that have not yet aged past the cutoff.
-		if swarm.CreationTimestamp.Time.After(cutoff) {
+		if swarm.CreationTimestamp.After(cutoff) {
 			continue
 		}
 

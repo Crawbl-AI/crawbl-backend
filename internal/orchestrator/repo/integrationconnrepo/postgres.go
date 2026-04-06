@@ -1,3 +1,5 @@
+// Package integrationconnrepo provides PostgreSQL-based implementation of the integration connection repository.
+// It handles persistence and retrieval of user integration connection records.
 package integrationconnrepo
 
 import (

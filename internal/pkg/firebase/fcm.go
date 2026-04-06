@@ -38,7 +38,7 @@ func NewFCMClient(projectID, serviceAccountPath string) (*FCMClient, error) {
 		return nil, fmt.Errorf("firebase: reading service account %q: %w", serviceAccountPath, err)
 	}
 
-	creds, err := google.CredentialsFromJSON(context.Background(), credJSON, fcmScope)
+	creds, err := google.CredentialsFromJSONWithType(context.Background(), credJSON, google.ServiceAccount, fcmScope)
 	if err != nil {
 		return nil, fmt.Errorf("firebase: parsing service account credentials: %w", err)
 	}
@@ -101,7 +101,7 @@ func (c *FCMClient) Send(ctx context.Context, deviceToken, title, body string) e
 	if err != nil {
 		return fmt.Errorf("firebase: sending FCM request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)

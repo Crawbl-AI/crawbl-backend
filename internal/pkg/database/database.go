@@ -14,8 +14,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
-	"github.com/lib/pq"   //nolint:staticcheck // Named import needed for pq.Error type
-	_ "github.com/lib/pq" // Required for driver registration
+	"github.com/lib/pq" // Required for pq.Error type and driver registration
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 )

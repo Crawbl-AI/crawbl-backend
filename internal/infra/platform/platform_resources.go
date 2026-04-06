@@ -13,6 +13,13 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
+const (
+	// argoCDHelmTimeout is the seconds to wait for the ArgoCD Helm release to complete.
+	argoCDHelmTimeout = 600
+	// backupLifecycleDays is the number of days before hourly backups are expired.
+	backupLifecycleDays = 7
+)
+
 // createArgoCDNamespace creates the argocd namespace (needed before ArgoCD Helm release).
 func createArgoCDNamespace(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) (*corev1.Namespace, error) {
 	return corev1.NewNamespace(ctx, name+"-ns-argocd", &corev1.NamespaceArgs{
@@ -36,7 +43,7 @@ func deployArgoCD(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Re
 			Repo: pulumi.String("https://argoproj.github.io/argo-helm"),
 		},
 		CreateNamespace: pulumi.Bool(false),
-		Timeout:         pulumi.Int(600),
+		Timeout:         pulumi.Int(argoCDHelmTimeout),
 		Atomic:          pulumi.Bool(true),
 		Values:          pulumi.ToMap(cfg.ArgoCDValues),
 	}, append(opts,
@@ -81,7 +88,7 @@ func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pu
 				"resources-finalizer.argocd.argoproj.io",
 			}),
 		},
-		OtherFields: map[string]interface{}{
+		OtherFields: map[string]any{
 			"spec": pulumi.Map{
 				"project": pulumi.String("default"),
 				"source": pulumi.Map{
@@ -151,7 +158,7 @@ func createBackupBucket(ctx *pulumi.Context, cfg Config, opts ...pulumi.Resource
 					Prefix: pulumi.String(fmt.Sprintf("%s/swarms/", cfg.Environment)),
 				},
 				Expiration: &s3.BucketLifecycleConfigurationV2RuleExpirationArgs{
-					Days: pulumi.Int(7),
+					Days: pulumi.Int(backupLifecycleDays),
 				},
 			},
 		},
@@ -189,7 +196,7 @@ func createBackupIAMUser(ctx *pulumi.Context, cfg Config, bucket *s3.BucketV2, o
 	// Scoped IAM policy — backup agent can only touch the backup bucket.
 	_, err = iam.NewUserPolicy(ctx, "crawbl-backup-s3-policy", &iam.UserPolicyArgs{
 		User: user.Name,
-		Policy: pulumi.All(bucket.Arn).ApplyT(func(args []interface{}) string {
+		Policy: pulumi.All(bucket.Arn).ApplyT(func(args []any) string {
 			bucketArn := args[0].(string)
 			return fmt.Sprintf(`{
 				"Version": "2012-10-17",
@@ -223,8 +230,8 @@ func createBackupIAMUser(ctx *pulumi.Context, cfg Config, bucket *s3.BucketV2, o
 
 	_, err = secretsmanager.NewSecretVersion(ctx, "crawbl-backup-aws-secret-value", &secretsmanager.SecretVersionArgs{
 		SecretId: pulumi.Sprintf("crawbl/%s/backup/aws", cfg.Environment),
-		SecretString: pulumi.All(accessKey.ID(), accessKey.Secret).ApplyT(func(args []interface{}) string {
-			return fmt.Sprintf(`{"access-key-id":"%s","secret-access-key":"%s"}`, args[0], args[1])
+		SecretString: pulumi.All(accessKey.ID(), accessKey.Secret).ApplyT(func(args []any) string {
+			return fmt.Sprintf(`{"access-key-id":%q,"secret-access-key":%q}`, args[0], args[1])
 		}).(pulumi.StringOutput),
 	}, opts...)
 	if err != nil {

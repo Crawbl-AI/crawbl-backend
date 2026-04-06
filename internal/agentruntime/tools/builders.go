@@ -1,4 +1,4 @@
-// This file defines the ADK tool.Tool builders that wrap runtime-local
+// Package tools defines the ADK tool.Tool builders that wrap runtime-local
 // Go functions (internal/agentruntime/tools/local/*) as
 // google.golang.org/adk/tool/functiontool instruments every llmagent
 // can bind directly.

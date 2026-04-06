@@ -6,6 +6,9 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
+// keepaliveIntervalSeconds is the idle ping interval in seconds for gRPC keepalive.
+const keepaliveIntervalSeconds = 30
+
 // DefaultClientKeepalive is the keepalive parameters every crawbl-backend
 // gRPC client should install via grpc.WithKeepaliveParams when dialing
 // long-lived peer connections (like the per-workspace runtime pods).
@@ -33,7 +36,7 @@ import (
 // client values here must stay within the allowed range to avoid
 // "too many pings" termination.
 var DefaultClientKeepalive = keepalive.ClientParameters{
-	Time:                30 * time.Second,
+	Time:                keepaliveIntervalSeconds * time.Second,
 	Timeout:             10 * time.Second,
 	PermitWithoutStream: true,
 }

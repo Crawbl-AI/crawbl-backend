@@ -128,13 +128,15 @@ func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image,
 		TimeoutSeconds:      5,
 		FailureThreshold:    3,
 	}
+	// startupProbeFailureThreshold: 24 periods × 5s = 120s (2 minutes) to boot.
+	const startupProbeFailureThreshold = 24
 	startupProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			GRPC: &corev1.GRPCAction{Port: port},
 		},
 		PeriodSeconds:    5,
 		TimeoutSeconds:   5,
-		FailureThreshold: 24, // 2 minutes to boot
+		FailureThreshold: startupProbeFailureThreshold,
 	}
 
 	container := corev1.Container{
@@ -191,7 +193,10 @@ func runtimeBackendEnv(cfg *runtimeConfig) []corev1.EnvVar {
 	if cfg == nil {
 		return nil
 	}
-	out := make([]corev1.EnvVar, 0, 8)
+	// runtimeEnvVarCap is the initial capacity for the env var slice; covers
+	// Postgres host/port/user/name/schema/sslmode + Redis addr + OTel fields.
+	const runtimeEnvVarCap = 8
+	out := make([]corev1.EnvVar, 0, runtimeEnvVarCap)
 	if cfg.PostgresHost != "" {
 		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_HOST", Value: cfg.PostgresHost})
 	}

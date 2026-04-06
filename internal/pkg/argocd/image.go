@@ -38,7 +38,7 @@ func ReplaceInFile(path, old, replacement string) error {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 	updated := strings.ReplaceAll(string(data), old, replacement)
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(updated), fileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil

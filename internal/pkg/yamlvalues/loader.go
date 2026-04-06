@@ -11,7 +11,7 @@ import (
 
 // LoadStackConfig reads a key from a Pulumi stack config file (Pulumi.<env>.yaml)
 // and unmarshals it into the provided target struct.
-func LoadStackConfig(env, key string, target interface{}) error {
+func LoadStackConfig(env, key string, target any) error {
 	filename := fmt.Sprintf("Pulumi.%s.yaml", env)
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -41,12 +41,12 @@ func LoadStackConfig(env, key string, target interface{}) error {
 }
 
 // Load reads a YAML values file from the given directory and returns it as map[string]interface{}.
-func Load(dir, name string) (map[string]interface{}, error) {
+func Load(dir, name string) (map[string]any, error) {
 	data, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {
 		return nil, fmt.Errorf("read values file %s: %w", name, err)
 	}
-	var result map[string]interface{}
+	var result map[string]any
 	if err := yaml.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parse values file %s: %w", name, err)
 	}
@@ -54,7 +54,7 @@ func Load(dir, name string) (map[string]interface{}, error) {
 }
 
 // MustLoad reads a YAML values file from the given directory or panics.
-func MustLoad(dir, name string) map[string]interface{} {
+func MustLoad(dir, name string) map[string]any {
 	v, err := Load(dir, name)
 	if err != nil {
 		panic(err)

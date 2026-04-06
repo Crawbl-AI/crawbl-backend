@@ -10,6 +10,11 @@ type messageRepo struct{}
 // in the ListByConversationID query.
 const defaultListLimit = 50
 
+// terminalStatusOrdinal is the ordinal assigned to terminal message statuses
+// (failed, incomplete, silent). Terminal statuses can always be written but
+// once set they cannot be overwritten by lower-ordinal statuses.
+const terminalStatusOrdinal = 99
+
 // messageColumns defines the column names used in SELECT queries for the messages table.
 // These columns map directly to the MessageRow struct fields.
 var messageColumns = []string{

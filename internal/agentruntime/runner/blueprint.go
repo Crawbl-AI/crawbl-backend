@@ -145,7 +145,7 @@ func fetchBlueprintHTTP(ctx context.Context, endpoint string, cfg config.Config)
 		return nil, errors.New("UserID and WorkspaceID are required for HMAC")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
@@ -154,23 +154,29 @@ func fetchBlueprintHTTP(ctx context.Context, endpoint string, cfg config.Config)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "crawbl-agent-runtime (+blueprint-fetch)")
 
+	const (
+		defaultBlueprintFetchTimeout = 15 * time.Second
+		blueprintErrorStatusThresh   = 400
+	)
+
 	client := &http.Client{
 		Timeout: cfg.Startup.BlueprintFetchTimeout,
 	}
 	if client.Timeout <= 0 {
-		client.Timeout = 15 * time.Second
+		client.Timeout = defaultBlueprintFetchTimeout
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", endpoint, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB cap
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= blueprintErrorStatusThresh {
 		return nil, fmt.Errorf("orchestrator returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var bp WorkspaceBlueprint

@@ -155,12 +155,12 @@ func New(opts BuildOptions) (*Runner, error) {
 // targetAgent is the authoritative routing field carried on the wire
 // as ConverseRequest.agent_id:
 //   - ""            → dispatch through the Manager root (Manager may
-//                     answer directly or delegate to a sub-agent via
-//                     ADK's transfer_to_agent flow).
+//     answer directly or delegate to a sub-agent via
+//     ADK's transfer_to_agent flow).
 //   - "wally"/"eve" → dispatch directly to that sub-agent, bypassing
-//                     the Manager's delegation heuristics. The sub-
-//                     agent sees the raw user message and answers
-//                     without routing through a parent.
+//     the Manager's delegation heuristics. The sub-
+//     agent sees the raw user message and answers
+//     without routing through a parent.
 //   - unknown name  → fall back to the Manager root and log a warning.
 //
 // sessionID is client-supplied (from the gRPC ConverseRequest); ADK

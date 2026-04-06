@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/gocraft/dbr/v2"
@@ -59,7 +58,7 @@ func (tc *testContext) queryCount(query string, args ...any) (int, error) {
 		return 0, nil
 	}
 	var count int
-	row := s.QueryRow(query, args...)
+	row := s.QueryRowContext(context.Background(), query, args...)
 	if err := row.Scan(&count); err != nil {
 		return 0, fmt.Errorf("DB query failed: %w", err)
 	}
@@ -182,7 +181,7 @@ func (tc *testContext) dbUserHasNickname(alias, expected string) error {
 	subject := tc.resolveSubject(alias)
 	s := tc.sess()
 	var got string
-	row := s.QueryRow("SELECT nickname FROM users WHERE subject = $1", subject)
+	row := s.QueryRowContext(context.Background(), "SELECT nickname FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&got); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
@@ -199,7 +198,7 @@ func (tc *testContext) dbUserHasCountryCode(alias, expected string) error {
 	subject := tc.resolveSubject(alias)
 	s := tc.sess()
 	var got sql.NullString
-	row := s.QueryRow("SELECT country_code FROM users WHERE subject = $1", subject)
+	row := s.QueryRowContext(context.Background(), "SELECT country_code FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&got); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
@@ -216,7 +215,7 @@ func (tc *testContext) dbUserHasDeletedAt(alias string) error {
 	subject := tc.resolveSubject(alias)
 	s := tc.sess()
 	var hasDeletedAt bool
-	row := s.QueryRow("SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
+	row := s.QueryRowContext(context.Background(), "SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&hasDeletedAt); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
@@ -233,7 +232,7 @@ func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
 	subject := tc.resolveSubject(alias)
 	s := tc.sess()
 	var isDeleted bool
-	row := s.QueryRow("SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
+	row := s.QueryRowContext(context.Background(), "SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&isDeleted); err != nil {
 		return fmt.Errorf("DB query failed: %w", err)
 	}
@@ -251,9 +250,9 @@ func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) 
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		count, err := tc.queryCount(`
 			SELECT COUNT(*) FROM agent_memories
 			JOIN workspaces ON workspaces.id = agent_memories.workspace_id
@@ -273,12 +272,12 @@ func (tc *testContext) dbAgentMemoryContains(key, substring string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		s := tc.sess()
 		var content string
-		row := s.QueryRow("SELECT content FROM agent_memories WHERE key = $1 LIMIT 1", key)
+		row := s.QueryRowContext(context.Background(), "SELECT content FROM agent_memories WHERE key = $1 LIMIT 1", key)
 		if err := row.Scan(&content); err != nil {
 			return fmt.Errorf("agent_memory key %q not found: %w", key, err)
 		}
@@ -294,9 +293,9 @@ func (tc *testContext) dbMCPAuditLogForSubject(toolName, alias string) error {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		count, err := tc.queryCount(`
 			SELECT COUNT(*) FROM mcp_audit_logs
 			JOIN users ON users.id::text = mcp_audit_logs.user_id
@@ -316,9 +315,9 @@ func (tc *testContext) dbAgentDelegationCountForSubject(expected int, alias stri
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		count, err := tc.queryCount(`
 			SELECT COUNT(*) FROM agent_delegations
 			JOIN conversations ON conversations.id = agent_delegations.conversation_id
@@ -340,9 +339,9 @@ func (tc *testContext) dbAgentMessageCountForSubject(expected int, alias string)
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		count, err := tc.queryCount(`
 			SELECT COUNT(*) FROM agent_messages
 			JOIN conversations ON conversations.id = agent_messages.conversation_id

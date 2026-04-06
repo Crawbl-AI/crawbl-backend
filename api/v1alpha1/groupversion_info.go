@@ -1,3 +1,4 @@
+// Package v1alpha1 contains API types for the crawbl.ai/v1alpha1 API group.
 package v1alpha1
 
 import (

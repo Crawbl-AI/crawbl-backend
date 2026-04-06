@@ -1,3 +1,6 @@
+// Package server implements the gRPC AgentRuntime service handlers for the
+// crawbl-agent-runtime binary. It wires the runner.Runner and memory.Store
+// into the gRPC server and provides the Converse and Memory service handlers.
 package server
 
 import (
@@ -16,6 +19,16 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
+)
+
+// Log preview length constants for structured log fields.
+const (
+	// previewLenArgs is the max runes for tool-call args previews.
+	previewLenArgs = 120
+	// previewLenMessage is the max runes for user message previews.
+	previewLenMessage = 120
+	// previewLenReply is the max runes for agent reply previews.
+	previewLenReply = 160
 )
 
 // converseHandler implements runtimev1.AgentRuntimeServer.Converse as
@@ -176,7 +189,7 @@ func (h *converseHandler) runOneTurn(
 		// Track model name if present. ADK populates it on the final
 		// LLM response for each agent; we overwrite so the last
 		// agent's model is reported in the DoneEvent.
-		if mv := event.LLMResponse.ModelVersion; mv != "" {
+		if mv := event.ModelVersion; mv != "" {
 			state.modelName = mv
 		}
 		if event.Partial {
@@ -187,7 +200,7 @@ func (h *converseHandler) runOneTurn(
 		// ToolCallEvent always precedes its matching ToolResultEvent
 		// and all ChunkEvents precede the terminal DoneEvent (we
 		// synthesize Done ourselves after the iterator finishes).
-		if event.LLMResponse.Content != nil {
+		if event.Content != nil {
 			// ADK sends content in two phases:
 			//   1. Partial events (Partial=true) — streaming token-by-token.
 			//   2. Final event (IsFinalResponse=true, Partial=false) — replays
@@ -200,7 +213,7 @@ func (h *converseHandler) runOneTurn(
 
 			if !isFinal {
 				// Partial event — stream each part to the client.
-				for _, part := range event.LLMResponse.Content.Parts {
+				for _, part := range event.Content.Parts {
 					if part != nil && part.FunctionCall != nil && part.FunctionCall.Name != "" {
 						state.toolCalls = append(state.toolCalls, part.FunctionCall.Name)
 						h.logger.Info("agent tool invoked",
@@ -208,7 +221,7 @@ func (h *converseHandler) runOneTurn(
 							"session_id", sessionID,
 							"agent", event.Author,
 							"tool", part.FunctionCall.Name,
-							"args_preview", previewMap(part.FunctionCall.Args, 120),
+							"args_preview", previewMap(part.FunctionCall.Args, previewLenArgs),
 						)
 					}
 					ce := translatePart(event.Author, part, event.Partial)
@@ -224,7 +237,7 @@ func (h *converseHandler) runOneTurn(
 			// Final event — capture as Turn for DoneEvent aggregation.
 			// Do NOT re-send parts as chunks (they were already streamed).
 			if isFinal {
-				text := concatPartText(event.LLMResponse.Content)
+				text := concatPartText(event.Content)
 				if strings.TrimSpace(text) == "" {
 					continue
 				}
@@ -248,7 +261,7 @@ func (h *converseHandler) runOneTurn(
 			"duration_ms", time.Since(start).Milliseconds(),
 			"authors_seen", authorsSlice(state.authors),
 			"tool_calls", state.toolCalls,
-			"message_preview", preview(message, 120),
+			"message_preview", preview(message, previewLenMessage),
 			"error", iterErr.Error(),
 		)
 		h.metrics.Record(ctx, principal.Object, orDefault(targetAgent, runner.AppName), "error", start)
@@ -280,11 +293,11 @@ func (h *converseHandler) runOneTurn(
 		"authors_seen", authorsSlice(state.authors),
 		"model", orDefault(state.modelName, "<unknown>"),
 		"duration_ms", duration.Milliseconds(),
-		"message_preview", preview(message, 120),
+		"message_preview", preview(message, previewLenMessage),
 	}
 	if state.finalSeen {
 		h.logger.Info("agent turn completed",
-			append(baseFields, "reply_preview", preview(state.finalText, 160))...,
+			append(baseFields, "reply_preview", preview(state.finalText, previewLenReply))...,
 		)
 	} else {
 		h.logger.Warn("agent turn produced no final response",
@@ -386,24 +399,24 @@ func marshalArgs(m map[string]any) string {
 // so a multi-line message still yields a single-line log field. Used
 // for message/reply previews on every turn-complete log so operators
 // can tell at a glance what a user asked and what the agent answered.
-func preview(s string, max int) string {
+func preview(s string, maxLen int) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
 	}
 	s = strings.Join(strings.Fields(s), " ")
 	runes := []rune(s)
-	if len(runes) <= max {
+	if len(runes) <= maxLen {
 		return s
 	}
-	return string(runes[:max]) + "…"
+	return string(runes[:maxLen]) + "…"
 }
 
 // previewMap renders a best-effort single-line preview of a tool-call
 // args map. Used for the "agent tool invoked" log so operators can
 // tell which value a tool was called with without fetching the full
 // args. Returns "{}" when the map is nil or empty.
-func previewMap(m map[string]any, max int) string {
+func previewMap(m map[string]any, maxLen int) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -411,7 +424,7 @@ func previewMap(m map[string]any, max int) string {
 	if err != nil {
 		return "<unmarshalable>"
 	}
-	return preview(string(b), max)
+	return preview(string(b), maxLen)
 }
 
 // authorsSlice returns the map keys sorted so log lines are stable

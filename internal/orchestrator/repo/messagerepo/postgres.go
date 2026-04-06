@@ -26,7 +26,7 @@ func New() *messageRepo {
 // Returns an empty page if the scroll ID references a non-existent message.
 // Returns ErrInvalidInput if sess is nil, opts is nil, or conversation ID is empty.
 //
-//nolint:cyclop
+
 func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, opts *orchestratorrepo.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
 	if sess == nil || opts == nil || strings.TrimSpace(opts.ConversationID) == "" {
 		return nil, merrors.ErrInvalidInput
@@ -78,8 +78,8 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 	}
 
 	messages := make([]*orchestrator.Message, 0, len(rows))
-	for _, row := range rows {
-		message, err := row.ToDomain()
+	for i := range rows {
+		message, err := rows[i].ToDomain()
 		if err != nil {
 			return nil, merrors.WrapStdServerError(err, "decode stored message")
 		}
@@ -170,7 +170,7 @@ func statusOrdinal(status orchestrator.MessageStatus) int {
 	case orchestrator.MessageStatusRead:
 		return 3
 	case orchestrator.MessageStatusFailed, orchestrator.MessageStatusIncomplete, orchestrator.MessageStatusSilent:
-		return 99
+		return terminalStatusOrdinal
 	default:
 		return -1
 	}
@@ -266,8 +266,8 @@ func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.Sess
 
 	// Reverse to oldest-first order.
 	messages := make([]*orchestrator.Message, len(rows))
-	for i, row := range rows {
-		msg, decodeErr := row.ToDomain()
+	for i := range rows {
+		msg, decodeErr := rows[i].ToDomain()
 		if decodeErr != nil {
 			return nil, merrors.WrapStdServerError(decodeErr, "decode recent message")
 		}

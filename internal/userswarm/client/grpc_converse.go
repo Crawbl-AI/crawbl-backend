@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 )
@@ -159,36 +159,35 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 	streamStart := time.Now()
 	slog.Debug("runtime converse stream opened",
 		"workspace_id", opts.Runtime.WorkspaceID,
-		"target_agent", orDefault(opts.AgentID, "<manager>"),
+		"target_agent", agentIDOrManager(opts.AgentID),
 		"service", opts.Runtime.ServiceName,
 	)
 
-	ch := make(chan StreamChunk, 16)
+	const streamChunkBufSize = 16
+	ch := make(chan StreamChunk, streamChunkBufSize)
 	go func() {
 		defer close(ch)
 		var chunkCount int
 		var doneSeen bool
 		for {
 			event, recvErr := stream.Recv()
-			if errors.Is(recvErr, io.EOF) {
-				if !doneSeen {
+			if recvErr != nil {
+				if !errors.Is(recvErr, io.EOF) {
+					slog.Error("runtime converse stream error",
+						"workspace_id", opts.Runtime.WorkspaceID,
+						"target_agent", agentIDOrManager(opts.AgentID),
+						"chunks_received", chunkCount,
+						"duration_ms", time.Since(streamStart).Milliseconds(),
+						"error", recvErr.Error(),
+					)
+				} else if !doneSeen {
 					slog.Warn("runtime converse stream closed before DoneEvent",
 						"workspace_id", opts.Runtime.WorkspaceID,
-						"target_agent", orDefault(opts.AgentID, "<manager>"),
+						"target_agent", agentIDOrManager(opts.AgentID),
 						"chunks_received", chunkCount,
 						"duration_ms", time.Since(streamStart).Milliseconds(),
 					)
 				}
-				return
-			}
-			if recvErr != nil {
-				slog.Error("runtime converse stream error",
-					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", orDefault(opts.AgentID, "<manager>"),
-					"chunks_received", chunkCount,
-					"duration_ms", time.Since(streamStart).Milliseconds(),
-					"error", recvErr.Error(),
-				)
 				return
 			}
 			chunk, ok := translateEvent(event)
@@ -201,22 +200,21 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 			case <-ctx.Done():
 				slog.Warn("runtime converse stream context cancelled",
 					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", orDefault(opts.AgentID, "<manager>"),
+					"target_agent", agentIDOrManager(opts.AgentID),
 					"chunks_delivered", chunkCount,
 					"duration_ms", time.Since(streamStart).Milliseconds(),
 				)
 				return
 			}
 			if chunk.Type == StreamEventDone {
-				doneSeen = true
 				slog.Info("runtime converse turn complete",
 					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", orDefault(opts.AgentID, "<manager>"),
+					"target_agent", agentIDOrManager(opts.AgentID),
 					"chunks_delivered", chunkCount,
 					"model", chunk.Model,
 					"duration_ms", time.Since(streamStart).Milliseconds(),
 				)
-				return
+				doneSeen = true
 			}
 		}
 	}()
@@ -272,13 +270,13 @@ func translateEvent(event *runtimev1.ConverseEvent) (StreamChunk, bool) {
 	return StreamChunk{}, false
 }
 
-// orDefault returns fallback when s is empty. Used to substitute a
-// human-readable placeholder ("<manager>") in target_agent log fields
-// when the caller passes an empty agent_id, so operators can tell the
-// intended routing without having to know the wire contract.
-func orDefault(s, fallback string) string {
+// agentIDOrManager returns s when non-empty, or "<manager>" when the
+// caller passes an empty agent_id. Used in target_agent log fields so
+// operators can tell the intended routing without having to know the
+// wire contract.
+func agentIDOrManager(s string) string {
 	if s == "" {
-		return fallback
+		return "<manager>"
 	}
 	return s
 }

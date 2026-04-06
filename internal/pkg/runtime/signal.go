@@ -1,3 +1,4 @@
+// Package runtime provides helpers for running services until an OS signal is received.
 package runtime
 
 import (

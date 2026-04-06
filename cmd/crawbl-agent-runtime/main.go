@@ -22,6 +22,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -60,6 +61,13 @@ func main() {
 		os.Exit(2)
 	}
 
+	if err := run(cfg, logger); err != nil {
+		logger.Error("agent runtime exited with error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(cfg config.Config, logger *slog.Logger) error {
 	logger.Info("crawbl-agent-runtime starting",
 		"version", version,
 		"workspace_id", cfg.WorkspaceID,
@@ -93,8 +101,7 @@ func main() {
 	// Step 2a: Postgres.
 	dbConn, err := database.New(cfg.Postgres)
 	if err != nil {
-		logger.Error("init postgres", "error", err)
-		os.Exit(1)
+		return err
 	}
 	memStore := memory.NewPostgresStore(dbConn, nil)
 	defer func() {
@@ -106,13 +113,11 @@ func main() {
 	// Step 2b: Redis (shared client + ADK session service).
 	redisCli, err := redisclient.New(cfg.Redis)
 	if err != nil {
-		logger.Error("init redis", "error", err)
-		os.Exit(1)
+		return err
 	}
 	rawRedis := redisclient.Unwrap(redisCli)
 	if rawRedis == nil {
-		logger.Error("init redis: unwrap returned nil client")
-		os.Exit(1)
+		return fmt.Errorf("init redis: unwrap returned nil client")
 	}
 	sessionSvc := session.NewRedisService(rawRedis, cfg.RedisSessionTTL)
 
@@ -125,8 +130,7 @@ func main() {
 	blueprint, err := runner.FetchBlueprint(bpCtx, cfg, logger)
 	bpCancel()
 	if err != nil {
-		logger.Error("fetch workspace blueprint", "error", err)
-		os.Exit(1)
+		return err
 	}
 	logger.Info("workspace blueprint loaded", "workspace_id", blueprint.WorkspaceID, "agent_count", len(blueprint.Agents))
 	for _, a := range blueprint.Agents {
@@ -136,15 +140,13 @@ func main() {
 	// Step 4a: LLM adapter.
 	llm, err := model.NewFromConfig(cfg)
 	if err != nil {
-		logger.Error("init model adapter", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Step 4b: orchestrator MCP toolset.
 	mcpToolset, mcpCloser, err := agentmcp.Toolset(cfg)
 	if err != nil {
-		logger.Error("init mcp toolset", "error", err)
-		os.Exit(1)
+		return err
 	}
 	defer func() {
 		if cerr := mcpCloser.Close(); cerr != nil {
@@ -165,8 +167,7 @@ func main() {
 		SecretKey: cfg.Spaces.SecretKey,
 	})
 	if err != nil {
-		logger.Error("init spaces client", "error", err)
-		os.Exit(1)
+		return err
 	}
 	if spacesClient != nil {
 		logger.Info("spaces client ready",
@@ -189,8 +190,7 @@ func main() {
 		Spaces:          spacesClient,
 	})
 	if err != nil {
-		logger.Error("init local tools", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Step 5: agent graph + ADK runner. The runner owns the session
@@ -205,8 +205,7 @@ func main() {
 		Logger:         logger,
 	})
 	if err != nil {
-		logger.Error("init runner", "error", err)
-		os.Exit(1)
+		return err
 	}
 	logger.Info("agent graph constructed", "root_agent", r.RootAgentName())
 
@@ -217,8 +216,7 @@ func main() {
 		Logger:   logger,
 	})
 	if err != nil {
-		logger.Error("init gRPC server", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Step 7: flip health to SERVING so Kubernetes probes mark the pod
@@ -243,17 +241,18 @@ func main() {
 		logger.Info("shutdown signal received", "signal", s.String())
 	case err := <-serveErr:
 		if err != nil {
-			logger.Error("gRPC server exited with error", "error", err)
-			os.Exit(1)
+			return err
 		}
 	}
 
 	// Graceful stop, bounded by the configured shutdown timeout.
-	_, cancel := context.WithTimeout(context.Background(), cfg.Startup.GracefulShutdownTimeout)
-	defer cancel()
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), cfg.Startup.GracefulShutdownTimeout)
+	defer stopCancel()
+	_ = stopCtx
 	srv.Shutdown()
 	if cerr := redisCli.Close(); cerr != nil {
 		logger.Warn("redis client close error", "error", cerr)
 	}
 	logger.Info("crawbl-agent-runtime stopped")
+	return nil
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -42,10 +41,10 @@ type portForward struct {
 // Returns a cleanup function that kills all subprocesses.
 func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(), err error) {
 	forwards := []struct {
-		svc       string
-		localPort int
+		svc        string
+		localPort  int
 		remotePort int
-		label     string
+		label      string
 	}{
 		{"svc/orchestrator", 7171, 7171, "orchestrator"},
 		{"svc/backend-postgresql", 5432, 5432, "postgres"},
@@ -63,7 +62,7 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 	}
 
 	for _, f := range forwards {
-		cmd := exec.Command("kubectl", "port-forward", f.svc,
+		cmd := exec.CommandContext(context.Background(), "kubectl", "port-forward", f.svc,
 			fmt.Sprintf("%d:%d", f.localPort, f.remotePort),
 			"-n", "backend")
 		cmd.Stdout = nil
@@ -89,20 +88,27 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 	return forwards[0].localPort, forwards[1].localPort, forwards[2].localPort, cleanup, nil
 }
 
+// dialTimeout is the per-attempt TCP dial timeout used by waitForPort.
+const dialTimeout = 500 * time.Millisecond
+
+// portPollInterval is how long waitForPort sleeps between dial attempts.
+const portPollInterval = 300 * time.Millisecond
+
 // waitForPort polls a TCP port until it accepts connections or ctx expires.
 func waitForPort(ctx context.Context, port int) error {
 	addr := fmt.Sprintf("localhost:%d", port)
+	dialer := &net.Dialer{Timeout: dialTimeout}
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+			conn, err := dialer.DialContext(ctx, "tcp", addr)
 			if err == nil {
 				_ = conn.Close()
 				return nil
 			}
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(portPollInterval)
 		}
 	}
 }
@@ -229,19 +235,4 @@ runs only test-features/chat/).`,
 	_ = cmd.Flags().MarkHidden("cat")
 
 	return cmd
-}
-
-// availableCategories returns the subfolder names under test-features/ for help text.
-func availableCategories() string {
-	entries, err := os.ReadDir("test-features")
-	if err != nil {
-		return "(unknown)"
-	}
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			names = append(names, e.Name())
-		}
-	}
-	return strings.Join(names, ", ")
 }

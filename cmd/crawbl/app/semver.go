@@ -53,14 +53,12 @@ func resolveDeployTagForRepo(explicit string, requireClean bool, repoPath string
 
 // resolveDeployTag returns the tag for a deploy — either the explicit --tag
 // value or an auto-calculated semver. For components that live in crawbl-backend
-// (platform, auth-filter), it also enforces a clean and pushed working tree.
+// (platform, auth-filter), it enforces a clean and pushed working tree.
 // tagPrefix scopes the tag namespace (e.g. "agent-runtime/" → "agent-runtime/v0.1.0").
 // An empty tagPrefix uses the global v* sequence.
-func resolveDeployTag(explicit string, requireClean bool, tagPrefix string) (tagPair, error) {
-	if requireClean {
-		if err := gitutil.EnsureCleanAndPushed(); err != nil {
-			return tagPair{}, err
-		}
+func resolveDeployTag(explicit string, tagPrefix string) (tagPair, error) {
+	if err := gitutil.EnsureCleanAndPushed(); err != nil {
+		return tagPair{}, err
 	}
 	if explicit != "" {
 		return tagPair{Tag: explicit}, nil
@@ -70,4 +68,3 @@ func resolveDeployTag(explicit string, requireClean bool, tagPrefix string) (tag
 	}
 	return calculateSemverForRepo("")
 }
-

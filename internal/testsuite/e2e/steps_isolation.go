@@ -63,5 +63,5 @@ func (tc *testContext) deletingUserShouldNotAffectUser(deletedAlias, survivorAli
 	if err := tc.userOpensProfile(survivorAlias); err != nil {
 		return err
 	}
-	return tc.assertStatus(200)
+	return tc.assertStatus(statusOK)
 }

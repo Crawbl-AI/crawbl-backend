@@ -128,7 +128,7 @@ func (s *Stack) Up(ctx context.Context) (*UpResult, error) {
 		return nil, fmt.Errorf("up failed: %w", err)
 	}
 
-	outputs := make(map[string]interface{})
+	outputs := make(map[string]any)
 	for k, v := range result.Outputs {
 		outputs[k] = v.Value
 	}
@@ -142,14 +142,14 @@ func (s *Stack) Destroy(ctx context.Context) error {
 }
 
 // Outputs returns the stack outputs.
-func (s *Stack) Outputs(ctx context.Context) (map[string]interface{}, error) {
+func (s *Stack) Outputs(ctx context.Context) (map[string]any, error) {
 	outputs, err := s.stack.Outputs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get outputs: %w", err)
 	}
 
 	// Convert to map[string]interface{}
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	for k, v := range outputs {
 		result[k] = v.Value
 	}

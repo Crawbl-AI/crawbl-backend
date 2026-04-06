@@ -14,11 +14,11 @@
 //
 // Composition shape:
 //
-//	                Manager (llmagent, root)
-//	               /                         \
-//	            Wally (research)           Eve (scheduling)
-//	        Tools: web_fetch              Tools: (none)
-//	        Toolsets: mcp                 Toolsets: mcp
+//	        Manager (llmagent, root)
+//	       /                         \
+//	    Wally (research)           Eve (scheduling)
+//	Tools: web_fetch              Tools: (none)
+//	Toolsets: mcp                 Toolsets: mcp
 //
 // Every agent shares the same model.LLM and the same MCP toolset so
 // Manager can answer directly using orchestrator tools without always

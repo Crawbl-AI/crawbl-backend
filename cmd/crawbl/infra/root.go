@@ -17,7 +17,7 @@ import (
 )
 
 // loadStackSection reads a section from Pulumi.<env>.yaml into target.
-func loadStackSection(env, key string, target interface{}) error {
+func loadStackSection(env, key string, target any) error {
 	if err := yamlvalues.LoadStackConfig(env, key, target); err != nil {
 		return fmt.Errorf("load %s from Pulumi.%s.yaml: %w", key, env, err)
 	}

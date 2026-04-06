@@ -266,6 +266,6 @@ func waitForPVCDeletion(ctx context.Context, clientset *kubernetes.Clientset) er
 func confirmDestroy() bool {
 	out.Prompt(style.Warning, "Do you want to destroy all resources? This cannot be undone. (y/N): ")
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 	return response == "y" || response == "Y"
 }

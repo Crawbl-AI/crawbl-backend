@@ -83,6 +83,7 @@ type UserSwarmStatus struct {
 	Conditions         []metav1.Condition `json:"conditions,omitempty"`
 }
 
+// UserSwarm is the schema for the userswarms API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=uswarm
@@ -94,6 +95,7 @@ type UserSwarm struct {
 	Status UserSwarmStatus `json:"status,omitempty"`
 }
 
+// UserSwarmList contains a list of UserSwarm resources.
 // +kubebuilder:object:root=true
 type UserSwarmList struct {
 	metav1.TypeMeta `json:",inline"`

@@ -50,7 +50,7 @@ func (r *userRepo) GetBySubject(ctx context.Context, sess orchestratorrepo.Sessi
 // Returns ErrUserNotFound if no user is found by either email or subject.
 // Returns ErrInvalidInput if sess is nil and both subject and email are empty.
 //
-//nolint:cyclop
+
 func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRunner, subject, email string) (*orchestrator.User, *merrors.Error) {
 	if sess == nil || (strings.TrimSpace(subject) == "" && strings.TrimSpace(email) == "") {
 		return nil, merrors.ErrInvalidInput

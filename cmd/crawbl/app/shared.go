@@ -2,6 +2,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -50,7 +51,7 @@ func runDockerBuild(opts buildOpts) error {
 
 	args = append(args, opts.contextDir)
 
-	cmd := exec.Command("docker", args...)
+	cmd := exec.CommandContext(context.Background(), "docker", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

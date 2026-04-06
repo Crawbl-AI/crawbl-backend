@@ -15,7 +15,7 @@ import (
 )
 
 // V is the template variable map for rendered messages.
-type V map[string]interface{}
+type V map[string]any
 
 var (
 	outWriter io.Writer = os.Stdout
@@ -50,7 +50,7 @@ func SetErrWriter(w io.Writer) {
 }
 
 // Step prints a styled message to stdout.
-func Step(s style.Enum, format string, a ...interface{}) {
+func Step(s style.Enum, format string, a ...any) {
 	writeLine(outWriter, s, fmt.Sprintf(format, a...))
 }
 
@@ -77,32 +77,32 @@ func Ln() {
 }
 
 // Prompt prints a styled prompt to stdout without a trailing newline.
-func Prompt(s style.Enum, format string, a ...interface{}) {
+func Prompt(s style.Enum, format string, a ...any) {
 	write(outWriter, s, fmt.Sprintf(format, a...), false)
 }
 
 // Success prints a success message to stdout.
-func Success(format string, a ...interface{}) {
+func Success(format string, a ...any) {
 	Step(style.Success, format, a...)
 }
 
 // Warning prints a warning message to stderr.
-func Warning(format string, a ...interface{}) {
+func Warning(format string, a ...any) {
 	writeLine(errWriter, style.Warning, fmt.Sprintf(format, a...))
 }
 
 // Err prints an error message to stderr.
-func Err(format string, a ...interface{}) {
+func Err(format string, a ...any) {
 	writeLine(errWriter, style.Warning, fmt.Sprintf(format, a...))
 }
 
 // Fail prints a failure message to stderr.
-func Fail(format string, a ...interface{}) {
+func Fail(format string, a ...any) {
 	writeLine(errWriter, style.Failure, fmt.Sprintf(format, a...))
 }
 
 // Infof prints an indented detail line to stdout.
-func Infof(format string, a ...interface{}) {
+func Infof(format string, a ...any) {
 	writeLine(outWriter, style.Indent, "  "+fmt.Sprintf(format, a...))
 }
 

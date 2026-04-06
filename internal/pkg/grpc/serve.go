@@ -31,7 +31,7 @@ func GracefulShutdown(srv *grpc.Server, timeout time.Duration, logger *slog.Logg
 		logger = slog.Default()
 	}
 	if timeout <= 0 {
-		timeout = 30 * time.Second
+		timeout = keepaliveIntervalSeconds * time.Second
 	}
 	done := make(chan struct{})
 	go func() {

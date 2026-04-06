@@ -18,7 +18,7 @@ func (tc *testContext) userOpensIntegrationsCatalog(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/integrations", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(200)
+	return tc.assertStatus(statusOK)
 }
 
 func (tc *testContext) userShouldSeeToolCategories(alias string) error {

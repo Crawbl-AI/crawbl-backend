@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +23,7 @@ func registerHTTPSteps(sc *godog.ScenarioContext, tc *testContext) {
 
 func (tc *testContext) sendGetNoAuth(path string) error {
 	url := tc.cfg.BaseURL + path
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -32,7 +33,7 @@ func (tc *testContext) sendGetNoAuth(path string) error {
 func (tc *testContext) userSendsGet(alias, path string) error {
 	path = tc.interpolatePath(path)
 	url := tc.cfg.BaseURL + path
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -43,7 +44,7 @@ func (tc *testContext) userSendsGet(alias, path string) error {
 func (tc *testContext) userSendsPost(alias, path string) error {
 	path = tc.interpolatePath(path)
 	url := tc.cfg.BaseURL + path
-	req, err := http.NewRequest("POST", url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "POST", url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func (tc *testContext) sendWithBody(method, alias, path, jsonBody string) error 
 	// Interpolate saved values in JSON body too (e.g. {researcher_id} → actual UUID).
 	jsonBody = tc.interpolatePath(jsonBody)
 	url := tc.cfg.BaseURL + path
-	req, err := http.NewRequest(method, url, bytes.NewBufferString(jsonBody))
+	req, err := http.NewRequestWithContext(context.Background(), method, url, bytes.NewBufferString(jsonBody))
 	if err != nil {
 		return err
 	}
@@ -138,7 +139,7 @@ func (tc *testContext) doRequest(method, path, alias string, body any) (string, 
 		bodyReader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequestWithContext(context.Background(), method, url, bodyReader)
 	if err != nil {
 		return "", err
 	}

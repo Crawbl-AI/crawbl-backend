@@ -30,8 +30,8 @@ func registerAssertionSteps(sc *godog.ScenarioContext, tc *testContext) {
 func (tc *testContext) assertStatus(expected int) error {
 	if tc.lastStatus != expected {
 		body := string(tc.lastBody)
-		if len(body) > 200 {
-			body = body[:200]
+		if len(body) > maxBodyDisplayLen {
+			body = body[:maxBodyDisplayLen]
 		}
 		return fmt.Errorf("expected status %d, got %d; body: %s", expected, tc.lastStatus, body)
 	}
@@ -109,14 +109,14 @@ func (tc *testContext) assertJSONArrayLength(path string, expected int) error {
 	return nil
 }
 
-func (tc *testContext) assertJSONArrayMinLength(path string, min int) error {
+func (tc *testContext) assertJSONArrayMinLength(path string, minLen int) error {
 	arr := gjson.GetBytes(tc.lastBody, path)
 	if !arr.IsArray() {
 		return fmt.Errorf("JSON %s: expected array, got %s", path, arr.Type)
 	}
 	got := len(arr.Array())
-	if got < min {
-		return fmt.Errorf("JSON %s: expected at least %d items, got %d", path, min, got)
+	if got < minLen {
+		return fmt.Errorf("JSON %s: expected at least %d items, got %d", path, minLen, got)
 	}
 	return nil
 }

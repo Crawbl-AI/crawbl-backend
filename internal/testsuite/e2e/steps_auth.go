@@ -47,14 +47,14 @@ func (tc *testContext) userSignsUp(alias string) error {
 	if err := tc.userHasSignedUp(alias); err != nil {
 		return err
 	}
-	return tc.assertStatus(204)
+	return tc.assertStatus(statusNoContent)
 }
 
 func (tc *testContext) userSignsIn(alias string) error {
 	if _, err := tc.doRequest("POST", "/v1/auth/sign-in", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(204)
+	return tc.assertStatus(statusNoContent)
 }
 
 func (tc *testContext) userShouldExistInDatabase(alias string) error {
@@ -71,7 +71,7 @@ func (tc *testContext) userOpensProfile(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/users/profile", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(200)
+	return tc.assertStatus(statusOK)
 }
 
 func (tc *testContext) userShouldSeeDefaultProfileDetails(alias string) error {
@@ -79,9 +79,9 @@ func (tc *testContext) userShouldSeeDefaultProfileDetails(alias string) error {
 		return err
 	}
 	for path, expected := range map[string]string{
-		"data.is_deleted":         "false",
-		"data.is_banned":          "false",
-		"data.subscription.code":  "freemium",
+		"data.is_deleted":        "false",
+		"data.is_banned":         "false",
+		"data.subscription.code": "freemium",
 	} {
 		if err := tc.assertJSONEquals(path, expected); err != nil {
 			return err
@@ -109,7 +109,7 @@ func (tc *testContext) userUpdatesProfileDetails(alias string) error {
 	if _, err := tc.doRequest("PATCH", "/v1/users", alias, body); err != nil {
 		return err
 	}
-	return tc.assertStatus(204)
+	return tc.assertStatus(statusNoContent)
 }
 
 func (tc *testContext) userShouldSeeUpdatedProfileDetails(alias string) error {
@@ -142,7 +142,7 @@ func (tc *testContext) userRegistersPushToken(alias string) error {
 	if _, err := tc.doRequest("POST", "/v1/fcm-token", alias, body); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.success", "true")
@@ -162,7 +162,7 @@ func (tc *testContext) userOpensLegalStatus(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/users/legal", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(200)
+	return tc.assertStatus(statusOK)
 }
 
 func (tc *testContext) userShouldSeeCurrentLegalVersions(alias string) error {
@@ -186,7 +186,7 @@ func (tc *testContext) userAcceptsCurrentLegalDocuments(alias string) error {
 	if _, err := tc.doRequest("POST", "/v1/users/legal/accept", alias, body); err != nil {
 		return err
 	}
-	return tc.assertStatus(204)
+	return tc.assertStatus(statusNoContent)
 }
 
 func (tc *testContext) userShouldShowAcceptedLegalDocuments(alias string) error {
@@ -209,7 +209,7 @@ func (tc *testContext) userDeletesTheirAccount(alias string) error {
 	if _, err := tc.doRequest("DELETE", "/v1/auth/delete", alias, body); err != nil {
 		return err
 	}
-	return tc.assertStatus(204)
+	return tc.assertStatus(statusNoContent)
 }
 
 func (tc *testContext) userShouldBeMarkedAsDeletedInDatabase(alias string) error {
@@ -220,7 +220,7 @@ func (tc *testContext) userShouldBeMarkedAsDeletedInDatabase(alias string) error
 }
 
 func (tc *testContext) deletedAccountShouldNoLongerBehaveLikeActiveUser() error {
-	return tc.assertStatus(401)
+	return tc.assertStatus(statusUnauthorized)
 }
 
 // --- Edge cases ------------------------------------------------------
@@ -230,6 +230,12 @@ func (tc *testContext) guestRequestsProfile() error {
 	return err
 }
 
-func (tc *testContext) requestShouldBeUnauthorized() error { return tc.assertStatus(401) }
-func (tc *testContext) requestShouldBeRejectedAsInvalid() error { return tc.assertStatus(400) }
-func (tc *testContext) requestShouldBeRejectedAsNotFound() error { return tc.assertStatus(404) }
+func (tc *testContext) requestShouldBeUnauthorized() error {
+	return tc.assertStatus(statusUnauthorized)
+}
+func (tc *testContext) requestShouldBeRejectedAsInvalid() error {
+	return tc.assertStatus(statusBadRequest)
+}
+func (tc *testContext) requestShouldBeRejectedAsNotFound() error {
+	return tc.assertStatus(statusNotFound)
+}

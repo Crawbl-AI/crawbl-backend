@@ -36,8 +36,8 @@ func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo
 	}
 
 	agents := make([]*orchestrator.Agent, 0, len(rows))
-	for _, row := range rows {
-		agents = append(agents, row.ToDomain())
+	for i := range rows {
+		agents = append(agents, rows[i].ToDomain())
 	}
 
 	return agents, nil

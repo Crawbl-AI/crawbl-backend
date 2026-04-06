@@ -3,8 +3,8 @@
 // Steps are phrased as workspace-file-store concepts so .feature
 // files never mention "Spaces", "S3", or "HeadObject":
 //
-//   a file named "trip.md" should exist in the workspace file store
-//   the saved file "trip.md" should contain "Paris"
+//	a file named "trip.md" should exist in the workspace file store
+//	the saved file "trip.md" should contain "Paris"
 //
 // When tc.spacesClient is nil the step is a silent no-op.
 package e2e
@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/cucumber/godog"
@@ -45,10 +44,10 @@ func (tc *testContext) fileShouldExistInWorkspace(fileName string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
 
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		_, err := tc.spacesClient.HeadObject(ctx, &s3.HeadObjectInput{
 			Bucket: &tc.cfg.SpacesBucket,
 			Key:    &key,
@@ -69,10 +68,10 @@ func (tc *testContext) savedFileShouldContain(fileName, substring string) error 
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
 	defer cancel()
 
-	return pollUntil(ctx, 1*time.Second, func() error {
+	return pollUntil(ctx, func() error {
 		resp, err := tc.spacesClient.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: &tc.cfg.SpacesBucket,
 			Key:    &key,
@@ -80,7 +79,7 @@ func (tc *testContext) savedFileShouldContain(fileName, substring string) error 
 		if err != nil {
 			return fmt.Errorf("failed to read file %q: %w", fileName, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read body of %q: %w", fileName, err)

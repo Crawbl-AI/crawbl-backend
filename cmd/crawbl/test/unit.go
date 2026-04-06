@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -23,26 +24,27 @@ func newUnitCommand() *cobra.Command {
 		Short: "Run the Go unit test suite",
 		Long:  "Run the Go test suite across the repository using the vendored dependency set.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			formatterPath, err := ensureGoTool("gotestfmt", gotestfmtModule)
+			ctx := cmd.Context()
+			formatterPath, err := ensureGoTool(ctx, "gotestfmt", gotestfmtModule)
 			if err != nil {
 				return fmt.Errorf("failed to prepare gotestfmt: %w", err)
 			}
 
 			out.Step(style.Test, "Running Go unit tests...")
-			return runFormattedGoTests(formatterPath, "-hide", "empty-packages")
+			return runFormattedGoTests(ctx, formatterPath, "-hide", "empty-packages")
 		},
 	}
 }
 
-func runFormattedGoTests(formatterPath string, formatterArgs ...string) error {
+func runFormattedGoTests(ctx context.Context, formatterPath string, formatterArgs ...string) error {
 	reader, writer := io.Pipe()
 
-	formatter := exec.Command(formatterPath, formatterArgs...)
+	formatter := exec.CommandContext(ctx, formatterPath, formatterArgs...)
 	formatter.Stdin = reader
 	formatter.Stdout = os.Stdout
 	formatter.Stderr = os.Stderr
 
-	goTest := exec.Command("go", "test", "-mod=vendor", "-json", "./...")
+	goTest := exec.CommandContext(ctx, "go", "test", "-mod=vendor", "-json", "./...")
 	goTest.Stdout = writer
 	goTest.Stderr = writer
 
@@ -79,13 +81,13 @@ func runFormattedGoTests(formatterPath string, formatterArgs ...string) error {
 	return nil
 }
 
-func ensureGoTool(binaryName, installTarget string) (string, error) {
+func ensureGoTool(ctx context.Context, binaryName, installTarget string) (string, error) {
 	if path, err := exec.LookPath(binaryName); err == nil {
 		return path, nil
 	}
 
 	out.Step(style.Deploy, "Installing %s...", binaryName)
-	install := exec.Command("go", "install", installTarget)
+	install := exec.CommandContext(ctx, "go", "install", installTarget)
 	install.Stdout = os.Stdout
 	install.Stderr = os.Stderr
 	if err := install.Run(); err != nil {
@@ -96,7 +98,7 @@ func ensureGoTool(binaryName, installTarget string) (string, error) {
 		return path, nil
 	}
 
-	for _, path := range goToolCandidates(binaryName) {
+	for _, path := range goToolCandidates(ctx, binaryName) {
 		if _, err := os.Stat(path); err == nil {
 			return path, nil
 		}
@@ -105,18 +107,18 @@ func ensureGoTool(binaryName, installTarget string) (string, error) {
 	return "", fmt.Errorf("%s installed successfully but was not found on PATH", binaryName)
 }
 
-func goToolCandidates(binaryName string) []string {
+func goToolCandidates(ctx context.Context, binaryName string) []string {
 	binary := binaryName
 	if runtime.GOOS == "windows" {
 		binary += ".exe"
 	}
 
 	var candidates []string
-	if gobin := strings.TrimSpace(goEnv("GOBIN")); gobin != "" {
+	if gobin := strings.TrimSpace(goEnv(ctx, "GOBIN")); gobin != "" {
 		candidates = append(candidates, filepath.Join(gobin, binary))
 	}
 
-	for _, root := range filepath.SplitList(strings.TrimSpace(goEnv("GOPATH"))) {
+	for _, root := range filepath.SplitList(strings.TrimSpace(goEnv(ctx, "GOPATH"))) {
 		if root == "" {
 			continue
 		}
@@ -126,8 +128,8 @@ func goToolCandidates(binaryName string) []string {
 	return candidates
 }
 
-func goEnv(key string) string {
-	cmd := exec.Command("go", "env", key)
+func goEnv(ctx context.Context, key string) string {
+	cmd := exec.CommandContext(ctx, "go", "env", key)
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

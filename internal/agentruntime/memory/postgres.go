@@ -99,7 +99,7 @@ func (s *PostgresStore) Create(ctx context.Context, workspaceID string, entry En
 		RETURNING created_at, updated_at
 	`
 	var createdAt, updatedAt time.Time
-	row := s.conn.DB.QueryRowContext(ctx, q, workspaceID, entry.Key, entry.Content, entry.Category, now)
+	row := s.conn.QueryRowContext(ctx, q, workspaceID, entry.Key, entry.Content, entry.Category, now)
 	if err := row.Scan(&createdAt, &updatedAt); err != nil {
 		return Entry{}, fmt.Errorf("memory: upsert entry: %w", err)
 	}
@@ -118,7 +118,7 @@ func (s *PostgresStore) Delete(ctx context.Context, workspaceID, key string) err
 		return errors.New("memory: postgres store not initialized")
 	}
 
-	res, err := s.conn.DB.ExecContext(ctx,
+	res, err := s.conn.ExecContext(ctx,
 		`DELETE FROM agent_memories WHERE workspace_id = $1 AND key = $2`,
 		workspaceID, key,
 	)
@@ -142,7 +142,7 @@ func (s *PostgresStore) Close() error {
 	if s == nil || s.conn == nil {
 		return nil
 	}
-	if err := s.conn.DB.Close(); err != nil && !errors.Is(err, sql.ErrConnDone) {
+	if err := s.conn.Close(); err != nil && !errors.Is(err, sql.ErrConnDone) {
 		return err
 	}
 	return nil
@@ -160,13 +160,7 @@ type memoryRow struct {
 }
 
 func (r memoryRow) toEntry() Entry {
-	return Entry{
-		Key:       r.Key,
-		Content:   r.Content,
-		Category:  r.Category,
-		CreatedAt: r.CreatedAt,
-		UpdatedAt: r.UpdatedAt,
-	}
+	return Entry(r)
 }
 
 // Compile-time interface assertion.

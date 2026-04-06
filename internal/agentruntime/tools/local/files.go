@@ -136,4 +136,3 @@ func isTextualContentType(ct string) bool {
 	}
 	return false
 }
-

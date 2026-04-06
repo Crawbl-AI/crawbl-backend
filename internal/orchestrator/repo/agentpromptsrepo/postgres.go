@@ -36,7 +36,8 @@ func (r *agentPromptsRepo) BulkSave(ctx context.Context, sess orchestratorrepo.S
 		return merrors.ErrInvalidInput
 	}
 
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		var existing orchestratorrepo.AgentPromptRow
 		err := sess.Select(orchestratorrepo.Columns(promptColumns...)...).
 			From("agent_prompts").

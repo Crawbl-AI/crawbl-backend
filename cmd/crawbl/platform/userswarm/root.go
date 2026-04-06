@@ -1,3 +1,6 @@
+// Package userswarm provides the "userswarm" CLI subcommand and its
+// sub-subcommands for managing UserSwarm runtime lifecycle operations
+// (webhook reconciliation and reaping).
 package userswarm
 
 import "github.com/spf13/cobra"

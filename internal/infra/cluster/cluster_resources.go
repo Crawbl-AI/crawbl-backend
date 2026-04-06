@@ -44,7 +44,8 @@ func getKubernetesVersion(ctx *pulumi.Context, cfg Config) (pulumi.StringInput, 
 
 // createCluster creates the Kubernetes cluster.
 func createCluster(ctx *pulumi.Context, name string, cfg Config, version pulumi.StringInput, vpcID pulumi.StringInput, result *Cluster, opts ...pulumi.ResourceOption) error {
-	tags := append(cfg.Tags, "crawbl")
+	cfg.Tags = append(cfg.Tags, "crawbl")
+	tags := cfg.Tags
 
 	labels := map[string]string{
 		"crawbl.io/pool": cfg.DefaultNodePoolName,
@@ -72,7 +73,7 @@ func createCluster(ctx *pulumi.Context, name string, cfg Config, version pulumi.
 		Ha:                            pulumi.Bool(cfg.HighAvailability),
 		Tags:                          pulumi.ToStringArray(tags),
 		DestroyAllAssociatedResources: pulumi.Bool(cfg.DestroyAllAssociatedResources),
-		RegistryIntegration:          pulumi.Bool(true),
+		RegistryIntegration:           pulumi.Bool(true),
 		MaintenancePolicy: &digitalocean.KubernetesClusterMaintenancePolicyArgs{
 			Day:       pulumi.String(cfg.MaintenanceDay),
 			StartTime: pulumi.String(cfg.MaintenanceStartTime),

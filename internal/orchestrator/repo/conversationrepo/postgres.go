@@ -38,8 +38,8 @@ func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestra
 	}
 
 	conversations := make([]*orchestrator.Conversation, 0, len(rows))
-	for _, row := range rows {
-		conversations = append(conversations, row.ToDomain())
+	for i := range rows {
+		conversations = append(conversations, rows[i].ToDomain())
 	}
 
 	return conversations, nil

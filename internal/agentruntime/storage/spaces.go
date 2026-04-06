@@ -152,7 +152,7 @@ func (c *SpacesClient) Get(ctx context.Context, workspaceID, userKey string) ([]
 		}
 		return nil, "", fmt.Errorf("spaces: get %q: %w", key, err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(out.Body, maxSpacesObjectBytes))
 	if err != nil {
@@ -206,9 +206,7 @@ func (c *SpacesClient) Put(ctx context.Context, workspaceID, userKey string, bod
 // user-supplied portion.
 func buildObjectKey(workspaceID, userKey string) string {
 	cleaned := path.Clean("/" + userKey)
-	if strings.HasPrefix(cleaned, "/") {
-		cleaned = strings.TrimPrefix(cleaned, "/")
-	}
+	cleaned = strings.TrimPrefix(cleaned, "/")
 	return path.Join("workspaces", workspaceID, "files", cleaned)
 }
 

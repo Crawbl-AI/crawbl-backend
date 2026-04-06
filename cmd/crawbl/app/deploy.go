@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -71,11 +72,12 @@ func newDeployPlatformCommand() *cobra.Command {
 		Long:  "Build and push the crawbl-platform image, then update orchestrator, webhook, and reaper image tags in crawbl-argocd-apps.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
   crawbl app deploy platform --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolved, err := resolveDeployTag(tag, true, "")
+			resolved, err := resolveDeployTag(tag, "")
 			if err != nil {
 				return err
 			}
@@ -102,16 +104,16 @@ func newDeployPlatformCommand() *cobra.Command {
 				return err
 			}
 			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(); err != nil {
+			if err := u.PullLatest(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdateOrchestrator(); err != nil {
+			if err := u.UpdateOrchestrator(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdatePlatform(); err != nil {
+			if err := u.UpdatePlatform(ctx); err != nil {
 				return err
 			}
-			if err := u.CommitAndPush("platform"); err != nil {
+			if err := u.CommitAndPush(ctx, "platform"); err != nil {
 				return err
 			}
 
@@ -141,11 +143,12 @@ func newDeployAuthFilterCommand() *cobra.Command {
 		Long:  "Build and push the envoy-auth-filter image, then update the image tag in crawbl-argocd-apps.",
 		Example: `  crawbl app deploy auth-filter --tag v1.0.0
   crawbl app deploy auth-filter --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolved, err := resolveDeployTag(tag, true, "")
+			resolved, err := resolveDeployTag(tag, "")
 			if err != nil {
 				return err
 			}
@@ -172,13 +175,13 @@ func newDeployAuthFilterCommand() *cobra.Command {
 				return err
 			}
 			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(); err != nil {
+			if err := u.PullLatest(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdateAuthFilter(); err != nil {
+			if err := u.UpdateAuthFilter(ctx); err != nil {
 				return err
 			}
-			if err := u.CommitAndPush("auth-filter"); err != nil {
+			if err := u.CommitAndPush(ctx, "auth-filter"); err != nil {
 				return err
 			}
 
@@ -219,11 +222,12 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 		Example: `  crawbl app deploy agent-runtime
   crawbl app deploy agent-runtime --tag v0.1.0
   crawbl app deploy agent-runtime --argocd-repo ../crawbl-argocd-apps`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolved, err := resolveDeployTag(tag, true, "agent-runtime/")
+			resolved, err := resolveDeployTag(tag, "agent-runtime/")
 			if err != nil {
 				return err
 			}
@@ -253,13 +257,13 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 				return err
 			}
 			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(); err != nil {
+			if err := u.PullLatest(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdateAgentRuntime(); err != nil {
+			if err := u.UpdateAgentRuntime(ctx); err != nil {
 				return err
 			}
-			if err := u.CommitAndPush("agent-runtime"); err != nil {
+			if err := u.CommitAndPush(ctx, "agent-runtime"); err != nil {
 				return err
 			}
 
@@ -389,11 +393,12 @@ func newDeployAllCommand() *cobra.Command {
 		Long:  "Build, push, and update argocd for platform and auth-filter. External components (docs, website, agent-runtime) must be deployed individually.",
 		Example: `  crawbl app deploy all --tag v1.0.0
   crawbl app deploy all --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolved, err := resolveDeployTag(tag, true, "")
+			resolved, err := resolveDeployTag(tag, "")
 			if err != nil {
 				return err
 			}
@@ -436,19 +441,19 @@ func newDeployAllCommand() *cobra.Command {
 			}
 			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
 
-			if err := u.PullLatest(); err != nil {
+			if err := u.PullLatest(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdateOrchestrator(); err != nil {
+			if err := u.UpdateOrchestrator(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdatePlatform(); err != nil {
+			if err := u.UpdatePlatform(ctx); err != nil {
 				return err
 			}
-			if err := u.UpdateAuthFilter(); err != nil {
+			if err := u.UpdateAuthFilter(ctx); err != nil {
 				return err
 			}
-			if err := u.CommitAndPush("all"); err != nil {
+			if err := u.CommitAndPush(ctx, "all"); err != nil {
 				return err
 			}
 
@@ -489,7 +494,7 @@ func checkStaticDeployTools() error {
 // runNpmBuild runs npm run build in the given directory.
 func runNpmBuild(dir string) error {
 	out.Step(style.Docker, "Building static site in %s", dir)
-	cmd := exec.Command("npm", "run", "build")
+	cmd := exec.CommandContext(context.Background(), "npm", "run", "build")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -503,7 +508,7 @@ func runNpmBuild(dir string) error {
 // runWranglerDeploy deploys a static site to Cloudflare Pages using wrangler.
 func runWranglerDeploy(dir, outputDir, projectName string) error {
 	out.Step(style.Deploy, "Deploying %s to Cloudflare Pages", projectName)
-	cmd := exec.Command("wrangler", "pages", "deploy", outputDir, "--project-name", projectName)
+	cmd := exec.CommandContext(context.Background(), "wrangler", "pages", "deploy", outputDir, "--project-name", projectName)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

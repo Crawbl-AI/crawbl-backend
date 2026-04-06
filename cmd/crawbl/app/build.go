@@ -121,4 +121,3 @@ func newBuildAuthFilterCommand() *cobra.Command {
 	addBuildFlags(cmd, &tag, &platform, &push)
 	return cmd
 }
-

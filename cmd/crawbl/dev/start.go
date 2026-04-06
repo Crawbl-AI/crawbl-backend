@@ -58,14 +58,15 @@ func runStart(clean, databaseOnly bool) error {
 	}
 
 	// Wait for Postgres to be ready.
+	const postgresReadyAttempts = 30
 	out.Step(style.Waiting, "Waiting for Postgres to become ready...")
-	for i := 0; i < 30; i++ {
+	for i := range postgresReadyAttempts {
 		if silentCmd("docker", "compose", "exec", "-T", "postgresdb", "pg_isready", "-h", "postgresdb") == nil {
 			out.Step(style.Ready, "Postgres is ready")
 			break
 		}
-		if i == 29 {
-			return fmt.Errorf("Postgres did not become ready in 30 seconds")
+		if i == postgresReadyAttempts-1 {
+			return fmt.Errorf("postgres did not become ready in %d seconds", postgresReadyAttempts)
 		}
 	}
 

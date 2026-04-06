@@ -95,18 +95,18 @@ type planOutput struct {
 // printPreviewJSON always outputs JSON, even on errors. This lets CI
 // parse the result without the command exit code hiding the data.
 func printPreviewJSON(result *infra.PreviewResult, previewErr error) error {
-	out := planOutput{}
+	planOut := planOutput{}
 	if result != nil {
-		out.Creates = result.Adds
-		out.Updates = result.Updates
-		out.Deletes = result.Deletes
-		out.Unchanged = result.Same
-		out.HasDrift = result.Adds > 0 || result.Updates > 0 || result.Deletes > 0
+		planOut.Creates = result.Adds
+		planOut.Updates = result.Updates
+		planOut.Deletes = result.Deletes
+		planOut.Unchanged = result.Same
+		planOut.HasDrift = result.Adds > 0 || result.Updates > 0 || result.Deletes > 0
 	}
 	if previewErr != nil {
-		out.Error = previewErr.Error()
+		planOut.Error = previewErr.Error()
 	}
-	return json.NewEncoder(os.Stdout).Encode(out)
+	return json.NewEncoder(os.Stdout).Encode(planOut)
 }
 
 func printPreviewSummary(result *infra.PreviewResult) {

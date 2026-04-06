@@ -11,7 +11,7 @@ type Config struct {
 	// ArgoCD
 	InstallArgoCD            bool
 	ArgoCDChartVersion       string
-	ArgoCDValues             map[string]interface{}
+	ArgoCDValues             map[string]any
 	ArgoCDAppsRepoURL        string
 	ArgoCDAppsTargetRevision string
 	ArgoCDRepoSSHPrivateKey  string // SSH private key for repo access

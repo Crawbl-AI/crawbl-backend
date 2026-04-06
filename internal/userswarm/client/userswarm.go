@@ -1,4 +1,4 @@
-// This file holds the Kubernetes CR lifecycle half of the production
+// Package client holds the Kubernetes CR lifecycle half of the production
 // Client implementation: EnsureRuntime, DeleteRuntime, getRuntimeState,
 // desiredUserSwarm, and the NewUserSwarmClient constructor. The gRPC
 // wire half (SendText, SendTextStream, Memory RPCs, connection cache)

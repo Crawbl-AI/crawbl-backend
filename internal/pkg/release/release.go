@@ -1,6 +1,8 @@
+// Package release provides helpers for tagging and creating GitHub releases.
 package release
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,9 +22,11 @@ type Config struct {
 // TagAndRelease creates a git tag, pushes it, and creates a GitHub
 // release with auto-generated release notes (--generate-notes).
 func TagAndRelease(cfg Config) error {
+	ctx := context.Background()
+
 	// 1. Create annotated tag.
 	out.Step(style.Deploy, "Creating tag %s", cfg.Tag)
-	tagCmd := exec.Command("git", "-C", cfg.RepoPath, "tag", "-a", cfg.Tag, "-m", "Release "+cfg.Tag)
+	tagCmd := exec.CommandContext(ctx, "git", "-C", cfg.RepoPath, "tag", "-a", cfg.Tag, "-m", "Release "+cfg.Tag)
 	tagCmd.Stdout = os.Stdout
 	tagCmd.Stderr = os.Stderr
 	if err := tagCmd.Run(); err != nil {
@@ -31,7 +35,7 @@ func TagAndRelease(cfg Config) error {
 
 	// 2. Push tag.
 	out.Step(style.Deploy, "Pushing tag %s to origin", cfg.Tag)
-	pushCmd := exec.Command("git", "-C", cfg.RepoPath, "push", "origin", cfg.Tag)
+	pushCmd := exec.CommandContext(ctx, "git", "-C", cfg.RepoPath, "push", "origin", cfg.Tag)
 	pushCmd.Stdout = os.Stdout
 	pushCmd.Stderr = os.Stderr
 	if err := pushCmd.Run(); err != nil {
@@ -40,7 +44,7 @@ func TagAndRelease(cfg Config) error {
 
 	// 3. Create GitHub release with auto-generated notes.
 	out.Step(style.Deploy, "Creating GitHub release for %s on %s", cfg.Tag, cfg.RepoSlug)
-	createCmd := exec.Command("gh", "release", "create", cfg.Tag,
+	createCmd := exec.CommandContext(ctx, "gh", "release", "create", cfg.Tag,
 		"--repo", cfg.RepoSlug,
 		"--title", "Release "+cfg.Tag,
 		"--generate-notes",

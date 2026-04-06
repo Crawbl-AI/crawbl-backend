@@ -92,10 +92,10 @@ type syncRequest struct {
 // ResyncAfterSeconds requests a delayed requeue, and Finalized tells
 // Metacontroller the deletion handshake is complete.
 type syncResponse struct {
-	Status             map[string]interface{} `json:"status"`
-	Children           []interface{}          `json:"children"`
-	ResyncAfterSeconds float64                `json:"resyncAfterSeconds,omitempty"`
-	Finalized          bool                   `json:"finalized,omitempty"`
+	Status             map[string]any `json:"status"`
+	Children           []any          `json:"children"`
+	ResyncAfterSeconds float64        `json:"resyncAfterSeconds,omitempty"`
+	Finalized          bool           `json:"finalized,omitempty"`
 }
 
 // Security constants shared by the generated runtime pod shape.

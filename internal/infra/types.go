@@ -10,9 +10,9 @@ import (
 
 // Config holds all infrastructure configuration.
 type Config struct {
-	Environment        string
-	Region             string
-	ESCEnvironment     string // Pulumi ESC environment (e.g. "crawbl/dev")
+	Environment    string
+	Region         string
+	ESCEnvironment string // Pulumi ESC environment (e.g. "crawbl/dev")
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
@@ -34,5 +34,5 @@ type PreviewResult struct {
 
 // UpResult contains apply result information.
 type UpResult struct {
-	Outputs map[string]interface{}
+	Outputs map[string]any
 }

@@ -4,6 +4,7 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,9 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
+
+// configFileMode is the permission bits used when writing config files.
+const configFileMode = 0o644
 
 // NewSetupCommand creates the `crawbl setup` command.
 func NewSetupCommand() *cobra.Command {
@@ -145,7 +149,7 @@ type toolCheck struct {
 
 // checkTool runs the check command via sh so shell operators (||, redirects) work.
 func checkTool(t toolCheck) bool {
-	cmd := exec.Command("sh", "-c", t.checkCmd)
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", t.checkCmd)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
@@ -162,7 +166,7 @@ func fileExists(path string) bool {
 }
 
 func runCmd(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -174,5 +178,5 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o644)
+	return os.WriteFile(dst, data, configFileMode)
 }

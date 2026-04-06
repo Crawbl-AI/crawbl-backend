@@ -1,13 +1,17 @@
 package dev
 
 import (
+	"context"
 	"os"
 	"os/exec"
 )
 
+// envFileMode is the permission bits used when creating .env files.
+const envFileMode = 0o644
+
 // shellCmd runs a command with stdout/stderr forwarded to the terminal.
 func shellCmd(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -15,7 +19,7 @@ func shellCmd(name string, args ...string) error {
 
 // silentCmd runs a command and discards output.
 func silentCmd(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	return cmd.Run()
 }
 
@@ -23,7 +27,7 @@ func silentCmd(name string, args ...string) error {
 func ensureEnvFile() {
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
 		if data, err := os.ReadFile(".env.example"); err == nil {
-			_ = os.WriteFile(".env", data, 0o644)
+			_ = os.WriteFile(".env", data, envFileMode)
 		}
 	}
 }

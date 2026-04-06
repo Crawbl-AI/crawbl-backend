@@ -86,7 +86,7 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 	reqCtx, cancel := context.WithTimeout(ctx, defaultWebSearchTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("web_search_tool: build request: %w", err)
 	}
@@ -96,19 +96,25 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "crawbl-agent-runtime (+https://crawbl.com)")
 
+	const (
+		webSearchBodyLimit         = 4 * 1024 * 1024 // 4 MiB
+		webSearchErrorStatusThresh = 400
+		webSearchErrorBodyPreview  = 256
+	)
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("web_search_tool: GET %s: %w", u.String(), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, webSearchBodyLimit))
 	if err != nil {
 		return nil, fmt.Errorf("web_search_tool: read response: %w", err)
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= webSearchErrorStatusThresh {
 		return nil, fmt.Errorf("web_search_tool: searxng returned status %d: %s",
-			resp.StatusCode, truncate(string(body), 256))
+			resp.StatusCode, truncate(string(body), webSearchErrorBodyPreview))
 	}
 
 	var payload searxngResponse

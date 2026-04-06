@@ -15,7 +15,7 @@ func (tc *testContext) guestChecksServiceHealth() error {
 }
 
 func (tc *testContext) serviceShouldReportOnline() error {
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.online", "true")
@@ -27,7 +27,7 @@ func (tc *testContext) guestReadsPublicLegalDocuments() error {
 }
 
 func (tc *testContext) publicLegalDocumentsShouldBeAvailable() error {
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	if err := tc.assertJSONNotEmpty("data.terms_of_service_version"); err != nil {

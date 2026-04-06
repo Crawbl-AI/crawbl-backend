@@ -1,3 +1,5 @@
+// Package realtime defines the broadcaster interface and event payload types
+// for real-time workspace event delivery.
 package realtime
 
 import "context"
@@ -72,20 +74,20 @@ const (
 	EventMessageStatus = "message.status"
 )
 
-// Event name for inter-agent delegation visibility.
+// EventAgentDelegation is the event name for inter-agent delegation visibility.
 const EventAgentDelegation = "agent.delegation"
 
-// Event name for artifact updates.
+// EventArtifactUpdated is the event name for artifact updates.
 const EventArtifactUpdated = "artifact.updated"
 
 // Event names for workflow progress.
 const (
-	EventWorkflowStarted        = "workflow.started"
-	EventWorkflowStepStarted    = "workflow.step.started"
-	EventWorkflowStepCompleted  = "workflow.step.completed"
-	EventWorkflowStepApproval   = "workflow.step.approval_required"
-	EventWorkflowCompleted      = "workflow.completed"
-	EventWorkflowFailed         = "workflow.failed"
+	EventWorkflowStarted       = "workflow.started"
+	EventWorkflowStepStarted   = "workflow.step.started"
+	EventWorkflowStepCompleted = "workflow.step.completed"
+	EventWorkflowStepApproval  = "workflow.step.approval_required"
+	EventWorkflowCompleted     = "workflow.completed"
+	EventWorkflowFailed        = "workflow.failed"
 )
 
 // MessageChunkPayload is emitted for each streamed text token.
@@ -109,7 +111,7 @@ type AgentToolPayload struct {
 	AgentID        string         `json:"agent_id"`
 	ConversationID string         `json:"conversation_id"`
 	Tool           string         `json:"tool"`
-	Status         string         `json:"status"`          // "running" or "done"
+	Status         string         `json:"status"` // "running" or "done"
 	Query          string         `json:"query,omitempty"`
 	Args           map[string]any `json:"args,omitempty"`
 }
@@ -142,12 +144,12 @@ const (
 
 // AgentDelegationPayload reports agent-to-agent delegation activity.
 type AgentDelegationPayload struct {
-	FromAgentID   string `json:"from_agent_id"`
-	FromAgentName string `json:"from_agent_name"`
-	FromAgentSlug string `json:"from_agent_slug"`
-	ToAgentID     string `json:"to_agent_id"`
-	ToAgentName   string `json:"to_agent_name"`
-	ToAgentSlug   string `json:"to_agent_slug"`
+	FromAgentID    string `json:"from_agent_id"`
+	FromAgentName  string `json:"from_agent_name"`
+	FromAgentSlug  string `json:"from_agent_slug"`
+	ToAgentID      string `json:"to_agent_id"`
+	ToAgentName    string `json:"to_agent_name"`
+	ToAgentSlug    string `json:"to_agent_slug"`
 	ConversationID string `json:"conversation_id"`
 	// Status is one of AgentDelegationStatus* (running | completed | failed).
 	Status         string `json:"status"`

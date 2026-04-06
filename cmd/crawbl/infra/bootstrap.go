@@ -93,14 +93,14 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 
 	// Step 4: Wait for controller to be ready
 	out.Step(style.Infra, "[4/5] Waiting for ArgoCD application-controller...")
-	if err := waitForController(ctx, timeout); err != nil {
+	if err := waitForController(timeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
 	}
 	out.Step(style.Ready, "ArgoCD application-controller is ready")
 
 	// Step 5: Wait for all apps to sync
 	out.Step(style.Infra, "[5/5] Waiting for all applications to sync...")
-	if err := waitForAppsSync(ctx, timeout); err != nil {
+	if err := waitForAppsSync(timeout); err != nil {
 		return fmt.Errorf("app sync wait failed: %w", err)
 	}
 	out.Step(style.Ready, "Applications are synced")
@@ -113,7 +113,7 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 }
 
 // waitForController waits for the ArgoCD application-controller StatefulSet to be ready.
-func waitForController(ctx context.Context, timeout time.Duration) error {
+func waitForController(timeout time.Duration) error {
 	return runCommand("kubectl", "rollout", "status",
 		"statefulset/argocd-application-controller",
 		"-n", "argocd",
@@ -122,7 +122,8 @@ func waitForController(ctx context.Context, timeout time.Duration) error {
 }
 
 // waitForAppsSync polls ArgoCD applications until all are Synced/Healthy or timeout.
-func waitForAppsSync(ctx context.Context, timeout time.Duration) error {
+func waitForAppsSync(timeout time.Duration) error {
+	const appSyncPollInterval = 15 * time.Second
 	deadline := time.Now().Add(timeout)
 
 	for {
@@ -143,13 +144,13 @@ func waitForAppsSync(ctx context.Context, timeout time.Duration) error {
 			return nil
 		}
 
-		time.Sleep(15 * time.Second)
+		time.Sleep(appSyncPollInterval)
 	}
 }
 
 // checkAppSyncStatus returns (synced count, total count, error).
 func checkAppSyncStatus() (int, int, error) {
-	cmd := exec.Command("kubectl", "get", "applications", "-n", "argocd",
+	cmd := exec.CommandContext(context.Background(), "kubectl", "get", "applications", "-n", "argocd",
 		"-o", "jsonpath={range .items[*]}{.status.sync.status},{.status.health.status}{\"\\n\"}{end}")
 	output, err := cmd.Output()
 	if err != nil {
@@ -186,7 +187,7 @@ func checkAppSyncStatus() (int, int, error) {
 func printAppStatus() {
 	out.Ln()
 	out.Step(style.Config, "Application status:")
-	cmd := exec.Command("kubectl", "get", "applications", "-n", "argocd",
+	cmd := exec.CommandContext(context.Background(), "kubectl", "get", "applications", "-n", "argocd",
 		"-o", "custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,MESSAGE:.status.conditions[0].message")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -195,7 +196,7 @@ func printAppStatus() {
 
 // runCommand executes a command with stdout/stderr connected to the terminal.
 func runCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

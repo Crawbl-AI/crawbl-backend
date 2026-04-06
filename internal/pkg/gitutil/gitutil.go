@@ -2,6 +2,7 @@
 package gitutil
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,7 +12,7 @@ import (
 
 // RootDir returns the git repository root directory.
 func RootDir() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get git root: %w", err)
@@ -42,18 +43,20 @@ func ResolveSiblingRepo(explicit, repoDir string) (string, error) {
 // HEAD has been pushed to the remote. This prevents deploying uncommitted or
 // unpushed code.
 func EnsureCleanAndPushed() error {
+	ctx := context.Background()
+
 	// Check for uncommitted changes.
-	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
 	statusOutput, err := statusCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git status failed: %w", err)
 	}
-	if len(strings.TrimSpace(string(statusOutput))) > 0 {
+	if strings.TrimSpace(string(statusOutput)) != "" {
 		return fmt.Errorf("working tree has uncommitted changes — commit and push before deploying")
 	}
 
 	// Check that HEAD is pushed to the remote.
-	localCmd := exec.Command("git", "rev-parse", "HEAD")
+	localCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
 	localOutput, err := localCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git rev-parse HEAD failed: %w", err)
@@ -61,14 +64,14 @@ func EnsureCleanAndPushed() error {
 	localSHA := strings.TrimSpace(string(localOutput))
 
 	// Get current branch.
-	branchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	branchOutput, err := branchCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git rev-parse --abbrev-ref HEAD failed: %w", err)
 	}
 	branch := strings.TrimSpace(string(branchOutput))
 
-	remoteCmd := exec.Command("git", "rev-parse", "origin/"+branch)
+	remoteCmd := exec.CommandContext(ctx, "git", "rev-parse", "origin/"+branch)
 	remoteOutput, err := remoteCmd.Output()
 	if err != nil {
 		return fmt.Errorf("branch %q not found on remote — push before deploying: %w", branch, err)

@@ -12,15 +12,18 @@ import (
 	"time"
 )
 
-// pollUntil calls fn at interval until it returns nil or ctx expires.
+// pollInterval is the fixed polling interval used by pollUntil.
+const pollInterval = 1 * time.Second
+
+// pollUntil calls fn every pollInterval until it returns nil or ctx expires.
 // Returns the last error from fn if the context deadline is reached.
-func pollUntil(ctx context.Context, interval time.Duration, fn func() error) error {
+func pollUntil(ctx context.Context, fn func() error) error {
 	// Run once immediately before starting the ticker.
 	if err := fn(); err == nil {
 		return nil
 	}
 
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	var lastErr error

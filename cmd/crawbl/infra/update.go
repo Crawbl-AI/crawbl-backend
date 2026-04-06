@@ -97,7 +97,7 @@ func validateEnvVars() error {
 func confirmUpdate() bool {
 	out.Prompt(style.Warning, "Do you want to perform this action? (y/N): ")
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 	return response == "y" || response == "Y"
 }
 

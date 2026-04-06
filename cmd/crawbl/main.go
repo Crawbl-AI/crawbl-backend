@@ -74,7 +74,6 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	rootCmd.SetUsageTemplate(rootUsageTemplate)
 	rootCmd.AddGroup(
@@ -109,7 +108,9 @@ func main() {
 	rootCmd.AddCommand(platformCmd, infraCmd, appCmd, testCmd, setupCmd, devCmd)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		stop()
 		out.Fail("%v", err)
 		os.Exit(1)
 	}
+	stop()
 }

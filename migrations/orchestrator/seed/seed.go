@@ -142,4 +142,3 @@ func ImplementedTools() []ToolEntry {
 // category. Named -List to avoid colliding with the orchestrator's
 // integration-category accessor.
 func ToolCategoriesList() []ToolCategoryEntry { return toolCategories }
-

@@ -1,3 +1,5 @@
+// Package agentpromptsrepo provides PostgreSQL-based implementation of the AgentPromptsRepo interface.
+// It handles persistence and retrieval of agent prompt entries.
 package agentpromptsrepo
 
 type agentPromptsRepo struct{}

@@ -79,11 +79,14 @@ func (r *redis) Set(ctx context.Context, key string, value any, ttl time.Duratio
 }
 
 func (r *redis) SetNX(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
-	ok, err := r.rc.SetNX(ctx, key, value, ttl).Result()
-	if err != nil {
+	ok, err := r.rc.SetArgs(ctx, key, value, goredis.SetArgs{
+		Mode: "NX",
+		TTL:  ttl,
+	}).Result()
+	if err != nil && err != goredis.Nil {
 		return false, fmt.Errorf("redis setnx %q: %w", key, err)
 	}
-	return ok, nil
+	return ok == "OK", nil
 }
 
 func (r *redis) Del(ctx context.Context, keys ...string) error {

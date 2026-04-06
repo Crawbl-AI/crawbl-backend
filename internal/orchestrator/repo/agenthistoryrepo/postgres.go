@@ -1,3 +1,5 @@
+// Package agenthistoryrepo provides PostgreSQL-based implementation of the AgentHistoryRepo interface.
+// It handles persistence and retrieval of agent history entries.
 package agenthistoryrepo
 
 import (

@@ -1,3 +1,5 @@
+// Package toolsrepo provides PostgreSQL-based implementation of the ToolsRepo interface.
+// It handles persistence, seeding, and retrieval of agent tool definitions.
 package toolsrepo
 
 import (

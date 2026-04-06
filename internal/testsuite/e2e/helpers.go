@@ -19,6 +19,22 @@ import (
 const (
 	defaultRuntimeReadyTimeout = 3 * time.Minute
 	defaultRuntimePollInterval = 2 * time.Second
+
+	// maxBodyDisplayLen is the maximum number of characters shown when
+	// truncating a response body in error messages.
+	maxBodyDisplayLen = 200
+
+	// asyncAssertTimeout is how long polling assertions wait for
+	// async agent-side effects (memory, audit, delegation, etc.).
+	asyncAssertTimeout = 30 * time.Second
+
+	// HTTP status code constants used by assertion steps.
+	statusOK                 = 200
+	statusNoContent          = 204
+	statusBadRequest         = 400
+	statusUnauthorized       = 401
+	statusNotFound           = 404
+	statusServiceUnavailable = 503
 )
 
 type runtimeSnapshot struct {
@@ -84,7 +100,7 @@ func (tc *testContext) fetchWorkspaceList(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces", alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.captureDefaultWorkspace(alias)
@@ -98,7 +114,7 @@ func (tc *testContext) fetchAgents(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/agents", alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.captureAgents(alias)
@@ -112,7 +128,7 @@ func (tc *testContext) fetchConversations(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(200); err != nil {
+	if err := tc.assertStatus(statusOK); err != nil {
 		return err
 	}
 	return tc.captureConversations(alias)
@@ -184,8 +200,8 @@ func (tc *testContext) sendMessage(alias, text string) error {
 		return fmt.Errorf("no current conversation set for %q — open one first", alias)
 	}
 	body := map[string]any{
-		"local_id": tc.nextLocalID(alias, "message"),
-		"content":  map[string]any{"type": "text", "text": text},
+		"local_id":    tc.nextLocalID(alias, "message"),
+		"content":     map[string]any{"type": "text", "text": text},
 		"attachments": []any{},
 	}
 	_, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body)
@@ -195,8 +211,8 @@ func (tc *testContext) sendMessage(alias, text string) error {
 func (tc *testContext) sendWarmupMessage(alias string) error {
 	state := tc.userState(alias)
 	body := map[string]any{
-		"local_id": tc.nextLocalID(alias, "warmup"),
-		"content":  map[string]any{"type": "text", "text": "Reply with the single word READY."},
+		"local_id":    tc.nextLocalID(alias, "warmup"),
+		"content":     map[string]any{"type": "text", "text": "Reply with the single word READY."},
 		"attachments": []any{},
 	}
 	_, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body)
@@ -238,8 +254,8 @@ func normalizeKey(value string) string {
 
 func abbreviatedBody(body []byte) string {
 	text := strings.TrimSpace(string(body))
-	if len(text) > 200 {
-		return text[:200]
+	if len(text) > maxBodyDisplayLen {
+		return text[:maxBodyDisplayLen]
 	}
 	return text
 }

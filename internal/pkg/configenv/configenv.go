@@ -1,3 +1,5 @@
+// Package configenv provides helpers for resolving sensitive configuration
+// values from environment variables or volume-mounted secret files.
 package configenv
 
 import (

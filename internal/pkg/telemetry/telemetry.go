@@ -33,6 +33,9 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
+// defaultExportIntervalSeconds is the default metrics export interval in seconds.
+const defaultExportIntervalSeconds = 30
+
 // Config carries the runtime knobs Init consumes. Populate it from the
 // caller's own config package — this package never reads environment
 // variables directly so tests can drive it deterministically.
@@ -85,7 +88,7 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (shutdown func(c
 		return noop, fmt.Errorf("telemetry: ServiceName is required when telemetry is enabled")
 	}
 	if cfg.ExportInterval <= 0 {
-		cfg.ExportInterval = 30 * time.Second
+		cfg.ExportInterval = defaultExportIntervalSeconds * time.Second
 	}
 	namespace := cfg.Namespace
 	if namespace == "" {
@@ -111,10 +114,7 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (shutdown func(c
 	// Parse the endpoint into host + URL path. otlpmetrichttp takes them
 	// as separate options because it also supports the path-relative
 	// OTEL_EXPORTER_OTLP_METRICS_ENDPOINT convention.
-	host, urlPath, insecure, err := splitOTLPEndpoint(cfg.Endpoint)
-	if err != nil {
-		return noop, fmt.Errorf("telemetry: parse endpoint %q: %w", cfg.Endpoint, err)
-	}
+	host, urlPath, insecure := splitOTLPEndpoint(cfg.Endpoint)
 
 	opts := []otlpmetrichttp.Option{
 		otlpmetrichttp.WithEndpoint(host),
@@ -154,7 +154,7 @@ func Init(ctx context.Context, cfg Config, logger *slog.Logger) (shutdown func(c
 // triple otlpmetrichttp wants. Scheme is used only to decide whether
 // the exporter needs WithInsecure; the otlpmetrichttp client always
 // speaks HTTP/1.1 + protobuf regardless.
-func splitOTLPEndpoint(raw string) (host, path string, insecure bool, err error) {
+func splitOTLPEndpoint(raw string) (host, path string, insecure bool) {
 	trimmed := strings.TrimSpace(raw)
 	switch {
 	case strings.HasPrefix(trimmed, "http://"):
@@ -170,7 +170,7 @@ func splitOTLPEndpoint(raw string) (host, path string, insecure bool, err error)
 	}
 	slash := strings.Index(trimmed, "/")
 	if slash < 0 {
-		return trimmed, "/opentelemetry/v1/metrics", insecure, nil
+		return trimmed, "/opentelemetry/v1/metrics", insecure
 	}
-	return trimmed[:slash], trimmed[slash:], insecure, nil
+	return trimmed[:slash], trimmed[slash:], insecure
 }

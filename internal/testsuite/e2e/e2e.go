@@ -191,11 +191,11 @@ func cleanupUser(cfg *Config, user *testUser) {
 
 // PrintResults writes a summary to w.
 func PrintResults(w io.Writer, r *Results) {
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 	if r.Exit == 0 {
-		fmt.Fprintln(w, "All e2e tests passed.")
+		_, _ = fmt.Fprintln(w, "All e2e tests passed.")
 	} else {
-		fmt.Fprintf(w, "E2e tests failed (exit code %d).\n", r.Exit)
+		_, _ = fmt.Fprintf(w, "E2e tests failed (exit code %d).\n", r.Exit)
 	}
 }
 

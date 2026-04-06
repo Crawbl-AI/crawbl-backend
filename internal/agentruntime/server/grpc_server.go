@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -106,7 +107,8 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 // Start binds the listener and begins serving. Blocks until the
 // server exits. main.go calls Start() in its own goroutine.
 func (s *Server) Start() error {
-	l, err := net.Listen("tcp", s.cfg.GRPCListen)
+	lc := &net.ListenConfig{}
+	l, err := lc.Listen(context.Background(), "tcp", s.cfg.GRPCListen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", s.cfg.GRPCListen, err)
 	}

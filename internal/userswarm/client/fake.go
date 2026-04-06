@@ -41,7 +41,7 @@ func NewFakeClient(config Config) Client {
 //
 // The context parameter is intentionally unused (_) because there is nothing
 // asynchronous to cancel.
-func (c *fakeClient) EnsureRuntime(_ context.Context, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error) {
+func (f *fakeClient) EnsureRuntime(_ context.Context, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error) {
 	// WorkspaceID is the minimum required field — without it we cannot derive
 	// a stable SwarmName, which downstream code may use for logging/tracing.
 	if opts == nil || strings.TrimSpace(opts.WorkspaceID) == "" {
@@ -66,7 +66,7 @@ func (c *fakeClient) EnsureRuntime(_ context.Context, opts *EnsureRuntimeOpts) (
 // There is nothing to clean up because EnsureRuntime never created any real
 // Kubernetes resources.  Returning nil satisfies the idempotency contract of
 // the Client interface.
-func (c *fakeClient) DeleteRuntime(_ context.Context, _ string) *merrors.Error {
+func (f *fakeClient) DeleteRuntime(_ context.Context, _ string) *merrors.Error {
 	return nil // no-op for fake client
 }
 
@@ -111,7 +111,7 @@ func (f *fakeClient) SendTextStream(_ context.Context, opts *SendTextOpts) (<-ch
 // Returns ErrInvalidInput if the required fields are missing, matching the
 // validation behaviour of the real userSwarmClient so tests that exercise the
 // validation path work against either implementation.
-func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error) {
+func (f *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error) {
 	// Mirror the same nil/empty guards as the real implementation so the fake
 	// is a faithful stand-in for validation testing.
 	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
@@ -121,7 +121,7 @@ func (c *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTur
 	// Echo the message back as a single manager turn so the caller can see it
 	// was processed.  The real implementation returns turns from the agent runtime agents.
 	return []AgentTurn{
-		{AgentID: "manager", Text: fmt.Sprintf("%s: %s", c.replyPrefix, opts.Message)},
+		{AgentID: "manager", Text: fmt.Sprintf("%s: %s", f.replyPrefix, opts.Message)},
 	}, nil
 }
 

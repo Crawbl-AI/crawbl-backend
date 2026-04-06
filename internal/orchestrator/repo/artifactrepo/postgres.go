@@ -1,3 +1,5 @@
+// Package artifactrepo provides PostgreSQL-based implementation of the artifact repository.
+// It handles persistence and retrieval of artifacts, artifact versions, and artifact reviews.
 package artifactrepo
 
 import (
