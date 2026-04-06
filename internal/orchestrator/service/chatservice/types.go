@@ -148,6 +148,9 @@ type messageRepo interface {
 	// CompleteDelegation marks a running delegation as completed, recording the
 	// completion timestamp and elapsed duration. Best-effort — callers may discard the error.
 	CompleteDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error
+	// UpdateDelegationSummary backfills the task_summary on delegation rows
+	// for a given trigger message. Best-effort — callers may discard the error.
+	UpdateDelegationSummary(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, summary string) *merrors.Error
 }
 
 // toolsRepo defines the repository interface for tool catalog operations.

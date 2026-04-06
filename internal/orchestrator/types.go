@@ -137,6 +137,11 @@ const (
 
 	// MessageStatusSilent indicates the agent consciously had nothing to say.
 	MessageStatusSilent MessageStatus = "silent"
+
+	// MessageStatusDelegated indicates the Manager routed the request to
+	// a sub-agent. The message text contains the Manager's reasoning;
+	// the mobile app renders it as a delegation card (dimmed/collapsible).
+	MessageStatusDelegated MessageStatus = "delegated"
 )
 
 // MessageContentType represents the type of content in a message.

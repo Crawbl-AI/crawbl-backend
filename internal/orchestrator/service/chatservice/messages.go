@@ -137,10 +137,6 @@ func (s *service) executeParallel(
 	targetAgents []*orchestrator.Agent,
 	lookups agentLookups,
 ) ([]*orchestrator.Message, *merrors.Error) {
-	type agentResult struct {
-		replies []*orchestrator.Message
-		err     *merrors.Error
-	}
 	results := make([]agentResult, len(targetAgents))
 	var wg sync.WaitGroup
 	wg.Add(len(targetAgents))
@@ -174,6 +170,12 @@ func (s *service) executeParallel(
 
 // pendingToolCall tracks a ToolCallEvent so we can resolve the tool name,
 // agent, and parsed args when the matching ToolResultEvent arrives.
+// agentResult holds the outcome of a parallel agent call in swarm mode.
+type agentResult struct {
+	replies []*orchestrator.Message
+	err     *merrors.Error
+}
+
 type pendingToolCall struct {
 	tool      string       // e.g. agentruntimetools.ToolTransferToAgent
 	agentSlug string       // agent slug from the ToolCallEvent (e.g. "manager")
@@ -576,16 +578,25 @@ func (s *service) callAgentStreaming(
 			"chunks", st.chunkCount,
 		)
 
-		// If sub-agents answered, suppress Manager's message entirely.
-		// Manager's job is to delegate — when delegation happened, only
-		// sub-agent bubbles should appear.
+		// When sub-agents answered, persist Manager's reasoning as a
+		// delegation message instead of deleting it. The mobile app
+		// renders delegation messages as a dimmed/collapsible card so
+		// the full conversation history is visible on reload.
 		if isPrimary && len(streams) > 1 {
-			slog.Info("callAgentStreaming: suppressing Manager bubble (sub-agents answered)",
+			slog.Info("callAgentStreaming: persisting Manager delegation decision",
 				"agent_slug", st.agent.Slug,
 				"sub_agent_count", len(streams)-1,
+				"text_len", len(finalText),
 			)
-			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
+			st.placeholder.Content.Type = orchestrator.MessageContentTypeDelegation
+			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusDelegated, lookups)
+			// Backfill the delegation task_summary now that Manager's
+			// full reasoning text is available.
+			go s.updateDelegationSummary(placeholder.ID, finalText)
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
+			if reply != nil {
+				replies = append(replies, reply)
+			}
 			continue
 		}
 
@@ -832,15 +843,18 @@ func parseToolCallArgs(toolName, argsJSON string) toolCallArgs {
 func (s *service) recordDelegation(ctx context.Context, sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, _ = sess.InsertInto("agent_delegations").
-		Pair("workspace_id", workspaceID).
-		Pair("conversation_id", conversationID).
-		Pair("trigger_message_id", triggerMsgID).
-		Pair("delegator_agent_id", delegatorAgentID).
-		Pair("delegate_agent_id", delegateAgentID).
-		Pair("task_summary", taskSummary).
-		Pair("status", realtime.AgentDelegationStatusRunning).
-		ExecContext(auditCtx)
+	_ = s.messageRepo.RecordDelegation(auditCtx, sess, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary)
+}
+
+// updateDelegationSummary backfills the task_summary via the repo layer.
+func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
+	if summary == "" {
+		return
+	}
+	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sess := s.db.NewSession(nil)
+	_ = s.messageRepo.UpdateDelegationSummary(auditCtx, sess, triggerMsgID, summary)
 }
 
 // completeDelegation marks a delegation as completed (async, best-effort).
@@ -848,13 +862,7 @@ func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, 
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sess := s.db.NewSession(nil)
-	_, _ = sess.Update("agent_delegations").
-		Set("status", realtime.AgentDelegationStatusCompleted).
-		Set("completed_at", time.Now().UTC()).
-		Set("duration_ms", dbr.Expr("EXTRACT(EPOCH FROM (NOW() - created_at))::INTEGER * 1000")).
-		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = ?",
-			triggerMsgID, delegateAgentID, realtime.AgentDelegationStatusRunning).
-		ExecContext(auditCtx)
+	_ = s.messageRepo.CompleteDelegation(auditCtx, sess, triggerMsgID, delegateAgentID)
 }
 
 // persistUserMessage saves the user message in its own transaction and

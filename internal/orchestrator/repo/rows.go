@@ -541,6 +541,10 @@ type MessageRepo interface {
 	// CompleteDelegation marks a running delegation as completed, recording the
 	// agent response as a delivered message in the conversation.
 	CompleteDelegation(ctx context.Context, sess SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error
+	// UpdateDelegationSummary backfills the task_summary on delegation rows
+	// for a given trigger message. Called after the Manager's reasoning text
+	// is fully accumulated.
+	UpdateDelegationSummary(ctx context.Context, sess SessionRunner, triggerMsgID, summary string) *merrors.Error
 }
 
 // ToolsRepo defines the repository interface for tool catalog operations.
@@ -568,6 +572,12 @@ type AgentHistoryRepo interface {
 	ListByAgentID(ctx context.Context, sess SessionRunner, agentID string, limit, offset int) ([]AgentHistoryRow, *merrors.Error)
 	CountByAgentID(ctx context.Context, sess SessionRunner, agentID string) (int, *merrors.Error)
 	Create(ctx context.Context, sess SessionRunner, row *AgentHistoryRow) *merrors.Error
+}
+
+// IntegrationConnRepo defines the repository interface for integration connection operations.
+type IntegrationConnRepo interface {
+	// ListActiveProviders returns provider names with active connections for a user.
+	ListActiveProviders(ctx context.Context, sess SessionRunner, userID, activeStatus string) ([]string, *merrors.Error)
 }
 
 // ToolRow represents a database row for the tools table.

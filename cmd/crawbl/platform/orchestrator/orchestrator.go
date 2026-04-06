@@ -25,6 +25,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentsettingsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/integrationconnrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
@@ -157,7 +158,8 @@ func runServer(ctx context.Context) error {
 		},
 		runtimeClient,
 	)
-	integrationService := integrationservice.New(logger)
+	integrationConnRepo := integrationconnrepo.New()
+	integrationService := integrationservice.New(logger, integrationConnRepo)
 
 	// Start background cleanup of orphaned pending messages.
 	chatService.StartPendingMessageCleanup(ctx)

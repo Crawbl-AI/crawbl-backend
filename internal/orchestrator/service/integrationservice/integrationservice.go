@@ -6,19 +6,21 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/integration"
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 // New creates a new IntegrationService.
-func New(logger *slog.Logger) orchestratorservice.IntegrationService {
+func New(logger *slog.Logger, connRepo orchestratorrepo.IntegrationConnRepo) orchestratorservice.IntegrationService {
 	if logger == nil {
 		panic("integration service logger cannot be nil")
 	}
 
 	return &service{
-		logger: logger,
+		logger:   logger,
+		connRepo: connRepo,
 	}
 }
 
@@ -29,25 +31,17 @@ func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservic
 		return nil, merrors.ErrInvalidInput
 	}
 
-	// Query the user's active connections from the database.
+	// Query the user's active connections via the repo layer.
 	// If the table doesn't exist yet (migration not run), treat as no connections.
 	connectedProviders := make(map[string]bool)
-	type connRow struct {
-		Provider string `db:"provider"`
-	}
-	var rows []connRow
-	_, err := opts.Sess.Select("provider").
-		From("integration_connections").
-		Where("user_id = ? AND status = ?", opts.UserID, integration.StatusActive).
-		LoadContext(ctx, &rows)
-	if err != nil {
-		// Table may not exist yet — log and continue with empty connections.
-		s.logger.Warn("failed to query integration_connections, assuming none connected",
-			slog.String("error", err.Error()),
+	activeProviders, mErr := s.connRepo.ListActiveProviders(ctx, opts.Sess, opts.UserID, integration.StatusActive)
+	if mErr != nil {
+		s.logger.Warn("failed to query integration connections, assuming none connected",
+			slog.String("error", mErr.Error()),
 		)
 	}
-	for _, r := range rows {
-		connectedProviders[r.Provider] = true
+	for _, p := range activeProviders {
+		connectedProviders[p] = true
 	}
 
 	// Build the response by merging seed catalog with connection status.

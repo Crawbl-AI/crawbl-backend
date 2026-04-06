@@ -390,3 +390,19 @@ func (r *messageRepo) CompleteDelegation(ctx context.Context, sess orchestratorr
 	}
 	return nil
 }
+
+// UpdateDelegationSummary backfills the task_summary on delegation
+// rows for a given trigger message.
+func (r *messageRepo) UpdateDelegationSummary(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, summary string) *merrors.Error {
+	if sess == nil || summary == "" {
+		return nil
+	}
+	_, err := sess.Update("agent_delegations").
+		Set("task_summary", summary).
+		Where("trigger_message_id = ? AND task_summary = ''", triggerMsgID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "update delegation summary")
+	}
+	return nil
+}
