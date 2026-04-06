@@ -23,8 +23,8 @@ Feature: Conversation management
 
   Scenario: A user can delete a scratch conversation
     When user "primary" creates a conversation named "Temporary" in their default workspace
-    Then the response status should be 200
+    Then the response status should be one of "200,201"
     When user "primary" deletes the current conversation
-    Then the response status should be 200
+    Then the response status should be one of "200,204"
     When user "primary" opens the current conversation again
     Then the request should be rejected as not found

@@ -299,7 +299,7 @@ func (tc *testContext) dbMCPAuditLogForSubject(toolName, alias string) error {
 	return pollUntil(ctx, 1*time.Second, func() error {
 		count, err := tc.queryCount(`
 			SELECT COUNT(*) FROM mcp_audit_logs
-			JOIN users ON users.id = mcp_audit_logs.user_id
+			JOIN users ON users.id::text = mcp_audit_logs.user_id
 			WHERE users.subject = $1 AND mcp_audit_logs.tool_name = $2`, subject, toolName)
 		if err != nil {
 			return err

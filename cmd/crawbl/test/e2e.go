@@ -217,7 +217,7 @@ runs only test-features/chat/).`,
 	cmd.Flags().StringVar(&name, "name", "E2E Test User", "Display name for the test user")
 	cmd.Flags().StringVar(&e2eToken, "e2e-token", os.Getenv("CRAWBL_E2E_TOKEN"), "Shared secret for gateway auth bypass, or set CRAWBL_E2E_TOKEN")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print detailed test output")
-	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "HTTP request timeout")
+	cmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout (includes agent tool-call latency)")
 	cmd.Flags().DurationVar(&runtimeReadyTimeout, "runtime-ready-timeout", 3*time.Minute, "How long to wait for a workspace runtime to become ready before chat scenarios fail")
 	cmd.Flags().DurationVar(&runtimePollInterval, "runtime-poll-interval", 2*time.Second, "How often to poll workspace runtime readiness during chat scenarios")
 	cmd.Flags().StringVar(&databaseDSN, "database-dsn", os.Getenv("CRAWBL_E2E_DATABASE_DSN"), "Postgres DSN for database assertions")
