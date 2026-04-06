@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+
+echo "Running golangci-lint on staged files..."
+
+# Get staged .go files (excluding deleted).
+staged_go_files=$(git diff --cached --name-only --diff-filter=d -- '*.go' || true)
+if [ -z "${staged_go_files}" ]; then
+  echo "No Go files staged, skipping lint."
+  exit 0
+fi
+
+# Extract unique packages from staged files.
+packages=$(echo "${staged_go_files}" | xargs -I{} dirname {} | sort -u | sed 's|^|./|')
+
+golangci-lint run ${packages}
+echo "Lint passed."

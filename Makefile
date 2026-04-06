@@ -11,7 +11,7 @@ post-clone:
 
 hooks:
 	git config core.hooksPath .githooks
-	chmod +x .githooks/pre-push ./crawbl
+	chmod +x .githooks/pre-push .githooks/pre-commit ./crawbl
 
 build:
 	./crawbl --version >/dev/null
