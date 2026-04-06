@@ -75,7 +75,7 @@ type Deps struct {
 	AgentRepo        orchestratorrepo.AgentRepo
 	AgentHistoryRepo orchestratorrepo.AgentHistoryRepo
 	ArtifactRepo     artifactrepo.Repo
-	SigningKey        string
+	SigningKey       string
 	FCM              *firebase.FCMClient    // nil = push notifications disabled
 	RuntimeClient    userswarmclient.Client // nil = agent messaging disabled
 	Broadcaster      realtime.Broadcaster   // nil = no real-time events
@@ -144,14 +144,14 @@ type userProfileInput struct {
 }
 
 type userProfileOutput struct {
-	ID          string  `json:"id"`
-	Email       string  `json:"email"`
-	Nickname    string  `json:"nickname"`
-	Name        string  `json:"name"`
-	Surname     string  `json:"surname"`
-	CountryCode *string `json:"country_code,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	Preferences *userPrefs  `json:"preferences,omitempty"`
+	ID          string     `json:"id"`
+	Email       string     `json:"email"`
+	Nickname    string     `json:"nickname"`
+	Name        string     `json:"name"`
+	Surname     string     `json:"surname"`
+	CountryCode *string    `json:"country_code,omitempty"`
+	CreatedAt   string     `json:"created_at"`
+	Preferences *userPrefs `json:"preferences,omitempty"`
 }
 
 type userPrefs struct {
@@ -273,12 +273,12 @@ type readArtifactInput struct {
 }
 
 type readArtifactOutput struct {
-	ArtifactID  string               `json:"artifact_id"`
-	Title       string               `json:"title"`
-	ContentType string               `json:"content_type"`
-	Content     string               `json:"content"`
-	Version     int                  `json:"version"`
-	Status      string               `json:"status"`
+	ArtifactID  string                `json:"artifact_id"`
+	Title       string                `json:"title"`
+	ContentType string                `json:"content_type"`
+	Content     string                `json:"content"`
+	Version     int                   `json:"version"`
+	Status      string                `json:"status"`
 	Reviews     []artifactReviewBrief `json:"reviews"`
 }
 

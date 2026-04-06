@@ -79,7 +79,15 @@ func autoMigrate(logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
-	defer m.Close()
+	defer func() {
+		srcErr, dbErr := m.Close()
+		if srcErr != nil {
+			slog.Warn("migrator: source close error", "error", srcErr.Error())
+		}
+		if dbErr != nil {
+			slog.Warn("migrator: db close error", "error", dbErr.Error())
+		}
+	}()
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("run migrations: %w", err)

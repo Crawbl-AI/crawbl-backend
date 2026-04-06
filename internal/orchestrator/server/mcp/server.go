@@ -1,7 +1,7 @@
-// TODO: IN THE FUTURE MCP SERVER SHOULD BE DEPLOYED
-// IN IT'S OWN SEPARATE SERVER, NOT PART OF ORCHESTRATOR
-// AI AGENTS WILL OVERLOAD THE ORCHESTRATOR SERVER WITH MCP CALLS
-// OUR DB, CACHE AND EVERYTHING WILL DIE.
+// Package mcp implements the MCP (Model Context Protocol) server that
+// agent runtime pods connect to for orchestrator-side tool execution.
+// In the future this should be deployed as a separate service to avoid
+// overloading the orchestrator with high-volume agent tool calls.
 package mcp
 
 import (
@@ -127,7 +127,7 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 }
 
 // extractToolCallParams extracts the tool name and input JSON from an MCP request.
-func extractToolCallParams(req sdkmcp.Request) (string, string) {
+func extractToolCallParams(req sdkmcp.Request) (toolName string, argsJSON string) {
 	params, ok := req.GetParams().(*sdkmcp.CallToolParamsRaw)
 	if !ok || params == nil {
 		return "unknown", "{}"

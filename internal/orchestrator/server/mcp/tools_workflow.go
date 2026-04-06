@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,12 +47,12 @@ type checkWorkflowStatusInput struct {
 
 // checkWorkflowStatusOutput is the result returned for check_workflow_status.
 type checkWorkflowStatusOutput struct {
-	ExecutionID string                 `json:"execution_id"`
-	Status      string                 `json:"status"`
-	CurrentStep int                    `json:"current_step"`
-	Error       string                 `json:"error,omitempty"`
-	Steps       []stepStatusBrief      `json:"steps,omitempty"`
-	Info        string                 `json:"info,omitempty"`
+	ExecutionID string            `json:"execution_id"`
+	Status      string            `json:"status"`
+	CurrentStep int               `json:"current_step"`
+	Error       string            `json:"error,omitempty"`
+	Steps       []stepStatusBrief `json:"steps,omitempty"`
+	Info        string            `json:"info,omitempty"`
 }
 
 // stepStatusBrief summarises a single step execution for the status response.
@@ -322,9 +323,12 @@ func newListWorkflowsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listWorkflowsInpu
 		}
 
 		briefs := make([]workflowBrief, 0, len(rows))
-		for _, row := range rows {
+		for i := range rows {
+			row := &rows[i]
 			var steps []workflowrepo.WorkflowStep
-			_ = json.Unmarshal(row.Steps, &steps)
+			if err := json.Unmarshal(row.Steps, &steps); err != nil {
+				slog.Warn("listWorkflows: failed to unmarshal steps", "workflow_id", row.ID, "error", err.Error())
+			}
 
 			briefs = append(briefs, workflowBrief{
 				ID:          row.ID,

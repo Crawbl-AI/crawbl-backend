@@ -16,14 +16,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zishang520/socket.io/v2/socket"
 
+	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/mcp"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentpromptsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentsettingsrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/integrationconnrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
@@ -32,9 +32,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
+	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
-	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
+	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
@@ -45,9 +46,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
-	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
-	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -122,7 +122,7 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, httpMiddleware)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger)
 	defer cleanupRT()
 
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
@@ -357,7 +357,7 @@ func buildMCPHandler(
 	return handler
 }
 
-func buildRealtime(logger *slog.Logger, middleware *httpserver.MiddlewareConfig) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+func buildRealtime(logger *slog.Logger) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	addr := strings.TrimSpace(os.Getenv("CRAWBL_REDIS_ADDR"))
 	if addr == "" {
 		logger.Info("realtime disabled: CRAWBL_REDIS_ADDR not set")
