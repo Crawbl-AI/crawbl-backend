@@ -1,3 +1,11 @@
+// Package grpc holds shared gRPC infrastructure used by crawbl-backend
+// components when they need to dial peer services (runtime pods, auth
+// filters, future federation endpoints) or serve gRPC endpoints.
+//
+// The package is deliberately narrow and generic: it owns a connection
+// pool, per-RPC HMAC credentials, standard keepalive parameters, and
+// server-side interceptors. It has zero knowledge of UserSwarm,
+// workspaces, memory, or any domain concept.
 package grpc
 
 import (
