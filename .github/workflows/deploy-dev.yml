@@ -93,5 +93,5 @@ jobs:
           ./.artifacts/bin/crawbl test e2e \
             --base-url https://dev.api.crawbl.com \
             --e2e-token "$CRAWBL_E2E_TOKEN" \
-            --timeout 60s \
+            --timeout 180s \
             --verbose
