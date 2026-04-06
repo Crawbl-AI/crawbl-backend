@@ -79,11 +79,9 @@ func (s *service) sendDirectMessage(
 	}
 
 	// Persist user message first (same as swarm path).
-	userMsg, mErr := s.persistUserMessage(ctx, opts, conversation)
-	if mErr != nil {
+	if _, mErr := s.persistUserMessage(ctx, opts, conversation); mErr != nil {
 		return nil, mErr
 	}
-	_ = userMsg
 
 	// Stream response from the agent.
 	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, primaryResponder, lookups, "")
@@ -261,7 +259,9 @@ func (s *service) callAgentStreaming(
 			"agent_id", agent.ID,
 			"error", mErr.Error(),
 		)
-		_ = s.messageRepo.DeleteByID(ctx, opts.Sess, placeholder.ID)
+		if mErr := s.messageRepo.DeleteByID(ctx, opts.Sess, placeholder.ID); mErr != nil {
+			slog.Warn("callAgentStreaming: failed to delete placeholder after stream failure", "error", mErr.Error())
+		}
 		s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, agent.ID, string(orchestrator.AgentStatusError), conversation.ID)
 		return nil, mErr
 	}
@@ -276,7 +276,9 @@ func (s *service) callAgentStreaming(
 				Status:         string(orchestrator.MessageStatusDelivered),
 			})
 			// Update DB so REST API returns "delivered" for historical messages.
-			_ = s.messageRepo.UpdateStatus(ctx, opts.Sess, opts.UserMessageID, orchestrator.MessageStatusDelivered)
+			if mErr := s.messageRepo.UpdateStatus(ctx, opts.Sess, opts.UserMessageID, orchestrator.MessageStatusDelivered); mErr != nil {
+				slog.Warn("callAgentStreaming: failed to update user message status to delivered", "message_id", opts.UserMessageID, "error", mErr.Error())
+			}
 		})
 	}
 
@@ -592,7 +594,7 @@ func (s *service) callAgentStreaming(
 			reply := s.finalizeStreamMessage(ctx, opts, conversation, st.placeholder, finalText, orchestrator.MessageStatusDelegated, lookups)
 			// Backfill the delegation task_summary now that Manager's
 			// full reasoning text is available.
-			go s.updateDelegationSummary(placeholder.ID, finalText)
+			s.updateDelegationSummary(placeholder.ID, finalText)
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 			if reply != nil {
 				replies = append(replies, reply)
@@ -614,7 +616,9 @@ func (s *service) callAgentStreaming(
 					"conversation_id", conversation.ID,
 				)
 			}
-			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
+			if mErr := s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID); mErr != nil {
+				slog.Warn("callAgentStreaming: failed to delete empty placeholder", "placeholder_id", st.placeholder.ID, "error", mErr.Error())
+			}
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 			continue
 		}
@@ -626,7 +630,9 @@ func (s *service) callAgentStreaming(
 				"agent_id", st.agent.ID,
 				"conversation_id", conversation.ID,
 			)
-			_ = s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID)
+			if mErr := s.messageRepo.DeleteByID(ctx, opts.Sess, st.placeholder.ID); mErr != nil {
+				slog.Warn("callAgentStreaming: failed to delete sub-agent-only placeholder", "placeholder_id", st.placeholder.ID, "error", mErr.Error())
+			}
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, st.agent.ID, string(orchestrator.AgentStatusOnline), conversation.ID)
 			continue
 		}
@@ -839,14 +845,19 @@ func parseToolCallArgs(toolName, argsJSON string) toolCallArgs {
 	return toolCallArgs{Parsed: parsed, Query: query}
 }
 
-// recordDelegation inserts an agent_delegations row (async, best-effort).
 func (s *service) recordDelegation(ctx context.Context, sess *dbr.Session, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = s.messageRepo.RecordDelegation(auditCtx, sess, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary)
+	if mErr := s.messageRepo.RecordDelegation(auditCtx, sess, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary); mErr != nil {
+		slog.Warn("recordDelegation: failed to insert delegation row",
+			"trigger_message_id", triggerMsgID,
+			"delegator", delegatorAgentID,
+			"delegate", delegateAgentID,
+			"error", mErr.Error(),
+		)
+	}
 }
 
-// updateDelegationSummary backfills the task_summary via the repo layer.
 func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
 	if summary == "" {
 		return
@@ -854,15 +865,25 @@ func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sess := s.db.NewSession(nil)
-	_ = s.messageRepo.UpdateDelegationSummary(auditCtx, sess, triggerMsgID, summary)
+	if mErr := s.messageRepo.UpdateDelegationSummary(auditCtx, sess, triggerMsgID, summary); mErr != nil {
+		slog.Warn("updateDelegationSummary: failed to backfill task_summary",
+			"trigger_message_id", triggerMsgID,
+			"error", mErr.Error(),
+		)
+	}
 }
 
-// completeDelegation marks a delegation as completed (async, best-effort).
 func (s *service) completeDelegation(workspaceID, conversationID, triggerMsgID, delegateAgentID string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sess := s.db.NewSession(nil)
-	_ = s.messageRepo.CompleteDelegation(auditCtx, sess, triggerMsgID, delegateAgentID)
+	if mErr := s.messageRepo.CompleteDelegation(auditCtx, sess, triggerMsgID, delegateAgentID); mErr != nil {
+		slog.Warn("completeDelegation: failed to mark delegation completed",
+			"trigger_message_id", triggerMsgID,
+			"delegate", delegateAgentID,
+			"error", mErr.Error(),
+		)
+	}
 }
 
 // persistUserMessage saves the user message in its own transaction and
