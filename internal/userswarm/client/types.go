@@ -132,16 +132,6 @@ const (
 	// DefaultPollInterval is how often EnsureRuntime re-checks the
 	// UserSwarm CR status while waiting for Verified=true.
 	DefaultPollInterval = 2 * time.Second
-
-	// DefaultGRPCDialTimeout caps the time a single gRPC dial attempt
-	// will block before returning an error. Short so an unreachable pod
-	// surfaces fast.
-	DefaultGRPCDialTimeout = 5 * time.Second
-
-	// DefaultGRPCCallTimeout bounds the duration of a non-streaming
-	// gRPC call (Memory RPCs). Streaming Converse calls use the
-	// request's own context deadline.
-	DefaultGRPCCallTimeout = 90 * time.Second
 )
 
 // Config is the top-level configuration passed into NewUserSwarmClient

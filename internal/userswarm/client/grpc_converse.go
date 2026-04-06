@@ -8,11 +8,32 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc"
+
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 )
+
+// dialRuntime dials the runtime pod via the cached gRPC pool and stamps
+// the caller's identity onto the context for HMAC signing. Returns the
+// connection, the authenticated context, and an error if dialing fails.
+func (c *userSwarmClient) dialRuntime(ctx context.Context, rt *orchestrator.RuntimeStatus) (
+	*grpc.ClientConn, context.Context, *merrors.Error,
+) {
+	target := crawblgrpc.ClusterTarget(rt.ServiceName, rt.RuntimeNamespace, c.config.Port)
+	conn, err := c.grpcPool.Get(ctx, target)
+	if err != nil {
+		return nil, nil, wrapGRPCError(err, "dial runtime")
+	}
+	authedCtx := crawblgrpc.WithIdentity(ctx, crawblgrpc.Identity{
+		Subject: rt.UserID,
+		Object:  rt.WorkspaceID,
+	})
+	return conn, authedCtx, nil
+}
 
 // SendText forwards a user's chat message to the runtime pod via the
 // Converse bidi stream and returns the aggregated agent turns.
@@ -37,18 +58,10 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 		return nil, merrors.NewServerErrorText("runtime missing identity (EnsureRuntime must stamp UserID + WorkspaceID)")
 	}
 
-	conn, err := c.conn(ctx, &runtimeCoord{
-		serviceName: opts.Runtime.ServiceName,
-		namespace:   opts.Runtime.RuntimeNamespace,
-	})
-	if err != nil {
-		return nil, wrapGRPCError(err, "dial runtime")
+	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
+	if dialErr != nil {
+		return nil, dialErr
 	}
-
-	authedCtx := crawblgrpc.WithIdentity(ctx, crawblgrpc.Identity{
-		Subject: opts.Runtime.UserID,
-		Object:  opts.Runtime.WorkspaceID,
-	})
 
 	client := runtimev1.NewAgentRuntimeClient(conn)
 	stream, err := client.Converse(authedCtx)
@@ -117,18 +130,10 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 		return nil, merrors.NewServerErrorText("runtime missing identity (EnsureRuntime must stamp UserID + WorkspaceID)")
 	}
 
-	conn, err := c.conn(ctx, &runtimeCoord{
-		serviceName: opts.Runtime.ServiceName,
-		namespace:   opts.Runtime.RuntimeNamespace,
-	})
-	if err != nil {
-		return nil, wrapGRPCError(err, "dial runtime")
+	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
+	if dialErr != nil {
+		return nil, dialErr
 	}
-
-	authedCtx := crawblgrpc.WithIdentity(ctx, crawblgrpc.Identity{
-		Subject: opts.Runtime.UserID,
-		Object:  opts.Runtime.WorkspaceID,
-	})
 
 	client := runtimev1.NewAgentRuntimeClient(conn)
 	stream, err := client.Converse(authedCtx)

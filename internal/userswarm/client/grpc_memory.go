@@ -3,9 +3,6 @@ package client
 import (
 	"context"
 	"strings"
-	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -26,18 +23,10 @@ func (c *userSwarmClient) ListMemories(ctx context.Context, opts *ListMemoriesOp
 		return nil, err
 	}
 
-	conn, cerr := c.conn(ctx, &runtimeCoord{
-		serviceName: opts.Runtime.ServiceName,
-		namespace:   opts.Runtime.RuntimeNamespace,
-	})
-	if cerr != nil {
-		return nil, wrapGRPCError(cerr, "dial runtime")
+	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
+	if dialErr != nil {
+		return nil, dialErr
 	}
-
-	authedCtx := crawblgrpc.WithIdentity(ctx, crawblgrpc.Identity{
-		Subject: opts.Runtime.UserID,
-		Object:  opts.Runtime.WorkspaceID,
-	})
 
 	client := runtimev1.NewMemoryClient(conn)
 	resp, err := client.ListMemories(authedCtx, &runtimev1.ListMemoriesRequest{
@@ -59,8 +48,8 @@ func (c *userSwarmClient) ListMemories(ctx context.Context, opts *ListMemoriesOp
 			Key:       e.GetKey(),
 			Content:   e.GetContent(),
 			Category:  e.GetCategory(),
-			CreatedAt: formatProtoTimestamp(e.GetCreatedAt()),
-			UpdatedAt: formatProtoTimestamp(e.GetUpdatedAt()),
+			CreatedAt: crawblgrpc.FormatProtoTimestamp(e.GetCreatedAt()),
+			UpdatedAt: crawblgrpc.FormatProtoTimestamp(e.GetUpdatedAt()),
 		})
 	}
 	return entries, nil
@@ -75,18 +64,10 @@ func (c *userSwarmClient) CreateMemory(ctx context.Context, opts *CreateMemoryOp
 		return err
 	}
 
-	conn, cerr := c.conn(ctx, &runtimeCoord{
-		serviceName: opts.Runtime.ServiceName,
-		namespace:   opts.Runtime.RuntimeNamespace,
-	})
-	if cerr != nil {
-		return wrapGRPCError(cerr, "dial runtime")
+	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
+	if dialErr != nil {
+		return dialErr
 	}
-
-	authedCtx := crawblgrpc.WithIdentity(ctx, crawblgrpc.Identity{
-		Subject: opts.Runtime.UserID,
-		Object:  opts.Runtime.WorkspaceID,
-	})
 
 	client := runtimev1.NewMemoryClient(conn)
 	if _, err := client.CreateMemory(authedCtx, &runtimev1.CreateMemoryRequest{
@@ -109,18 +90,10 @@ func (c *userSwarmClient) DeleteMemory(ctx context.Context, opts *DeleteMemoryOp
 		return err
 	}
 
-	conn, cerr := c.conn(ctx, &runtimeCoord{
-		serviceName: opts.Runtime.ServiceName,
-		namespace:   opts.Runtime.RuntimeNamespace,
-	})
-	if cerr != nil {
-		return wrapGRPCError(cerr, "dial runtime")
+	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
+	if dialErr != nil {
+		return dialErr
 	}
-
-	authedCtx := crawblgrpc.WithIdentity(ctx, crawblgrpc.Identity{
-		Subject: opts.Runtime.UserID,
-		Object:  opts.Runtime.WorkspaceID,
-	})
 
 	client := runtimev1.NewMemoryClient(conn)
 	if _, err := client.DeleteMemory(authedCtx, &runtimev1.DeleteMemoryRequest{
@@ -153,18 +126,4 @@ func validateMemoryRuntime(runtime *orchestrator.RuntimeStatus) *merrors.Error {
 		return merrors.NewServerErrorText("runtime missing identity (EnsureRuntime must stamp UserID + WorkspaceID)")
 	}
 	return nil
-}
-
-// formatProtoTimestamp renders a google.protobuf.Timestamp into an
-// RFC3339 UTC string. Returns "" for nil / zero timestamps so the
-// orchestrator's JSON layer omits the field.
-func formatProtoTimestamp(ts *timestamppb.Timestamp) string {
-	if ts == nil {
-		return ""
-	}
-	t := ts.AsTime()
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
 }

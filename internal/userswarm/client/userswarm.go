@@ -86,7 +86,7 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 	return &userSwarmClient{
 		client:   k8sClient,
 		config:   userswarmCfg,
-		grpcPool: newGRPCPool(userswarmCfg.MCPSigningKey),
+		grpcPool: crawblgrpc.NewInsecureHMACPool(userswarmCfg.MCPSigningKey),
 	}, nil
 }
 
@@ -287,7 +287,8 @@ func (c *userSwarmClient) DeleteRuntime(ctx context.Context, workspaceID string)
 	// Best-effort drop of any cached gRPC connection for this workspace
 	// so a recreated pod does not inherit a dead connection from the
 	// pool. The service name is derived from the CR we just deleted.
-	if target, terr := c.grpcTarget(swarm.Status.ServiceName, swarm.Status.RuntimeNamespace); terr == nil {
+	if swarm.Status.ServiceName != "" && swarm.Status.RuntimeNamespace != "" {
+		target := crawblgrpc.ClusterTarget(swarm.Status.ServiceName, swarm.Status.RuntimeNamespace, c.config.Port)
 		c.grpcPool.Drop(target)
 	}
 
