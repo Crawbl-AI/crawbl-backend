@@ -8,7 +8,45 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// newUserProfileHandler creates the MCP handler for retrieving the authenticated user's profile.
+type userProfileInput struct {
+	IncludePreferences bool `json:"include_preferences,omitempty" jsonschema:"include user preferences in response"`
+}
+
+type userProfileOutput struct {
+	ID          string     `json:"id"`
+	Email       string     `json:"email"`
+	Nickname    string     `json:"nickname"`
+	Name        string     `json:"name"`
+	Surname     string     `json:"surname"`
+	CountryCode *string    `json:"country_code,omitempty"`
+	CreatedAt   string     `json:"created_at"`
+	Preferences *userPrefs `json:"preferences,omitempty"`
+}
+
+type userPrefs struct {
+	Theme    *string `json:"theme,omitempty"`
+	Language *string `json:"language,omitempty"`
+	Currency *string `json:"currency,omitempty"`
+}
+
+type workspaceInfoInput struct {
+	IncludeAgents bool `json:"include_agents,omitempty" jsonschema:"include agent list in response"`
+}
+
+type workspaceInfoOutput struct {
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	CreatedAt string       `json:"created_at"`
+	Agents    []agentBrief `json:"agents"`
+}
+
+type agentBrief struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+	Slug string `json:"slug"`
+}
+
 func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, userProfileOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input userProfileInput) (*sdkmcp.CallToolResult, userProfileOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -19,53 +57,26 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 		sess := deps.newSession()
 		RecordAPICall(ctx, "DB:SELECT users WHERE id="+userID)
 
-		// The MCP token contains the internal DB user ID (not Firebase subject).
-		// Query the user table directly by primary key.
-		var row struct {
-			ID          string    `db:"id"`
-			Email       string    `db:"email"`
-			Nickname    string    `db:"nickname"`
-			Name        string    `db:"name"`
-			Surname     string    `db:"surname"`
-			CountryCode *string   `db:"country_code"`
-			CreatedAt   time.Time `db:"created_at"`
-		}
-		err := sess.Select("id", "email", "nickname", "name", "surname", "country_code", "created_at").
-			From("users").
-			Where("id = ?", userID).
-			LoadOneContext(ctx, &row)
+		profile, err := deps.MCPService.GetUserProfile(ctx, sess, userID, input.IncludePreferences)
 		if err != nil {
 			return nil, userProfileOutput{}, fmt.Errorf("user not found")
 		}
 
 		out := userProfileOutput{
-			ID:          row.ID,
-			Email:       row.Email,
-			Nickname:    row.Nickname,
-			Name:        row.Name,
-			Surname:     row.Surname,
-			CountryCode: row.CountryCode,
-			CreatedAt:   row.CreatedAt.Format(time.RFC3339),
+			ID:          profile.ID,
+			Email:       profile.Email,
+			Nickname:    profile.Nickname,
+			Name:        profile.Name,
+			Surname:     profile.Surname,
+			CountryCode: profile.CountryCode,
+			CreatedAt:   profile.CreatedAt.Format(time.RFC3339),
 		}
 
-		// Only load preferences when explicitly requested.
-		if input.IncludePreferences {
-			var prefs struct {
-				Theme    *string `db:"platform_theme"`
-				Language *string `db:"platform_language"`
-				Currency *string `db:"currency_code"`
-			}
-			_ = sess.Select("platform_theme", "platform_language", "currency_code").
-				From("user_preferences").
-				Where("user_id = ?", userID).
-				LoadOneContext(ctx, &prefs)
-
-			if prefs.Theme != nil || prefs.Language != nil || prefs.Currency != nil {
-				out.Preferences = &userPrefs{
-					Theme:    prefs.Theme,
-					Language: prefs.Language,
-					Currency: prefs.Currency,
-				}
+		if profile.Preferences != nil {
+			out.Preferences = &userPrefs{
+				Theme:    profile.Preferences.Theme,
+				Language: profile.Preferences.Language,
+				Currency: profile.Preferences.Currency,
 			}
 		}
 
@@ -73,7 +84,6 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 	}
 }
 
-// newWorkspaceInfoHandler creates the MCP handler for retrieving workspace details and agent list.
 func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInput, workspaceInfoOutput] {
 	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input workspaceInfoInput) (*sdkmcp.CallToolResult, workspaceInfoOutput, error) {
 		userID := userIDFromContext(ctx)
@@ -83,29 +93,22 @@ func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInpu
 		}
 
 		sess := deps.newSession()
-
-		// Verify workspace belongs to user.
 		RecordAPICall(ctx, "DB:SELECT workspaces WHERE id="+workspaceID)
-		ws, mErr := deps.WorkspaceRepo.GetByID(ctx, sess, userID, workspaceID)
-		if mErr != nil {
+
+		info, err := deps.MCPService.GetWorkspaceInfo(ctx, sess, userID, workspaceID, input.IncludeAgents)
+		if err != nil {
 			return nil, workspaceInfoOutput{}, fmt.Errorf("workspace not found")
 		}
 
 		out := workspaceInfoOutput{
-			ID:        ws.ID,
-			Name:      ws.Name,
-			CreatedAt: ws.CreatedAt.Format(time.RFC3339),
+			ID:        info.ID,
+			Name:      info.Name,
+			CreatedAt: info.CreatedAt.Format(time.RFC3339),
 		}
 
-		// Only list agents when explicitly requested.
-		if input.IncludeAgents {
-			agents, mErr := deps.AgentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
-			if mErr != nil {
-				agents = nil // non-fatal
-			}
-
-			briefs := make([]agentBrief, 0, len(agents))
-			for _, a := range agents {
+		if info.Agents != nil {
+			briefs := make([]agentBrief, 0, len(info.Agents))
+			for _, a := range info.Agents {
 				briefs = append(briefs, agentBrief{
 					ID:   a.ID,
 					Name: a.Name,

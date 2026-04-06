@@ -1,0 +1,339 @@
+// Package mcpservice implements the business logic for MCP tool operations.
+// It sits between the MCP HTTP handlers and the persistence layer, providing
+// user profile, push notification, chat, agent messaging, artifact,
+// and workflow operations.
+package mcpservice
+
+import (
+	"context"
+	"time"
+
+	"github.com/gocraft/dbr/v2"
+
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+)
+
+// Service defines all operations that MCP tool handlers need.
+type Service interface {
+	// User context
+	GetUserProfile(ctx context.Context, sess *dbr.Session, userID string, includePrefs bool) (*UserProfileResult, error)
+	GetWorkspaceInfo(ctx context.Context, sess *dbr.Session, userID, workspaceID string, includeAgents bool) (*WorkspaceInfoResult, error)
+
+	// Conversations & messages
+	ListConversations(ctx context.Context, sess *dbr.Session, userID, workspaceID string) ([]*orchestrator.Conversation, error)
+	SearchMessages(ctx context.Context, sess *dbr.Session, userID, workspaceID, conversationID, query string, limit int) ([]MessageBrief, error)
+
+	// Push notifications
+	SendPush(ctx context.Context, sess *dbr.Session, userID, title, message string) (sent bool, info string, err error)
+
+	// Agent operations
+	ResolveAgentBySlug(ctx context.Context, sess *dbr.Session, workspaceID, slug string) (string, error)
+	CreateAgentHistory(ctx context.Context, sess *dbr.Session, workspaceID string, params *CreateAgentHistoryParams) error
+
+	// Agent-to-agent messaging
+	SendMessageToAgent(ctx context.Context, sess *dbr.Session, params *SendAgentMessageParams) (*SendAgentMessageResult, error)
+
+	// Artifacts
+	CreateArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *CreateArtifactParams) (*CreateArtifactResult, error)
+	ReadArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID, artifactID string, version int) (*ReadArtifactResult, error)
+	UpdateArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *UpdateArtifactParams) (*UpdateArtifactResult, error)
+	ReviewArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *ReviewArtifactParams) (*ReviewArtifactResult, error)
+
+	// Workflows
+	CreateWorkflow(ctx context.Context, sess *dbr.Session, workspaceID string, params *CreateWorkflowParams) (*CreateWorkflowResult, error)
+	TriggerWorkflow(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *TriggerWorkflowParams) (*TriggerWorkflowResult, error)
+	CheckWorkflowStatus(ctx context.Context, sess *dbr.Session, workspaceID, executionID string) (*WorkflowStatusResult, error)
+	ListWorkflows(ctx context.Context, sess *dbr.Session, userID, workspaceID string) ([]WorkflowBriefResult, error)
+}
+
+// ---------------------------------------------------------------------------
+// Local repo interfaces (narrow contracts for what mcpservice actually uses)
+// ---------------------------------------------------------------------------
+
+type mcpRepo = mcprepo.Repo
+
+type workspaceRepo interface {
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
+}
+
+type conversationRepo interface {
+	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error)
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) (*orchestrator.Conversation, *merrors.Error)
+}
+
+type agentRepo interface {
+	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error)
+	GetByIDGlobal(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error)
+}
+
+type agentHistoryRepo interface {
+	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentHistoryRow) *merrors.Error
+}
+
+type messageRepo interface {
+	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
+}
+
+type artifactRepoI interface {
+	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *artifactrepo.ArtifactRow) *merrors.Error
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, artifactID string) (*artifactrepo.ArtifactRow, *merrors.Error)
+	UpdateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, newVersion int) *merrors.Error
+	CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *artifactrepo.ArtifactVersionRow) *merrors.Error
+	GetLatestVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (*artifactrepo.ArtifactVersionRow, *merrors.Error)
+	ListVersions(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) ([]artifactrepo.ArtifactVersionRow, *merrors.Error)
+	CreateReview(ctx context.Context, sess orchestratorrepo.SessionRunner, row *artifactrepo.ArtifactReviewRow) *merrors.Error
+	ListReviews(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, version int) ([]artifactrepo.ArtifactReviewRow, *merrors.Error)
+}
+
+type workflowRepoI interface {
+	CreateDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, row *workflowrepo.WorkflowDefinitionRow) *merrors.Error
+	GetDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, definitionID string) (*workflowrepo.WorkflowDefinitionRow, *merrors.Error)
+	ListDefinitions(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]workflowrepo.WorkflowDefinitionRow, *merrors.Error)
+	CreateExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *workflowrepo.WorkflowExecutionRow) *merrors.Error
+	GetExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string) (*workflowrepo.WorkflowExecutionRow, *merrors.Error)
+	GetStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string, stepIndex int) (*workflowrepo.WorkflowStepExecutionRow, *merrors.Error)
+}
+
+// WorkflowExecutor runs a workflow execution asynchronously.
+type WorkflowExecutor interface {
+	ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
+}
+
+// ---------------------------------------------------------------------------
+// Deps bundles all dependencies for the MCP service.
+// ---------------------------------------------------------------------------
+
+// Repos groups the repository dependencies.
+type Repos struct {
+	MCP          mcpRepo
+	Workspace    workspaceRepo
+	Conversation conversationRepo
+	Agent        agentRepo
+	AgentHistory agentHistoryRepo
+	Message      messageRepo
+	Artifact     artifactRepoI
+	Workflow     workflowRepoI
+}
+
+// Infra groups non-repo infrastructure dependencies.
+type Infra struct {
+	Logger        logger
+	FCM           *firebase.FCMClient
+	RuntimeClient userswarmclient.Client
+	Broadcaster   realtime.Broadcaster
+	WorkflowExec  WorkflowExecutor
+}
+
+type logger interface {
+	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
+	Error(msg string, args ...any)
+	InfoContext(ctx context.Context, msg string, args ...any)
+	ErrorContext(ctx context.Context, msg string, args ...any)
+}
+
+// ---------------------------------------------------------------------------
+// Params & result types
+// ---------------------------------------------------------------------------
+
+// UserProfileResult is returned by GetUserProfile.
+type UserProfileResult struct {
+	ID          string
+	Email       string
+	Nickname    string
+	Name        string
+	Surname     string
+	CountryCode *string
+	CreatedAt   time.Time
+	Preferences *UserPreferences
+}
+
+// UserPreferences holds optional user preference fields.
+type UserPreferences struct {
+	Theme    *string
+	Language *string
+	Currency *string
+}
+
+// WorkspaceInfoResult is returned by GetWorkspaceInfo.
+type WorkspaceInfoResult struct {
+	ID        string
+	Name      string
+	CreatedAt time.Time
+	Agents    []*orchestrator.Agent
+}
+
+// MessageBrief is a search result item.
+type MessageBrief struct {
+	ID        string
+	Role      string
+	Text      string
+	CreatedAt time.Time
+}
+
+// CreateAgentHistoryParams holds input for creating an agent history entry.
+type CreateAgentHistoryParams struct {
+	AgentID        string
+	AgentSlug      string
+	ConversationID string
+	Title          string
+	Subtitle       string
+}
+
+// SendAgentMessageParams holds input for the send_message_to_agent flow.
+type SendAgentMessageParams struct {
+	UserID         string
+	WorkspaceID    string
+	SessionID      string
+	AgentSlug      string
+	Message        string
+	ConversationID string
+}
+
+// SendAgentMessageResult is returned by SendMessageToAgent.
+type SendAgentMessageResult struct {
+	Success   bool
+	AgentSlug string
+	Response  string
+	MessageID string
+	Error     string
+}
+
+// CreateArtifactParams holds input for creating an artifact.
+type CreateArtifactParams struct {
+	Title          string
+	Content        string
+	ContentType    string
+	ConversationID string
+	AgentID        string
+	AgentSlug      string
+}
+
+// CreateArtifactResult is returned by CreateArtifact.
+type CreateArtifactResult struct {
+	ArtifactID string
+	Version    int
+}
+
+// ReadArtifactResult is returned by ReadArtifact.
+type ReadArtifactResult struct {
+	ArtifactID  string
+	Title       string
+	ContentType string
+	Content     string
+	Version     int
+	Status      string
+	Reviews     []ArtifactReviewBrief
+}
+
+// ArtifactReviewBrief summarises a single review.
+type ArtifactReviewBrief struct {
+	ReviewerAgentSlug string
+	Outcome           string
+	Comments          string
+	CreatedAt         time.Time
+}
+
+// UpdateArtifactParams holds input for updating an artifact.
+type UpdateArtifactParams struct {
+	ArtifactID      string
+	Content         string
+	ChangeSummary   string
+	ExpectedVersion int
+	AgentID         string
+	AgentSlug       string
+}
+
+// UpdateArtifactResult is returned by UpdateArtifact.
+type UpdateArtifactResult struct {
+	Version int
+}
+
+// ReviewArtifactParams holds input for reviewing an artifact.
+type ReviewArtifactParams struct {
+	ArtifactID string
+	Outcome    string
+	Comments   string
+	Version    int
+	AgentID    string
+	AgentSlug  string
+}
+
+// ReviewArtifactResult is returned by ReviewArtifact.
+type ReviewArtifactResult struct {
+	Reviewed bool
+}
+
+// CreateWorkflowParams holds input for creating a workflow definition.
+type CreateWorkflowParams struct {
+	Name        string
+	Description string
+	StepsJSON   string
+}
+
+// CreateWorkflowResult is returned by CreateWorkflow.
+type CreateWorkflowResult struct {
+	WorkflowID string
+	StepCount  int
+}
+
+// TriggerWorkflowParams holds input for triggering a workflow.
+type TriggerWorkflowParams struct {
+	WorkflowID     string
+	ConversationID string
+	InitialContext string
+}
+
+// TriggerWorkflowResult is returned by TriggerWorkflow.
+type TriggerWorkflowResult struct {
+	ExecutionID  string
+	WorkflowName string
+}
+
+// WorkflowStatusResult is returned by CheckWorkflowStatus.
+type WorkflowStatusResult struct {
+	ExecutionID string
+	Status      string
+	CurrentStep int
+	Error       string
+	Steps       []StepStatusBrief
+}
+
+// StepStatusBrief summarises a single workflow step execution.
+type StepStatusBrief struct {
+	StepIndex  int
+	StepName   string
+	AgentSlug  string
+	Status     string
+	DurationMs *int
+}
+
+// WorkflowBriefResult summarises a workflow definition.
+type WorkflowBriefResult struct {
+	ID          string
+	Name        string
+	Description string
+	IsActive    bool
+	StepCount   int
+	CreatedAt   time.Time
+}
+
+// WorkflowStep describes a single step within a workflow definition.
+type WorkflowStep struct {
+	Name             string `json:"name"`
+	AgentSlug        string `json:"agent_slug"`
+	PromptTemplate   string `json:"prompt_template"`
+	TimeoutSecs      int    `json:"timeout_secs,omitempty"`
+	RequiresApproval bool   `json:"requires_approval,omitempty"`
+	OnFailure        string `json:"on_failure,omitempty"`
+	OutputKey        string `json:"output_key,omitempty"`
+	MaxRetries       int    `json:"max_retries,omitempty"`
+}

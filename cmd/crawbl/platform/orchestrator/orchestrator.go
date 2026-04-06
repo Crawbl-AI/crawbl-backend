@@ -24,8 +24,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentsettingsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/integrationconnrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
@@ -35,9 +37,11 @@ import (
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
+	auditservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/auditservice"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
@@ -175,7 +179,7 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster)
+	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -304,7 +308,6 @@ func int32FromEnv(key string, fallback int32) int32 {
 func buildMCPHandler(
 	logger *slog.Logger,
 	db *dbr.Connection,
-	userRepo orchestratorrepo.UserRepo,
 	workspaceRepo orchestratorrepo.WorkspaceRepo,
 	agentRepo orchestratorrepo.AgentRepo,
 	conversationRepo orchestratorrepo.ConversationRepo,
@@ -333,25 +336,39 @@ func buildMCPHandler(
 		}
 	}
 
-	workflowRepo := workflowrepo.New()
-	workflowSvc := workflowservice.New(db, workflowRepo, runtimeClient, broadcaster)
+	wfRepo := workflowrepo.New()
+	workflowSvc := workflowservice.New(db, wfRepo, runtimeClient, broadcaster)
+
+	auditRepo := auditrepo.New()
+	auditSvc := auditservice.New(auditRepo)
+
+	mcpRepo := mcprepo.New()
+	mcpSvc := mcpservice.New(
+		mcpservice.Repos{
+			MCP:          mcpRepo,
+			Workspace:    workspaceRepo,
+			Conversation: conversationRepo,
+			Agent:        agentRepo,
+			AgentHistory: agentHistoryRepo,
+			Message:      messageRepo,
+			Artifact:     artifactRepo,
+			Workflow:     wfRepo,
+		},
+		mcpservice.Infra{
+			Logger:        logger,
+			FCM:           fcm,
+			RuntimeClient: runtimeClient,
+			Broadcaster:   broadcaster,
+			WorkflowExec:  workflowSvc,
+		},
+	)
 
 	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
-		DB:               db,
-		Logger:           logger,
-		UserRepo:         userRepo,
-		WorkspaceRepo:    workspaceRepo,
-		AgentRepo:        agentRepo,
-		ConversationRepo: conversationRepo,
-		MessageRepo:      messageRepo,
-		AgentHistoryRepo: agentHistoryRepo,
-		ArtifactRepo:     artifactRepo,
-		SigningKey:       signingKey,
-		FCM:              fcm,
-		RuntimeClient:    runtimeClient,
-		Broadcaster:      broadcaster,
-		WorkflowRepo:     workflowRepo,
-		WorkflowService:  workflowSvc,
+		DB:           db,
+		Logger:       logger,
+		SigningKey:   signingKey,
+		MCPService:   mcpSvc,
+		AuditService: auditSvc,
 	})
 	logger.Info("MCP server enabled at /mcp/v1")
 	return handler

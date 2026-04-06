@@ -1,0 +1,258 @@
+package mcpservice
+
+import (
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+)
+
+// maxAgentDepth is the maximum depth for agent-to-agent chains.
+const maxAgentDepth = 3
+
+// delegationPreviewMaxRunes caps the preview text on delegation socket events.
+const delegationPreviewMaxRunes = 100
+
+// agentMessageMaxStoredBytes caps the response_text column on agent_messages.
+const agentMessageMaxStoredBytes = 32768
+
+// agentMessageTruncatedMarker is appended when a response exceeds the column budget.
+const agentMessageTruncatedMarker = "\n[truncated]"
+
+// contextMessageLimit is the number of recent messages to include as context.
+const contextMessageLimit = 20
+
+func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAgentMessageParams) (*SendAgentMessageResult, error) {
+	if s.infra.RuntimeClient == nil {
+		return &SendAgentMessageResult{Error: "agent messaging not configured on this server"}, nil
+	}
+
+	slug := strings.TrimSpace(params.AgentSlug)
+	message := strings.TrimSpace(params.Message)
+	if slug == "" || message == "" {
+		return &SendAgentMessageResult{Error: "agent_slug and message are required"}, nil
+	}
+
+	// 1. Resolve target agent and calling agent from the workspace.
+	agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, params.WorkspaceID)
+	if mErr != nil {
+		return &SendAgentMessageResult{Error: "failed to list agents: " + mErr.Error()}, nil
+	}
+
+	var targetAgent, fromAgent *orchestrator.Agent
+	callingSlug := ""
+	if parts := strings.SplitN(params.SessionID, ":", 2); len(parts) == 2 {
+		callingSlug = parts[1]
+	}
+
+	for _, a := range agents {
+		if a.Slug == slug {
+			targetAgent = a
+		}
+		if callingSlug != "" && a.Slug == callingSlug {
+			fromAgent = a
+		}
+	}
+
+	if targetAgent == nil {
+		available := make([]string, 0, len(agents))
+		for _, a := range agents {
+			if a.Role != "manager" {
+				available = append(available, a.Slug)
+			}
+		}
+		return &SendAgentMessageResult{
+			Error: fmt.Sprintf("unknown agent '%s'. Available: %s", slug, strings.Join(available, ", ")),
+		}, nil
+	}
+
+	if callingSlug == slug {
+		return &SendAgentMessageResult{Error: "an agent cannot send a message to itself"}, nil
+	}
+
+	// 2. Check depth limit.
+	currentDepth, err := s.repos.MCP.GetMaxAgentMessageDepth(ctx, sess, params.WorkspaceID, params.ConversationID)
+	if err != nil {
+		currentDepth = -1
+	}
+	newDepth := currentDepth + 1
+	if newDepth >= maxAgentDepth {
+		return &SendAgentMessageResult{
+			Error: fmt.Sprintf("agent chain depth limit reached (%d/%d). Cannot delegate further.", newDepth, maxAgentDepth),
+		}, nil
+	}
+
+	// 3. Insert agent_messages row.
+	msgID := uuid.NewString()
+	fromAgentID := ""
+	if fromAgent != nil {
+		fromAgentID = fromAgent.ID
+	}
+
+	if insertErr := s.repos.MCP.CreateAgentMessage(ctx, sess, &mcprepo.AgentMessageRow{
+		ID:             msgID,
+		WorkspaceID:    params.WorkspaceID,
+		ConversationID: params.ConversationID,
+		FromAgentID:    fromAgentID,
+		FromAgentSlug:  callingSlug,
+		ToAgentID:      targetAgent.ID,
+		ToAgentSlug:    targetAgent.Slug,
+		RequestText:    message,
+		Status:         realtime.AgentDelegationStatusRunning,
+		Depth:          newDepth,
+	}); insertErr != nil {
+		s.infra.Logger.Error("send_message_to_agent: failed to insert agent_messages",
+			"error", insertErr.Error(),
+			"workspace_id", params.WorkspaceID,
+		)
+	}
+
+	// 4. Emit Socket.IO delegation event.
+	s.emitDelegationStarted(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, message)
+
+	// 5. Build conversation context and call agent runtime.
+	startTime := time.Now()
+
+	var conversationContext string
+	if params.ConversationID != "" {
+		conversationContext = s.buildConversationContext(ctx, sess, params.ConversationID, contextMessageLimit)
+	}
+
+	fullMessage := message
+	if conversationContext != "" {
+		fullMessage = conversationContext + "\n\n" + fullMessage
+	}
+
+	runtimeState, rErr := s.infra.RuntimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
+		UserID:          params.UserID,
+		WorkspaceID:     params.WorkspaceID,
+		WaitForVerified: true,
+	})
+	if rErr != nil {
+		duration := time.Since(startTime).Milliseconds()
+		if failErr := s.repos.MCP.UpdateAgentMessageFailed(ctx, sess, msgID, rErr.Error(), duration); failErr != nil {
+			s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
+		}
+		s.emitDelegationDone(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
+		return &SendAgentMessageResult{
+			AgentSlug: slug,
+			Error:     "runtime not ready: " + rErr.Error(),
+			MessageID: msgID,
+		}, nil
+	}
+
+	turns, callErr := s.infra.RuntimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
+		Runtime:   runtimeState,
+		Message:   fullMessage,
+		SessionID: params.ConversationID,
+		AgentID:   slug,
+	})
+
+	duration := time.Since(startTime).Milliseconds()
+
+	// 6. Handle result.
+	if callErr != nil {
+		if failErr := s.repos.MCP.UpdateAgentMessageFailed(ctx, sess, msgID, callErr.Error(), duration); failErr != nil {
+			s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
+		}
+		s.emitDelegationDone(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
+		return &SendAgentMessageResult{
+			AgentSlug: slug,
+			Error:     callErr.Error(),
+			MessageID: msgID,
+		}, nil
+	}
+
+	var sb strings.Builder
+	for i, t := range turns {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(t.Text)
+	}
+	responseText := sb.String()
+
+	storedText := responseText
+	if len(storedText) > agentMessageMaxStoredBytes {
+		storedText = storedText[:agentMessageMaxStoredBytes] + agentMessageTruncatedMarker
+	}
+
+	if completeErr := s.repos.MCP.UpdateAgentMessageCompleted(ctx, sess, msgID, storedText, duration); completeErr != nil {
+		s.infra.Logger.Warn("failed to mark agent message as completed", "error", completeErr.Error())
+	}
+
+	s.emitDelegationDone(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, realtime.AgentDelegationStatusCompleted)
+
+	s.infra.Logger.Info("send_message_to_agent: completed",
+		slog.String("from_slug", callingSlug),
+		slog.String("to_slug", slug),
+		slog.Int64("duration_ms", duration),
+		slog.Int("response_len", len(responseText)),
+	)
+
+	return &SendAgentMessageResult{
+		Success:   true,
+		AgentSlug: slug,
+		Response:  responseText,
+		MessageID: msgID,
+	}, nil
+}
+
+func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, to *orchestrator.Agent, conversationID, msgID, message string) {
+	if s.infra.Broadcaster == nil || to == nil {
+		return
+	}
+	fromID, fromName, fromSlug := "", "", ""
+	if from != nil {
+		fromID, fromName, fromSlug = from.ID, from.Name, from.Slug
+	}
+	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
+		FromAgentID:    fromID,
+		FromAgentName:  fromName,
+		FromAgentSlug:  fromSlug,
+		ToAgentID:      to.ID,
+		ToAgentName:    to.Name,
+		ToAgentSlug:    to.Slug,
+		ConversationID: conversationID,
+		Status:         realtime.AgentDelegationStatusRunning,
+		MessagePreview: truncateStr(message, delegationPreviewMaxRunes),
+		MessageID:      msgID,
+	})
+	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusThinking), conversationID)
+}
+
+func (s *service) emitDelegationDone(ctx contextT, workspaceID string, from, to *orchestrator.Agent, conversationID, msgID, status string) {
+	if s.infra.Broadcaster == nil || to == nil {
+		return
+	}
+	fromID, fromName, fromSlug := "", "", ""
+	if from != nil {
+		fromID, fromName, fromSlug = from.ID, from.Name, from.Slug
+	}
+	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusOnline), conversationID)
+	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
+		FromAgentID:    fromID,
+		FromAgentName:  fromName,
+		FromAgentSlug:  fromSlug,
+		ToAgentID:      to.ID,
+		ToAgentName:    to.Name,
+		ToAgentSlug:    to.Slug,
+		ConversationID: conversationID,
+		Status:         status,
+		MessageID:      msgID,
+	})
+}
+
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
