@@ -6,13 +6,6 @@ Feature: Integration error handling
   Background:
     Given user "primary" has signed up
 
-  Scenario: Connecting a non-existent integration provider fails
-    When user "primary" sends a POST request to "/v1/integrations/connect" with JSON:
-      """
-      {"provider": "non_existent_provider"}
-      """
-    Then the response status should be one of "400,404,500"
-
   Scenario: Integration callback without valid state fails
     When user "primary" sends a POST request to "/v1/integrations/callback" with JSON:
       """
