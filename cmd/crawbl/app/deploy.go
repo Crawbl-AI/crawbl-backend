@@ -140,19 +140,22 @@ func newDeployAuthFilterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth-filter",
 		Short: "Deploy the Envoy auth filter",
-		Long:  "Build and push the envoy-auth-filter image, then update the image tag in crawbl-argocd-apps.",
-		Example: `  crawbl app deploy auth-filter --tag v1.0.0
-  crawbl app deploy auth-filter --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
+		Long:  "Build and push the envoy-auth-filter image, then update the image tag in crawbl-argocd-apps. Tags releases under auth-filter/vX.Y.Z.",
+		Example: `  crawbl app deploy auth-filter
+  crawbl app deploy auth-filter --tag v1.0.0
+  crawbl app deploy auth-filter --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolved, err := resolveDeployTag(tag, "")
+			resolved, err := resolveDeployTag(tag, "auth-filter/")
 			if err != nil {
 				return err
 			}
-			tag = resolved.Tag
+			// Git tag is prefixed (auth-filter/v0.1.0), Docker tag is bare (v0.1.0).
+			gitTag := resolved.Tag
+			tag = strings.TrimPrefix(gitTag, "auth-filter/")
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -188,7 +191,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: "Crawbl-AI/crawbl-backend",
-				Tag:      tag,
+				Tag:      gitTag,
 				PrevTag:  resolved.PrevTag,
 			})
 		},
@@ -398,11 +401,21 @@ func newDeployAllCommand() *cobra.Command {
 			if err := checkAllTools(); err != nil {
 				return err
 			}
-			resolved, err := resolveDeployTag(tag, "")
+
+			// Platform uses the global v* tag sequence.
+			platformResolved, err := resolveDeployTag(tag, "")
 			if err != nil {
 				return err
 			}
-			tag = resolved.Tag
+			platformTag := platformResolved.Tag
+
+			// Auth-filter uses its own auth-filter/v* tag sequence.
+			afResolved, err := resolveDeployTag(tag, "auth-filter/")
+			if err != nil {
+				return err
+			}
+			afGitTag := afResolved.Tag
+			afImageTag := strings.TrimPrefix(afGitTag, "auth-filter/")
 
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
@@ -415,7 +428,7 @@ func newDeployAllCommand() *cobra.Command {
 				imageRepo:  buildPlatformImageRepo,
 				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildPlatformDockerfile),
 				contextDir: rootDir,
-				tag:        tag,
+				tag:        platformTag,
 				platform:   platform,
 				push:       true,
 			}); err != nil {
@@ -426,7 +439,7 @@ func newDeployAllCommand() *cobra.Command {
 				imageRepo:  buildAuthFilterImageRepo,
 				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterDockerfile),
 				contextDir: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterContext),
-				tag:        tag,
+				tag:        afImageTag,
 				platform:   platform,
 				push:       true,
 			}); err != nil {
@@ -439,31 +452,45 @@ func newDeployAllCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
 
-			if err := u.PullLatest(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdateOrchestrator(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdatePlatform(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdateAuthFilter(ctx); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush(ctx, "all"); err != nil {
+			if err := (&argocd.Update{RepoPath: repoPath, Tag: platformTag}).PullLatest(ctx); err != nil {
 				return err
 			}
 
-			// --- Tag + release ---
+			platformUpdate := &argocd.Update{RepoPath: repoPath, Tag: platformTag}
+			if err := platformUpdate.UpdateOrchestrator(ctx); err != nil {
+				return err
+			}
+			if err := platformUpdate.UpdatePlatform(ctx); err != nil {
+				return err
+			}
 
+			afUpdate := &argocd.Update{RepoPath: repoPath, Tag: afImageTag}
+			if err := afUpdate.UpdateAuthFilter(ctx); err != nil {
+				return err
+			}
+
+			if err := platformUpdate.CommitAndPush(ctx, "all"); err != nil {
+				return err
+			}
+
+			// --- Tag + release (platform tag is the primary release) ---
+
+			if err := release.TagAndRelease(release.Config{
+				RepoPath: rootDir,
+				RepoSlug: "Crawbl-AI/crawbl-backend",
+				Tag:      platformTag,
+				PrevTag:  platformResolved.PrevTag,
+			}); err != nil {
+				return err
+			}
+
+			// Tag auth-filter separately in its own namespace.
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: "Crawbl-AI/crawbl-backend",
-				Tag:      tag,
-				PrevTag:  resolved.PrevTag,
+				Tag:      afGitTag,
+				PrevTag:  afResolved.PrevTag,
 			})
 		},
 	}
