@@ -541,8 +541,9 @@ type ChatService interface {
 
 	// StartPendingMessageCleanup launches a background goroutine that periodically
 	// marks stale pending messages as failed. The goroutine stops when ctx is cancelled.
-	// Call this once at server startup.
-	StartPendingMessageCleanup(ctx context.Context)
+	// Call this once at server startup. The returned channel is closed when the
+	// goroutine exits, allowing graceful shutdown synchronization.
+	StartPendingMessageCleanup(ctx context.Context) <-chan struct{}
 
 	// CreateConversation creates a new conversation within a workspace.
 	//

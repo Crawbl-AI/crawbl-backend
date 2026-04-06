@@ -166,7 +166,10 @@ func runServer(ctx context.Context) error {
 	integrationService := integrationservice.New(logger, integrationConnRepo)
 
 	// Start background cleanup of orphaned pending messages.
-	chatService.StartPendingMessageCleanup(ctx)
+	// The done channel is closed when the goroutine exits, so we wait
+	// for it on shutdown to avoid DB queries against a closed pool.
+	cleanupDone := chatService.StartPendingMessageCleanup(ctx)
+	defer func() { <-cleanupDone }()
 
 	// Register Socket.IO message.send handler now that services are available.
 	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.

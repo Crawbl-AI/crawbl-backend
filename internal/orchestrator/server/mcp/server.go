@@ -91,29 +91,27 @@ func auditMiddleware(deps *Deps) sdkmcp.Middleware {
 			outputJSON := extractResultJSON(result)
 			apiCalls := apiCallsFromContext(ctx)
 
-			go func() {
-				auditCtx, cancel := context.WithTimeout(context.Background(), auditWriteTimeout)
-				defer cancel()
-				sess := deps.newSession()
-				if logErr := deps.AuditService.WriteLog(auditCtx, sess, &auditrepo.AuditLogRow{
-					UserID:      userID,
-					WorkspaceID: workspaceID,
-					SessionID:   sessionIDFromContext(ctx),
-					ToolName:    toolName,
-					Input:       inputJSON,
-					Output:      outputJSON,
-					APICalls:    apiCalls,
-					Success:     err == nil,
-					ErrorMsg:    errorString(err),
-					DurationMs:  int(duration.Milliseconds()),
-				}); logErr != nil {
-					deps.Logger.Error("failed to write mcp audit log",
-						slog.String("error", logErr.Error()),
-						slog.String("tool", toolName),
-						slog.String("user_id", userID),
-					)
-				}
-			}()
+			auditCtx, auditCancel := context.WithTimeout(ctx, auditWriteTimeout)
+			defer auditCancel()
+			sess := deps.newSession()
+			if logErr := deps.AuditService.WriteLog(auditCtx, sess, &auditrepo.AuditLogRow{
+				UserID:      userID,
+				WorkspaceID: workspaceID,
+				SessionID:   sessionIDFromContext(ctx),
+				ToolName:    toolName,
+				Input:       inputJSON,
+				Output:      outputJSON,
+				APICalls:    apiCalls,
+				Success:     err == nil,
+				ErrorMsg:    errorString(err),
+				DurationMs:  int(duration.Milliseconds()),
+			}); logErr != nil {
+				deps.Logger.Error("failed to write mcp audit log",
+					slog.String("error", logErr.Error()),
+					slog.String("tool", toolName),
+					slog.String("user_id", userID),
+				)
+			}
 
 			return result, err
 		}

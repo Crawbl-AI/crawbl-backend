@@ -18,8 +18,12 @@ const cleanupInterval = 1 * time.Minute
 // marks stale pending messages as failed. Call this once at service startup.
 // The goroutine stops when ctx is cancelled. It opens a fresh session from
 // s.db for each tick so the cleanup is not coupled to any request session.
-func (s *service) StartPendingMessageCleanup(ctx context.Context) {
+// The returned channel is closed when the goroutine exits, allowing the caller
+// to wait for in-flight cleanup before closing the DB connection pool.
+func (s *service) StartPendingMessageCleanup(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(cleanupInterval)
 		defer ticker.Stop()
 
@@ -32,6 +36,7 @@ func (s *service) StartPendingMessageCleanup(ctx context.Context) {
 			}
 		}
 	}()
+	return done
 }
 
 // cleanupPendingMessages finds messages with status "pending" older than
