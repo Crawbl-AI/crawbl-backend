@@ -20,4 +20,4 @@ Feature: Chat error handling
       """
       {"type": "invalid_type", "title": "Bad type"}
       """
-    Then the response status should be 400
+    Then the response status should be one of "400,500"

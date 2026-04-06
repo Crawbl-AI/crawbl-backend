@@ -1,4 +1,4 @@
-Feature: Cross-user access control
+Feature: Cross-user access control edge cases
   As the platform
   I need to prevent users from accessing each other's data
   So user privacy is enforced at every endpoint
@@ -8,14 +8,12 @@ Feature: Cross-user access control
     And an extra test user "frank"
     And user "frank" has signed up
 
-  Scenario: A user cannot read another user's agent details
+  Scenario: A user cannot access another user's workspace by identifier
     Given user "primary" opens their default workspace
-    And user "primary" opens the agents in their default workspace
-    When user "frank" opens the details for agent "wally"
+    When user "frank" opens user "primary"'s default workspace
     Then the response status should be one of "403,404"
 
-  Scenario: A user cannot delete another user's conversation
+  Scenario: A user cannot list another user's conversations
     Given user "primary" opens their default workspace
-    And user "primary" opens the swarm conversation
-    When user "frank" sends a GET request to "/v1/workspaces/{workspace_id}/conversations"
+    When user "frank" opens user "primary"'s conversations
     Then the response status should be one of "403,404"
