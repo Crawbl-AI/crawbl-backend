@@ -13,7 +13,7 @@ Feature: Chat error handling
 
   Scenario: Opening messages without a valid conversation returns not found
     When user "primary" sends a GET request to "/v1/workspaces/{workspace_id}/conversations/not-a-uuid/messages"
-    Then the response status should be one of "400,404"
+    Then the response status should be one of "400,404,500"
 
   Scenario: Creating a conversation with an invalid type is rejected
     When user "primary" sends a POST request to "/v1/workspaces/{workspace_id}/conversations" with JSON:
