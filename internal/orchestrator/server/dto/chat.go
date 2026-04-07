@@ -100,6 +100,12 @@ type MessageContentPayload struct {
 
 	// State is the current state of a tool invocation (e.g., "pending", "success", "error").
 	State string `json:"state,omitempty"`
+
+	// Delegation fields (type = "delegation").
+	From             *orchestrator.ContentAgent `json:"from,omitempty"`
+	To               *orchestrator.ContentAgent `json:"to,omitempty"`
+	DelegationStatus string                     `json:"status,omitempty"`
+	TaskPreview      string                     `json:"task_preview,omitempty"`
 }
 
 // MessageResponse represents a message in API responses.
@@ -253,12 +259,16 @@ func ToMessageResponse(message *orchestrator.Message) MessageResponse {
 // Handles the transformation of content types, actions, and tool state.
 func MessageContentFromDomain(content orchestrator.MessageContent) MessageContentPayload {
 	response := MessageContentPayload{
-		Type:        string(content.Type),
-		Text:        content.Text,
-		Title:       content.Title,
-		Description: content.Description,
-		Tool:        content.Tool,
-		State:       string(content.State),
+		Type:             string(content.Type),
+		Text:             content.Text,
+		Title:            content.Title,
+		Description:      content.Description,
+		Tool:             content.Tool,
+		State:            string(content.State),
+		From:             content.From,
+		To:               content.To,
+		DelegationStatus: content.Status,
+		TaskPreview:      content.TaskPreview,
 	}
 	if content.SelectedActionID != nil {
 		response.SelectedActionID = content.SelectedActionID
