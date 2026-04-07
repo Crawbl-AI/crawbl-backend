@@ -178,6 +178,7 @@ type pendingToolCall struct {
 	tool      string       // e.g. agentruntimetools.ToolTransferToAgent
 	agentSlug string       // agent slug from the ToolCallEvent (e.g. "manager")
 	args      toolCallArgs // parsed args — reused on ToolResult for delegation resolution
+	messageID string       // persisted tool_status message ID for updating on completion
 }
 
 // agentSilentResponse is the sentinel text agents return when they have nothing to say.
@@ -408,7 +409,8 @@ func (s *service) createSubAgentStream(
 	return st
 }
 
-// handleToolCall processes a StreamEventToolCall: emits tool status and records delegation.
+// handleToolCall processes a StreamEventToolCall: persists a tool_status message,
+// emits tool status, and records delegation for transfer_to_agent.
 func (s *service) handleToolCall(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
@@ -422,8 +424,21 @@ func (s *service) handleToolCall(
 	toolAgentID := resolveToolAgentID(agent, lookups, chunk.AgentID)
 	parsed := parseToolCallArgs(chunk.Tool, chunk.Args)
 
+	// Persist tool_status message (state: running).
+	var toolMsgID string
+	if chunk.Tool != agentruntimetools.ToolTransferToAgent {
+		toolMsg := s.newToolStatusMessage(conversation.ID, toolAgentID, chunk.Tool, orchestrator.ToolStateRunning, parsed)
+		if mErr := s.savePlaceholder(ctx, opts.Sess, toolMsg); mErr == nil {
+			toolMsgID = toolMsg.ID
+			if toolMsg.AgentID != nil {
+				toolMsg.Agent = lookups.byID[*toolMsg.AgentID]
+			}
+			s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, toolMsg)
+		}
+	}
+
 	if chunk.CallID != "" {
-		pending[chunk.CallID] = pendingToolCall{tool: chunk.Tool, agentSlug: chunk.AgentID, args: parsed}
+		pending[chunk.CallID] = pendingToolCall{tool: chunk.Tool, agentSlug: chunk.AgentID, args: parsed, messageID: toolMsgID}
 	}
 
 	s.broadcaster.EmitAgentTool(ctx, opts.WorkspaceID, realtime.AgentToolPayload{
@@ -475,6 +490,11 @@ func (s *service) handleToolResult(
 		AgentID: toolAgentID, ConversationID: conversation.ID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
 	})
+
+	// Update persisted tool_status message to completed.
+	if matched.messageID != "" {
+		_ = s.messageRepo.UpdateToolState(ctx, opts.Sess, matched.messageID, string(orchestrator.ToolStateCompleted))
+	}
 
 	if matched.tool == agentruntimetools.ToolTransferToAgent {
 		slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
@@ -589,6 +609,28 @@ func resolveToolAgentID(primary *orchestrator.Agent, lookups agentLookups, chunk
 		}
 	}
 	return primary.ID
+}
+
+// newToolStatusMessage creates a message with type tool_status for persisting tool calls.
+func (s *service) newToolStatusMessage(convID, agentID, tool string, state orchestrator.ToolState, parsed toolCallArgs) *orchestrator.Message {
+	now := time.Now().UTC()
+	return &orchestrator.Message{
+		ID:             uuid.NewString(),
+		ConversationID: convID,
+		Role:           orchestrator.MessageRoleAgent,
+		Content: orchestrator.MessageContent{
+			Type:  orchestrator.MessageContentTypeToolStatus,
+			Tool:  tool,
+			State: state,
+			Query: parsed.Query,
+			Args:  parsed.Parsed,
+		},
+		Status:      orchestrator.MessageStatusDelivered,
+		AgentID:     &agentID,
+		Attachments: []orchestrator.Attachment{},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 }
 
 // allStreamsDone returns true if every stream has received its done event.

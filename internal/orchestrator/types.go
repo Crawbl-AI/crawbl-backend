@@ -638,11 +638,11 @@ type MessageContent struct {
 	// SelectedActionID is the ID of the user-selected action.
 	SelectedActionID *string `json:"selected_action_id,omitempty"`
 
-	// Tool is the tool name for tool status content.
-	Tool string `json:"tool,omitempty"`
-
-	// State is the execution state for tool status content.
-	State ToolState `json:"state,omitempty"`
+	// Tool status fields (type = "tool_status").
+	Tool  string         `json:"tool,omitempty"`
+	State ToolState      `json:"state,omitempty"`
+	Query string         `json:"query,omitempty"`
+	Args  map[string]any `json:"args,omitempty"`
 
 	// Delegation fields (type = "delegation").
 	From        *ContentAgent `json:"from,omitempty"`

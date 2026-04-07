@@ -391,6 +391,22 @@ func (r *messageRepo) CompleteDelegation(ctx context.Context, sess orchestratorr
 	return nil
 }
 
+// UpdateToolState updates the state field inside a tool_status message's JSONB content.
+func (r *messageRepo) UpdateToolState(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, state string) *merrors.Error {
+	if sess == nil || messageID == "" {
+		return nil
+	}
+	_, err := sess.Update("messages").
+		Set("content", dbr.Expr("jsonb_set(content, '{state}', to_jsonb(?::text))", state)).
+		Set("updated_at", time.Now().UTC()).
+		Where("id = ?", messageID).
+		ExecContext(ctx)
+	if err != nil {
+		return merrors.WrapStdServerError(err, "update tool state")
+	}
+	return nil
+}
+
 // UpdateDelegationSummary backfills the task_summary on delegation
 // rows for a given trigger message.
 func (r *messageRepo) UpdateDelegationSummary(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, summary string) *merrors.Error {

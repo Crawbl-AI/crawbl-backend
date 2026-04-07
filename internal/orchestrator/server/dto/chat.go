@@ -95,11 +95,11 @@ type MessageContentPayload struct {
 	// SelectedActionID is the ID of the action selected by the user, if applicable.
 	SelectedActionID *string `json:"selected_action_id,omitempty"`
 
-	// Tool is the name of the tool associated with this content, for tool invocations.
-	Tool string `json:"tool,omitempty"`
-
-	// State is the current state of a tool invocation (e.g., "pending", "success", "error").
-	State string `json:"state,omitempty"`
+	// Tool status fields (type = "tool_status").
+	Tool  string         `json:"tool,omitempty"`
+	State string         `json:"state,omitempty"`
+	Query string         `json:"query,omitempty"`
+	Args  map[string]any `json:"args,omitempty"`
 
 	// Delegation fields (type = "delegation").
 	From             *orchestrator.ContentAgent `json:"from,omitempty"`
@@ -265,6 +265,8 @@ func MessageContentFromDomain(content orchestrator.MessageContent) MessageConten
 		Description:      content.Description,
 		Tool:             content.Tool,
 		State:            string(content.State),
+		Query:            content.Query,
+		Args:             content.Args,
 		From:             content.From,
 		To:               content.To,
 		DelegationStatus: content.Status,

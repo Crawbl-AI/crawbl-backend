@@ -123,6 +123,8 @@ type MessageRepo interface {
 	// for a given trigger message. Called after the Manager's reasoning text
 	// is fully accumulated.
 	UpdateDelegationSummary(ctx context.Context, sess SessionRunner, triggerMsgID, summary string) *merrors.Error
+	// UpdateToolState updates a tool_status message's state (running → completed/failed).
+	UpdateToolState(ctx context.Context, sess SessionRunner, messageID string, state string) *merrors.Error
 }
 
 // ToolsRepo defines the repository interface for tool catalog operations.
