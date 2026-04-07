@@ -114,6 +114,7 @@ type AgentToolPayload struct {
 	Status         string         `json:"status"` // "running" or "done"
 	Query          string         `json:"query,omitempty"`
 	Args           map[string]any `json:"args,omitempty"`
+	CreatedAt      string         `json:"created_at,omitempty"`
 }
 
 // MessageStatusPayload is emitted when a message's delivery status changes.
@@ -159,6 +160,7 @@ type AgentDelegationPayload struct {
 	From           *DelegationAgent `json:"from"`
 	To             *DelegationAgent `json:"to"`
 	ConversationID string           `json:"conversation_id"`
+	CreatedAt      string           `json:"created_at,omitempty"`
 	// Status is one of AgentDelegationStatus* (running | completed | failed).
 	Status         string `json:"status"`
 	MessagePreview string `json:"message_preview,omitempty"`

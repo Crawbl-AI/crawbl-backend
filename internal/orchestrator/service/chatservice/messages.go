@@ -397,11 +397,18 @@ func (s *service) createSubAgentStream(
 	}
 
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, sub.ID, string(orchestrator.AgentStatusThinking), convID)
+	// Use the primary (Manager) placeholder's created_at so mobile inserts
+	// the delegation card at the correct chronological position.
+	delegationCreatedAt := ""
+	if primarySt, ok := streams[primary.ID]; ok {
+		delegationCreatedAt = primarySt.placeholder.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
 	s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
 		From:           delegationAgent(primary),
 		To:             delegationAgent(sub),
 		ConversationID: convID, Status: realtime.AgentDelegationStatusRunning,
 		MessageID: placeholder.ID,
+		CreatedAt: delegationCreatedAt,
 	})
 
 	st := &subAgentStream{agent: sub, placeholder: placeholder, firstChunk: true}
@@ -426,10 +433,12 @@ func (s *service) handleToolCall(
 
 	// Persist tool_status message (state: running).
 	var toolMsgID string
+	var toolCreatedAt string
 	if chunk.Tool != agentruntimetools.ToolTransferToAgent {
 		toolMsg := s.newToolStatusMessage(conversation.ID, toolAgentID, chunk.Tool, orchestrator.ToolStateRunning, parsed)
 		if mErr := s.savePlaceholder(ctx, opts.Sess, toolMsg); mErr == nil {
 			toolMsgID = toolMsg.ID
+			toolCreatedAt = toolMsg.CreatedAt.UTC().Format(time.RFC3339Nano)
 			if toolMsg.AgentID != nil {
 				toolMsg.Agent = lookups.byID[*toolMsg.AgentID]
 			}
@@ -445,6 +454,7 @@ func (s *service) handleToolCall(
 		AgentID: toolAgentID, ConversationID: conversation.ID,
 		Tool: chunk.Tool, Status: realtime.AgentToolStatusRunning,
 		Query: parsed.Query, Args: parsed.Parsed,
+		CreatedAt: toolCreatedAt,
 	})
 
 	if chunk.Tool == agentruntimetools.ToolTransferToAgent {
