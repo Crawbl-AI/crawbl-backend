@@ -396,9 +396,22 @@ func (s *service) createSubAgentStream(
 		return streams[primary.ID]
 	}
 
-	// agent.delegation { running } was already emitted in handleToolCall when
-	// transfer_to_agent was seen — don't duplicate here. Only emit sub-agent thinking.
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, sub.ID, string(orchestrator.AgentStatusThinking), convID)
+
+	// Emit delegation running. ADK may not surface transfer_to_agent as a
+	// ToolCallEvent, so this is the reliable place to emit delegation —
+	// when the first chunk from the sub-agent creates the stream.
+	delegationCreatedAt := ""
+	if primarySt, ok := streams[primary.ID]; ok {
+		delegationCreatedAt = primarySt.placeholder.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
+		From:           delegationAgent(primary),
+		To:             delegationAgent(sub),
+		ConversationID: convID, Status: realtime.AgentDelegationStatusRunning,
+		MessageID: placeholder.ID,
+		CreatedAt: delegationCreatedAt,
+	})
 
 	st := &subAgentStream{agent: sub, placeholder: placeholder, firstChunk: true}
 	streams[sub.ID] = st
