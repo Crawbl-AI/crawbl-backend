@@ -497,9 +497,9 @@ type WorkspaceService interface {
 	GetByID(ctx context.Context, opts *GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error)
 }
 
-// ChatService defines the interface for chat and messaging operations.
-// Implementations handle agents, conversations, and messages within workspaces.
-type ChatService interface {
+// ChatReader handles read-only chat operations (conversations, messages, agents).
+// Handlers that only query data should depend on this interface, not the full ChatService.
+type ChatReader interface {
 	// ListAgents retrieves all agents available in a specific workspace.
 	// Agents represent the AI swarm members that users can interact with.
 	//
@@ -525,25 +525,22 @@ type ChatService interface {
 	// or a merrors.Error on failure.
 	ListMessages(ctx context.Context, opts *ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error)
 
-	// SendMessage creates a new message in a conversation. Uses LocalID for
-	// idempotency, allowing clients to safely retry on network failures.
-	// Returns the agent reply messages (one per agent turn) on success.
-	//
-	// Returns the created Messages on success, or a merrors.Error on failure.
-	SendMessage(ctx context.Context, opts *SendMessageOpts) ([]*orchestrator.Message, *merrors.Error)
-
 	// GetWorkspaceSummary retrieves aggregate workspace data including agent count
 	// and the most recent message preview. The caller must verify workspace ownership
 	// before calling this method.
 	//
 	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
 	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
+}
 
-	// StartPendingMessageCleanup launches a background goroutine that periodically
-	// marks stale pending messages as failed. The goroutine stops when ctx is cancelled.
-	// Call this once at server startup. The returned channel is closed when the
-	// goroutine exits, allowing graceful shutdown synchronization.
-	StartPendingMessageCleanup(ctx context.Context) <-chan struct{}
+// ChatWriter handles write operations that mutate state, trigger streaming, or emit socket events.
+type ChatWriter interface {
+	// SendMessage creates a new message in a conversation. Uses LocalID for
+	// idempotency, allowing clients to safely retry on network failures.
+	// Returns the agent reply messages (one per agent turn) on success.
+	//
+	// Returns the created Messages on success, or a merrors.Error on failure.
+	SendMessage(ctx context.Context, opts *SendMessageOpts) ([]*orchestrator.Message, *merrors.Error)
 
 	// CreateConversation creates a new conversation within a workspace.
 	//
@@ -564,6 +561,19 @@ type ChatService interface {
 	//
 	// Returns the updated Message on success, or a merrors.Error on failure.
 	RespondToActionCard(ctx context.Context, opts *RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error)
+
+	// StartPendingMessageCleanup launches a background goroutine that periodically
+	// marks stale pending messages as failed. The goroutine stops when ctx is cancelled.
+	// Call this once at server startup. The returned channel is closed when the
+	// goroutine exits, allowing graceful shutdown synchronization.
+	StartPendingMessageCleanup(ctx context.Context) <-chan struct{}
+}
+
+// ChatService is the full interface combining read and write operations.
+// Use ChatReader or ChatWriter when only a subset is needed.
+type ChatService interface {
+	ChatReader
+	ChatWriter
 }
 
 // AgentService defines the interface for agent-specific operations.
