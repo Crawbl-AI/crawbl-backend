@@ -294,6 +294,10 @@ func (s *service) callAgentStreaming(
 			})
 
 		case userswarmclient.StreamEventToolCall:
+			// Resolve stream BEFORE handling the tool call — if this is a
+			// sub-agent's tool, createSubAgentStream fires here (emitting
+			// agent.delegation running) before the tool_status is persisted.
+			resolveStream(chunk.AgentID)
 			s.handleToolCall(ctx, opts, conversation, agent, lookups, placeholder, chunk, pending)
 
 		case userswarmclient.StreamEventToolResult:
