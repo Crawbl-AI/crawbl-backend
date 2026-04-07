@@ -142,15 +142,23 @@ const (
 	AgentToolStatusDone    = "done"
 )
 
+// DelegationAgent is the agent summary nested in delegation socket events.
+// Matches the JSON shape of orchestrator.ContentAgent and the agent objects
+// the mobile already parses in message bubbles.
+type DelegationAgent struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Role   string `json:"role"`
+	Slug   string `json:"slug"`
+	Avatar string `json:"avatar"`
+	Status string `json:"status"`
+}
+
 // AgentDelegationPayload reports agent-to-agent delegation activity.
 type AgentDelegationPayload struct {
-	FromAgentID    string `json:"from_agent_id"`
-	FromAgentName  string `json:"from_agent_name"`
-	FromAgentSlug  string `json:"from_agent_slug"`
-	ToAgentID      string `json:"to_agent_id"`
-	ToAgentName    string `json:"to_agent_name"`
-	ToAgentSlug    string `json:"to_agent_slug"`
-	ConversationID string `json:"conversation_id"`
+	From           *DelegationAgent `json:"from"`
+	To             *DelegationAgent `json:"to"`
+	ConversationID string           `json:"conversation_id"`
 	// Status is one of AgentDelegationStatus* (running | completed | failed).
 	Status         string `json:"status"`
 	MessagePreview string `json:"message_preview,omitempty"`

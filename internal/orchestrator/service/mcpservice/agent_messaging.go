@@ -209,17 +209,9 @@ func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, 
 	if s.infra.Broadcaster == nil || to == nil {
 		return
 	}
-	fromID, fromName, fromSlug := "", "", ""
-	if from != nil {
-		fromID, fromName, fromSlug = from.ID, from.Name, from.Slug
-	}
 	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
-		FromAgentID:    fromID,
-		FromAgentName:  fromName,
-		FromAgentSlug:  fromSlug,
-		ToAgentID:      to.ID,
-		ToAgentName:    to.Name,
-		ToAgentSlug:    to.Slug,
+		From:           mcpDelegationAgent(from),
+		To:             mcpDelegationAgent(to),
 		ConversationID: conversationID,
 		Status:         realtime.AgentDelegationStatusRunning,
 		MessagePreview: truncateStr(message, delegationPreviewMaxRunes),
@@ -232,22 +224,28 @@ func (s *service) emitDelegationDone(ctx contextT, workspaceID string, from, to 
 	if s.infra.Broadcaster == nil || to == nil {
 		return
 	}
-	fromID, fromName, fromSlug := "", "", ""
-	if from != nil {
-		fromID, fromName, fromSlug = from.ID, from.Name, from.Slug
-	}
 	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusOnline), conversationID)
 	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
-		FromAgentID:    fromID,
-		FromAgentName:  fromName,
-		FromAgentSlug:  fromSlug,
-		ToAgentID:      to.ID,
-		ToAgentName:    to.Name,
-		ToAgentSlug:    to.Slug,
+		From:           mcpDelegationAgent(from),
+		To:             mcpDelegationAgent(to),
 		ConversationID: conversationID,
 		Status:         status,
 		MessageID:      msgID,
 	})
+}
+
+func mcpDelegationAgent(a *orchestrator.Agent) *realtime.DelegationAgent {
+	if a == nil {
+		return nil
+	}
+	return &realtime.DelegationAgent{
+		ID:     a.ID,
+		Name:   a.Name,
+		Role:   a.Role,
+		Slug:   a.Slug,
+		Avatar: a.AvatarURL,
+		Status: string(a.Status),
+	}
 }
 
 func truncateStr(s string, maxLen int) string {

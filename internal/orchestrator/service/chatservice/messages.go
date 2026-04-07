@@ -183,6 +183,9 @@ type pendingToolCall struct {
 // agentSilentResponse is the sentinel text agents return when they have nothing to say.
 const agentSilentResponse = "[SILENT]"
 
+// taskPreviewMaxRunes caps the delegation task_preview field.
+const taskPreviewMaxRunes = 120
+
 // subAgentStream tracks a placeholder message and accumulated text for a single
 // agent_id seen during a multi-agent streaming response (Phase 5).
 type subAgentStream struct {
@@ -394,8 +397,8 @@ func (s *service) createSubAgentStream(
 
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, sub.ID, string(orchestrator.AgentStatusThinking), convID)
 	s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
-		FromAgentID: primary.ID, FromAgentName: primary.Name, FromAgentSlug: primary.Slug,
-		ToAgentID: sub.ID, ToAgentName: sub.Name, ToAgentSlug: sub.Slug,
+		From:           delegationAgent(primary),
+		To:             delegationAgent(sub),
 		ConversationID: convID, Status: realtime.AgentDelegationStatusRunning,
 		MessageID: placeholder.ID,
 	})
@@ -501,7 +504,24 @@ func (s *service) finalizeStreams(
 	// Primary agent first when delegation occurred.
 	if primarySt := streams[agent.ID]; primarySt != nil && len(streams) > 1 {
 		text := strings.TrimSpace(primarySt.accumulated.String())
-		primarySt.placeholder.Content.Type = orchestrator.MessageContentTypeDelegation
+
+		// Find the first sub-agent that was delegated to.
+		var delegatee *orchestrator.Agent
+		for _, st := range streams {
+			if st.agent.ID != agent.ID {
+				delegatee = st.agent
+				break
+			}
+		}
+
+		primarySt.placeholder.Content = orchestrator.MessageContent{
+			Type:        orchestrator.MessageContentTypeDelegation,
+			Text:        text,
+			From:        orchestrator.ContentAgentFromAgent(agent),
+			To:          orchestrator.ContentAgentFromAgent(delegatee),
+			Status:      realtime.AgentDelegationStatusCompleted,
+			TaskPreview: truncateText(text, taskPreviewMaxRunes),
+		}
 		if reply := s.finalizeStreamMessage(ctx, opts, conversation, primarySt.placeholder, text, orchestrator.MessageStatusDelegated, lookups); reply != nil {
 			replies = append(replies, reply)
 		}
@@ -550,8 +570,8 @@ func (s *service) finalizeStreams(
 	for _, st := range streams {
 		if st.agent.ID != agent.ID {
 			s.broadcaster.EmitAgentDelegation(ctx, wsID, realtime.AgentDelegationPayload{
-				FromAgentID: agent.ID, FromAgentName: agent.Name, FromAgentSlug: agent.Slug,
-				ToAgentID: st.agent.ID, ToAgentName: st.agent.Name, ToAgentSlug: st.agent.Slug,
+				From:           delegationAgent(agent),
+				To:             delegationAgent(st.agent),
 				ConversationID: convID, Status: realtime.AgentDelegationStatusCompleted,
 				MessageID: st.placeholder.ID,
 			})
@@ -732,6 +752,31 @@ func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
 			"error", mErr.Error(),
 		)
 	}
+}
+
+// delegationAgent converts an orchestrator.Agent to a realtime.DelegationAgent
+// for socket events. Returns nil for nil input.
+func delegationAgent(a *orchestrator.Agent) *realtime.DelegationAgent {
+	if a == nil {
+		return nil
+	}
+	return &realtime.DelegationAgent{
+		ID:     a.ID,
+		Name:   a.Name,
+		Role:   a.Role,
+		Slug:   a.Slug,
+		Avatar: a.AvatarURL,
+		Status: string(a.Status),
+	}
+}
+
+// truncateText trims s to maxLen runes with "..." suffix.
+func truncateText(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
 }
 
 func (s *service) completeDelegation(_, _, triggerMsgID, delegateAgentID string) {

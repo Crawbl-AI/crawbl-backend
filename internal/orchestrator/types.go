@@ -643,6 +643,39 @@ type MessageContent struct {
 
 	// State is the execution state for tool status content.
 	State ToolState `json:"state,omitempty"`
+
+	// Delegation fields (type = "delegation").
+	From        *ContentAgent `json:"from,omitempty"`
+	To          *ContentAgent `json:"to,omitempty"`
+	Status      string        `json:"status,omitempty"`
+	TaskPreview string        `json:"task_preview,omitempty"`
+}
+
+// ContentAgent is the agent summary embedded in delegation and workflow
+// message content. Matches the shape the mobile already uses for agent
+// objects in message bubbles (id, name, role, slug, avatar, status).
+type ContentAgent struct {
+	ID     string      `json:"id"`
+	Name   string      `json:"name"`
+	Role   string      `json:"role"`
+	Slug   string      `json:"slug"`
+	Avatar string      `json:"avatar"`
+	Status AgentStatus `json:"status"`
+}
+
+// ContentAgentFromAgent converts an Agent to a ContentAgent summary.
+func ContentAgentFromAgent(a *Agent) *ContentAgent {
+	if a == nil {
+		return nil
+	}
+	return &ContentAgent{
+		ID:     a.ID,
+		Name:   a.Name,
+		Role:   a.Role,
+		Slug:   a.Slug,
+		Avatar: a.AvatarURL,
+		Status: a.Status,
+	}
 }
 
 // ActionItem represents an interactive button in an action card message.
