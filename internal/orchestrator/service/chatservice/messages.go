@@ -396,20 +396,9 @@ func (s *service) createSubAgentStream(
 		return streams[primary.ID]
 	}
 
+	// agent.delegation { running } was already emitted in handleToolCall when
+	// transfer_to_agent was seen — don't duplicate here. Only emit sub-agent thinking.
 	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, sub.ID, string(orchestrator.AgentStatusThinking), convID)
-	// Use the primary (Manager) placeholder's created_at so mobile inserts
-	// the delegation card at the correct chronological position.
-	delegationCreatedAt := ""
-	if primarySt, ok := streams[primary.ID]; ok {
-		delegationCreatedAt = primarySt.placeholder.CreatedAt.UTC().Format(time.RFC3339Nano)
-	}
-	s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
-		From:           delegationAgent(primary),
-		To:             delegationAgent(sub),
-		ConversationID: convID, Status: realtime.AgentDelegationStatusRunning,
-		MessageID: placeholder.ID,
-		CreatedAt: delegationCreatedAt,
-	})
 
 	st := &subAgentStream{agent: sub, placeholder: placeholder, firstChunk: true}
 	streams[sub.ID] = st
@@ -462,6 +451,17 @@ func (s *service) handleToolCall(
 		if del := lookups.bySlug[slug]; del != nil {
 			go s.recordDelegation(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, placeholder.ID, agent.ID, del.ID, "")
 			s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, del.ID, string(orchestrator.AgentStatusThinking), conversation.ID)
+
+			// Emit delegation running NOW (at transfer_to_agent time) so the mobile
+			// shows the delegation card before tool results, not after.
+			delegationCreatedAt := placeholder.CreatedAt.UTC().Format(time.RFC3339Nano)
+			s.broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, realtime.AgentDelegationPayload{
+				From:           delegationAgent(agent),
+				To:             delegationAgent(del),
+				ConversationID: conversation.ID, Status: realtime.AgentDelegationStatusRunning,
+				MessageID: placeholder.ID,
+				CreatedAt: delegationCreatedAt,
+			})
 		}
 	}
 }
