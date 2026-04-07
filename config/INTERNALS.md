@@ -79,7 +79,7 @@ Source: `internal/pkg/errors/types.go`
 
 ---
 
-## the agent runtime Defaults
+## Agent Runtime Defaults
 
 Source: `internal/agentruntime/types.go`
 
@@ -106,7 +106,7 @@ Source: `internal/userswarm/webhook/types.go`, `internal/userswarm/client/types.
 | ConfigMap file permissions | `0444` (read-only) |
 | Runtime namespace | `userswarms` |
 | PVC size | `2Gi` |
-| Gateway port | `42617` |
+| Gateway port | `42618` |
 | Poll timeout (readiness) | `60s` |
 | Poll interval | `2s` |
 | HTTP client timeout | `90s` |

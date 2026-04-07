@@ -32,7 +32,7 @@ flowchart LR
     redis["Redis"]
     cr["UserSwarm CR"]
     mc["Metacontroller"]
-    runtime["the agent runtime Runtime"]
+    runtime["Agent Runtime"]
     mcp["Embedded MCP Server"]
     llm["LLM / External APIs"]
 
@@ -144,7 +144,7 @@ api/                            # 📐 Kubernetes CRD types
 
 See [`config/README.md`](config/README.md) for the complete reference of every env var and hardcoded default.
 
-## 🐳 Manual the agent runtime Build
+## 🐳 Manual Agent Runtime Build
 
 CI is slow — use this to build and push the agent runtime image directly.
 
@@ -207,6 +207,6 @@ make deploy-website      # Deploy website only
 | | Repo | |
 |---|------|---|
 | 📚 | [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) | Docs, API reference, architecture |
-| 🤖 | [](https://github.com/Crawbl-AI/) | the agent runtime agent runtime |
+| 🤖 | Agent Runtime | Per-workspace agent orchestration service (in-tree) |
 | 📱 | [crawbl-mobile](https://github.com/Crawbl-AI/crawbl-mobile) | Flutter mobile app |
 | ☸️ | [crawbl-argocd-apps](https://github.com/Crawbl-AI/crawbl-argocd-apps) | K8s manifests + Helm values |

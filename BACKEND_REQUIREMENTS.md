@@ -37,7 +37,7 @@ The system has three layers:
 
 - **Mobile app (Flutter)** — the consumer interface. Chat, agent profiles, swarm visualizer.
 - **Go orchestrator (backend)** — auth, provisioning, message routing, LLM mediation, integration adapters, real-time event fan-out.
-- **Cortex Layer | runtime** — a ~5 MB Rust binary running in an isolated Kubernetes pod per user. Executes agent prompts, tools, and memory.
+- **Agent Runtime** — a ~26 MB Go binary built on ADK-Go running in an isolated Kubernetes pod per user. Executes agent prompts, tools, and memory.
 
 The orchestrator is the control plane. It decides which agent should respond, routes messages, manages OAuth tokens, and fans out real-time events. The agent runtime never talks to the mobile app directly — every interaction is mediated by the orchestrator.
 
@@ -48,7 +48,7 @@ The mobile app communicates with the orchestrator via REST (CRUD operations) and
 ## 2. Architecture Overview
 
 ```
-Mobile App  <--REST/Socket.IO-->  Go Orchestrator  <--internal HTTP-->  Isolated Pod
+Mobile App  <--REST/Socket.IO-->  Go Orchestrator  <--gRPC (port 42618)-->  Isolated Pod
                                        |                                    |
                                   PostgreSQL                          PVC (memory/sessions)
                                   Redis (pub/sub)
@@ -58,7 +58,7 @@ Key principles:
 
 - **The orchestrator is the single entry point.** No direct pod-to-pod or client-to-runtime access.
 - **Each user gets an isolated runtime.** One UserSwarm CR = one Isolated pod with its own storage.
-- **Agents are real entities.** Each swarm has a Manager (base agent) plus named delegate agents (e.g. "Wally") defined in Somewhere.
+- **Agents are real entities.** Each swarm has a Manager (base agent) plus named delegate agents (e.g. "Wally") defined in the workspace blueprint fetched from the orchestrator at runtime startup.
 - **The orchestrator decides WHO answers.** The runtime owns WHAT that agent is (personality, tools, memory).
 
 ---
@@ -141,7 +141,7 @@ Each agent has configurable LLM settings and system prompt files:
 
 `model` is one of: `flash`, `sonnet`, `opus`. These map to the LLM model the agent uses.
 `response_length` is one of: `auto`, `short`, `medium`, `long`. Controls response verbosity.
-`prompts` are the system prompt files (IDENTITY.md, TOOLS.md, SOUL.md) that define the agent's behavior.
+`prompts` are the system prompt files (e.g. IDENTITY.md, TOOLS.md) that define the agent's behavior.
 
 ---
 
@@ -187,7 +187,7 @@ POST /v1/workspaces/{workspaceId}/conversations
 
 ```json
 {
-  "type": "swarm | agent",ZeroClawZeroClaw
+  "type": "swarm | agent",
   "agent_id": "uuid | null"
 }
 ```

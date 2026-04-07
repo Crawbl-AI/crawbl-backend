@@ -32,7 +32,7 @@ spec:
     mode: daemon
     # Gateway port the agent runtime listens on inside the pod.
     # Must match the operator's ClusterIP Service targetPort.
-    port: 42617
+    port: 42618
     # DOCR pull secret — must exist in the runtime namespace.
     imagePullSecretName: crawbl
     # Resource requests/limits for the agent runtime container.
