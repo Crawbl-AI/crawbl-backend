@@ -104,13 +104,15 @@ type messageSendAttachment struct {
 
 // messageSendAckPayload is the JSON payload for the message.send.ack event to the client.
 type messageSendAckPayload struct {
-	LocalID   string `json:"local_id"`
-	MessageID string `json:"message_id"`
-	Status    string `json:"status"`
+	LocalID        string `json:"local_id"`
+	MessageID      string `json:"message_id"`
+	ConversationID string `json:"conversation_id"`
+	Status         string `json:"status"`
 }
 
 // messageSendErrPayload is the JSON payload for the message.send.error event to the client.
 type messageSendErrPayload struct {
-	LocalID string `json:"local_id"`
-	Error   string `json:"error"`
+	LocalID        string `json:"local_id"`
+	ConversationID string `json:"conversation_id"`
+	Error          string `json:"error"`
 }

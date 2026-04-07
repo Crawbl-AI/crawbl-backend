@@ -35,14 +35,14 @@ func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
 	// Extract authenticated principal from socket.
 	principal, ok := s.Data().(*orchestrator.Principal)
 	if !ok || principal == nil {
-		h.emitError(s, "", "unauthorized")
+		h.emitError(s, "", "", "unauthorized")
 		return
 	}
 
 	// Parse the event payload.
 	payload, ok := parseMessageSendPayload(args[0])
 	if !ok {
-		h.emitError(s, "", "invalid payload")
+		h.emitError(s, "", "", "invalid payload")
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
 	if strings.TrimSpace(payload.WorkspaceID) == "" ||
 		strings.TrimSpace(payload.ConversationID) == "" ||
 		strings.TrimSpace(payload.Content.Text) == "" {
-		h.emitError(s, localID, "workspace_id, conversation_id, and content.text are required")
+		h.emitError(s, localID, payload.ConversationID, "workspace_id, conversation_id, and content.text are required")
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 			"subject", principal.Subject,
 			"error", mErr.Error(),
 		)
-		h.emitError(s, localID, "user not found")
+		h.emitError(s, localID, payload.ConversationID, "user not found")
 		return
 	}
 
@@ -138,9 +138,10 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 		Mentions:       mentions,
 		OnPersisted: func(userMsg *orchestrator.Message) {
 			_ = s.Emit(eventMessageSendAck, messageSendAckPayload{
-				LocalID:   localID,
-				MessageID: userMsg.ID,
-				Status:    "sent",
+				LocalID:        localID,
+				MessageID:      userMsg.ID,
+				ConversationID: payload.ConversationID,
+				Status:         string(orchestrator.MessageStatusSent),
 			})
 		},
 	})
@@ -150,7 +151,7 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 			"workspace_id", payload.WorkspaceID,
 			"error", mErr.Error(),
 		)
-		h.emitError(s, localID, "message send failed")
+		h.emitError(s, localID, payload.ConversationID, "message send failed")
 		return
 	}
 
@@ -160,10 +161,11 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 }
 
 // emitError sends a message.send.error event to the sender socket.
-func (h *messageHandler) emitError(s *socket.Socket, localID, errMsg string) {
+func (h *messageHandler) emitError(s *socket.Socket, localID, conversationID, errMsg string) {
 	_ = s.Emit(eventMessageSendErr, messageSendErrPayload{
-		LocalID: localID,
-		Error:   errMsg,
+		LocalID:        localID,
+		ConversationID: conversationID,
+		Error:          errMsg,
 	})
 }
 
