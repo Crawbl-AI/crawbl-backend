@@ -416,6 +416,9 @@ func (s *service) createSubAgentStream(
 		MessageID: placeholder.ID,
 		CreatedAt: delegationCreatedAt,
 	})
+	// Manager handed off — clear thinking status so mobile stops showing
+	// "Manager is thinking" while the sub-agent works.
+	s.broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, primary.ID, string(orchestrator.AgentStatusOnline), convID)
 
 	st := &subAgentStream{agent: sub, placeholder: placeholder, firstChunk: true}
 	streams[sub.ID] = st
