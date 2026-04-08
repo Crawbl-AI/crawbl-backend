@@ -23,8 +23,12 @@ CREATE TABLE memory_drawers (
 CREATE INDEX idx_drawers_workspace      ON memory_drawers (workspace_id);
 CREATE INDEX idx_drawers_workspace_wing ON memory_drawers (workspace_id, wing);
 CREATE INDEX idx_drawers_workspace_room ON memory_drawers (workspace_id, wing, room);
-CREATE INDEX idx_drawers_embedding      ON memory_drawers
-    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+-- NOTE: HNSW vector index removed — Bitnami PG image uses SIMD instructions
+-- (AVX2) that Hetzner CPUs don't support, causing SIGILL crashes on INSERT.
+-- At <10K drawers per workspace, sequential scan is fast enough.
+-- Re-add when the cluster moves to nodes with AVX2 support:
+--   CREATE INDEX idx_drawers_embedding ON memory_drawers
+--       USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 -- Knowledge graph: entity nodes.
 CREATE TABLE memory_entities (
