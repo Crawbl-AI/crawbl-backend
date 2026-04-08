@@ -6,8 +6,8 @@
 
 | ID  | Topic                        | Description                                                                                                                                                         | Impact                                      |
 | --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| 1   | Redis session token overflow | ADK Redis session accumulates conversation history indefinitely. After ~50 messages, hits OpenAI 272K token limit. Requires manual Redis key flush to unblock user. **Orchestrator side fixed** (v0.12.0 MemPalace: token-budgeted context injection, 14K char cap). **Runtime side still open**: ADK session in Redis still accumulates unbounded history. | Users get silent responses, cannot use chat |
-| 2   | Context window management    | ~~`buildConversationContext` injects last 20 messages~~ **Fixed** (v0.12.0): rewritten as memory-first, token-budgeted (L0+L1 + budgeted messages). **Still open**: ADK session keeps full history internally in the runtime. No truncation or sliding window on the runtime side. | Compounds issue #1                          |
+| 1   | ~~Redis session token overflow~~ | **FIXED** (v0.12.0). Orchestrator: token-budgeted context (14K cap). Runtime: LTrim caps Redis events list at 60 entries (~15 turns). Both sides resolved. | ~~Users get silent responses~~ |
+| 2   | ~~Context window management~~ | **FIXED** (v0.12.0). `buildConversationContext` rewritten memory-first + token-budgeted. ADK session capped via LTrim. | ~~Compounds issue #1~~ |
 
 ---
 
@@ -15,7 +15,7 @@
 
 | ID  | Topic                     | Description                                                                                                             | Reason                           |
 | --- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| 4   | Context window truncation | Runtime must cap ADK session to fit model's context limit. Options: sliding window, summarization, or hard truncation. **Note**: orchestrator context injection is now capped (v0.12.0 MemPalace), but the runtime's internal ADK session still needs truncation. | Blocks all long conversations    |
+| 4   | ~~Context window truncation~~ | **FIXED** (v0.12.0). Orchestrator: memory-first 14K cap. Runtime: LTrim at 60 events. Both sides capped. | ~~Blocks all long conversations~~ |
 | 5   | New swarm conversation    | Users can only have one swarm conversation per workspace. Need `POST /conversations` with `type: swarm` to start fresh. | No way to reset bloated sessions |
 | 6   | File upload endpoint      | `POST /v1/uploads` returns 501. Need S3/Spaces upload with presigned URLs.                                              | Users cannot send images/files   |
 | 7   | Message search            | `GET .../messages/search` returns 501. Need full-text search across conversation messages.                              | Users cannot find old messages   |
@@ -37,6 +37,7 @@
 | 16  | System message type           | `MessageContentTypeSystem` defined but never emitted. Should fire on agent join, workspace events.                                                                          | Missing system notifications            |
 | 17  | Notification list endpoint    | `GET /v1/notifications` — mobile ready, backend endpoint needed.                                                                                                            | Empty notifications tab                 |
 | 18  | Notification preferences      | `GET/PATCH /v1/notifications/preferences` — mobile ready.                                                                                                                   | Dead settings link                      |
+| 30  | Agent memory prompt injection | Agent blueprints need Palace Protocol instructions so agents proactively use the 19 MCP memory tools (memory_search, memory_kg_query, memory_diary_write, etc.).            | Agents won't use memory without prompting |
 
 ---
 
@@ -76,6 +77,10 @@
 | D12 | StreamSession refactor          | v0.11.5          | 992-line monolith split into 6 files with StreamSession struct                |
 | D13 | Interface Segregation           | v0.11.5          | `ChatService` = `ChatReader` + `ChatWriter` composition                       |
 | D14 | Startup seeding                 | v0.1.6           | All reference data (tools, models, categories) seeded on boot via dbr builder |
+| D15 | MemPalace memory system         | v0.12.0          | 4-layer memory stack, 19 MCP tools, pgvector semantic search, temporal KG     |
+| D16 | Token-budgeted context          | v0.12.0          | `buildConversationContext` rewritten: L0+L1 + budgeted messages, 14K char cap |
+| D17 | Redis session overflow fix      | v0.12.0          | LTrim caps event list at 60 entries per session, prevents 272K token overflow |
+| D18 | Context window truncation       | v0.12.0          | Orchestrator 14K cap + runtime 60-event LTrim — both sides capped             |
 
 ---
 
@@ -83,9 +88,9 @@
 
 | Priority          | Count  |
 | ----------------- | ------ |
-| P0 - Known Issues | 3      |
-| P1 - Critical     | 4      |
-| P2 - Important    | 11     |
+| P0 - Known Issues | 1      |
+| P1 - Critical     | 3      |
+| P2 - Important    | 12     |
 | P3 - Tech Debt    | 11     |
-| Done              | 14     |
-| **Total**         | **43** |
+| Done              | 18     |
+| **Total**         | **45** |
