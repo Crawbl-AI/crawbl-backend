@@ -43,6 +43,7 @@ const (
 	StreamEventToolCall   StreamEventType = "tool_call"
 	StreamEventToolResult StreamEventType = "tool_result"
 	StreamEventDone       StreamEventType = "done"
+	StreamEventUsage      StreamEventType = "usage"
 )
 
 // StreamChunk is a single streaming event the orchestrator's chat handler
@@ -59,6 +60,15 @@ type StreamChunk struct {
 	Output  string
 	Model   string
 	CallID  string
+
+	// Usage fields (populated only for StreamEventUsage).
+	PromptTokens        int32
+	CompletionTokens    int32
+	TotalTokens         int32
+	ToolUsePromptTokens int32
+	ThoughtsTokens      int32
+	CachedTokens        int32
+	CallSequence        int32
 }
 
 // MemoryEntry is a single memory row returned by the runtime's Memory

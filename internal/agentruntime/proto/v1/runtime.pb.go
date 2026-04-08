@@ -145,6 +145,7 @@ type ConverseEvent struct {
 	//	*ConverseEvent_ToolCall
 	//	*ConverseEvent_ToolResult
 	//	*ConverseEvent_Done
+	//	*ConverseEvent_Usage
 	Event         isConverseEvent_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -232,6 +233,15 @@ func (x *ConverseEvent) GetDone() *DoneEvent {
 	return nil
 }
 
+func (x *ConverseEvent) GetUsage() *UsageEvent {
+	if x != nil {
+		if x, ok := x.Event.(*ConverseEvent_Usage); ok {
+			return x.Usage
+		}
+	}
+	return nil
+}
+
 type isConverseEvent_Event interface {
 	isConverseEvent_Event()
 }
@@ -256,6 +266,10 @@ type ConverseEvent_Done struct {
 	Done *DoneEvent `protobuf:"bytes,5,opt,name=done,proto3,oneof"`
 }
 
+type ConverseEvent_Usage struct {
+	Usage *UsageEvent `protobuf:"bytes,6,opt,name=usage,proto3,oneof"`
+}
+
 func (*ConverseEvent_Chunk) isConverseEvent_Event() {}
 
 func (*ConverseEvent_Thinking) isConverseEvent_Event() {}
@@ -265,6 +279,8 @@ func (*ConverseEvent_ToolCall) isConverseEvent_Event() {}
 func (*ConverseEvent_ToolResult) isConverseEvent_Event() {}
 
 func (*ConverseEvent_Done) isConverseEvent_Event() {}
+
+func (*ConverseEvent_Usage) isConverseEvent_Event() {}
 
 // ChunkEvent is a partial text delta streamed from an agent.
 type ChunkEvent struct {
@@ -623,6 +639,118 @@ func (x *Turn) GetText() string {
 	return ""
 }
 
+// UsageEvent is emitted after each LLM GenerateContent call returns.
+// In a single turn with tool calls, multiple UsageEvents may be emitted
+// (one per LLM round-trip). The orchestrator accumulates them for quota
+// enforcement and forwards them to analytics via NATS.
+type UsageEvent struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	AgentId             string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Model               string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	PromptTokens        int32                  `protobuf:"varint,3,opt,name=prompt_tokens,json=promptTokens,proto3" json:"prompt_tokens,omitempty"`
+	CompletionTokens    int32                  `protobuf:"varint,4,opt,name=completion_tokens,json=completionTokens,proto3" json:"completion_tokens,omitempty"`
+	TotalTokens         int32                  `protobuf:"varint,5,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`
+	ToolUsePromptTokens int32                  `protobuf:"varint,6,opt,name=tool_use_prompt_tokens,json=toolUsePromptTokens,proto3" json:"tool_use_prompt_tokens,omitempty"`
+	ThoughtsTokens      int32                  `protobuf:"varint,7,opt,name=thoughts_tokens,json=thoughtsTokens,proto3" json:"thoughts_tokens,omitempty"`
+	CachedTokens        int32                  `protobuf:"varint,8,opt,name=cached_tokens,json=cachedTokens,proto3" json:"cached_tokens,omitempty"`
+	CallSequence        int32                  `protobuf:"varint,9,opt,name=call_sequence,json=callSequence,proto3" json:"call_sequence,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *UsageEvent) Reset() {
+	*x = UsageEvent{}
+	mi := &file_agentruntime_v1_runtime_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageEvent) ProtoMessage() {}
+
+func (x *UsageEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_agentruntime_v1_runtime_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageEvent.ProtoReflect.Descriptor instead.
+func (*UsageEvent) Descriptor() ([]byte, []int) {
+	return file_agentruntime_v1_runtime_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *UsageEvent) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *UsageEvent) GetPromptTokens() int32 {
+	if x != nil {
+		return x.PromptTokens
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetCompletionTokens() int32 {
+	if x != nil {
+		return x.CompletionTokens
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetTotalTokens() int32 {
+	if x != nil {
+		return x.TotalTokens
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetToolUsePromptTokens() int32 {
+	if x != nil {
+		return x.ToolUsePromptTokens
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetThoughtsTokens() int32 {
+	if x != nil {
+		return x.ThoughtsTokens
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetCachedTokens() int32 {
+	if x != nil {
+		return x.CachedTokens
+	}
+	return 0
+}
+
+func (x *UsageEvent) GetCallSequence() int32 {
+	if x != nil {
+		return x.CallSequence
+	}
+	return 0
+}
+
 var File_agentruntime_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_agentruntime_v1_runtime_proto_rawDesc = "" +
@@ -635,14 +763,15 @@ const file_agentruntime_v1_runtime_proto_rawDesc = "" +
 	"\bagent_id\x18\x03 \x01(\tR\aagentId\x12#\n" +
 	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\x12!\n" +
 	"\fworkspace_id\x18\x05 \x01(\tR\vworkspaceId\x12\x17\n" +
-	"\auser_id\x18\x06 \x01(\tR\x06userId\"\xe4\x02\n" +
+	"\auser_id\x18\x06 \x01(\tR\x06userId\"\xa0\x03\n" +
 	"\rConverseEvent\x12:\n" +
 	"\x05chunk\x18\x01 \x01(\v2\".crawbl.agentruntime.v1.ChunkEventH\x00R\x05chunk\x12C\n" +
 	"\bthinking\x18\x02 \x01(\v2%.crawbl.agentruntime.v1.ThinkingEventH\x00R\bthinking\x12D\n" +
 	"\ttool_call\x18\x03 \x01(\v2%.crawbl.agentruntime.v1.ToolCallEventH\x00R\btoolCall\x12J\n" +
 	"\vtool_result\x18\x04 \x01(\v2'.crawbl.agentruntime.v1.ToolResultEventH\x00R\n" +
 	"toolResult\x127\n" +
-	"\x04done\x18\x05 \x01(\v2!.crawbl.agentruntime.v1.DoneEventH\x00R\x04doneB\a\n" +
+	"\x04done\x18\x05 \x01(\v2!.crawbl.agentruntime.v1.DoneEventH\x00R\x04done\x12:\n" +
+	"\x05usage\x18\x06 \x01(\v2\".crawbl.agentruntime.v1.UsageEventH\x00R\x05usageB\a\n" +
 	"\x05event\";\n" +
 	"\n" +
 	"ChunkEvent\x12\x19\n" +
@@ -667,7 +796,18 @@ const file_agentruntime_v1_runtime_proto_rawDesc = "" +
 	"\x05turns\x18\x02 \x03(\v2\x1c.crawbl.agentruntime.v1.TurnR\x05turns\"5\n" +
 	"\x04Turn\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text2n\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\"\xda\x02\n" +
+	"\n" +
+	"UsageEvent\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12#\n" +
+	"\rprompt_tokens\x18\x03 \x01(\x05R\fpromptTokens\x12+\n" +
+	"\x11completion_tokens\x18\x04 \x01(\x05R\x10completionTokens\x12!\n" +
+	"\ftotal_tokens\x18\x05 \x01(\x05R\vtotalTokens\x123\n" +
+	"\x16tool_use_prompt_tokens\x18\x06 \x01(\x05R\x13toolUsePromptTokens\x12'\n" +
+	"\x0fthoughts_tokens\x18\a \x01(\x05R\x0ethoughtsTokens\x12#\n" +
+	"\rcached_tokens\x18\b \x01(\x05R\fcachedTokens\x12#\n" +
+	"\rcall_sequence\x18\t \x01(\x05R\fcallSequence2n\n" +
 	"\fAgentRuntime\x12^\n" +
 	"\bConverse\x12'.crawbl.agentruntime.v1.ConverseRequest\x1a%.crawbl.agentruntime.v1.ConverseEvent(\x010\x01BNZLgithub.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1;runtimev1b\x06proto3"
 
@@ -683,7 +823,7 @@ func file_agentruntime_v1_runtime_proto_rawDescGZIP() []byte {
 	return file_agentruntime_v1_runtime_proto_rawDescData
 }
 
-var file_agentruntime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_agentruntime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_agentruntime_v1_runtime_proto_goTypes = []any{
 	(*ConverseRequest)(nil), // 0: crawbl.agentruntime.v1.ConverseRequest
 	(*ConverseEvent)(nil),   // 1: crawbl.agentruntime.v1.ConverseEvent
@@ -693,6 +833,7 @@ var file_agentruntime_v1_runtime_proto_goTypes = []any{
 	(*ToolResultEvent)(nil), // 5: crawbl.agentruntime.v1.ToolResultEvent
 	(*DoneEvent)(nil),       // 6: crawbl.agentruntime.v1.DoneEvent
 	(*Turn)(nil),            // 7: crawbl.agentruntime.v1.Turn
+	(*UsageEvent)(nil),      // 8: crawbl.agentruntime.v1.UsageEvent
 }
 var file_agentruntime_v1_runtime_proto_depIdxs = []int32{
 	2, // 0: crawbl.agentruntime.v1.ConverseEvent.chunk:type_name -> crawbl.agentruntime.v1.ChunkEvent
@@ -700,14 +841,15 @@ var file_agentruntime_v1_runtime_proto_depIdxs = []int32{
 	4, // 2: crawbl.agentruntime.v1.ConverseEvent.tool_call:type_name -> crawbl.agentruntime.v1.ToolCallEvent
 	5, // 3: crawbl.agentruntime.v1.ConverseEvent.tool_result:type_name -> crawbl.agentruntime.v1.ToolResultEvent
 	6, // 4: crawbl.agentruntime.v1.ConverseEvent.done:type_name -> crawbl.agentruntime.v1.DoneEvent
-	7, // 5: crawbl.agentruntime.v1.DoneEvent.turns:type_name -> crawbl.agentruntime.v1.Turn
-	0, // 6: crawbl.agentruntime.v1.AgentRuntime.Converse:input_type -> crawbl.agentruntime.v1.ConverseRequest
-	1, // 7: crawbl.agentruntime.v1.AgentRuntime.Converse:output_type -> crawbl.agentruntime.v1.ConverseEvent
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	8, // 5: crawbl.agentruntime.v1.ConverseEvent.usage:type_name -> crawbl.agentruntime.v1.UsageEvent
+	7, // 6: crawbl.agentruntime.v1.DoneEvent.turns:type_name -> crawbl.agentruntime.v1.Turn
+	0, // 7: crawbl.agentruntime.v1.AgentRuntime.Converse:input_type -> crawbl.agentruntime.v1.ConverseRequest
+	1, // 8: crawbl.agentruntime.v1.AgentRuntime.Converse:output_type -> crawbl.agentruntime.v1.ConverseEvent
+	8, // [8:9] is the sub-list for method output_type
+	7, // [7:8] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_agentruntime_v1_runtime_proto_init() }
@@ -721,6 +863,7 @@ func file_agentruntime_v1_runtime_proto_init() {
 		(*ConverseEvent_ToolCall)(nil),
 		(*ConverseEvent_ToolResult)(nil),
 		(*ConverseEvent_Done)(nil),
+		(*ConverseEvent_Usage)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -728,7 +871,7 @@ func file_agentruntime_v1_runtime_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agentruntime_v1_runtime_proto_rawDesc), len(file_agentruntime_v1_runtime_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

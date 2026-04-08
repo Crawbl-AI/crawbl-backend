@@ -271,6 +271,20 @@ func translateEvent(event *runtimev1.ConverseEvent) (StreamChunk, bool) {
 			Type:  StreamEventDone,
 			Model: d.GetModel(),
 		}, true
+	case event.GetUsage() != nil:
+		u := event.GetUsage()
+		return StreamChunk{
+			Type:                StreamEventUsage,
+			AgentID:             u.GetAgentId(),
+			Model:               u.GetModel(),
+			PromptTokens:        u.GetPromptTokens(),
+			CompletionTokens:    u.GetCompletionTokens(),
+			TotalTokens:         u.GetTotalTokens(),
+			ToolUsePromptTokens: u.GetToolUsePromptTokens(),
+			ThoughtsTokens:      u.GetThoughtsTokens(),
+			CachedTokens:        u.GetCachedTokens(),
+			CallSequence:        u.GetCallSequence(),
+		}, true
 	}
 	return StreamChunk{}, false
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workspacerepo"
@@ -47,12 +48,15 @@ import (
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
@@ -165,6 +169,23 @@ func runServer(ctx context.Context) error {
 	agentHistoryRepo := agenthistoryrepo.New()
 	artifactRepo := artifactrepo.New()
 
+	pricingCache := pricing.New(db, logger)
+	pricingCache.Start(ctx, 5*time.Minute)
+
+	// Connect to NATS for usage event publishing. Disabled when CRAWBL_NATS_URL is unset.
+	natsCfg := crawblnats.DefaultConfig()
+	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
+	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
+	if natsErr != nil {
+		logger.Warn("NATS connect failed, usage publishing disabled", "error", natsErr)
+	}
+	defer func() {
+		if natsClient != nil {
+			_ = natsClient.Close()
+		}
+	}()
+	usagePublisher := usagepublisher.New(natsClient, logger)
+
 	chatService := chatservice.New(
 		db,
 		chatservice.Repos{
@@ -176,8 +197,9 @@ func runServer(ctx context.Context) error {
 			AgentSettings: agentSettingsRepo,
 			AgentPrompts:  agentPromptsRepo,
 			AgentHistory:  agentHistoryRepo,
+			Usage:         usagerepo.New(),
 		},
-		runtimeClient, broadcaster, memoryStack,
+		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
 	)
 	agentService := agentservice.New(
 		agentservice.Repos{
@@ -187,6 +209,7 @@ func runServer(ctx context.Context) error {
 			AgentSettings: agentSettingsRepo,
 			AgentPrompts:  agentPromptsRepo,
 			AgentHistory:  agentHistoryRepo,
+			Usage:         usagerepo.New(),
 		},
 		runtimeClient,
 	)
@@ -596,12 +619,82 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		}
 	}
 
+	// 6. Usage plans
+	for _, p := range seed.UsagePlans() {
+		var existing struct {
+			PlanID string `db:"plan_id"`
+		}
+		err := sess.Select("plan_id").From("usage_plans").
+			Where("plan_id = ?", p.PlanID).
+			LoadOneContext(ctx, &existing)
+		if err != nil && !database.IsRecordNotFoundError(err) {
+			return fmt.Errorf("seed usage plan %q: %w", p.PlanID, err)
+		}
+		if existing.PlanID != "" {
+			_, err = sess.Update("usage_plans").
+				Set("name", p.Name).
+				Set("monthly_token_limit", p.MonthlyTokenLimit).
+				Set("daily_request_limit", p.DailyRequestLimit).
+				Set("max_tokens_per_request", p.MaxTokensPerRequest).
+				Set("updated_at", time.Now()).
+				Where("plan_id = ?", p.PlanID).
+				ExecContext(ctx)
+		} else {
+			_, err = sess.InsertInto("usage_plans").
+				Pair("plan_id", p.PlanID).
+				Pair("name", p.Name).
+				Pair("monthly_token_limit", p.MonthlyTokenLimit).
+				Pair("daily_request_limit", p.DailyRequestLimit).
+				Pair("max_tokens_per_request", p.MaxTokensPerRequest).
+				Pair("created_at", time.Now()).
+				Pair("updated_at", time.Now()).
+				ExecContext(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("seed usage plan %q: %w", p.PlanID, err)
+		}
+	}
+
+	// 7. Model pricing (bootstrap — CronJob is the real source of truth)
+	for _, p := range seed.ModelPricing() {
+		var existing struct {
+			Model string `db:"model"`
+		}
+		err := sess.Select("model").From("model_pricing").
+			Where("provider = ? AND model = ? AND region = ?", p.Provider, p.Model, p.Region).
+			OrderBy("effective_at DESC").
+			Limit(1).
+			LoadOneContext(ctx, &existing)
+		if err != nil && !database.IsRecordNotFoundError(err) {
+			return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
+		}
+		if existing.Model != "" {
+			continue // Already has pricing — don't overwrite CronJob data
+		}
+		_, err = sess.InsertInto("model_pricing").
+			Pair("provider", p.Provider).
+			Pair("model", p.Model).
+			Pair("region", p.Region).
+			Pair("input_cost_per_token", p.InputCostPerToken).
+			Pair("output_cost_per_token", p.OutputCostPerToken).
+			Pair("cached_cost_per_token", p.CachedCostPerToken).
+			Pair("source", p.Source).
+			Pair("effective_at", time.Now()).
+			Pair("created_at", time.Now()).
+			ExecContext(ctx)
+		if err != nil {
+			return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
+		}
+	}
+
 	logger.Info("catalogs seeded",
 		slog.Int("tools", len(catalog)),
 		slog.Int("models", len(seed.AvailableModels())),
 		slog.Int("tool_categories", len(agentruntimetools.ToolCategories())),
 		slog.Int("integration_categories", len(seed.IntegrationCategories())),
 		slog.Int("integration_providers", len(seed.IntegrationProviders())),
+		slog.Int("usage_plans", len(seed.UsagePlans())),
+		slog.Int("model_pricing", len(seed.ModelPricing())),
 	)
 	return nil
 }

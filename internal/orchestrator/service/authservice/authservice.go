@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
 	"time"
@@ -429,6 +430,18 @@ func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *
 		HasAgreedWithLegal: hasAgreedWithLegal,
 	}); mErr != nil {
 		return nil, mErr
+	}
+
+	// Assign the free usage plan to the new user so quota enforcement is active from day one.
+	if _, qErr := sess.InsertInto("usage_quotas").
+		Pair("user_id", user.ID).
+		Pair("plan_id", "free").
+		Pair("effective_at", now).
+		Pair("created_at", now).
+		Pair("updated_at", now).
+		ExecContext(ctx); qErr != nil {
+		slog.Warn("failed to assign free usage plan", "user_id", user.ID, "error", qErr.Error())
+		// Non-fatal: user can still use the platform, quota enforcement will be a no-op.
 	}
 
 	// Ensure default workspace exists

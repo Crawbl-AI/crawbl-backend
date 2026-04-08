@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,17 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 
 	for _, agent := range agents {
 		agent.Status = orchestrator.StatusForRuntime(runtimeState)
+	}
+
+	// Pre-flight quota check: reject if user exceeded monthly token limit.
+	if s.usageRepo != nil {
+		period := time.Now().UTC().Format("2006-01")
+		tokensUsed, tokenLimit, qErr := s.usageRepo.CheckQuota(ctx, opts.Sess, opts.UserID, period)
+		if qErr != nil {
+			slog.Warn("quota check failed, allowing request", "user_id", opts.UserID, "error", qErr.Error())
+		} else if tokenLimit > 0 && tokensUsed >= tokenLimit {
+			return nil, merrors.NewBusinessError("monthly token quota exceeded", merrors.ErrCodeQuotaExceeded)
+		}
 	}
 
 	if conversation.Type == orchestrator.ConversationTypeSwarm {

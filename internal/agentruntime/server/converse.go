@@ -146,6 +146,7 @@ type turnState struct {
 	partialCount int
 	toolCalls    []string
 	authors      map[string]int
+	callSequence int32
 }
 
 func newTurnState(targetAgent string) *turnState {
@@ -249,6 +250,31 @@ func (h *converseHandler) runOneTurn(
 					Text:    text,
 				})
 			}
+		}
+
+		// Emit UsageEvent when the ADK yields token usage data.
+		// UsageMetadata is populated after each GenerateContent call.
+		if event.UsageMetadata != nil {
+			um := event.UsageMetadata
+			usageEvt := &runtimev1.ConverseEvent{
+				Event: &runtimev1.ConverseEvent_Usage{
+					Usage: &runtimev1.UsageEvent{
+						AgentId:             event.Author,
+						Model:               state.modelName,
+						PromptTokens:        um.PromptTokenCount,
+						CompletionTokens:    um.CandidatesTokenCount,
+						TotalTokens:         um.TotalTokenCount,
+						ToolUsePromptTokens: um.ToolUsePromptTokenCount,
+						ThoughtsTokens:      um.ThoughtsTokenCount,
+						CachedTokens:        um.CachedContentTokenCount,
+						CallSequence:        state.callSequence,
+					},
+				},
+			}
+			if sendErr := stream.Send(usageEvt); sendErr != nil {
+				return sendErr
+			}
+			state.callSequence++
 		}
 	}
 

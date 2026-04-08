@@ -1,0 +1,16 @@
+[
+  {
+    "plan_id": "free",
+    "name": "Freemium",
+    "monthly_token_limit": 500000,
+    "daily_request_limit": null,
+    "max_tokens_per_request": null
+  },
+  {
+    "plan_id": "pro",
+    "name": "Pro",
+    "monthly_token_limit": 10000000,
+    "daily_request_limit": null,
+    "max_tokens_per_request": null
+  }
+]

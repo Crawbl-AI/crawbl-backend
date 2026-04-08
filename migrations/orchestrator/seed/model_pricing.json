@@ -1,0 +1,20 @@
+[
+  {
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "region": "global",
+    "input_cost_per_token": 0.0000003,
+    "output_cost_per_token": 0.0000012,
+    "cached_cost_per_token": 0.00000015,
+    "source": "litellm"
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-4o-2024-08-06",
+    "region": "global",
+    "input_cost_per_token": 0.0000025,
+    "output_cost_per_token": 0.00001,
+    "cached_cost_per_token": 0.00000125,
+    "source": "litellm"
+  }
+]

@@ -40,5 +40,6 @@ func New(
 		agentPromptsRepo:  repos.AgentPrompts,
 		agentHistoryRepo:  repos.AgentHistory,
 		runtimeClient:     runtimeClient,
+		usageRepo:         repos.Usage,
 	}
 }

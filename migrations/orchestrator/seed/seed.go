@@ -27,6 +27,12 @@ var toolsJSON []byte
 //go:embed tool_categories.json
 var toolCategoriesJSON []byte
 
+//go:embed usage_plans.json
+var usagePlansJSON []byte
+
+//go:embed model_pricing.json
+var modelPricingJSON []byte
+
 // AgentEntry defines a default agent blueprint.
 type AgentEntry struct {
 	Name         string   `json:"name"`
@@ -82,6 +88,26 @@ type IntegrationCategoryEntry struct {
 	ImageURL string `json:"image_url"`
 }
 
+// UsagePlanEntry defines a subscription plan with token limits.
+type UsagePlanEntry struct {
+	PlanID              string `json:"plan_id"`
+	Name                string `json:"name"`
+	MonthlyTokenLimit   int64  `json:"monthly_token_limit"`
+	DailyRequestLimit   *int   `json:"daily_request_limit"`
+	MaxTokensPerRequest *int   `json:"max_tokens_per_request"`
+}
+
+// ModelPricingEntry holds bootstrap pricing for a model.
+type ModelPricingEntry struct {
+	Provider           string  `json:"provider"`
+	Model              string  `json:"model"`
+	Region             string  `json:"region"`
+	InputCostPerToken  float64 `json:"input_cost_per_token"`
+	OutputCostPerToken float64 `json:"output_cost_per_token"`
+	CachedCostPerToken float64 `json:"cached_cost_per_token"`
+	Source             string  `json:"source"`
+}
+
 var (
 	agents                []AgentEntry
 	models                []ModelEntry
@@ -89,6 +115,8 @@ var (
 	integrationCategories []IntegrationCategoryEntry
 	tools                 []ToolEntry
 	toolCategories        []ToolCategoryEntry
+	usagePlans            []UsagePlanEntry
+	modelPricing          []ModelPricingEntry
 )
 
 func init() {
@@ -98,6 +126,8 @@ func init() {
 	mustParse(integrationCategoriesJSON, &integrationCategories, "integration_categories.json")
 	mustParse(toolsJSON, &tools, "tools.json")
 	mustParse(toolCategoriesJSON, &toolCategories, "tool_categories.json")
+	mustParse(usagePlansJSON, &usagePlans, "usage_plans.json")
+	mustParse(modelPricingJSON, &modelPricing, "model_pricing.json")
 }
 
 func mustParse(data []byte, target any, name string) {
@@ -142,3 +172,9 @@ func ImplementedTools() []ToolEntry {
 // category. Named -List to avoid colliding with the orchestrator's
 // integration-category accessor.
 func ToolCategoriesList() []ToolCategoryEntry { return toolCategories }
+
+// UsagePlans returns the list of available subscription plans.
+func UsagePlans() []UsagePlanEntry { return usagePlans }
+
+// ModelPricing returns the bootstrap model pricing entries.
+func ModelPricing() []ModelPricingEntry { return modelPricing }

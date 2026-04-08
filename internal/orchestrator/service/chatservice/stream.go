@@ -9,7 +9,9 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -23,6 +25,7 @@ type streamSession struct {
 	svc          *service
 	sess         *dbr.Session
 	wsID         string
+	userID       string
 	convID       string
 	conversation *orchestrator.Conversation
 	primary      *orchestrator.Agent
@@ -60,6 +63,7 @@ func newStreamSession(
 		svc:          svc,
 		sess:         opts.Sess,
 		wsID:         opts.WorkspaceID,
+		userID:       opts.UserID,
 		convID:       conv.ID,
 		conversation: conv,
 		primary:      agent,
@@ -154,6 +158,8 @@ func (ss *streamSession) processStream(ch <-chan userswarmclient.StreamChunk) {
 			ss.handleToolResult(chunk)
 		case userswarmclient.StreamEventDone:
 			ss.handleDone(chunk)
+		case userswarmclient.StreamEventUsage:
+			ss.handleUsage(chunk)
 		}
 	}
 	ss.log.Info("stream complete", "streams", len(ss.streams), "chunks", ss.totalChunks,
@@ -192,6 +198,111 @@ func (ss *streamSession) handleDone(chunk userswarmclient.StreamChunk) {
 		ss.resolveStream(chunk.AgentID).done = true
 		ss.globalDone = allStreamsDone(ss.streams)
 	}
+}
+
+// handleUsage processes a usage event from the runtime. Increments both
+// user-level (monthly period) and agent-level (lifetime) token counters.
+func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
+	ss.log.Info("llm usage",
+		"agent", chunk.AgentID,
+		"model", chunk.Model,
+		"prompt_tokens", chunk.PromptTokens,
+		"completion_tokens", chunk.CompletionTokens,
+		"total_tokens", chunk.TotalTokens,
+		"cached_tokens", chunk.CachedTokens,
+		"call_sequence", chunk.CallSequence,
+	)
+
+	// Emit real-time usage update to mobile via Socket.IO.
+	ss.svc.broadcaster.EmitUsageUpdate(ss.ctx, ss.wsID, realtime.UsageUpdatePayload{
+		AgentID:          chunk.AgentID,
+		ConversationID:   ss.convID,
+		Model:            chunk.Model,
+		PromptTokens:     chunk.PromptTokens,
+		CompletionTokens: chunk.CompletionTokens,
+		TotalTokens:      chunk.TotalTokens,
+		CallSequence:     chunk.CallSequence,
+	})
+
+	if ss.svc.usageRepo == nil {
+		return
+	}
+
+	period := time.Now().UTC().Format("2006-01")
+
+	// Resolve the agent DB ID from the slug in the chunk.
+	var agentDBID string
+	var workspaceID string
+	if st := ss.resolveStreamReadOnly(chunk.AgentID); st != nil && st.agent != nil {
+		agentDBID = st.agent.ID
+		workspaceID = ss.wsID
+	}
+
+	// Compute cost from pricing cache.
+	var costUSD float64
+	if ss.svc.pricingCache != nil {
+		costUSD = ss.svc.pricingCache.Compute("", chunk.Model, "global",
+			chunk.PromptTokens, chunk.CompletionTokens, chunk.CachedTokens)
+	}
+
+	// Increment user usage counter (monthly).
+	if mErr := ss.svc.usageRepo.IncrementUsage(ss.ctx, ss.sess, &usagerepo.IncrementUsageOpts{
+		UserID:           ss.userID,
+		Period:           period,
+		PromptTokens:     int64(chunk.PromptTokens),
+		CompletionTokens: int64(chunk.CompletionTokens),
+		TotalTokens:      int64(chunk.TotalTokens),
+		CostUSD:          costUSD,
+	}); mErr != nil {
+		slog.Warn("failed to increment user usage", "error", mErr.Error())
+	}
+
+	// Increment agent usage counter (lifetime).
+	if agentDBID != "" {
+		if mErr := ss.svc.usageRepo.IncrementAgentUsage(ss.ctx, ss.sess, &usagerepo.IncrementAgentUsageOpts{
+			AgentID:          agentDBID,
+			WorkspaceID:      workspaceID,
+			PromptTokens:     int64(chunk.PromptTokens),
+			CompletionTokens: int64(chunk.CompletionTokens),
+			TotalTokens:      int64(chunk.TotalTokens),
+			CostUSD:          costUSD,
+		}); mErr != nil {
+			slog.Warn("failed to increment agent usage", "error", mErr.Error())
+		}
+	}
+
+	// Publish to NATS for ClickHouse analytics pipeline.
+	ss.svc.usagePublisher.Publish(ss.ctx, ss.wsID, &usagepublisher.UsageEvent{
+		UserID:           ss.userID,
+		WorkspaceID:      ss.wsID,
+		ConversationID:   ss.convID,
+		AgentID:          chunk.AgentID,
+		AgentDBID:        agentDBID,
+		Model:            chunk.Model,
+		PromptTokens:     chunk.PromptTokens,
+		CompletionTokens: chunk.CompletionTokens,
+		TotalTokens:      chunk.TotalTokens,
+		CachedTokens:     chunk.CachedTokens,
+		CostUSD:          costUSD,
+		CallSequence:     chunk.CallSequence,
+		SessionID:        ss.convID,
+	})
+}
+
+// resolveStreamReadOnly looks up the subAgentStream for a slug without
+// creating a new one. Returns nil if not found.
+func (ss *streamSession) resolveStreamReadOnly(slug string) *subAgentStream {
+	if slug == "" || slug == ss.primary.Slug {
+		return ss.streams[ss.primary.ID]
+	}
+	sub := ss.lookups.bySlug[slug]
+	if sub == nil {
+		return ss.streams[ss.primary.ID]
+	}
+	if st, ok := ss.streams[sub.ID]; ok {
+		return st
+	}
+	return nil
 }
 
 // emitDelivered marks the user message as delivered (once across parallel agents).

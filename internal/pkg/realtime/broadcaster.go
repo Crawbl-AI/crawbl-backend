@@ -16,3 +16,4 @@ func (NopBroadcaster) EmitAgentDelegation(_ context.Context, _ string, _ AgentDe
 func (NopBroadcaster) EmitArtifactUpdated(_ context.Context, _ string, _ ArtifactEventPayload) {}
 func (NopBroadcaster) EmitWorkflowEvent(_ context.Context, _ string, _ string, _ WorkflowEventPayload) {
 }
+func (NopBroadcaster) EmitUsageUpdate(_ context.Context, _ string, _ UsageUpdatePayload) {}

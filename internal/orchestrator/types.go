@@ -498,7 +498,11 @@ type AgentDetails struct {
 
 // AgentStats contains aggregate metrics for an agent.
 type AgentStats struct {
-	TotalMessages int
+	TotalMessages         int
+	TotalTokensUsed       int64
+	TotalPromptTokens     int64
+	TotalCompletionTokens int64
+	TotalRequests         int
 }
 
 // AgentSettings contains the agent's model configuration and prompts.

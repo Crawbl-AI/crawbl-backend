@@ -13,6 +13,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -54,6 +55,9 @@ type Context struct {
 
 	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
 	MCPSigningKey string
+
+	// UsageRepo provides token usage and quota read operations for usage API endpoints.
+	UsageRepo usagerepo.Repo
 }
 
 // NewSession creates a new database session.
@@ -147,6 +151,8 @@ func HTTPStatusForError(err *merrors.Error) int {
 		return http.StatusNotFound
 	case merrors.IsCode(err, merrors.ErrCodeRuntimeNotReady):
 		return http.StatusServiceUnavailable
+	case merrors.IsCode(err, merrors.ErrCodeQuotaExceeded):
+		return http.StatusTooManyRequests
 	case merrors.IsCode(err, merrors.ErrCodeUserDeleted):
 		return http.StatusForbidden
 	case merrors.IsBusinessError(err):

@@ -93,3 +93,8 @@ func (b *Broadcaster) EmitArtifactUpdated(ctx context.Context, workspaceID strin
 func (b *Broadcaster) EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload realtime.WorkflowEventPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, event, payload)
 }
+
+// EmitUsageUpdate emits a usage.update event for per-LLM-call token tracking.
+func (b *Broadcaster) EmitUsageUpdate(ctx context.Context, workspaceID string, payload realtime.UsageUpdatePayload) {
+	b.EmitToWorkspace(ctx, workspaceID, realtime.EventUsageUpdate, payload)
+}

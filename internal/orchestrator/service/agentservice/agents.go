@@ -2,6 +2,7 @@ package agentservice
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -55,6 +56,20 @@ func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice
 		return nil, mErr
 	}
 
+	// Fetch lifetime token usage for the agent.
+	var tokenStats orchestrator.AgentStats
+	if s.usageRepo != nil {
+		usage, uErr := s.usageRepo.GetAgentUsage(ctx, opts.Sess, opts.AgentID)
+		if uErr != nil {
+			slog.Warn("failed to get agent usage", "agent_id", opts.AgentID, "error", uErr.Error())
+		} else if usage != nil {
+			tokenStats.TotalTokensUsed = usage.TokensUsed
+			tokenStats.TotalPromptTokens = usage.PromptTokensUsed
+			tokenStats.TotalCompletionTokens = usage.CompletionTokensUsed
+			tokenStats.TotalRequests = usage.RequestCount
+		}
+	}
+
 	s.enrichAgentStatus(ctx, workspace, []*orchestrator.Agent{agent})
 
 	return &orchestrator.AgentDetails{
@@ -62,7 +77,11 @@ func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice
 		Description: agent.Description,
 		SortOrder:   0,
 		Stats: orchestrator.AgentStats{
-			TotalMessages: totalMessages,
+			TotalMessages:         totalMessages,
+			TotalTokensUsed:       tokenStats.TotalTokensUsed,
+			TotalPromptTokens:     tokenStats.TotalPromptTokens,
+			TotalCompletionTokens: tokenStats.TotalCompletionTokens,
+			TotalRequests:         tokenStats.TotalRequests,
 		},
 	}, nil
 }

@@ -40,6 +40,9 @@ type Broadcaster interface {
 
 	// EmitWorkflowEvent emits a workflow progress event.
 	EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload WorkflowEventPayload)
+
+	// EmitUsageUpdate emits a usage.update event for per-LLM-call token tracking.
+	EmitUsageUpdate(ctx context.Context, workspaceID string, payload UsageUpdatePayload)
 }
 
 // NopBroadcaster is a no-op implementation used when real-time is not configured.
@@ -89,6 +92,9 @@ const (
 	EventWorkflowCompleted     = "workflow.completed"
 	EventWorkflowFailed        = "workflow.failed"
 )
+
+// EventUsageUpdate is the event name for per-LLM-call token usage updates.
+const EventUsageUpdate = "usage.update"
 
 // MessageChunkPayload is emitted for each streamed text token.
 type MessageChunkPayload struct {
@@ -176,6 +182,19 @@ type ArtifactEventPayload struct {
 	Action         string `json:"action"` // "created", "updated", "reviewed"
 	AgentID        string `json:"agent_id"`
 	AgentSlug      string `json:"agent_slug"`
+}
+
+// UsageUpdatePayload reports per-LLM-call token usage to connected clients.
+// Emitted inline during streaming so mobile can show real-time token counters.
+type UsageUpdatePayload struct {
+	AgentID          string `json:"agent_id"`
+	ConversationID   string `json:"conversation_id"`
+	MessageID        string `json:"message_id,omitempty"`
+	Model            string `json:"model"`
+	PromptTokens     int32  `json:"prompt_tokens"`
+	CompletionTokens int32  `json:"completion_tokens"`
+	TotalTokens      int32  `json:"total_tokens"`
+	CallSequence     int32  `json:"call_sequence"`
 }
 
 // WorkflowEventPayload reports workflow execution progress.

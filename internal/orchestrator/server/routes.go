@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/handler"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
@@ -25,6 +26,7 @@ func registerRoutes(s *Server) http.Handler {
 		Broadcaster:        s.broadcaster,
 		RuntimeClient:      s.runtimeClient,
 		MCPSigningKey:      s.mcpSigningKey,
+		UsageRepo:          usagerepo.New(),
 	}
 
 	router := chi.NewRouter()
@@ -63,8 +65,10 @@ func registerRoutes(s *Server) http.Handler {
 			r.Patch("/users", handler.UpdateUser(h))
 			r.Get("/users/legal", handler.UserLegal(h))
 			r.Post("/users/legal/accept", handler.AcceptLegal(h))
+			r.Get("/users/usage/summary", handler.UserUsageSummary(h))
 			r.Get("/workspaces", handler.WorkspacesList(h))
 			r.Get("/workspaces/{id}", handler.WorkspaceGet(h))
+			r.Get("/workspaces/{id}/usage", handler.WorkspaceUsage(h))
 			r.Get("/workspaces/{workspaceId}/agents", handler.WorkspaceAgentsList(h))
 			r.Get("/workspaces/{workspaceId}/conversations", handler.ConversationsList(h))
 			r.Post("/workspaces/{workspaceId}/conversations", handler.ConversationCreate(h))

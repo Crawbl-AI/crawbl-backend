@@ -49,6 +49,9 @@ const (
 	ErrCodeMessageNotFound    = "MSG0001" // Message does not exist
 	ErrCodeUnsupportedMessage = "MSG0002" // Message type is not supported
 
+	// Quota error codes (QTAxxxx)
+	ErrCodeQuotaExceeded = "QTA0001" // User has exceeded their monthly token quota
+
 	// Runtime error codes (RTMxxxx)
 	ErrCodeRuntimeNotReady = "RTM0001" // User swarm runtime is not ready
 
@@ -93,6 +96,9 @@ var (
 	// Message errors
 	ErrMessageNotFound    = NewBusinessError("Message not found", ErrCodeMessageNotFound)
 	ErrUnsupportedMessage = NewBusinessError("Only text messages are supported right now", ErrCodeUnsupportedMessage)
+
+	// Quota errors
+	ErrQuotaExceeded = NewBusinessError("Monthly token quota exceeded", ErrCodeQuotaExceeded)
 
 	// Runtime errors
 	ErrRuntimeNotReady = NewBusinessError("Assistant is still starting", ErrCodeRuntimeNotReady)
