@@ -180,11 +180,10 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	}
 
 	// Step 4d: shared local tool slice (web_fetch, web_search_tool,
-	// memory_store, memory_recall, memory_forget, + file_read/file_write
-	// when Spaces is configured) built once per pod and bound onto every
-	// agent in the graph.
+	// + file_read/file_write when Spaces is configured) built once per
+	// pod and bound onto every agent in the graph. Memory tools are now
+	// provided by the orchestrator's MCP MemPalace toolset.
 	localTools, err := tools.BuildCommonTools(tools.CommonToolDeps{
-		MemStore:        memStore,
 		WorkspaceID:     cfg.WorkspaceID,
 		SearXNGEndpoint: cfg.SearXNGEndpoint,
 		Spaces:          spacesClient,

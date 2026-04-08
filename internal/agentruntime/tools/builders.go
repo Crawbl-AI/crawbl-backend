@@ -24,9 +24,9 @@
 //     workspace ID never flows through tool arguments.
 //
 // main.go builds CommonToolDeps once per pod from the constructed
-// memory.Store, storage.SpacesClient, SearXNG endpoint, and
-// workspace ID, then calls BuildCommonTools and threads the result
-// through runner.BuildOptions.LocalTools into every agent constructor.
+// storage.SpacesClient, SearXNG endpoint, and workspace ID, then
+// calls BuildCommonTools and threads the result through
+// runner.BuildOptions.LocalTools into every agent constructor.
 package tools
 
 import (
@@ -36,7 +36,6 @@ import (
 	adktool "google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/local"
 )
@@ -73,39 +72,6 @@ type webSearchArgs struct {
 type webSearchResult struct {
 	Query   string                  `json:"query"`
 	Results []local.WebSearchResult `json:"results"`
-}
-
-type memoryStoreArgs struct {
-	Key      string `json:"key" jsonschema:"stable identifier to recall this memory by; required"`
-	Content  string `json:"content" jsonschema:"the memory text to persist; required"`
-	Category string `json:"category,omitempty" jsonschema:"optional topic tag so memory_recall can filter by category"`
-}
-
-type memoryEntryOut struct {
-	Key       string `json:"key"`
-	Content   string `json:"content"`
-	Category  string `json:"category,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
-	UpdatedAt string `json:"updated_at,omitempty"`
-}
-
-type memoryRecallArgs struct {
-	Category string `json:"category,omitempty" jsonschema:"optional category filter; empty returns all entries"`
-	Limit    int    `json:"limit,omitempty" jsonschema:"optional cap on entries returned (default 100)"`
-	Offset   int    `json:"offset,omitempty" jsonschema:"optional pagination offset"`
-}
-
-type memoryRecallResult struct {
-	Entries []memoryEntryOut `json:"entries"`
-}
-
-type memoryForgetArgs struct {
-	Key string `json:"key" jsonschema:"key of the memory entry to delete; required"`
-}
-
-type memoryForgetResult struct {
-	Key     string `json:"key"`
-	Deleted bool   `json:"deleted"`
 }
 
 type fileReadArgs struct {
@@ -206,47 +172,6 @@ func webSearchHandler(endpoint string) handlerFunc[webSearchArgs, webSearchResul
 	}
 }
 
-func memoryStoreHandler(store memory.Store, workspaceID string) handlerFunc[memoryStoreArgs, memoryEntryOut] {
-	return func(ctx context.Context, args memoryStoreArgs) (memoryEntryOut, error) {
-		entry, err := local.MemoryStore(ctx, store, workspaceID, local.MemoryStoreOptions{
-			Key:      args.Key,
-			Content:  args.Content,
-			Category: args.Category,
-		})
-		if err != nil {
-			return memoryEntryOut{}, err
-		}
-		return entryToOut(entry), nil
-	}
-}
-
-func memoryRecallHandler(store memory.Store, workspaceID string) handlerFunc[memoryRecallArgs, memoryRecallResult] {
-	return func(ctx context.Context, args memoryRecallArgs) (memoryRecallResult, error) {
-		entries, err := local.MemoryRecall(ctx, store, workspaceID, local.MemoryRecallOptions{
-			Category: args.Category,
-			Limit:    args.Limit,
-			Offset:   args.Offset,
-		})
-		if err != nil {
-			return memoryRecallResult{}, err
-		}
-		out := make([]memoryEntryOut, 0, len(entries))
-		for _, e := range entries {
-			out = append(out, entryToOut(e))
-		}
-		return memoryRecallResult{Entries: out}, nil
-	}
-}
-
-func memoryForgetHandler(store memory.Store, workspaceID string) handlerFunc[memoryForgetArgs, memoryForgetResult] {
-	return func(ctx context.Context, args memoryForgetArgs) (memoryForgetResult, error) {
-		if err := local.MemoryForget(ctx, store, workspaceID, local.MemoryForgetOptions{Key: args.Key}); err != nil {
-			return memoryForgetResult{Key: args.Key, Deleted: false}, err
-		}
-		return memoryForgetResult{Key: args.Key, Deleted: true}, nil
-	}
-}
-
 func fileReadHandler(spaces *storage.SpacesClient, workspaceID string) handlerFunc[fileReadArgs, local.FileReadResult] {
 	return func(ctx context.Context, args fileReadArgs) (local.FileReadResult, error) {
 		return local.FileRead(ctx, spaces, workspaceID, local.FileReadOptions{Key: args.Key})
@@ -263,32 +188,15 @@ func fileWriteHandler(spaces *storage.SpacesClient, workspaceID string) handlerF
 	}
 }
 
-// entryToOut flattens a memory.Entry into the LLM-facing shape with
-// RFC3339 UTC timestamps instead of time.Time values.
-func entryToOut(e memory.Entry) memoryEntryOut {
-	const fmtUTC = "2006-01-02T15:04:05Z"
-	return memoryEntryOut{
-		Key:       e.Key,
-		Content:   e.Content,
-		Category:  e.Category,
-		CreatedAt: e.CreatedAt.UTC().Format(fmtUTC),
-		UpdatedAt: e.UpdatedAt.UTC().Format(fmtUTC),
-	}
-}
-
 // --- BuildCommonTools -----------------------------------------------
 
 // CommonToolDeps carries the backend handles every local tool needs.
 // main.go builds this once per pod from config + constructed stores
 // and hands it to runner.BuildOptions.LocalTools via BuildCommonTools.
 type CommonToolDeps struct {
-	// MemStore is the durable memory.Store (Postgres-backed in
-	// production). Captured at construction time by memory_store /
-	// memory_recall / memory_forget.
-	MemStore memory.Store
 	// WorkspaceID is the Crawbl workspace this pod serves. The
-	// memory and file tools scope every read and write to this
-	// workspace via closure capture.
+	// file tools scope every read and write to this workspace via
+	// closure capture.
 	WorkspaceID string
 	// SearXNGEndpoint is the base URL of the internal meta-search
 	// instance. Captured at construction time by web_search_tool.
@@ -308,9 +216,6 @@ type CommonToolDeps struct {
 // slice mirrors the order the agents see in their tool list; file_*
 // come last because they are optional.
 func BuildCommonTools(deps CommonToolDeps) ([]adktool.Tool, error) {
-	if deps.MemStore == nil {
-		return nil, fmt.Errorf("tools: BuildCommonTools requires a non-nil MemStore")
-	}
 	if deps.WorkspaceID == "" {
 		return nil, fmt.Errorf("tools: BuildCommonTools requires a non-empty WorkspaceID")
 	}
@@ -324,15 +229,6 @@ func BuildCommonTools(deps CommonToolDeps) ([]adktool.Tool, error) {
 		},
 		func() (adktool.Tool, error) {
 			return buildFunctionTool(ToolWebSearch, webSearchHandler(deps.SearXNGEndpoint))
-		},
-		func() (adktool.Tool, error) {
-			return buildFunctionTool(ToolMemoryStore, memoryStoreHandler(deps.MemStore, deps.WorkspaceID))
-		},
-		func() (adktool.Tool, error) {
-			return buildFunctionTool(ToolMemoryRecall, memoryRecallHandler(deps.MemStore, deps.WorkspaceID))
-		},
-		func() (adktool.Tool, error) {
-			return buildFunctionTool(ToolMemoryForget, memoryForgetHandler(deps.MemStore, deps.WorkspaceID))
 		},
 	}
 	if deps.Spaces != nil {

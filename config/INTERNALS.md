@@ -21,9 +21,6 @@ Adding a tool here auto-enables it in the mobile app AND the agent runtime's aut
 | `file_edit` | Edit Files | files |
 | `glob_search` | File Search | files |
 | `content_search` | Content Search | files |
-| `memory_store` | Remember | memory |
-| `memory_recall` | Recall | memory |
-| `memory_forget` | Forget | memory |
 | `cron_add` | Schedule Task | scheduling |
 | `cron_list` | List Schedules | scheduling |
 | `cron_remove` | Remove Schedule | scheduling |

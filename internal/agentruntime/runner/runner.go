@@ -62,9 +62,8 @@ type BuildOptions struct {
 	// sourced from the orchestrator's agents tables.
 	Blueprint *WorkspaceBlueprint
 	// LocalTools is the shared local tool slice (web_fetch,
-	// web_search_tool, memory_store, memory_recall, memory_forget)
-	// built once per pod by agents.BuildCommonTools and handed to
-	// every agent constructor.
+	// web_search_tool) built once per pod by tools.BuildCommonTools
+	// and handed to every agent constructor.
 	LocalTools []adktool.Tool
 	// Logger for the runner. If nil, slog.Default() is used.
 	Logger *slog.Logger

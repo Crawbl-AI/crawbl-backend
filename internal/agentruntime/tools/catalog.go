@@ -9,8 +9,8 @@
 // Implementation lives in subpackages:
 //
 //   - tools/local — tools executed inside the runtime process
-//     (web_fetch, web_search_tool, memory_*). Additional local tools
-//     will drop in here as they are implemented.
+//     (web_fetch, web_search_tool, file_read, file_write). Additional
+//     local tools will drop in here as they are implemented.
 //   - tools/mcp   — tools that bridge to the orchestrator's MCP server
 //     at /mcp/v1 (orchestrator__* prefix). The runtime never
 //     implements these locally; it forwards every call to the
@@ -47,11 +47,6 @@ const (
 	ToolFileEdit      = "file_edit"
 	ToolGlobSearch    = "glob_search"
 	ToolContentSearch = "content_search"
-
-	// Memory
-	ToolMemoryStore  = "memory_store"
-	ToolMemoryRecall = "memory_recall"
-	ToolMemoryForget = "memory_forget"
 
 	// Scheduling
 	ToolCronAdd    = "cron_add"
@@ -95,9 +90,6 @@ var ToolQueryField = map[string][]string{
 	ToolHTTPRequest:        {"url"},
 	ToolGlobSearch:         {"pattern"},
 	ToolContentSearch:      {"query", "pattern"},
-	ToolMemoryStore:        {"content", "key"},
-	ToolMemoryRecall:       {"category", "key"},
-	ToolMemoryForget:       {"key"},
 	ToolCalculator:         {"expression"},
 	ToolWeather:            {"location"},
 	ToolShell:              {"command"},

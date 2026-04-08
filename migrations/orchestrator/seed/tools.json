@@ -9,10 +9,6 @@
   { "name": "glob_search", "display_name": "File Search", "description": "Search for files by name pattern in the workspace", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/glob-search.png", "implemented": false },
   { "name": "content_search", "display_name": "Content Search", "description": "Search inside files for specific text or patterns", "category": "files", "icon_url": "https://cdn.crawbl.com/tools/content-search.png", "implemented": false },
 
-  { "name": "memory_store", "display_name": "Remember", "description": "Store important information for future conversations", "category": "memory", "icon_url": "https://cdn.crawbl.com/tools/memory-store.png", "implemented": true },
-  { "name": "memory_recall", "display_name": "Recall", "description": "Retrieve previously stored information and context", "category": "memory", "icon_url": "https://cdn.crawbl.com/tools/memory-recall.png", "implemented": true },
-  { "name": "memory_forget", "display_name": "Forget", "description": "Remove stored information from memory", "category": "memory", "icon_url": "https://cdn.crawbl.com/tools/memory-forget.png", "implemented": true },
-
   { "name": "cron_add", "display_name": "Schedule Task", "description": "Create scheduled or recurring tasks", "category": "scheduling", "icon_url": "https://cdn.crawbl.com/tools/cron-add.png", "implemented": false },
   { "name": "cron_list", "display_name": "List Schedules", "description": "View all scheduled tasks", "category": "scheduling", "icon_url": "https://cdn.crawbl.com/tools/cron-list.png", "implemented": false },
   { "name": "cron_remove", "display_name": "Remove Schedule", "description": "Delete a scheduled task", "category": "scheduling", "icon_url": "https://cdn.crawbl.com/tools/cron-remove.png", "implemented": false },
