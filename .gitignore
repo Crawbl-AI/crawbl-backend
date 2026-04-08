@@ -7,3 +7,5 @@ e2e/*.xml
 bin/
 .omc/
 /crawbl
+usage-writer
+pricing-refresh
