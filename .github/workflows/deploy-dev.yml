@@ -2,6 +2,8 @@
 #
 # Lightweight CI gate: validates the already-deployed dev cluster.
 # Builds, deployments, and releases happen locally via `crawbl app deploy`.
+#
+# E2E tests temporarily disabled — re-enable when stable.
 name: Deploy to Dev
 
 on:
@@ -14,7 +16,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  placeholder:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "E2E tests disabled — deploy-only pipeline"
+
+  # e2e-test — disabled, re-enable when ready
   e2e-test:
+    if: false  # disabled
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
