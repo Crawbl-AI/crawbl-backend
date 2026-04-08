@@ -51,6 +51,12 @@ import (
 // recreates them.
 const DefaultSessionTTL = 24 * time.Hour
 
+// maxSessionEvents caps the Redis events list per session. Each turn
+// produces ~4 events (user, model, tool_call, tool_result), so 60
+// events covers ~15 turns — well within the model's context window.
+// Older events are trimmed on every append via LTrim.
+const maxSessionEvents = 60
+
 // RedisService implements google.golang.org/adk/session.Service against
 // a Redis backend. Safe for concurrent use — every method takes its own
 // Redis round-trip and does not share mutable state across calls.
@@ -266,6 +272,7 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 
 	pipe := s.client.TxPipeline()
 	pipe.RPush(ctx, eventsK, eventJSON)
+	pipe.LTrim(ctx, eventsK, -maxSessionEvents, -1)
 	pipe.Expire(ctx, eventsK, s.ttl)
 
 	payload := sessionPayload{
