@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS usage_quotas (
 
 CREATE UNIQUE INDEX idx_usage_quotas_user_active
     ON usage_quotas(user_id, plan_id)
-    WHERE expires_at IS NULL OR expires_at > NOW();
+    WHERE expires_at IS NULL;
 
 -- Usage Counters (running totals, one row per user per month)
 CREATE TABLE IF NOT EXISTS usage_counters (
