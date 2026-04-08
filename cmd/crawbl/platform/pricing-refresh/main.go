@@ -27,12 +27,14 @@ const (
 )
 
 // litellmEntry represents a single model entry from LiteLLM's pricing JSON.
+// Fields use permissive types because LiteLLM's JSON is inconsistent
+// (e.g., max_tokens can be int or string depending on the model).
 type litellmEntry struct {
 	InputCostPerToken  *float64 `json:"input_cost_per_token"`
 	OutputCostPerToken *float64 `json:"output_cost_per_token"`
 	CacheReadInput     *float64 `json:"cache_read_input_token_cost"`
 	Provider           string   `json:"litellm_provider"`
-	MaxTokens          int      `json:"max_tokens"`
+	MaxTokens          any      `json:"max_tokens"`
 	Mode               string   `json:"mode"`
 }
 
