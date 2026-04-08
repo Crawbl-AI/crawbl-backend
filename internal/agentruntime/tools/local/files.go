@@ -73,10 +73,18 @@ func FileRead(ctx context.Context, client *storage.SpacesClient, workspaceID str
 		SizeBytes:   len(body),
 	}
 	if isTextualContentType(contentType) {
-		result.Content = string(body)
+		content := string(body)
+		if len(content) > MaxToolOutputChars {
+			content = content[:MaxToolOutputChars] + "\n\n[truncated — file exceeded 30K chars]"
+		}
+		result.Content = content
 		result.Encoding = "text"
 	} else {
-		result.Content = base64.StdEncoding.EncodeToString(body)
+		encoded := base64.StdEncoding.EncodeToString(body)
+		if len(encoded) > MaxToolOutputChars {
+			encoded = encoded[:MaxToolOutputChars]
+		}
+		result.Content = encoded
 		result.Encoding = "base64"
 	}
 	return result, nil

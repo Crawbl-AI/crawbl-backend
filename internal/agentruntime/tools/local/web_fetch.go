@@ -13,13 +13,17 @@
 package local
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	readability "codeberg.org/readeck/go-readability/v2"
 )
 
 // ErrNotImplemented is returned by local tool stubs that exist only to
@@ -46,9 +50,13 @@ type WebFetchOptions struct {
 // responses or slow servers. Agents can override per call via the
 // options struct, but the ceilings apply.
 const (
-	DefaultWebFetchMaxBytes       int64 = 2 * 1024 * 1024 // 2 MiB
+	DefaultWebFetchMaxBytes       int64 = 200 * 1024 // 200 KB
 	DefaultWebFetchTimeoutSeconds int   = 10
 	MaxWebFetchTimeoutSeconds     int   = 60
+
+	// MaxToolOutputChars caps the final string returned to the LLM.
+	// 30K chars ≈ 7.5K tokens — keeps tool results within context budget.
+	MaxToolOutputChars = 30000
 )
 
 // WebFetch executes the web_fetch tool: HTTP GET the URL, read up to
@@ -61,12 +69,12 @@ const (
 // required for the US-AR-014 e2e assertion "fetch https://example.com
 // and return the page title" → response contains "Example Domain".
 func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
-	url := strings.TrimSpace(opts.URL)
-	if url == "" {
+	rawURL := strings.TrimSpace(opts.URL)
+	if rawURL == "" {
 		return "", errors.New("web_fetch: url is required")
 	}
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return "", fmt.Errorf("web_fetch: url must start with http:// or https://, got %q", url)
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return "", fmt.Errorf("web_fetch: url must start with http:// or https://, got %q", rawURL)
 	}
 
 	maxBytes := opts.MaxBytes
@@ -85,9 +93,9 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
-		return "", fmt.Errorf("web_fetch: build request for %s: %w", url, err)
+		return "", fmt.Errorf("web_fetch: build request for %s: %w", rawURL, err)
 	}
 	// Identify ourselves so remote services can rate-limit sensibly. No
 	// contact URL until Phase 3 when we can point it at a public docs page.
@@ -101,18 +109,44 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("web_fetch: GET %s: %w", url, err)
+		return "", fmt.Errorf("web_fetch: GET %s: %w", rawURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
 	if err != nil {
-		return "", fmt.Errorf("web_fetch: read body from %s: %w", url, err)
+		return "", fmt.Errorf("web_fetch: read body from %s: %w", rawURL, err)
 	}
 	if resp.StatusCode >= webFetchErrorStatusThresh {
-		return "", fmt.Errorf("web_fetch: %s returned status %d: %s", url, resp.StatusCode, truncate(string(body), webFetchErrorBodyPreview))
+		return "", fmt.Errorf("web_fetch: %s returned status %d: %s", rawURL, resp.StatusCode, truncate(string(body), webFetchErrorBodyPreview))
 	}
-	return string(body), nil
+
+	content := string(body)
+
+	// Extract article text from HTML using Mozilla Readability algorithm.
+	// This strips navigation, ads, scripts, styles — keeping only the article content.
+	// For non-HTML responses (JSON, plain text), return as-is.
+	if isHTML(content) {
+		parsed, err := url.Parse(rawURL)
+		if err == nil {
+			article, readErr := readability.FromReader(bytes.NewReader(body), parsed)
+			if readErr == nil {
+				var sb strings.Builder
+				_ = article.RenderText(&sb)
+				extracted := sb.String()
+				if strings.TrimSpace(extracted) != "" {
+					content = extracted
+				}
+			}
+		}
+	}
+
+	// Cap output to prevent token explosion in LLM context.
+	if len(content) > MaxToolOutputChars {
+		content = content[:MaxToolOutputChars] + "\n\n[truncated — content exceeded 30K chars]"
+	}
+
+	return content, nil
 }
 
 // truncate trims s to at most n runes, appending an ellipsis marker when
@@ -126,4 +160,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// isHTML checks if content looks like HTML based on common markers.
+func isHTML(s string) bool {
+	lower := strings.ToLower(s[:min(len(s), 500)])
+	return strings.Contains(lower, "<!doctype html") ||
+		strings.Contains(lower, "<html") ||
+		strings.Contains(lower, "<head") ||
+		strings.Contains(lower, "<body")
 }
