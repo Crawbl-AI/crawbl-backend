@@ -56,6 +56,8 @@
 | 27  | BFS loads full graph per call     | `buildNodes` queries all drawers for a workspace with no caching. At 10K drawers, loads thousands of rows per traverse/tunnel/stats call.                       | Performance            |
 | 28  | `tokenEstimate` unused            | Defined in `l0_identity.go` but never called. Was intended for budget enforcement but not integrated.                                                           | Dead code              |
 | 29  | Diary agent name not sanitized    | `wing_{agentName}` constructed without normalizing agent name. Spaces or special chars create inconsistent wing names.                                          | Data consistency       |
+| 31  | Re-add pgvector HNSW index        | HNSW index removed — DigitalOcean basic CPUs lack AVX2, causing SIGILL crashes on INSERT. Re-add when cluster moves to premium/dedicated CPU nodes with AVX2.  | Performance (deferred) |
+| 32  | MCP audit log fails on memory tools | `mcp_audit_logs.output` is `jsonb` but typed handler results include `structuredContent` with characters that fail jsonb parsing. Memory tools work — only audit logging breaks. Fix: sanitize output in audit middleware or change column to `text`. | Silent audit data loss |
 
 ---
 
