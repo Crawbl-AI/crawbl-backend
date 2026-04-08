@@ -1,0 +1,118 @@
+// Package memory defines the core domain types for the MemPalace memory system,
+// including drawers, knowledge graph triples, and workspace statistics.
+package memory
+
+import "time"
+
+// MemoryType classifies extracted memories.
+type MemoryType string
+
+const (
+	MemoryTypeDecision   MemoryType = "decision"
+	MemoryTypePreference MemoryType = "preference"
+	MemoryTypeMilestone  MemoryType = "milestone"
+	MemoryTypeProblem    MemoryType = "problem"
+	MemoryTypeEmotional  MemoryType = "emotional"
+)
+
+// Workspace limits.
+const (
+	MaxDrawersPerWorkspace  = 10000
+	MaxEntitiesPerWorkspace = 5000
+	MaxTriplesPerWorkspace  = 50000
+	MaxContentLength        = 10000
+	MaxIdentityLength       = 2000
+)
+
+// Token budget for context injection (in characters, ~4 chars per token).
+const (
+	TokenBudgetL0    = 400   // Identity — never truncated
+	TokenBudgetL1    = 2000  // Essential story — truncated first
+	TokenBudgetL2    = 1200  // On-demand recall — truncated second
+	TokenBudgetTotal = 14000 // Hard cap on total output
+)
+
+// Drawer is a chunk of verbatim content stored in the palace.
+type Drawer struct {
+	ID          string    `db:"id"`
+	WorkspaceID string    `db:"workspace_id"`
+	Wing        string    `db:"wing"`
+	Room        string    `db:"room"`
+	Hall        string    `db:"hall"`
+	Content     string    `db:"content"`
+	Importance  float64   `db:"importance"`
+	MemoryType  string    `db:"memory_type"`
+	SourceFile  string    `db:"source_file"`
+	AddedBy     string    `db:"added_by"`
+	FiledAt     time.Time `db:"filed_at"`
+	CreatedAt   time.Time `db:"created_at"`
+}
+
+// DrawerSearchResult extends Drawer with similarity score from vector search.
+type DrawerSearchResult struct {
+	Drawer
+	Similarity float64 `db:"similarity"`
+}
+
+// Entity is a node in the knowledge graph.
+type Entity struct {
+	ID          string    `db:"id"`
+	WorkspaceID string    `db:"workspace_id"`
+	Name        string    `db:"name"`
+	Type        string    `db:"type"`
+	Properties  string    `db:"properties"` // JSON string
+	CreatedAt   time.Time `db:"created_at"`
+}
+
+// Triple is a temporal relationship edge in the knowledge graph.
+type Triple struct {
+	ID           string    `db:"id"`
+	WorkspaceID  string    `db:"workspace_id"`
+	Subject      string    `db:"subject"`
+	Predicate    string    `db:"predicate"`
+	Object       string    `db:"object"`
+	ValidFrom    *string   `db:"valid_from"`
+	ValidTo      *string   `db:"valid_to"`
+	Confidence   float64   `db:"confidence"`
+	SourceCloset string    `db:"source_closet"`
+	SourceFile   string    `db:"source_file"`
+	ExtractedAt  time.Time `db:"extracted_at"`
+}
+
+// TripleResult extends Triple with resolved entity names.
+type TripleResult struct {
+	Triple
+	SubjectName string `db:"subject_name"`
+	ObjectName  string `db:"object_name"`
+	Direction   string // "outgoing" or "incoming"
+	Current     bool   // valid_to is NULL
+}
+
+// Identity is the L0 identity text for a workspace.
+type Identity struct {
+	WorkspaceID string    `db:"workspace_id"`
+	Content     string    `db:"content"`
+	UpdatedAt   time.Time `db:"updated_at"`
+}
+
+// WingCount represents a wing with its drawer count.
+type WingCount struct {
+	Wing  string `db:"wing"`
+	Count int    `db:"count"`
+}
+
+// RoomCount represents a room with its drawer count.
+type RoomCount struct {
+	Wing  string `db:"wing"`
+	Room  string `db:"room"`
+	Count int    `db:"count"`
+}
+
+// KGStats holds knowledge graph statistics.
+type KGStats struct {
+	Entities          int      `json:"entities"`
+	Triples           int      `json:"triples"`
+	CurrentFacts      int      `json:"current_facts"`
+	ExpiredFacts      int      `json:"expired_facts"`
+	RelationshipTypes []string `json:"relationship_types"`
+}

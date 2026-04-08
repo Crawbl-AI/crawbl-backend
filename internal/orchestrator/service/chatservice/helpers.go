@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
+	memory "github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -243,12 +244,15 @@ func (s *service) savePlaceholder(ctx context.Context, sess *dbr.Session, msg *o
 	return mErr
 }
 
-// buildConversationContext creates a context summary from recent messages
-// for injection into agent calls. This gives agents awareness of the
-// conversation even though each runtime pod's memory is workspace-isolated.
+// buildConversationContext creates a context summary for injection into agent calls.
+// It is memory-first and token-budgeted:
+//  1. If a memoryStack is available, WakeUp (L0+L1) is prepended first.
+//  2. Recent messages fill the remaining budget up to memory.TokenBudgetTotal characters.
+//  3. L1 is truncated if the combined output would exceed the hard cap.
 func (s *service) buildConversationContext(
 	ctx context.Context,
 	sess *dbr.Session,
+	workspaceID string,
 	conversationID string,
 	lookups agentLookups,
 	limit int,
@@ -257,33 +261,75 @@ func (s *service) buildConversationContext(
 		limit = 20
 	}
 
+	// --- Memory layer (L0 + L1) ---
+	var memoryText string
+	if s.memoryStack != nil {
+		wakeUp, err := s.memoryStack.WakeUp(ctx, sess, workspaceID, "")
+		if err == nil {
+			memoryText = wakeUp
+		}
+	}
+
+	// --- Recent messages ---
 	messages, mErr := s.messageRepo.ListRecent(ctx, sess, conversationID, limit)
-	if mErr != nil || len(messages) == 0 {
+
+	var msgSB strings.Builder
+	if mErr == nil && len(messages) > 0 {
+		msgSB.WriteString("## Conversation Context\n")
+		msgSB.WriteString("Recent messages in this conversation (most recent last):\n\n")
+
+		for _, msg := range messages {
+			if msg.Status == orchestrator.MessageStatusSilent {
+				continue
+			}
+			text := msg.Content.Text
+			if text == "" {
+				continue
+			}
+			if len(text) > 500 {
+				text = text[:500] + "..."
+			}
+
+			sender := "User"
+			if msg.Role == orchestrator.MessageRoleAgent && msg.AgentID != nil {
+				if agent := lookups.byID[*msg.AgentID]; agent != nil {
+					sender = agent.Name
+				}
+			}
+			fmt.Fprintf(&msgSB, "**%s**: %s\n\n", sender, text)
+		}
+	}
+	messagesText := msgSB.String()
+
+	// --- Budget assembly ---
+	if memoryText == "" && messagesText == "" {
 		return ""
 	}
 
 	var sb strings.Builder
-	sb.WriteString("\n\n## Conversation Context\n")
-	sb.WriteString("Recent messages in this conversation (most recent last):\n\n")
-
-	for _, msg := range messages {
-		sender := "User"
-		if msg.Role == orchestrator.MessageRoleAgent && msg.AgentID != nil {
-			if agent := lookups.byID[*msg.AgentID]; agent != nil {
-				sender = agent.Name
+	if memoryText != "" {
+		sb.WriteString(memoryText)
+	}
+	if messagesText != "" {
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		// Remaining budget for messages after memory.
+		remaining := memory.TokenBudgetTotal - sb.Len()
+		if remaining > 0 {
+			if len(messagesText) > remaining {
+				messagesText = messagesText[:remaining]
 			}
+			sb.WriteString(messagesText)
 		}
-
-		text := msg.Content.Text
-		if len(text) > 500 {
-			text = text[:500] + "..."
-		}
-		if text == "" || msg.Status == orchestrator.MessageStatusSilent {
-			continue
-		}
-
-		fmt.Fprintf(&sb, "**%s**: %s\n\n", sender, text)
 	}
 
-	return sb.String()
+	// Hard cap on total output.
+	result := sb.String()
+	if len(result) > memory.TokenBudgetTotal {
+		// Truncate L1 portion to fit within budget while keeping L0 intact.
+		result = result[:memory.TokenBudgetTotal]
+	}
+
+	return "\n\n" + result
 }

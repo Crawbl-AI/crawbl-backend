@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/gocraft/dbr/v2"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 )
 
 // Convenience type aliases to keep method signatures short.
@@ -19,12 +21,14 @@ var errWorkspaceNotFound = errors.New("workspace not found")
 
 // service implements the Service interface.
 type service struct {
-	repos Repos
-	infra Infra
+	repos       Repos
+	infra       Infra
+	memoryStack layers.Stack
 }
 
 // New creates a new MCP service. Panics if any required dependency is nil.
-func New(repos Repos, infra Infra) Service {
+// memoryStack may be nil; when nil, context building falls back to recent messages only.
+func New(repos Repos, infra Infra, memoryStack layers.Stack) Service {
 	if repos.MCP == nil {
 		panic("mcpservice: MCP repo is nil")
 	}
@@ -52,7 +56,7 @@ func New(repos Repos, infra Infra) Service {
 	if infra.Logger == nil {
 		panic("mcpservice: Logger is nil")
 	}
-	return &service{repos: repos, infra: infra}
+	return &service{repos: repos, infra: infra, memoryStack: memoryStack}
 }
 
 // verifyWorkspace checks that the workspace belongs to the given user.

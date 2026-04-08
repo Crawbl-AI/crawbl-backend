@@ -122,7 +122,7 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 
 	var conversationContext string
 	if params.ConversationID != "" {
-		conversationContext = s.buildConversationContext(ctx, sess, params.ConversationID, contextMessageLimit)
+		conversationContext = s.buildConversationContext(ctx, sess, params.WorkspaceID, params.ConversationID, contextMessageLimit)
 	}
 
 	fullMessage := message

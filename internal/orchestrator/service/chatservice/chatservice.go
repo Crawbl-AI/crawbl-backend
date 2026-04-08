@@ -3,6 +3,7 @@ package chatservice
 import (
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -11,11 +12,13 @@ import (
 
 // New creates a new ChatService with the provided dependencies.
 // db is required for background operations (e.g. pending message cleanup).
+// memoryStack may be nil; when nil, context building falls back to recent messages only.
 func New(
 	db *dbr.Connection,
 	repos Repos,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
+	memoryStack layers.Stack,
 ) orchestratorservice.ChatService {
 	if db == nil {
 		panic("chat service db cannot be nil")
@@ -64,5 +67,6 @@ func New(
 		runtimeClient:     runtimeClient,
 		broadcaster:       broadcaster,
 		defaultAgents:     orchestrator.GetDefaultAgents(),
+		memoryStack:       memoryStack,
 	}
 }

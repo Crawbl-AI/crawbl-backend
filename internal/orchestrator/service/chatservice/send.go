@@ -115,7 +115,7 @@ func (s *service) sendSwarmMessage(
 	}
 
 	// Build conversation context so Manager sees recent chat history.
-	conversationContext := s.buildConversationContext(ctx, opts.Sess, conversation.ID, lookups, 20)
+	conversationContext := s.buildConversationContext(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, lookups, 20)
 
 	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, lookups.manager, lookups, conversationContext)
 }

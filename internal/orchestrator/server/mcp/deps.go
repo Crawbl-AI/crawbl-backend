@@ -7,8 +7,14 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/graph"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // mcpServerVersion is the version string reported in the MCP implementation info.
@@ -45,13 +51,20 @@ type auditService interface {
 }
 
 // Deps holds all dependencies needed by the MCP server and tool handlers.
-// It references services only — no repos or direct DB queries.
 type Deps struct {
 	DB           *dbr.Connection
 	Logger       *slog.Logger
 	SigningKey   string
 	MCPService   mcpservice.Service
 	AuditService auditService
+
+	// Memory palace dependencies.
+	DrawerRepo  drawer.Repo
+	KG          kg.Graph
+	MemoryStack layers.Stack
+	PalaceGraph graph.PalaceGraph
+	Classifier  extract.Classifier
+	Embedder    embed.Embedder
 }
 
 // newSession creates a new database session for MCP tool queries.

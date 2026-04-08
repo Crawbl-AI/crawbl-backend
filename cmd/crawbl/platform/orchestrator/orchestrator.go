@@ -17,6 +17,11 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/graph"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
@@ -45,6 +50,7 @@ import (
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -120,6 +126,28 @@ func runServer(ctx context.Context) error {
 		return err
 	}
 
+	// Memory system — constructed unconditionally; embedder is optional.
+	// When CRAWBL_EMBED_BASE_URL is empty the embedder and memoryStack remain
+	// nil, and downstream services fall back to messages-only context.
+	drawerRepo := drawer.NewPostgres()
+	kgGraph := kg.NewPostgres()
+	palaceGraph := graph.NewPostgres()
+	classifier := extract.NewClassifier()
+
+	var memoryStack layers.Stack
+	var embedder embed.Embedder
+	if baseURL := os.Getenv("CRAWBL_EMBED_BASE_URL"); baseURL != "" {
+		embedder = embed.NewProvider(embed.ProviderConfig{
+			BaseURL: baseURL,
+			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
+			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
+		})
+		memoryStack = layers.NewStack(drawerRepo, embedder)
+		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
+	} else {
+		logger.Info("memory stack disabled: CRAWBL_EMBED_BASE_URL not set")
+	}
+
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
 		return err
@@ -149,7 +177,7 @@ func runServer(ctx context.Context) error {
 			AgentPrompts:  agentPromptsRepo,
 			AgentHistory:  agentHistoryRepo,
 		},
-		runtimeClient, broadcaster,
+		runtimeClient, broadcaster, memoryStack,
 	)
 	agentService := agentservice.New(
 		agentservice.Repos{
@@ -182,7 +210,7 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster)
+	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgGraph, palaceGraph, classifier, embedder, memoryStack)
 
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
@@ -320,6 +348,12 @@ func buildMCPHandler(
 	artifactRepo artifactrepo.Repo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
+	drawerRepo drawer.Repo,
+	kgGraph kg.Graph,
+	palaceGraph graph.PalaceGraph,
+	classifier extract.Classifier,
+	embedder embed.Embedder,
+	memoryStack layers.Stack,
 ) http.Handler {
 	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
 	if signingKey == "" {
@@ -365,6 +399,7 @@ func buildMCPHandler(
 			Broadcaster:   broadcaster,
 			WorkflowExec:  workflowSvc,
 		},
+		memoryStack,
 	)
 
 	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
@@ -373,6 +408,12 @@ func buildMCPHandler(
 		SigningKey:   signingKey,
 		MCPService:   mcpSvc,
 		AuditService: auditSvc,
+		DrawerRepo:   drawerRepo,
+		KG:           kgGraph,
+		MemoryStack:  memoryStack,
+		PalaceGraph:  palaceGraph,
+		Classifier:   classifier,
+		Embedder:     embedder,
 	})
 	logger.Info("MCP server enabled at /mcp/v1")
 	return handler

@@ -52,4 +52,7 @@ func registerTools(server *sdkmcp.Server, deps *Deps) {
 
 	// Workflow engine
 	registerWorkflowTools(server, deps)
+
+	// Memory palace
+	registerMemoryTools(server, deps)
 }

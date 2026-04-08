@@ -6,8 +6,8 @@ cd "${repo_root}"
 
 echo "Running golangci-lint on staged files..."
 
-# Get staged .go files (excluding deleted).
-staged_go_files=$(git diff --cached --name-only --diff-filter=d -- '*.go' || true)
+# Get staged .go files (excluding deleted and vendor).
+staged_go_files=$(git diff --cached --name-only --diff-filter=d -- '*.go' | grep -v '^vendor/' || true)
 if [ -z "${staged_go_files}" ]; then
   echo "No Go files staged, skipping lint."
   exit 0
