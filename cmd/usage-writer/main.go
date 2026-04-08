@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -59,8 +60,14 @@ func main() {
 func run(ctx context.Context) error {
 	logger := slog.Default()
 
-	// ClickHouse connection
+	// ClickHouse connection.
+	// If CLICKHOUSE_PASSWORD is set separately, inject it into the DSN.
 	chDSN := envOrDefault("CLICKHOUSE_DSN", "clickhouse://localhost:9000/default")
+	if pw := os.Getenv("CLICKHOUSE_PASSWORD"); pw != "" && !strings.Contains(chDSN, "@") {
+		// DSN has no credentials — inject user:pass before the host.
+		user := envOrDefault("CLICKHOUSE_USER", "default")
+		chDSN = strings.Replace(chDSN, "clickhouse://", "clickhouse://"+user+":"+pw+"@", 1)
+	}
 	chDB, err := sql.Open("clickhouse", chDSN)
 	if err != nil {
 		return fmt.Errorf("clickhouse connect failed: %w", err)
