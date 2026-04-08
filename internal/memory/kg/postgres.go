@@ -40,7 +40,7 @@ func (g *postgresGraph) AddEntity(ctx context.Context, sess database.SessionRunn
 
 	_, err := sess.InsertBySql(
 		`INSERT INTO memory_entities (id, workspace_id, name, type, properties, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (workspace_id, id) DO UPDATE
 		   SET name = EXCLUDED.name,
 		       type = EXCLUDED.type,
@@ -108,7 +108,7 @@ func (g *postgresGraph) AddTriple(ctx context.Context, sess database.SessionRunn
 	_, err = sess.InsertBySql(
 		`INSERT INTO memory_triples
 		   (id, workspace_id, subject, predicate, object, valid_from, valid_to, confidence, source_closet, source_file, extracted_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, workspaceID, subID, t.Predicate, objID,
 		t.ValidFrom, t.ValidTo, t.Confidence, t.SourceCloset, t.SourceFile, now,
 	).ExecContext(ctx)

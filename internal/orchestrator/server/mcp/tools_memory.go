@@ -659,8 +659,8 @@ func newMemorySetIdentityHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySetIden
 		sess := deps.newSession()
 		_, err := sess.InsertBySql(
 			`INSERT INTO memory_identities (workspace_id, content, updated_at)
-			 VALUES ($1, $2, NOW())
-			 ON CONFLICT (workspace_id) DO UPDATE SET content = $2, updated_at = NOW()`,
+			 VALUES (?, ?, NOW())
+			 ON CONFLICT (workspace_id) DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()`,
 			workspaceID, input.Content,
 		).ExecContext(ctx)
 		if err != nil {

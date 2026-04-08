@@ -30,7 +30,7 @@ func (r *postgresRepo) Add(ctx context.Context, sess database.SessionRunner, d *
 		vec := pgvector.NewVector(embedding)
 		_, err := sess.InsertBySql(
 			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, filed_at, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
 			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.FiledAt, d.CreatedAt,
 		).ExecContext(ctx)
@@ -39,7 +39,7 @@ func (r *postgresRepo) Add(ctx context.Context, sess database.SessionRunner, d *
 
 	_, err = sess.InsertBySql(
 		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, filed_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
 		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.FiledAt, d.CreatedAt,
 	).ExecContext(ctx)
