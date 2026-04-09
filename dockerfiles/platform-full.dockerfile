@@ -26,11 +26,21 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
     go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/crawbl ./cmd/crawbl
 
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
+    go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/memory-process ./cmd/crawbl/jobs/memory-process
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
+    go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/memory-maintain ./cmd/crawbl/jobs/memory-maintain
+
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /
 
 COPY --from=builder /out/crawbl /crawbl
+COPY --from=builder /out/memory-process /memory-process
+COPY --from=builder /out/memory-maintain /memory-maintain
 COPY --from=builder /build/migrations /migrations
 
 USER nonroot:nonroot
