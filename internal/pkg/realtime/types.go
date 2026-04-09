@@ -189,7 +189,7 @@ type ArtifactEventPayload struct {
 type UsageUpdatePayload struct {
 	AgentID          string `json:"agent_id"`
 	ConversationID   string `json:"conversation_id"`
-	MessageID        string `json:"message_id,omitempty"`
+	MessageID        string `json:"message_id"`
 	Model            string `json:"model"`
 	PromptTokens     int32  `json:"prompt_tokens"`
 	CompletionTokens int32  `json:"completion_tokens"`
