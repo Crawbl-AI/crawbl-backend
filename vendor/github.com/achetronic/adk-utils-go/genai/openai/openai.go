@@ -148,6 +148,10 @@ func (m *Model) generateStream(ctx context.Context, req *model.LLMRequest) iter.
 			yield(nil, err)
 			return
 		}
+		// Request token usage in streaming responses so UsageMetadata is populated.
+		params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		}
 
 		stream := m.client.Chat.Completions.NewStreaming(ctx, params)
 		acc := openai.ChatCompletionAccumulator{}
