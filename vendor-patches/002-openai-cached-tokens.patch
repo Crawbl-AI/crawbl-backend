@@ -1,0 +1,11 @@
+--- a/vendor/github.com/achetronic/adk-utils-go/genai/openai/openai.go
++++ b/vendor/github.com/achetronic/adk-utils-go/genai/openai/openai.go
+@@ -675,6 +675,8 @@
+ 	return &genai.GenerateContentResponseUsageMetadata{
+ 		PromptTokenCount:     int32(usage.PromptTokens),
+ 		CandidatesTokenCount: int32(usage.CompletionTokens),
+ 		TotalTokenCount:      int32(usage.TotalTokens),
++		// Crawbl patch: forward OpenAI prompt cache hits to genai metadata.
++		CachedContentTokenCount: int32(usage.PromptTokensDetails.CachedTokens),
+ 	}
+ }

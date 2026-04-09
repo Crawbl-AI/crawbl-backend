@@ -676,6 +676,8 @@ func convertUsageMetadata(usage openai.CompletionUsage) *genai.GenerateContentRe
 		PromptTokenCount:     int32(usage.PromptTokens),
 		CandidatesTokenCount: int32(usage.CompletionTokens),
 		TotalTokenCount:      int32(usage.TotalTokens),
+		// Crawbl patch: forward OpenAI prompt cache hits to genai metadata.
+		CachedContentTokenCount: int32(usage.PromptTokensDetails.CachedTokens),
 	}
 }
 
