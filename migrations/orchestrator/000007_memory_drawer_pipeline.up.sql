@@ -23,4 +23,5 @@ CREATE INDEX idx_drawers_state ON memory_drawers (state) WHERE state = 'raw';
 CREATE INDEX idx_drawers_superseded ON memory_drawers (superseded_by) WHERE superseded_by IS NOT NULL;
 
 -- Entity embeddings for semantic KG lookup fallback.
-ALTER TABLE memory_entities ADD COLUMN embedding vector(1536);
+-- public.vector required because pgvector extension lives in public schema.
+ALTER TABLE memory_entities ADD COLUMN embedding public.vector(1536);
