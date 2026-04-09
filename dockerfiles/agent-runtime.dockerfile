@@ -32,7 +32,8 @@ COPY proto/ proto/
 COPY migrations/ migrations/
 
 # Apply vendor patches (fixes third-party bugs without forking upstream).
-RUN for p in vendor-patches/*.patch; do [ -f "$p" ] && patch -p1 < "$p" || true; done
+RUN apt-get update -qq && apt-get install -y -qq patch >/dev/null 2>&1; \
+    for p in vendor-patches/*.patch; do [ -f "$p" ] && patch -p1 < "$p"; done
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
