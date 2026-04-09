@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
@@ -335,7 +336,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 	return memories, nil
 }
 
-// DeleteAgentMemory removes a memory from the agent's agent runtime.
+// DeleteAgentMemory removes a memory drawer by ID.
 func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.Key == "" {
 		return merrors.ErrInvalidInput
@@ -351,6 +352,15 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
+	// Delete from memory_drawers (where memory_add_drawer tool writes).
+	if s.drawerRepo != nil {
+		if err := s.drawerRepo.Delete(ctx, opts.Sess, agent.WorkspaceID, opts.Key); err != nil {
+			return merrors.WrapStdServerError(err, "delete drawer memory")
+		}
+		return nil
+	}
+
+	// Fallback to runtime gRPC if drawer repo not configured.
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     agent.WorkspaceID,
@@ -366,7 +376,7 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 	})
 }
 
-// CreateAgentMemory stores a memory in the agent's agent runtime.
+// CreateAgentMemory stores a memory as a drawer in the memory palace.
 func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.Key == "" || opts.Content == "" {
 		return merrors.ErrInvalidInput
@@ -382,6 +392,38 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
+	// Write to memory_drawers (where memory_add_drawer tool writes).
+	if s.drawerRepo != nil {
+		now := time.Now().UTC()
+		wing := memory.DefaultWing
+		room := memory.DefaultRoom
+		if opts.Category != "" {
+			parts := strings.SplitN(opts.Category, "/", 2)
+			wing = parts[0]
+			if len(parts) > 1 {
+				room = parts[1]
+			}
+		}
+
+		drawer := &memory.Drawer{
+			ID:          opts.Key,
+			WorkspaceID: agent.WorkspaceID,
+			Wing:        wing,
+			Room:        room,
+			Content:     opts.Content,
+			Importance:  memory.DefaultImportance,
+			MemoryType:  string(memory.MemoryTypePreference),
+			AddedBy:     memory.DefaultAddedBy,
+			FiledAt:     now,
+			CreatedAt:   now,
+		}
+		if err := s.drawerRepo.Add(ctx, opts.Sess, drawer, nil); err != nil {
+			return merrors.WrapStdServerError(err, "create drawer memory")
+		}
+		return nil
+	}
+
+	// Fallback to runtime gRPC if drawer repo not configured.
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     agent.WorkspaceID,

@@ -24,6 +24,14 @@ const (
 	MaxIdentityLength       = 2000
 )
 
+// Drawer defaults for programmatic creation (mobile REST, MCP tools).
+const (
+	DefaultWing       = "user"
+	DefaultRoom       = "general"
+	DefaultImportance = 3.0
+	DefaultAddedBy    = "mobile"
+)
+
 // Token budget for context injection (in characters, ~4 chars per token).
 const (
 	TokenBudgetL0    = 400   // Identity — never truncated

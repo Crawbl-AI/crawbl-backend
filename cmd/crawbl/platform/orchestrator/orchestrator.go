@@ -149,7 +149,7 @@ func runServer(ctx context.Context) error {
 		memoryStack = layers.NewStack(drawerRepo, embedder)
 		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
 	} else {
-		logger.Info("memory stack disabled: CRAWBL_EMBED_BASE_URL not set")
+		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
 	}
 
 	runtimeClient, err := buildRuntimeClient(logger)
