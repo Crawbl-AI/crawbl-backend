@@ -567,6 +567,11 @@ type ChatWriter interface {
 	// Call this once at server startup. The returned channel is closed when the
 	// goroutine exits, allowing graceful shutdown synchronization.
 	StartPendingMessageCleanup(ctx context.Context) <-chan struct{}
+
+	// StartIngestWorker starts the memory auto-ingest worker that drains the
+	// ingest queue and persists conversation exchanges as memory drawers.
+	// It is a no-op when the drawer repo is not configured.
+	StartIngestWorker(ctx context.Context)
 }
 
 // ChatService is the full interface combining read and write operations.

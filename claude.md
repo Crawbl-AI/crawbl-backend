@@ -20,6 +20,8 @@ The backend sits between the Flutter app and each user's agent runtime. It owns 
 - Enforce rate limits, plans, and usage attribution
 - Record audit logs for tool usage and write actions
 - Later: broker A2A communication between user swarms
+- Use Github Issues to write tasks to the Backlog. All issues are tagged with priority labels (P1: critical, P2: important, P3: tech-debt) and topic labels (streaming, memory, mobile-api, infrastructure, performance,  
+  security)
 
 ## Rules
 
@@ -103,6 +105,7 @@ The backend sits between the Flutter app and each user's agent runtime. It owns 
 CI is a **validation gate**, not the build/deploy pipeline.
 
 On push to `main`, `deploy-dev.yml` runs two parallel jobs:
+
 - e2e tests against the live dev cluster
 - release tagging
 
@@ -132,6 +135,7 @@ crawbl app deploy platform --tag v1.2.3
 Semver logic: finds the last `v*` tag, scans commits since then — `feat:` triggers a minor bump, `!:` (breaking) triggers a major bump, everything else is a patch bump.
 
 Each `crawbl app deploy` call for backend components (platform, auth-filter):
+
 1. Verifies working tree is clean and pushed
 2. Builds the Docker image locally
 3. Pushes to DOCR (`registry.digitalocean.com/crawbl/`)
@@ -147,6 +151,7 @@ For **docs** and **website**, steps 2-4 and 7 are skipped. Instead, the deploy r
 `crawbl setup` verifies required tools: `docker`, `yq`, `gh`. `.mise.toml` includes `yq`, `protoc`, and the standard Go/k8s/cloud toolchain. Run `mise install` inside `crawbl-backend/` after a fresh clone to provision `protoc` and the rest.
 
 **Protobuf / gRPC toolchain** (required by `internal/agentruntime/` and `cmd/crawbl-agent-runtime/`):
+
 - `protoc` — installed via `mise install` (pinned in `.mise.toml`) or `brew install protobuf`.
 - `protoc-gen-go` and `protoc-gen-go-grpc` — Go plugins, installed by the `make generate` target or manually with:
   ```bash
@@ -215,34 +220,3 @@ Get the postgres password: `kubectl get secret backend-postgresql-auth -n backen
 
 - Build → Docker images → Update ArgoCD tags → Wait for sync → Run e2e
 - If e2e fails in CI, fix the code and push again; the cluster stays on the latest deployed version
-
-## Current API Slice
-
-- The implemented orchestrator slice currently covers:
-  - `GET /v1/health`
-  - `GET /v1/legal`
-  - `POST /v1/fcm-token`
-  - `POST /v1/auth/sign-in`
-  - `POST /v1/auth/sign-up`
-  - `DELETE /v1/auth/delete`
-  - `GET /v1/users/profile`
-  - `PATCH /v1/users`
-  - `GET /v1/users/legal`
-  - `POST /v1/users/legal/accept`
-  - `GET /v1/workspaces`
-  - `GET /v1/workspaces/{id}`
-  - `GET /v1/workspaces/{workspaceId}/agents`
-  - `GET /v1/workspaces/{workspaceId}/tools`
-  - `GET /v1/workspaces/{workspaceId}/conversations`
-  - `GET /v1/workspaces/{workspaceId}/conversations/{id}`
-  - `GET /v1/workspaces/{workspaceId}/conversations/{id}/messages`
-  - `POST /v1/workspaces/{workspaceId}/conversations/{id}/messages` — returns `[]*Message` (multi-agent turns)
-  - `GET /v1/models`
-  - `GET /v1/agents/{id}`
-  - `GET /v1/agents/{id}/details`
-  - `GET /v1/agents/{id}/history`
-  - `GET /v1/agents/{id}/settings`
-  - `GET /v1/agents/{id}/tools`
-- The minimal local verification path is `make test-e2e-one FILE=01_orchestrator_smoke.yml`
-- `POST /v1/auth/sign-up` and `POST /v1/auth/sign-in` should best-effort seed the default workspace `UserSwarm` without waiting for `Verified=True`
-- Mobile should poll `GET /v1/workspaces` or `GET /v1/workspaces/{id}` for `runtime.status` / `runtime.verified` while the first swarm is provisioning

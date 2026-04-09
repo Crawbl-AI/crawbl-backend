@@ -3,9 +3,11 @@ package chatservice
 import (
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -23,6 +25,8 @@ func New(
 	memoryStack layers.Stack,
 	pricingCache *pricing.Cache,
 	usagePublisher *usagepublisher.Publisher,
+	memoryPublisher *memorypublisher.Publisher,
+	memDeps MemoryDeps,
 ) orchestratorservice.ChatService {
 	if db == nil {
 		panic("chat service db cannot be nil")
@@ -75,5 +79,12 @@ func New(
 		memoryStack:       memoryStack,
 		pricingCache:      pricingCache,
 		usagePublisher:    usagePublisher,
+		memoryPublisher:   memoryPublisher,
+		drawerRepo:        memDeps.DrawerRepo,
+		classifier:        memDeps.Classifier,
+		llmClassifier:     memDeps.LLMClassifier,
+		embedder:          memDeps.Embedder,
+		kgGraph:           memDeps.KGGraph,
+		ingestQueue:       make(chan ingestWork, memory.IngestQueueSize),
 	}
 }

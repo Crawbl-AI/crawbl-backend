@@ -1,0 +1,11 @@
+{
+  "patterns": [
+    "hi", "hello", "hey", "thanks", "thank you",
+    "ok", "okay", "sure", "yes", "no",
+    "bye", "goodbye", "thx", "ty",
+    "yep", "nope", "yeah", "nah",
+    "yo", "sup", "cool", "nice",
+    "got it", "sounds good", "alright"
+  ],
+  "min_length": 20
+}

@@ -14,6 +14,9 @@ type Repo interface {
 	// Add inserts a drawer with its embedding. Checks workspace limits.
 	Add(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
 
+	// AddIdempotent inserts a drawer with ON CONFLICT DO NOTHING semantics.
+	AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
+
 	// Delete removes a drawer by ID within a workspace.
 	Delete(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
 
@@ -43,4 +46,38 @@ type Repo interface {
 
 	// ListByWorkspace returns all drawers for a workspace, ordered by filed_at DESC.
 	ListByWorkspace(ctx context.Context, sess database.SessionRunner, workspaceID string, limit, offset int) ([]memory.Drawer, error)
+
+	// ListByState returns drawers in a given state, ordered by created_at ASC.
+	// Uses FOR UPDATE SKIP LOCKED for concurrent worker safety.
+	ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error)
+
+	// UpdateState sets the processing state of a drawer.
+	UpdateState(ctx context.Context, sess database.SessionRunner, drawerID, state string) error
+
+	// UpdateClassification sets the memory type, summary, room, and importance after LLM classification.
+	UpdateClassification(ctx context.Context, sess database.SessionRunner, drawerID, memoryType, summary, room string, importance float64) error
+
+	// SetSupersededBy marks a drawer as superseded by another drawer.
+	SetSupersededBy(ctx context.Context, sess database.SessionRunner, drawerID, supersededBy string) error
+
+	// SetClusterID assigns a drawer to a cluster.
+	SetClusterID(ctx context.Context, sess database.SessionRunner, drawerID, clusterID string) error
+
+	// TouchAccess updates last_accessed_at and increments access_count for a drawer.
+	TouchAccess(ctx context.Context, sess database.SessionRunner, drawerID string) error
+
+	// IncrementRetryCount bumps the retry counter for a drawer.
+	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, drawerID string) error
+
+	// DecayImportance reduces importance for old, unaccessed drawers.
+	DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error)
+
+	// PruneLowImportance deletes low-importance, low-access drawers while keeping a minimum count.
+	PruneLowImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, threshold float64, minAccessCount, keepMin int) (int, error)
+
+	// ActiveWorkspaces returns workspace IDs with recent activity.
+	ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error)
+
+	// GetByID returns a single drawer by ID within a workspace.
+	GetByID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) (*memory.Drawer, error)
 }

@@ -7,11 +7,16 @@ package chatservice
 import (
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -32,6 +37,16 @@ type Repos struct {
 	Usage         usagerepo.Repo
 }
 
+// MemoryDeps groups the memory pipeline dependencies.
+// All fields are optional — when nil, the corresponding feature is disabled.
+type MemoryDeps struct {
+	DrawerRepo    drawer.Repo
+	Classifier    extract.Classifier
+	LLMClassifier extract.LLMClassifier
+	Embedder      embed.Embedder
+	KGGraph       kg.Graph
+}
+
 // service implements the ChatService interface.
 type service struct {
 	db                *dbr.Connection
@@ -50,4 +65,20 @@ type service struct {
 	memoryStack       layers.Stack
 	pricingCache      *pricing.Cache
 	usagePublisher    *usagepublisher.Publisher
+	memoryPublisher   *memorypublisher.Publisher
+	// Memory pipeline dependencies.
+	drawerRepo    drawer.Repo
+	classifier    extract.Classifier
+	llmClassifier extract.LLMClassifier
+	embedder      embed.Embedder
+	kgGraph       kg.Graph
+	ingestQueue   chan ingestWork
+}
+
+// ingestWork represents a unit of work for the memory auto-ingest pipeline.
+type ingestWork struct {
+	workspaceID string
+	agentSlug   string
+	userText    string
+	replies     []*orchestrator.Message
 }

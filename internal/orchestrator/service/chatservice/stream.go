@@ -138,6 +138,16 @@ func (s *service) callAgentStreaming(
 
 	// 4. Finalize.
 	replies := ss.finalize()
+
+	// Auto-ingest conversation into MemPalace memory (non-blocking).
+	if len(replies) > 0 {
+		agentID := ""
+		if agent != nil {
+			agentID = agent.ID
+		}
+		s.autoIngestConversation(wsID, agentID, opts.Content.Text, replies)
+	}
+
 	if len(replies) == 0 {
 		return nil, nil
 	}

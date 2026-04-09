@@ -48,6 +48,7 @@ import (
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
@@ -146,7 +147,7 @@ func runServer(ctx context.Context) error {
 			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
 			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
 		})
-		memoryStack = layers.NewStack(drawerRepo, embedder)
+		memoryStack = layers.NewStack(drawerRepo, embedder, kgGraph)
 		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
 	} else {
 		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
@@ -185,6 +186,7 @@ func runServer(ctx context.Context) error {
 		}
 	}()
 	usagePublisher := usagepublisher.New(natsClient, logger)
+	memoryPublisher := memorypublisher.New(natsClient, logger)
 
 	chatService := chatservice.New(
 		db,
@@ -199,7 +201,12 @@ func runServer(ctx context.Context) error {
 			AgentHistory:  agentHistoryRepo,
 			Usage:         usagerepo.New(),
 		},
-		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
+		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher, memoryPublisher,
+		chatservice.MemoryDeps{
+			DrawerRepo: drawerRepo,
+			Classifier: classifier,
+			Embedder:   embedder,
+		},
 	)
 	agentService := agentservice.New(
 		agentservice.Repos{
@@ -216,6 +223,9 @@ func runServer(ctx context.Context) error {
 	)
 	integrationConnRepo := integrationconnrepo.New()
 	integrationService := integrationservice.New(logger, integrationConnRepo)
+
+	// Start memory auto-ingest worker (hot path).
+	chatService.StartIngestWorker(ctx)
 
 	// Start background cleanup of orphaned pending messages.
 	// The done channel is closed when the goroutine exits, so we wait

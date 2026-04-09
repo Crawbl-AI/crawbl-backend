@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gocraft/dbr/v2"
 	"github.com/pgvector/pgvector-go"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
@@ -29,19 +30,19 @@ func (r *postgresRepo) Add(ctx context.Context, sess database.SessionRunner, d *
 	if len(embedding) > 0 {
 		vec := pgvector.NewVector(embedding)
 		_, err := sess.InsertBySql(
-			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, filed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
-			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.FiledAt, d.CreatedAt,
+			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
 		).ExecContext(ctx)
 		return err
 	}
 
 	_, err = sess.InsertBySql(
-		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, filed_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
-		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.FiledAt, d.CreatedAt,
+		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
 	).ExecContext(ctx)
 	return err
 }
@@ -63,7 +64,7 @@ func (r *postgresRepo) Search(ctx context.Context, sess database.SessionRunner, 
 
 	vec := pgvector.NewVector(queryEmbedding)
 
-	where := "workspace_id = $2 AND embedding IS NOT NULL"
+	where := "workspace_id = $2 AND embedding IS NOT NULL AND (state IN ('raw', 'processed') OR state = '') AND superseded_by IS NULL"
 	args := []any{vec, workspaceID}
 	paramIdx := 3
 
@@ -82,6 +83,7 @@ func (r *postgresRepo) Search(ctx context.Context, sess database.SessionRunner, 
 	query := fmt.Sprintf(
 		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 		        source_file, added_by, filed_at, created_at,
+		        state, summary, added_by_agent,
 		        1 - (embedding <=> $1) AS similarity
 		 FROM memory_drawers
 		 WHERE %s
@@ -109,6 +111,7 @@ func (r *postgresRepo) CheckDuplicate(ctx context.Context, sess database.Session
 	vec := pgvector.NewVector(embedding)
 	query := `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 	                 source_file, added_by, filed_at, created_at,
+	                 state, summary, added_by_agent,
 	                 1 - (embedding <=> $1) AS similarity
 	          FROM memory_drawers
 	          WHERE workspace_id = $2 AND embedding IS NOT NULL
@@ -231,4 +234,172 @@ func (r *postgresRepo) GetByWingRoom(ctx context.Context, sess database.SessionR
 		return nil, fmt.Errorf("drawer: get by wing/room: %w", err)
 	}
 	return results, nil
+}
+
+func (r *postgresRepo) AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error {
+	if len(embedding) > 0 {
+		vec := pgvector.NewVector(embedding)
+		_, err := sess.InsertBySql(
+			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT DO NOTHING`,
+			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
+			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
+		).ExecContext(ctx)
+		return err
+	}
+
+	_, err := sess.InsertBySql(
+		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT DO NOTHING`,
+		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
+		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
+	).ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	var rows []memory.Drawer
+	_, err := sess.SelectBySql(
+		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
+		        source_file, added_by, filed_at, created_at, state, retry_count
+		 FROM memory_drawers
+		 WHERE workspace_id = ? AND state = ?
+		 ORDER BY created_at ASC
+		 LIMIT ?
+		 FOR UPDATE SKIP LOCKED`,
+		workspaceID, state, limit,
+	).LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("drawer: list by state: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *postgresRepo) UpdateState(ctx context.Context, sess database.SessionRunner, drawerID, state string) error {
+	_, err := sess.Update("memory_drawers").
+		Set("state", state).
+		Where("id = ?", drawerID).
+		ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) UpdateClassification(ctx context.Context, sess database.SessionRunner, drawerID, memoryType, summary, room string, importance float64) error {
+	_, err := sess.Update("memory_drawers").
+		Set("memory_type", memoryType).
+		Set("summary", summary).
+		Set("room", room).
+		Set("importance", importance).
+		Where("id = ?", drawerID).
+		ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) SetSupersededBy(ctx context.Context, sess database.SessionRunner, drawerID, supersededBy string) error {
+	_, err := sess.Update("memory_drawers").
+		Set("superseded_by", supersededBy).
+		Where("id = ?", drawerID).
+		ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) SetClusterID(ctx context.Context, sess database.SessionRunner, drawerID, clusterID string) error {
+	_, err := sess.Update("memory_drawers").
+		Set("cluster_id", clusterID).
+		Where("id = ?", drawerID).
+		ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) TouchAccess(ctx context.Context, sess database.SessionRunner, drawerID string) error {
+	_, err := sess.Update("memory_drawers").
+		Set("last_accessed_at", dbr.Expr("NOW()")).
+		Set("access_count", dbr.Expr("access_count + 1")).
+		Where("id = ?", drawerID).
+		ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) IncrementRetryCount(ctx context.Context, sess database.SessionRunner, drawerID string) error {
+	_, err := sess.Update("memory_drawers").
+		Set("retry_count", dbr.Expr("retry_count + 1")).
+		Where("id = ?", drawerID).
+		ExecContext(ctx)
+	return err
+}
+
+func (r *postgresRepo) DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error) {
+	res, err := sess.Update("memory_drawers").
+		Set("importance", dbr.Expr("GREATEST(importance * ?, ?)", factor, floor)).
+		Where("workspace_id = ?", workspaceID).
+		Where("state = ?", "processed").
+		Where("importance > ?", floor).
+		Where(dbr.Expr("created_at < NOW() - INTERVAL '1 day' * ?", olderThanDays)).
+		Where(dbr.Expr("(last_accessed_at IS NULL OR last_accessed_at < NOW() - INTERVAL '1 day' * ?)", skipAccessedWithinDays)).
+		ExecContext(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("drawer: decay importance: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("drawer: decay importance rows affected: %w", err)
+	}
+	return int(n), nil
+}
+
+func (r *postgresRepo) PruneLowImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, threshold float64, minAccessCount, keepMin int) (int, error) {
+	res, err := sess.DeleteFrom("memory_drawers").
+		Where(dbr.Expr(
+			`id IN (
+			   SELECT id FROM memory_drawers
+			   WHERE workspace_id = ? AND importance < ? AND access_count < ?
+			   ORDER BY importance ASC
+			   OFFSET ?
+			 )`,
+			workspaceID, threshold, minAccessCount, keepMin,
+		)).
+		ExecContext(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("drawer: prune low importance: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("drawer: prune low importance rows affected: %w", err)
+	}
+	return int(n), nil
+}
+
+func (r *postgresRepo) GetByID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) (*memory.Drawer, error) {
+	var d memory.Drawer
+	err := sess.Select("id", "workspace_id", "wing", "room", "hall", "content",
+		"importance", "memory_type", "source_file", "added_by", "added_by_agent",
+		"state", "summary", "last_accessed_at", "access_count", "superseded_by",
+		"cluster_id", "retry_count", "filed_at", "created_at").
+		From("memory_drawers").
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where("superseded_by IS NULL").
+		Where("state != 'merged'").
+		LoadOneContext(ctx, &d)
+	if err != nil {
+		return nil, fmt.Errorf("drawer: get by id: %w", err)
+	}
+	return &d, nil
+}
+
+func (r *postgresRepo) ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error) {
+	var ids []string
+	_, err := sess.SelectBySql(
+		`SELECT DISTINCT workspace_id FROM memory_drawers
+		 WHERE created_at > NOW() - INTERVAL '1 hour' * ?
+		    OR last_accessed_at > NOW() - INTERVAL '1 hour' * ?`,
+		withinHours, withinHours,
+	).LoadContext(ctx, &ids)
+	if err != nil {
+		return nil, fmt.Errorf("drawer: active workspaces: %w", err)
+	}
+	return ids, nil
 }
