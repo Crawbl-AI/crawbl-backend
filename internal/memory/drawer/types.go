@@ -69,6 +69,9 @@ type Repo interface {
 	// IncrementRetryCount bumps the retry counter for a drawer.
 	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, drawerID string) error
 
+	// BoostImportance increases importance of a drawer by delta, capped at maxImportance.
+	BoostImportance(ctx context.Context, sess database.SessionRunner, drawerID string, delta, maxImportance float64) error
+
 	// DecayImportance reduces importance for old, unaccessed drawers.
 	DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error)
 

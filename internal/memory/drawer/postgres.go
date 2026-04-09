@@ -390,6 +390,14 @@ func (r *postgresRepo) GetByID(ctx context.Context, sess database.SessionRunner,
 	return &d, nil
 }
 
+func (r *postgresRepo) BoostImportance(ctx context.Context, sess database.SessionRunner, drawerID string, delta, maxImportance float64) error {
+	_, err := sess.InsertBySql(
+		`UPDATE memory_drawers SET importance = LEAST(importance + ?, ?) WHERE id = ?`,
+		delta, maxImportance, drawerID,
+	).ExecContext(ctx)
+	return err
+}
+
 func (r *postgresRepo) ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error) {
 	var ids []string
 	_, err := sess.SelectBySql(

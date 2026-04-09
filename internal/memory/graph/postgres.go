@@ -10,11 +10,15 @@ import (
 
 const maxGraphResults = 50
 
-type postgresGraph struct{}
+type postgresGraph struct {
+	cache *graphCache
+}
 
 // NewPostgres returns a PalaceGraph backed by Postgres.
 func NewPostgres() PalaceGraph {
-	return &postgresGraph{}
+	return &postgresGraph{
+		cache: newGraphCache(),
+	}
 }
 
 // drawerMeta is a scan target for the aggregation query.
@@ -26,6 +30,10 @@ type drawerMeta struct {
 }
 
 func (g *postgresGraph) buildNodes(ctx context.Context, sess database.SessionRunner, workspaceID string) (map[string]*RoomNode, error) {
+	if cached, ok := g.cache.get(workspaceID); ok {
+		return cached, nil
+	}
+
 	var rows []drawerMeta
 	_, err := sess.Select("room", "wing", "hall", "COUNT(*) AS cnt").
 		From("memory_drawers").
@@ -59,6 +67,7 @@ func (g *postgresGraph) buildNodes(ctx context.Context, sess database.SessionRun
 		sort.Strings(node.Halls)
 	}
 
+	g.cache.set(workspaceID, nodes)
 	return nodes, nil
 }
 

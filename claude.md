@@ -20,6 +20,7 @@ The backend sits between the Flutter app and each user's agent runtime. It owns 
 - Enforce rate limits, plans, and usage attribution
 - Record audit logs for tool usage and write actions
 - Later: broker A2A communication between user swarms
+- ALWAYS read /Crawbl-AI/crawbl-docs/internal-docs/reference/api/endpoints.md if you make changes on API or Work with new ones
 - Use Github Issues to write tasks to the Backlog. All issues are tagged with priority labels (P1: critical, P2: important, P3: tech-debt) and topic labels (streaming, memory, mobile-api, infrastructure, performance,  
   security)
 

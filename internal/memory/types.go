@@ -193,6 +193,13 @@ func MemoryTypeToRoom(memoryType string) string {
 	}
 }
 
+// Reinforcement constants for boosting semantically similar drawers on add.
+const (
+	ReinforcementThreshold = 0.7
+	ReinforcementBoost     = 0.5
+	MaxImportance          = 5.0
+)
+
 // KGStats holds knowledge graph statistics.
 type KGStats struct {
 	Entities          int      `json:"entities"`

@@ -161,6 +161,117 @@ func (c *openAIClassifier) ClassifyAndExtract(ctx context.Context, content strin
 	return &result, nil
 }
 
+const batchClassifySystemPrompt = `You are a memory classifier. You will receive N numbered memory snippets.
+Classify each one and return a JSON array with exactly N objects, one per snippet, in order.
+Each object must have:
+- "memory_type": one of "decision", "preference", "milestone", "problem", "emotional", "fact", "task"
+- "importance": float 0.0-1.0 (how important is this to remember long-term)
+- "entities": array of {"name": string, "type": string} where type is "person", "tool", "concept", "project", or "organization"
+- "summary": one concise sentence summarizing the key point
+- "triples": array of {"subject": string, "predicate": string, "object": string} for relationships found
+Return ONLY a valid JSON array, no wrapper object.`
+
+// batchClassifyMaxTokens allows more room for N items in the response.
+const batchClassifyMaxTokens = 4096
+
+func (c *openAIClassifier) ClassifyBatch(ctx context.Context, contents []string) ([]*LLMClassification, error) {
+	if len(contents) == 0 {
+		return nil, nil
+	}
+
+	// Build numbered prompt.
+	input := fmt.Sprintf("Classify each of the following %d memory snippets:\n\n", len(contents))
+	for i, content := range contents {
+		input += fmt.Sprintf("%d.\n%s\n\n", i+1, content)
+	}
+
+	// Use a higher token budget for batch responses.
+	reqBody := chatRequest{
+		Model: c.model,
+		Messages: []chatMessage{
+			{Role: "system", Content: batchClassifySystemPrompt},
+			{Role: "user", Content: input},
+		},
+		MaxTokens:   batchClassifyMaxTokens,
+		Temperature: classifyTemperature,
+		// Note: json_object forces a single object; for arrays we rely on prompt and parse directly.
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("llm classify batch: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("llm classify batch: request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("llm classify batch: http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxLLMResponseBytes))
+	if err != nil {
+		return nil, fmt.Errorf("llm classify batch: read body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		preview := string(respBody)
+		if len(preview) > maxPreviewLen {
+			preview = preview[:maxPreviewLen]
+		}
+		return nil, fmt.Errorf("llm classify batch: status %d: %s", resp.StatusCode, preview)
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return nil, fmt.Errorf("llm classify batch: unmarshal response: %w", err)
+	}
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("llm classify batch: empty choices")
+	}
+
+	raw := chatResp.Choices[0].Message.Content
+
+	var results []*LLMClassification
+	if err := json.Unmarshal([]byte(raw), &results); err != nil || len(results) != len(contents) {
+		preview := raw
+		if len(preview) > maxPreviewLen {
+			preview = preview[:maxPreviewLen]
+		}
+		slog.Warn("llm classify batch: parse failed, falling back to individual calls",
+			"error", err, "got", len(results), "want", len(contents), "raw", preview)
+		return c.classifyBatchFallback(ctx, contents), nil
+	}
+
+	return results, nil
+}
+
+// classifyBatchFallback calls ClassifyAndExtract individually for each content.
+func (c *openAIClassifier) classifyBatchFallback(ctx context.Context, contents []string) []*LLMClassification {
+	results := make([]*LLMClassification, len(contents))
+	for i, content := range contents {
+		r, err := c.ClassifyAndExtract(ctx, content)
+		if err != nil {
+			slog.Warn("llm classify batch fallback: individual call failed", "index", i, "error", err)
+			summary := content
+			if len(summary) > 100 {
+				summary = summary[:100]
+			}
+			r = &LLMClassification{MemoryType: "fact", Importance: fallbackImportance, Summary: summary}
+		}
+		results[i] = r
+	}
+	return results
+}
+
 const conflictSystemPrompt = `Compare these two statements. Do they contradict each other?
 Return JSON: {"conflicts": true} or {"conflicts": false}
 Only return true if the statements make incompatible claims about the same topic.`

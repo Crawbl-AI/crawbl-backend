@@ -60,9 +60,40 @@ func RunProcess(ctx context.Context, deps ProcessDeps) (*ProcessResult, error) {
 			continue
 		}
 
+		// Collect all contents for a single batch LLM call per workspace.
+		contents := make([]string, len(drawers))
+		for i := range drawers {
+			contents[i] = drawers[i].Content
+		}
+
+		classifyCtx, cancelBatch := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
+		classifications, batchErr := deps.LLMClassifier.ClassifyBatch(classifyCtx, contents)
+		cancelBatch()
+
 		for i := range drawers {
 			d := &drawers[i]
-			if err := processOneDrawer(ctx, sess, deps, d); err != nil {
+
+			var classification *extract.LLMClassification
+			if batchErr != nil || i >= len(classifications) || classifications[i] == nil {
+				// Batch failed entirely or result missing for this index — fall back to individual call.
+				slog.Warn("memory-process: batch classify unavailable, falling back",
+					"drawer_id", d.ID, "workspace_id", wsID, "error", batchErr)
+				singleCtx, cancelSingle := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
+				classification, err = deps.LLMClassifier.ClassifyAndExtract(singleCtx, d.Content)
+				cancelSingle()
+				if err != nil {
+					slog.Warn("memory-process: drawer classify failed",
+						"drawer_id", d.ID, "workspace_id", d.WorkspaceID,
+						"retry_count", d.RetryCount, "error", err)
+					handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
+					result.Failed++
+					continue
+				}
+			} else {
+				classification = classifications[i]
+			}
+
+			if err := applyClassification(ctx, sess, deps, d, classification); err != nil {
 				slog.Warn("memory-process: drawer failed",
 					"drawer_id", d.ID, "workspace_id", d.WorkspaceID,
 					"retry_count", d.RetryCount, "error", err)
@@ -77,15 +108,9 @@ func RunProcess(ctx context.Context, deps ProcessDeps) (*ProcessResult, error) {
 	return result, nil
 }
 
-func processOneDrawer(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, d *memory.Drawer) error {
-	classifyCtx, cancel := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
-	defer cancel()
-
-	classification, err := deps.LLMClassifier.ClassifyAndExtract(classifyCtx, d.Content)
-	if err != nil {
-		return fmt.Errorf("classify: %w", err)
-	}
-
+// applyClassification persists a classification result and runs downstream steps
+// (entity linking, clustering, conflict detection) for a single drawer.
+func applyClassification(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, d *memory.Drawer, classification *extract.LLMClassification) error {
 	scaledImportance := classification.Importance * importanceScale
 	room := memory.MemoryTypeToRoom(classification.MemoryType)
 

@@ -616,6 +616,16 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			return nil, memoryAddDrawerOutput{Info: "failed to store memory"}, nil
 		}
 
+		// Reinforce similar memories.
+		if len(embedding) > 0 {
+			similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", 5)
+			for i := range similar {
+				if similar[i].ID != drawerID && similar[i].Similarity > memory.ReinforcementThreshold {
+					_ = deps.DrawerRepo.BoostImportance(ctx, sess, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
+				}
+			}
+		}
+
 		return nil, memoryAddDrawerOutput{
 			DrawerID:   drawerID,
 			MemoryType: memoryType,

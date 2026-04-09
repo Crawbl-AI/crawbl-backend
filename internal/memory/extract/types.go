@@ -45,6 +45,10 @@ type LLMClassifier interface {
 	// ClassifyAndExtract classifies content and extracts entities/relationships.
 	ClassifyAndExtract(ctx context.Context, content string) (*LLMClassification, error)
 
+	// ClassifyBatch classifies multiple content strings in a single LLM call.
+	// If the batch response cannot be parsed, it falls back to individual ClassifyAndExtract calls.
+	ClassifyBatch(ctx context.Context, contents []string) ([]*LLMClassification, error)
+
 	// DetectConflict determines if two pieces of content contradict each other.
 	DetectConflict(ctx context.Context, contentA, contentB string) (bool, error)
 
