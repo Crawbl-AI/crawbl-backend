@@ -213,10 +213,17 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 		"call_sequence", chunk.CallSequence,
 	)
 
+	// Resolve message ID from the agent's placeholder so mobile knows which message to attach usage to.
+	var usageMessageID string
+	if st := ss.resolveStreamReadOnly(chunk.AgentID); st != nil && st.placeholder != nil {
+		usageMessageID = st.placeholder.ID
+	}
+
 	// Emit real-time usage update to mobile via Socket.IO.
 	ss.svc.broadcaster.EmitUsageUpdate(ss.ctx, ss.wsID, realtime.UsageUpdatePayload{
 		AgentID:          chunk.AgentID,
 		ConversationID:   ss.convID,
+		MessageID:        usageMessageID,
 		Model:            chunk.Model,
 		PromptTokens:     chunk.PromptTokens,
 		CompletionTokens: chunk.CompletionTokens,
