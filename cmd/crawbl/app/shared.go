@@ -24,8 +24,53 @@ type buildOpts struct {
 	target     string // Docker build --target stage (empty = default)
 }
 
+// applyVendorPatches applies all .patch files from vendor-patches/ to the
+// working tree. Patches are applied with --check first to skip already-applied
+// patches (idempotent). This allows fixing third-party vendor bugs without
+// forking upstream repos.
+func applyVendorPatches(rootDir string) error {
+	patchDir := rootDir + "/vendor-patches"
+	entries, err := os.ReadDir(patchDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no patches directory — nothing to do
+		}
+		return fmt.Errorf("read vendor-patches: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || len(entry.Name()) < 7 || entry.Name()[len(entry.Name())-6:] != ".patch" {
+			continue
+		}
+		patchPath := patchDir + "/" + entry.Name()
+
+		// Check if already applied.
+		check := exec.CommandContext(context.Background(), "git", "apply", "--check", "--reverse", patchPath)
+		check.Dir = rootDir
+		if check.Run() == nil {
+			// Patch already applied — skip.
+			continue
+		}
+
+		out.Step(style.Docker, "Applying vendor patch: %s", entry.Name())
+		apply := exec.CommandContext(context.Background(), "git", "apply", patchPath)
+		apply.Dir = rootDir
+		apply.Stdout = os.Stdout
+		apply.Stderr = os.Stderr
+		if err := apply.Run(); err != nil {
+			return fmt.Errorf("vendor patch %s failed: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
 // runDockerBuild executes docker buildx build with the given options.
 func runDockerBuild(opts buildOpts) error {
+	// Apply vendor patches before building.
+	if err := applyVendorPatches(opts.contextDir); err != nil {
+		return err
+	}
+
 	imageRef := fmt.Sprintf("%s:%s", opts.imageRepo, opts.tag)
 	out.Step(style.Docker, "Building %s", imageRef)
 
