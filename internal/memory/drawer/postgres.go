@@ -188,6 +188,28 @@ func (r *postgresRepo) GetTopByImportance(ctx context.Context, sess database.Ses
 	return results, nil
 }
 
+func (r *postgresRepo) ListByWorkspace(ctx context.Context, sess database.SessionRunner, workspaceID string, limit, offset int) ([]memory.Drawer, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var rows []memory.Drawer
+	_, err := sess.Select("id", "workspace_id", "wing", "room", "hall", "content", "importance", "memory_type", "source_file", "added_by", "filed_at", "created_at").
+		From("memory_drawers").
+		Where("workspace_id = ?", workspaceID).
+		OrderBy("filed_at DESC").
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).
+		LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("drawer: list by workspace: %w", err)
+	}
+	return rows, nil
+}
+
 func (r *postgresRepo) GetByWingRoom(ctx context.Context, sess database.SessionRunner, workspaceID, wing, room string, limit int) ([]memory.Drawer, error) {
 	if limit <= 0 {
 		limit = 10

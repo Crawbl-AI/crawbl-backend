@@ -40,4 +40,7 @@ type Repo interface {
 
 	// GetByWingRoom returns drawers filtered by wing and/or room for L2 retrieval.
 	GetByWingRoom(ctx context.Context, sess database.SessionRunner, workspaceID, wing, room string, limit int) ([]memory.Drawer, error)
+
+	// ListByWorkspace returns all drawers for a workspace, ordered by filed_at DESC.
+	ListByWorkspace(ctx context.Context, sess database.SessionRunner, workspaceID string, limit, offset int) ([]memory.Drawer, error)
 }

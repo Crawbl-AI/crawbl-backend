@@ -210,6 +210,7 @@ func runServer(ctx context.Context) error {
 			AgentPrompts:  agentPromptsRepo,
 			AgentHistory:  agentHistoryRepo,
 			Usage:         usagerepo.New(),
+			Drawer:        drawerRepo,
 		},
 		runtimeClient,
 	)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
@@ -255,7 +256,10 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 	}, nil
 }
 
-// GetAgentMemories retrieves memories from the agent's agent runtime.
+// GetAgentMemories retrieves memories for the agent's workspace.
+// It reads from memory_drawers (where memory_add_drawer tool writes) instead of
+// agent_memories (which is unused/empty). Falls back to the runtime gRPC path
+// if no drawer repo is configured.
 func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -271,6 +275,34 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 		return nil, mErr
 	}
 
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	// Read from memory_drawers (where memory_add_drawer tool writes)
+	// instead of agent_memories (which is unused/empty).
+	if s.drawerRepo != nil {
+		drawers, err := s.drawerRepo.ListByWorkspace(ctx, opts.Sess, agent.WorkspaceID, limit, opts.Offset)
+		if err != nil {
+			return nil, merrors.WrapStdServerError(err, "list drawer memories")
+		}
+
+		memories := make([]orchestratorservice.AgentMemory, 0, len(drawers))
+		for i := range drawers {
+			d := &drawers[i]
+			memories = append(memories, orchestratorservice.AgentMemory{
+				Key:       d.ID,
+				Content:   d.Content,
+				Category:  d.Wing + "/" + d.Room,
+				CreatedAt: d.CreatedAt.Format(time.RFC3339),
+				UpdatedAt: d.FiledAt.Format(time.RFC3339),
+			})
+		}
+		return memories, nil
+	}
+
+	// Fallback to runtime gRPC if drawer repo not configured.
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          opts.UserID,
 		WorkspaceID:     agent.WorkspaceID,
@@ -300,7 +332,6 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 			UpdatedAt: e.UpdatedAt,
 		})
 	}
-
 	return memories, nil
 }
 

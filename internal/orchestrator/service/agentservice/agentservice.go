@@ -41,5 +41,6 @@ func New(
 		agentHistoryRepo:  repos.AgentHistory,
 		runtimeClient:     runtimeClient,
 		usageRepo:         repos.Usage,
+		drawerRepo:        repos.Drawer,
 	}
 }
