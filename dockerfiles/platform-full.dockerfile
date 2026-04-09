@@ -12,10 +12,14 @@ WORKDIR /build
 
 COPY go.mod go.sum ./
 COPY vendor/ vendor/
+COPY vendor-patches/ vendor-patches/
 COPY api/ api/
 COPY cmd/ cmd/
 COPY internal/ internal/
 COPY migrations/ migrations/
+
+# Apply vendor patches (fixes third-party bugs without forking upstream).
+RUN for p in vendor-patches/*.patch; do [ -f "$p" ] && patch -p1 < "$p" || true; done
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
