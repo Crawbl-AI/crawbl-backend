@@ -3,6 +3,7 @@ package kg
 import (
 	"context"
 	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -18,11 +19,24 @@ func NewPostgres() Graph {
 	return &postgresGraph{}
 }
 
-// entityID derives a stable entity ID from a name.
+// entityID derives a stable, collision-resistant entity ID from a name.
 func entityID(name string) string {
-	s := strings.ToLower(name)
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if normalized == "" {
+		return "entity_empty"
+	}
+	h := sha256.Sum256([]byte(normalized))
+	return fmt.Sprintf("e_%s_%x", sanitizeForID(normalized), h[:4])
+}
+
+const maxEntityIDPrefix = 32
+
+// sanitizeForID keeps the name readable but safe for use in IDs.
+func sanitizeForID(s string) string {
 	s = strings.ReplaceAll(s, " ", "_")
-	s = strings.ReplaceAll(s, "'", "")
+	if len(s) > maxEntityIDPrefix {
+		s = s[:32]
+	}
 	return s
 }
 

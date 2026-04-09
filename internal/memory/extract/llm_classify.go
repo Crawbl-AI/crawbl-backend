@@ -18,6 +18,7 @@ const (
 	classifyTemperature  = 0.1
 	maxPreviewLen        = 200
 	fallbackImportance   = 0.5
+	maxLLMResponseBytes  = 1 << 20 // 1 MB
 )
 
 // LLMClassifierConfig holds configuration for the OpenAI-compatible LLM classifier.
@@ -105,7 +106,7 @@ func (c *openAIClassifier) chat(ctx context.Context, systemPrompt, userContent s
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxLLMResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("llm classify: read body: %w", err)
 	}

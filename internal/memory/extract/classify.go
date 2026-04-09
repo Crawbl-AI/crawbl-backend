@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
 )
 
 const (
@@ -13,28 +15,45 @@ const (
 )
 
 type classifier struct {
-	markers   map[string][]*regexp.Regexp
-	positive  map[string]bool
-	negative  map[string]bool
-	resolvers []*regexp.Regexp
-	codeLines []*regexp.Regexp
+	markers          map[string][]*regexp.Regexp
+	positive         map[string]bool
+	negative         map[string]bool
+	resolvers        []*regexp.Regexp
+	codeLines        []*regexp.Regexp
+	blockquote       *regexp.Regexp
+	humanSpeaker     *regexp.Regexp
+	assistantSpeaker *regexp.Regexp
+	wordTokenizer    *regexp.Regexp
 }
 
 // NewClassifier returns a heuristic memory classifier.
+// Patterns are loaded from the embedded classify_patterns.json config.
+// If config loading fails, it panics — this is a programmer error (missing embedded file).
 func NewClassifier() Classifier {
+	cfg, err := config.LoadClassifyConfig()
+	if err != nil {
+		panic("classify: failed to load classify_patterns.json: " + err.Error())
+	}
+
+	segments := cfg.CompileSegmentPatterns()
+
 	return &classifier{
-		markers:   compileAllMarkers(),
-		positive:  positiveWords,
-		negative:  negativeWords,
-		resolvers: compileResolvers(),
-		codeLines: compileCodeLinePatterns(),
+		markers:          cfg.CompileMarkers(),
+		positive:         positiveWords,
+		negative:         negativeWords,
+		resolvers:        cfg.CompileResolvers(),
+		codeLines:        cfg.CompileCodeLines(),
+		blockquote:       segments["blockquote"],
+		humanSpeaker:     segments["human_speaker"],
+		assistantSpeaker: segments["assistant_speaker"],
+		wordTokenizer:    segments["word_tokenizer"],
 	}
 }
 
 // Classify splits text into segments, scores each against 5 memory types,
 // disambiguates, and returns those meeting minConfidence.
 func (c *classifier) Classify(text string, minConfidence float64) []ClassifiedMemory {
-	segments := splitIntoSegments(text)
+	segments := c.splitIntoSegments(text)
 	var results []ClassifiedMemory
 
 	for _, seg := range segments {
@@ -102,7 +121,7 @@ func (c *classifier) scoreMarkers(text string, markers []*regexp.Regexp) float64
 
 // getSentiment returns "positive", "negative", or "neutral".
 func (c *classifier) getSentiment(text string) string {
-	words := tokenize(text)
+	words := c.tokenize(text)
 	pos, neg := 0, 0
 	for _, w := range words {
 		if c.positive[w] {
@@ -202,13 +221,13 @@ func (c *classifier) isCodeLine(line string) bool {
 }
 
 // splitIntoSegments splits text by speaker turns or double newlines.
-func splitIntoSegments(text string) []string {
+func (c *classifier) splitIntoSegments(text string) []string {
 	lines := strings.Split(text, "\n")
 
 	turnPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`^>\s`),
-		regexp.MustCompile(`(?i)^(Human|User|Q)\s*:`),
-		regexp.MustCompile(`(?i)^(Assistant|AI|A|Claude|ChatGPT)\s*:`),
+		c.blockquote,
+		c.humanSpeaker,
+		c.assistantSpeaker,
 	}
 
 	turnCount := 0
@@ -282,9 +301,8 @@ func splitByTurns(lines []string, turnPatterns []*regexp.Regexp) []string {
 }
 
 // tokenize extracts lowercase words from text.
-func tokenize(text string) []string {
-	re := regexp.MustCompile(`\b\w+\b`)
-	raw := re.FindAllString(strings.ToLower(text), -1)
+func (c *classifier) tokenize(text string) []string {
+	raw := c.wordTokenizer.FindAllString(strings.ToLower(text), -1)
 	seen := make(map[string]bool, len(raw))
 	var unique []string
 	for _, w := range raw {
@@ -312,194 +330,6 @@ func maxKey(m map[string]float64) string {
 		}
 	}
 	return best
-}
-
-// =============================================================================
-// Marker definitions
-// =============================================================================
-
-func compileAllMarkers() map[string][]*regexp.Regexp {
-	return map[string][]*regexp.Regexp{
-		"decision":   compileList(decisionMarkers),
-		"preference": compileList(preferenceMarkers),
-		"milestone":  compileList(milestoneMarkers),
-		"problem":    compileList(problemMarkers),
-		"emotional":  compileList(emotionMarkers),
-	}
-}
-
-func compileResolvers() []*regexp.Regexp {
-	return compileList([]string{
-		`\bfixed\b`,
-		`\bsolved\b`,
-		`\bresolved\b`,
-		`\bpatched\b`,
-		`\bgot it working\b`,
-		`\bit works\b`,
-		`\bnailed it\b`,
-		`\bfigured (it )?out\b`,
-		`\bthe (fix|answer|solution)\b`,
-	})
-}
-
-func compileCodeLinePatterns() []*regexp.Regexp {
-	return compileList([]string{
-		`^\s*[$#]\s`,
-		`^\s*(cd|source|echo|export|pip|npm|git|python|bash|curl|wget|mkdir|rm|cp|mv|ls|cat|grep|find|chmod|sudo|brew|docker)\s`,
-		"^\\s*```",
-		`^\s*(import|from|def|class|function|const|let|var|return)\s`,
-		`^\s*[A-Z_]{2,}=`,
-		`^\s*\|`,
-		`^\s*[-]{2,}`,
-		`^\s*[{}\[\]]\s*$`,
-		`^\s*(if|for|while|try|except|elif|else:)\b`,
-		`^\s*\w+\.\w+\(`,
-		`^\s*\w+ = \w+\.\w+`,
-	})
-}
-
-func compileList(patterns []string) []*regexp.Regexp {
-	compiled := make([]*regexp.Regexp, 0, len(patterns))
-	for _, p := range patterns {
-		r, err := regexp.Compile(p)
-		if err == nil {
-			compiled = append(compiled, r)
-		}
-	}
-	return compiled
-}
-
-var decisionMarkers = []string{
-	`\blet'?s (use|go with|try|pick|choose|switch to)\b`,
-	`\bwe (should|decided|chose|went with|picked|settled on)\b`,
-	`\bi'?m going (to|with)\b`,
-	`\bbetter (to|than|approach|option|choice)\b`,
-	`\binstead of\b`,
-	`\brather than\b`,
-	`\bthe reason (is|was|being)\b`,
-	`\bbecause\b`,
-	`\btrade-?off\b`,
-	`\bpros and cons\b`,
-	`\bover\b.*\bbecause\b`,
-	`\barchitecture\b`,
-	`\bapproach\b`,
-	`\bstrategy\b`,
-	`\bpattern\b`,
-	`\bstack\b`,
-	`\bframework\b`,
-	`\binfrastructure\b`,
-	`\bset (it |this )?to\b`,
-	`\bconfigure\b`,
-	`\bdefault\b`,
-}
-
-var preferenceMarkers = []string{
-	`\bi prefer\b`,
-	`\balways use\b`,
-	`\bnever use\b`,
-	`\bdon'?t (ever |like to )?(use|do|mock|stub|import)\b`,
-	`\bi like (to|when|how)\b`,
-	`\bi hate (when|how|it when)\b`,
-	`\bplease (always|never|don'?t)\b`,
-	`\bmy (rule|preference|style|convention) is\b`,
-	`\bwe (always|never)\b`,
-	`\bfunctional\b.*\bstyle\b`,
-	`\bimperative\b`,
-	`\bsnake_?case\b`,
-	`\bcamel_?case\b`,
-	`\btabs\b.*\bspaces\b`,
-	`\bspaces\b.*\btabs\b`,
-	`\buse\b.*\binstead of\b`,
-}
-
-var milestoneMarkers = []string{
-	`\bit works\b`,
-	`\bit worked\b`,
-	`\bgot it working\b`,
-	`\bfixed\b`,
-	`\bsolved\b`,
-	`\bbreakthrough\b`,
-	`\bfigured (it )?out\b`,
-	`\bnailed it\b`,
-	`\bcracked (it|the)\b`,
-	`\bfinally\b`,
-	`\bfirst time\b`,
-	`\bfirst ever\b`,
-	`\bnever (done|been|had) before\b`,
-	`\bdiscovered\b`,
-	`\brealized\b`,
-	`\bfound (out|that)\b`,
-	`\bturns out\b`,
-	`\bthe key (is|was|insight)\b`,
-	`\bthe trick (is|was)\b`,
-	`\bnow i (understand|see|get it)\b`,
-	`\bbuilt\b`,
-	`\bcreated\b`,
-	`\bimplemented\b`,
-	`\bshipped\b`,
-	`\blaunched\b`,
-	`\bdeployed\b`,
-	`\breleased\b`,
-	`\bprototype\b`,
-	`\bproof of concept\b`,
-	`\bdemo\b`,
-	`\bversion \d`,
-	`\bv\d+\.\d+`,
-	`\d+x (compression|faster|slower|better|improvement|reduction)`,
-	`\d+% (reduction|improvement|faster|better|smaller)`,
-}
-
-var problemMarkers = []string{
-	`\b(bug|error|crash|fail|broke|broken|issue|problem)\b`,
-	`\bdoesn'?t work\b`,
-	`\bnot working\b`,
-	`\bwon'?t\b.*\bwork\b`,
-	`\bkeeps? (failing|crashing|breaking|erroring)\b`,
-	`\broot cause\b`,
-	`\bthe (problem|issue|bug) (is|was)\b`,
-	`\bturns out\b.*\b(was|because|due to)\b`,
-	`\bthe fix (is|was)\b`,
-	`\bworkaround\b`,
-	`\bthat'?s why\b`,
-	`\bthe reason it\b`,
-	`\bfixed (it |the |by )\b`,
-	`\bsolution (is|was)\b`,
-	`\bresolved\b`,
-	`\bpatched\b`,
-	`\bthe answer (is|was)\b`,
-	`\b(had|need) to\b.*\binstead\b`,
-}
-
-var emotionMarkers = []string{
-	`\blove\b`,
-	`\bscared\b`,
-	`\bafraid\b`,
-	`\bproud\b`,
-	`\bhurt\b`,
-	`\bhappy\b`,
-	`\bsad\b`,
-	`\bcry\b`,
-	`\bcrying\b`,
-	`\bmiss\b`,
-	`\bsorry\b`,
-	`\bgrateful\b`,
-	`\bangry\b`,
-	`\bworried\b`,
-	`\blonely\b`,
-	`\bbeautiful\b`,
-	`\bamazing\b`,
-	`\bwonderful\b`,
-	`i feel`,
-	`i'm scared`,
-	`i love you`,
-	`i'm sorry`,
-	`i can't`,
-	`i wish`,
-	`i miss`,
-	`i need`,
-	`never told anyone`,
-	`nobody knows`,
-	`\*[^*]+\*`,
 }
 
 // =============================================================================

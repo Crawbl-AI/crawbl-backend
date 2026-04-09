@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"strings"
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -849,7 +850,10 @@ func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWri
 			return nil, memoryDiaryWriteOutput{Info: fmt.Sprintf("entry exceeds max length of %d", memory.MaxContentLength)}, nil
 		}
 
-		wing := fmt.Sprintf("wing_%s", input.AgentName)
+		agentName := strings.ToLower(strings.TrimSpace(input.AgentName))
+		agentName = strings.ReplaceAll(agentName, " ", "_")
+		agentName = strings.ReplaceAll(agentName, "'", "")
+		wing := fmt.Sprintf("wing_%s", agentName)
 		room := "diary"
 
 		hash := md5.Sum([]byte(input.Entry)) //nolint:gosec // non-cryptographic use for ID generation
@@ -908,7 +912,10 @@ func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryRead
 			lastN = 100
 		}
 
-		wing := fmt.Sprintf("wing_%s", input.AgentName)
+		agentName := strings.ToLower(strings.TrimSpace(input.AgentName))
+		agentName = strings.ReplaceAll(agentName, " ", "_")
+		agentName = strings.ReplaceAll(agentName, "'", "")
+		wing := fmt.Sprintf("wing_%s", agentName)
 
 		sess := deps.newSession()
 		drawers, err := deps.DrawerRepo.GetByWingRoom(ctx, sess, workspaceID, wing, "diary", lastN)

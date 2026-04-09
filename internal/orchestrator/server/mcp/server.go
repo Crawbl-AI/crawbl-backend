@@ -138,9 +138,10 @@ func extractResultJSON(result sdkmcp.Result) string {
 	if err != nil {
 		return "{}"
 	}
-	s := string(data)
+	// Ensure valid UTF-8 for jsonb storage.
+	s := strings.ToValidUTF8(string(data), "")
 	if len(s) > auditMaxResponseBytes {
-		return s[:auditMaxResponseBytes] + "..."
+		s = s[:auditMaxResponseBytes] + "..."
 	}
 	return s
 }

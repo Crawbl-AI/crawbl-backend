@@ -62,7 +62,7 @@ const (
 	AutoIngestMinChunk      = 50
 	AutoIngestDupThreshold  = 0.85
 	AutoIngestDefaultRoom   = "general"
-	IngestQueueSize         = 5
+	IngestQueueSize         = 100
 	AutoIngestMinConfidence = 0.3
 
 	// Cold worker constants.
