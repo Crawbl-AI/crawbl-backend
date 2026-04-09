@@ -280,54 +280,54 @@ func (r *postgresRepo) ListByState(ctx context.Context, sess database.SessionRun
 	return rows, nil
 }
 
-func (r *postgresRepo) UpdateState(ctx context.Context, sess database.SessionRunner, drawerID, state string) error {
+func (r *postgresRepo) UpdateState(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, state string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("state", state).
-		Where("id = ?", drawerID).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
 
-func (r *postgresRepo) UpdateClassification(ctx context.Context, sess database.SessionRunner, drawerID, memoryType, summary, room string, importance float64) error {
+func (r *postgresRepo) UpdateClassification(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, memoryType, summary, room string, importance float64) error {
 	_, err := sess.Update("memory_drawers").
 		Set("memory_type", memoryType).
 		Set("summary", summary).
 		Set("room", room).
 		Set("importance", importance).
-		Where("id = ?", drawerID).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
 
-func (r *postgresRepo) SetSupersededBy(ctx context.Context, sess database.SessionRunner, drawerID, supersededBy string) error {
+func (r *postgresRepo) SetSupersededBy(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, supersededBy string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("superseded_by", supersededBy).
-		Where("id = ?", drawerID).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
 
-func (r *postgresRepo) SetClusterID(ctx context.Context, sess database.SessionRunner, drawerID, clusterID string) error {
+func (r *postgresRepo) SetClusterID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, clusterID string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("cluster_id", clusterID).
-		Where("id = ?", drawerID).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
 
-func (r *postgresRepo) TouchAccess(ctx context.Context, sess database.SessionRunner, drawerID string) error {
+func (r *postgresRepo) TouchAccess(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("last_accessed_at", dbr.Expr("NOW()")).
 		Set("access_count", dbr.Expr("access_count + 1")).
-		Where("id = ?", drawerID).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
 
-func (r *postgresRepo) IncrementRetryCount(ctx context.Context, sess database.SessionRunner, drawerID string) error {
+func (r *postgresRepo) IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("retry_count", dbr.Expr("retry_count + 1")).
-		Where("id = ?", drawerID).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -390,10 +390,10 @@ func (r *postgresRepo) GetByID(ctx context.Context, sess database.SessionRunner,
 	return &d, nil
 }
 
-func (r *postgresRepo) BoostImportance(ctx context.Context, sess database.SessionRunner, drawerID string, delta, maxImportance float64) error {
+func (r *postgresRepo) BoostImportance(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, delta, maxImportance float64) error {
 	_, err := sess.InsertBySql(
-		`UPDATE memory_drawers SET importance = LEAST(importance + ?, ?) WHERE id = ?`,
-		delta, maxImportance, drawerID,
+		`UPDATE memory_drawers SET importance = LEAST(importance + ?, ?) WHERE workspace_id = ? AND id = ?`,
+		delta, maxImportance, workspaceID, drawerID,
 	).ExecContext(ctx)
 	return err
 }

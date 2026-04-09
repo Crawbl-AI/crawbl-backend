@@ -114,7 +114,7 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 	scaledImportance := classification.Importance * importanceScale
 	room := memory.MemoryTypeToRoom(classification.MemoryType)
 
-	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, d.ID,
+	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, d.WorkspaceID, d.ID,
 		classification.MemoryType, classification.Summary, room, scaledImportance,
 	); err != nil {
 		return fmt.Errorf("update classification: %w", err)
@@ -134,7 +134,7 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 
 	clusterDrawers(ctx, sess, deps, d, embedding)
 	detectDrawerConflicts(ctx, sess, deps, d, embedding)
-	return deps.DrawerRepo.UpdateState(ctx, sess, d.ID, string(memory.DrawerStateProcessed))
+	return deps.DrawerRepo.UpdateState(ctx, sess, d.WorkspaceID, d.ID, string(memory.DrawerStateProcessed))
 }
 
 func linkEntities(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, workspaceID string, classification *extract.LLMClassification) {
@@ -191,10 +191,10 @@ func clusterDrawers(ctx context.Context, sess database.SessionRunner, deps Proce
 	}
 	for i := range cluster {
 		member := &cluster[i]
-		_ = deps.DrawerRepo.SetClusterID(ctx, sess, member.ID, d.ID)
-		_ = deps.DrawerRepo.UpdateState(ctx, sess, member.ID, string(memory.DrawerStateMerged))
+		_ = deps.DrawerRepo.SetClusterID(ctx, sess, d.WorkspaceID, member.ID, d.ID)
+		_ = deps.DrawerRepo.UpdateState(ctx, sess, d.WorkspaceID, member.ID, string(memory.DrawerStateMerged))
 	}
-	_ = deps.DrawerRepo.UpdateClassification(ctx, sess, d.ID, d.MemoryType, mergedSummary, d.Room, d.Importance)
+	_ = deps.DrawerRepo.UpdateClassification(ctx, sess, d.WorkspaceID, d.ID, d.MemoryType, mergedSummary, d.Room, d.Importance)
 }
 
 func detectDrawerConflicts(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, d *memory.Drawer, embedding []float32) {
@@ -220,16 +220,16 @@ func detectDrawerConflicts(ctx context.Context, sess database.SessionRunner, dep
 		if conflicts {
 			slog.Info("memory-process: conflict detected",
 				"new_drawer", d.ID, "old_drawer", neighbor.ID, "similarity", neighbor.Similarity)
-			_ = deps.DrawerRepo.SetSupersededBy(ctx, sess, neighbor.ID, d.ID)
+			_ = deps.DrawerRepo.SetSupersededBy(ctx, sess, d.WorkspaceID, neighbor.ID, d.ID)
 		}
 	}
 }
 
 func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo drawer.Repo, d *memory.Drawer) {
-	_ = drawerRepo.IncrementRetryCount(ctx, sess, d.ID)
+	_ = drawerRepo.IncrementRetryCount(ctx, sess, d.WorkspaceID, d.ID)
 	if d.RetryCount+1 >= memory.ColdWorkerMaxRetries {
 		slog.Warn("memory-process: max retries, marking failed",
 			"drawer_id", d.ID, "workspace_id", d.WorkspaceID)
-		_ = drawerRepo.UpdateState(ctx, sess, d.ID, string(memory.DrawerStateFailed))
+		_ = drawerRepo.UpdateState(ctx, sess, d.WorkspaceID, d.ID, string(memory.DrawerStateFailed))
 	}
 }

@@ -621,7 +621,7 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", 5)
 			for i := range similar {
 				if similar[i].ID != drawerID && similar[i].Similarity > memory.ReinforcementThreshold {
-					_ = deps.DrawerRepo.BoostImportance(ctx, sess, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
+					_ = deps.DrawerRepo.BoostImportance(ctx, sess, workspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
 				}
 			}
 		}

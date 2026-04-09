@@ -52,25 +52,25 @@ type Repo interface {
 	ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error)
 
 	// UpdateState sets the processing state of a drawer.
-	UpdateState(ctx context.Context, sess database.SessionRunner, drawerID, state string) error
+	UpdateState(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, state string) error
 
 	// UpdateClassification sets the memory type, summary, room, and importance after LLM classification.
-	UpdateClassification(ctx context.Context, sess database.SessionRunner, drawerID, memoryType, summary, room string, importance float64) error
+	UpdateClassification(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, memoryType, summary, room string, importance float64) error
 
 	// SetSupersededBy marks a drawer as superseded by another drawer.
-	SetSupersededBy(ctx context.Context, sess database.SessionRunner, drawerID, supersededBy string) error
+	SetSupersededBy(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, supersededBy string) error
 
 	// SetClusterID assigns a drawer to a cluster.
-	SetClusterID(ctx context.Context, sess database.SessionRunner, drawerID, clusterID string) error
+	SetClusterID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, clusterID string) error
 
 	// TouchAccess updates last_accessed_at and increments access_count for a drawer.
-	TouchAccess(ctx context.Context, sess database.SessionRunner, drawerID string) error
+	TouchAccess(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
 
 	// IncrementRetryCount bumps the retry counter for a drawer.
-	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, drawerID string) error
+	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
 
 	// BoostImportance increases importance of a drawer by delta, capped at maxImportance.
-	BoostImportance(ctx context.Context, sess database.SessionRunner, drawerID string, delta, maxImportance float64) error
+	BoostImportance(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, delta, maxImportance float64) error
 
 	// DecayImportance reduces importance for old, unaccessed drawers.
 	DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error)

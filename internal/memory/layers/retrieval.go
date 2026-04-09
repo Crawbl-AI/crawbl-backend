@@ -129,7 +129,7 @@ func HybridRetrieve(
 		if i >= limit {
 			break
 		}
-		_ = drawerRepo.TouchAccess(ctx, sess, results[i].ID)
+		_ = drawerRepo.TouchAccess(ctx, sess, workspaceID, results[i].ID)
 	}
 
 	if len(results) > limit {
