@@ -98,6 +98,43 @@ type DrawerRepo interface {
 
 	// GetByID returns a single drawer by ID within a workspace.
 	GetByID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) (*memory.Drawer, error)
+
+	// ListEnrichCandidates returns drawers eligible for asynchronous
+	// entity/KG enrichment: state='processed', pipeline_tier<>'llm',
+	// entity_count=0, importance>=3, ordered by created_at ASC and
+	// limited to avoid pulling megabytes per sweep. Matches the
+	// idx_drawers_enrich partial index exactly.
+	ListEnrichCandidates(ctx context.Context, sess database.SessionRunner, limit int) ([]memory.Drawer, error)
+
+	// UpdateEnrichment sets entity_count / triple_count for a drawer
+	// after the enrichment worker has wired its KG nodes in.
+	UpdateEnrichment(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, entityCount, tripleCount int) error
+
+	// ListCentroidTrainingSamples returns the top-topN drawers per
+	// memory_type (ordered by importance DESC then filed_at DESC)
+	// within the last windowDays, restricted to pipeline_tier='llm'
+	// drawers with non-null embeddings. Used by the weekly centroid
+	// recompute job — the SQL lives in the repo so the job layer
+	// never touches pgvector types directly.
+	ListCentroidTrainingSamples(ctx context.Context, sess database.SessionRunner, windowDays, topN int) ([]memory.CentroidTrainingSample, error)
+}
+
+// CentroidRepo is the memory_type_centroids persistence contract. It
+// stores seven "prototype" vectors (one per memory type) that feed the
+// Phase 2 nearest-centroid classifier in the autoingest worker. Rows
+// with sample_count < MemoryCentroidMinSamples are ignored by lookups.
+type CentroidRepo interface {
+	// GetAll returns every centroid row regardless of sample_count.
+	GetAll(ctx context.Context, sess database.SessionRunner) ([]memory.MemoryTypeCentroid, error)
+
+	// Upsert writes a batch of centroids in a single transaction,
+	// replacing any row whose source_hash has changed.
+	Upsert(ctx context.Context, sess database.SessionRunner, rows []memory.MemoryTypeCentroid) error
+
+	// NearestType returns the closest memory-type centroid to the given
+	// embedding. Honors MemoryCentroidMinSamples as a reliability gate.
+	// ok=false when the table is empty or every row is below the gate.
+	NearestType(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32) (memType string, similarity float64, ok bool, err error)
 }
 
 // KGRepo is the knowledge graph persistence contract: entity nodes plus

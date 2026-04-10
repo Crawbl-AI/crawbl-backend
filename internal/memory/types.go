@@ -2,7 +2,11 @@
 // including drawers, knowledge graph triples, and workspace statistics.
 package memory
 
-import "time"
+import (
+	"os"
+	"strconv"
+	"time"
+)
 
 // MemoryType classifies extracted memories.
 type MemoryType string
@@ -109,6 +113,19 @@ type Drawer struct {
 	SupersededBy   *string    `db:"superseded_by"`
 	ClusterID      *string    `db:"cluster_id"`
 	RetryCount     int        `db:"retry_count"`
+	// PipelineTier tracks which arm of the cold pipeline labelled this
+	// drawer: "heuristic" (regex), "centroid" (embedding k-NN), or "llm".
+	// Phase 1 writes "heuristic" when HeuristicConfidenceHigh is met and
+	// skips the LLM branch entirely. Phase 2 writes "centroid" via the
+	// embedding k-NN. Everything else defaults to "llm" so the periodic
+	// memory_process sweep still picks it up.
+	PipelineTier string `db:"pipeline_tier"`
+	// EntityCount and TripleCount are maintained by the cold enrichment
+	// worker (memory_enrich) for drawers that skipped the LLM path. The
+	// partial index idx_drawers_enrich filters on (pipeline_tier!='llm'
+	// AND entity_count=0 AND importance>=3) to feed that worker.
+	EntityCount int `db:"entity_count"`
+	TripleCount int `db:"triple_count"`
 }
 
 // DrawerSearchResult extends Drawer with similarity score from vector search.
@@ -209,6 +226,71 @@ const (
 	MaxImportance          = 5.0
 )
 
+// Pipeline tiers describe which arm of the cold pipeline labelled a
+// drawer. Stored in memory_drawers.pipeline_tier and used by the
+// autoingest worker, the enrichment worker, and the centroid recompute
+// job.
+const (
+	PipelineTierHeuristic = "heuristic"
+	PipelineTierCentroid  = "centroid"
+	PipelineTierLLM       = "llm"
+)
+
+// MemoryCentroidThreshold is the cosine-similarity floor at which a
+// chunk in the medium-confidence band is considered close enough to a
+// type centroid to skip the LLM. Raising this shrinks the centroid
+// branch; lowering it grows it (and trades accuracy for cost).
+const MemoryCentroidThreshold = 0.85
+
+// MemoryCentroidMinSamples is the minimum number of LLM-labelled drawers
+// required to trust a centroid for a memory type. NearestType ignores
+// centroids below this gate so a new workspace cannot be dominated by a
+// type that only has a handful of samples.
+const MemoryCentroidMinSamples = 50
+
+// HeuristicKillSwitchValue is the default value for the Phase 1/2
+// confidence gates when the corresponding env var is unset. Any
+// classifier confidence > 1.0 disables the branch because classifier
+// confidence is bounded to [0, 1]; we pick 999 for loud log lines.
+const HeuristicKillSwitchValue = 999.0
+
+// HeuristicConfidenceHigh and HeuristicConfidenceLow are the Phase 1/2
+// gates for the autoingest worker. Declared as package variables so
+// the rollout value can be set at boot via env var rather than baked
+// into a release — a kill-switch value of HeuristicKillSwitchValue
+// forces every chunk into the LLM path.
+//
+// These are read ONCE at package init via envFloat, so changing the
+// env var requires a pod restart (same operational cost as a redeploy,
+// but without rebuilding an image). If you need live reconfiguration
+// without a restart, wrap them in atomic.Float64 values polled from a
+// periodic job — this is intentionally not wired up today because the
+// rollout plan gates each phase behind its own deploy.
+//
+// Defaults are HeuristicKillSwitchValue (disabled) in Phase 0 so the
+// pre-Phase-1 behaviour is preserved. Phase 1 flips
+// CRAWBL_MEM_HEURISTIC_HIGH to 0.8. Phase 2 flips
+// CRAWBL_MEM_HEURISTIC_LOW to 0.5.
+var (
+	HeuristicConfidenceHigh = envFloat("CRAWBL_MEM_HEURISTIC_HIGH", HeuristicKillSwitchValue)
+	HeuristicConfidenceLow  = envFloat("CRAWBL_MEM_HEURISTIC_LOW", HeuristicKillSwitchValue)
+)
+
+// envFloat reads a float knob from env with a fallback. Invalid values
+// fall back to def so a typo in the env never silently disables the
+// kill switch.
+func envFloat(name string, def float64) float64 {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return def
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
 // KGStats holds knowledge graph statistics.
 type KGStats struct {
 	Entities          int      `json:"entities"`
@@ -234,6 +316,29 @@ type Tunnel struct {
 	Wings []string `json:"wings"`
 	Halls []string `json:"halls"`
 	Count int      `json:"count"`
+}
+
+// CentroidTrainingSample is one row fed to the weekly centroid
+// recompute job: an LLM-labelled drawer's id, type, and embedding.
+// Lives in the domain layer so the repo signature stays transport-free
+// and the jobs layer never touches pgvector types directly.
+type CentroidTrainingSample struct {
+	ID         string
+	MemoryType string
+	Embedding  []float32
+}
+
+// MemoryTypeCentroid is one row of the memory_type_centroids table.
+// centroid is the element-wise average of the embeddings of recently
+// LLM-labelled drawers of the given memory type; sample_count is the
+// cohort size. Rows below MemoryCentroidMinSamples are treated as
+// unreliable and ignored by NearestType.
+type MemoryTypeCentroid struct {
+	MemoryType  string
+	Centroid    []float32
+	SampleCount int
+	ComputedAt  time.Time
+	SourceHash  string
 }
 
 // PalaceGraphStats holds palace graph overview statistics.

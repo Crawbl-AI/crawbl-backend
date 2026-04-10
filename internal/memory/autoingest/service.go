@@ -1,0 +1,117 @@
+package autoingest
+
+import (
+	"context"
+	"log/slog"
+	"sync/atomic"
+
+	"github.com/alitto/pond/v2"
+)
+
+// service is the concrete Service backed by a pond.Pool with a bounded
+// non-blocking queue. It owns no goroutines of its own beyond the pool
+// workers; all lifecycle concerns live in pond.
+type service struct {
+	pool           pond.Pool
+	deps           Deps
+	logger         *slog.Logger
+	dropped        atomic.Uint64
+	centroidErrors atomic.Uint64
+}
+
+// NewService constructs a Service backed by a pond.Pool. The pool is
+// started eagerly; the caller must call Shutdown before the process exits.
+// Panics if deps is missing a required collaborator — that would be a
+// wiring bug and the orchestrator should refuse to boot.
+func NewService(deps Deps, cfg Config) Service {
+	if err := deps.Validate(); err != nil {
+		panic(err)
+	}
+	workers := cfg.Workers
+	if workers <= 0 {
+		workers = defaultWorkers
+	}
+	queueSize := cfg.QueueSize
+	if queueSize <= 0 {
+		queueSize = defaultQueueSize
+	}
+
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	pool := pond.NewPool(
+		workers,
+		pond.WithQueueSize(queueSize),
+		pond.WithNonBlocking(true),
+	)
+
+	logger.Info("memory.autoingest: pool started",
+		slog.Int("workers", workers),
+		slog.Int("queue_size", queueSize),
+	)
+
+	return &service{
+		pool:   pool,
+		deps:   deps,
+		logger: logger,
+	}
+}
+
+// Submit enqueues one Work for background ingestion. Deps.Validate in
+// NewService guarantees DrawerRepo and Classifier are non-nil, so the
+// hot path only filters noise and hands off to pond.
+func (s *service) Submit(ctx context.Context, work Work) {
+	if isNoise(work.Exchange) {
+		return
+	}
+	// Capture a background context so long-lived ingestion does not
+	// get cancelled when the request goroutine returns. chatservice
+	// hands us a request-scoped ctx; we only use it to stamp the
+	// logger / tracing.
+	runCtx := context.WithoutCancel(ctx)
+	_, ok := s.pool.TrySubmit(func() {
+		s.runChunkPipeline(runCtx, work)
+	})
+	if !ok {
+		s.dropped.Add(1)
+		s.logger.WarnContext(ctx, "memory.autoingest: pool full, dropping work",
+			slog.String("workspace_id", work.WorkspaceID),
+			slog.String("agent", work.AgentSlug),
+		)
+	}
+}
+
+// Shutdown closes the pool and waits for in-flight tasks to finish.
+// If the supplied ctx expires first, the remaining work is abandoned
+// (workers observe cancellation via runCtx and return) and the context
+// error is returned.
+func (s *service) Shutdown(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.pool.StopAndWait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Metrics proxies pond counters plus the locally tracked drop and
+// centroid-lookup-error counters. dropped and centroidErrors are kept
+// locally because the pond queue "drop" counter counts only items
+// rejected by the queue itself, and pond has no visibility into our
+// per-step Phase 2 lookup failures.
+func (s *service) Metrics() Metrics {
+	return Metrics{
+		Running:        s.pool.RunningWorkers(),
+		Waiting:        s.pool.WaitingTasks(),
+		Completed:      s.pool.CompletedTasks(),
+		Dropped:        s.dropped.Load(),
+		CentroidErrors: s.centroidErrors.Load(),
+	}
+}

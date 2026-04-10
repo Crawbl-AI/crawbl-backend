@@ -39,19 +39,21 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 	if len(embedding) > 0 {
 		vec := pgvector.NewVector(embedding)
 		_, err := sess.InsertBySql(
-			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
-			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
+			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
 		).ExecContext(ctx)
 		return err
 	}
 
 	_, err = sess.InsertBySql(
-		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
-		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
+		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+		d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
 	).ExecContext(ctx)
 	return err
 }
@@ -346,21 +348,23 @@ func (r *Postgres) AddIdempotent(ctx context.Context, sess database.SessionRunne
 	if len(embedding) > 0 {
 		vec := pgvector.NewVector(embedding)
 		_, err := sess.InsertBySql(
-			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT DO NOTHING`,
 			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
-			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
+			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
 		).ExecContext(ctx)
 		return err
 	}
 
 	_, err := sess.InsertBySql(
-		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, filed_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT DO NOTHING`,
 		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
-		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State, d.FiledAt, d.CreatedAt,
+		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+		d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
 	).ExecContext(ctx)
 	return err
 }
@@ -516,4 +520,94 @@ func (r *Postgres) ActiveWorkspaces(ctx context.Context, sess database.SessionRu
 		return nil, fmt.Errorf("drawer: active workspaces: %w", err)
 	}
 	return ids, nil
+}
+
+// ListEnrichCandidates returns drawers eligible for asynchronous entity
+// enrichment. The WHERE clause matches idx_drawers_enrich exactly so the
+// partial index can serve the query cheaply.
+func (r *Postgres) ListEnrichCandidates(ctx context.Context, sess database.SessionRunner, limit int) ([]memory.Drawer, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var rows []memory.Drawer
+	_, err := sess.SelectBySql(
+		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
+		        source_file, added_by, added_by_agent, state, summary,
+		        pipeline_tier, entity_count, triple_count, filed_at, created_at
+		 FROM memory_drawers
+		 WHERE state = 'processed'
+		   AND pipeline_tier <> 'llm'
+		   AND entity_count = 0
+		   AND importance >= 3.0
+		 ORDER BY created_at ASC
+		 LIMIT ?`,
+		limit,
+	).LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("drawer: list enrich candidates: %w", err)
+	}
+	return rows, nil
+}
+
+// ListCentroidTrainingSamples returns up to topN LLM-labelled drawers
+// per memory type within the last windowDays, ordered by importance
+// then recency. Used by the weekly centroid recompute job — this
+// keeps the raw SQL and pgvector.Vector binding inside the repo so
+// the job layer can stay driver-agnostic.
+func (r *Postgres) ListCentroidTrainingSamples(ctx context.Context, sess database.SessionRunner, windowDays, topN int) ([]memory.CentroidTrainingSample, error) {
+	if windowDays <= 0 {
+		windowDays = 90
+	}
+	if topN <= 0 {
+		topN = 500
+	}
+	type row struct {
+		ID         string          `db:"id"`
+		MemoryType string          `db:"memory_type"`
+		Embedding  pgvector.Vector `db:"embedding"`
+	}
+	var rows []row
+	_, err := sess.SelectBySql(
+		`SELECT id, memory_type, embedding FROM (
+		    SELECT id, memory_type, embedding,
+		           ROW_NUMBER() OVER (
+		               PARTITION BY memory_type
+		               ORDER BY importance DESC, filed_at DESC
+		           ) AS rnk
+		    FROM memory_drawers
+		    WHERE state = 'processed'
+		      AND pipeline_tier = 'llm'
+		      AND embedding IS NOT NULL
+		      AND memory_type <> ''
+		      AND created_at > NOW() - ($1::int || ' days')::interval
+		 ) ranked
+		 WHERE rnk <= $2`,
+		windowDays, topN,
+	).LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("drawer: list centroid training samples: %w", err)
+	}
+	out := make([]memory.CentroidTrainingSample, 0, len(rows))
+	for i := range rows {
+		out = append(out, memory.CentroidTrainingSample{
+			ID:         rows[i].ID,
+			MemoryType: rows[i].MemoryType,
+			Embedding:  rows[i].Embedding.Slice(),
+		})
+	}
+	return out, nil
+}
+
+// UpdateEnrichment sets entity_count / triple_count for a drawer after
+// the enrichment worker has linked its KG nodes in.
+func (r *Postgres) UpdateEnrichment(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, entityCount, tripleCount int) error {
+	_, err := sess.Update("memory_drawers").
+		Set("entity_count", entityCount).
+		Set("triple_count", tripleCount).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		ExecContext(ctx)
+	if err != nil {
+		return fmt.Errorf("drawer: update enrichment: %w", err)
+	}
+	return nil
 }
