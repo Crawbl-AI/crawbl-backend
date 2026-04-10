@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gocraft/dbr/v2"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/zishang520/engine.io/v2/types"
@@ -21,6 +22,7 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
@@ -59,7 +61,11 @@ func NewServer(cfg *Config) *socket.Server {
 	// Set up the /v1 namespace with auth middleware and connection handling.
 	nsp := io.Of(socketNamespace, nil)
 	registerAuthMiddleware(nsp, cfg.Logger)
-	registerConnectionHandler(nsp, cfg.Logger)
+	shutdownCtx := cfg.ShutdownCtx
+	if shutdownCtx == nil {
+		shutdownCtx = context.Background()
+	}
+	registerConnectionHandler(nsp, cfg.Logger, cfg.DB, cfg.WorkspaceRepo, cfg.AuthService, shutdownCtx)
 
 	return io
 }
@@ -126,14 +132,30 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 }
 
 // registerConnectionHandler sets up the "connection" event on the namespace.
-// For each authenticated socket it registers workspace.subscribe/unsubscribe
-// event handlers for dynamic room management and a disconnect handler for cleanup.
-func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
+// For each authenticated socket it:
+//   - upgrades socket.Data() from *Principal to *socketData (adding a socketSession)
+//   - registers workspace.subscribe/unsubscribe event handlers for dynamic room management
+//   - registers a single disconnect handler for cleanup and in-flight dispatch cancellation
+//
+// db, workspaceRepo, and authService are used to verify ownership before joining a
+// workspace room. authService resolves the Firebase subject to an internal user.ID so
+// the workspace ownership query uses the correct PK column. When db or workspaceRepo is
+// nil the ownership check is skipped (development / test only).
+func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService orchestratorservice.AuthService, shutdownCtx context.Context) {
 	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {
 			return
 		}
+
+		// Auth middleware stored a *Principal in Data(). Wrap it alongside a fresh
+		// socketSession so downstream handlers can access both via *socketData.
+		principal, _ := s.Data().(*orchestrator.Principal)
+		sd := &socketData{
+			Principal: principal,
+			Session:   &socketSession{},
+		}
+		s.SetData(sd)
 
 		subject := principalSubjectFromSocket(s)
 
@@ -142,21 +164,85 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 			"subject", subject,
 		)
 
-		// workspace.subscribe — join rooms and acknowledge.
+		// workspace.subscribe — verify ownership then join rooms and acknowledge.
 		_ = s.On(eventWorkspaceSubscribe, func(args ...any) {
 			ids := parseWorkspaceIDs(args)
 			if len(ids) == 0 {
 				return
 			}
-			for _, id := range ids {
+
+			// Determine the authenticated user's subject. Reject the subscribe
+			// entirely when no principal is present (should not happen after auth
+			// middleware, but guard defensively).
+			if sd.Principal == nil || strings.TrimSpace(sd.Principal.Subject) == "" {
+				logger.Warn("socketio: workspace subscribe rejected — no principal",
+					"socket_id", string(s.Id()),
+				)
+				return
+			}
+			userSubject := sd.Principal.Subject
+
+			// When DB + repo are available, verify each requested workspace is
+			// owned by the authenticated user before joining its room.
+			// IDs that fail the check are silently dropped — we do not reveal
+			// whether the workspace exists to prevent enumeration attacks.
+			authorised := ids
+			if db != nil && workspaceRepo != nil {
+				authorised = make([]string, 0, len(ids))
+				sess := db.NewSession(nil)
+
+				// Resolve Firebase subject → internal user.ID. The workspace repo
+				// queries by the internal PK (user_id column), not the subject.
+				// On failure, drop all requested IDs and bail early.
+				var userID string
+				if authService != nil {
+					user, mErr := authService.GetBySubject(shutdownCtx, &orchestratorservice.GetUserBySubjectOpts{
+						Sess:    sess,
+						Subject: userSubject,
+					})
+					if mErr != nil {
+						logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
+							"socket_id", string(s.Id()),
+							"subject", userSubject,
+							"error", mErr.Error(),
+						)
+						return
+					}
+					userID = user.ID
+				} else {
+					// authService unavailable (dev/test): fall back to subject as-is.
+					userID = userSubject
+				}
+
+				owned, mErr := workspaceRepo.ListOwnedByUser(shutdownCtx, sess, userID, ids)
+				if mErr != nil {
+					logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
+						"socket_id", string(s.Id()),
+						"subject", userSubject,
+						"error", mErr.Error(),
+					)
+					return
+				}
+				for _, id := range ids {
+					if _, ok := owned[id]; ok {
+						authorised = append(authorised, id)
+					}
+				}
+			}
+
+			if len(authorised) == 0 {
+				return
+			}
+
+			for _, id := range authorised {
 				s.Join(socket.Room(workspaceRoomPrefix + id))
 			}
 			logger.Info("socketio: workspace subscribe",
 				"socket_id", string(s.Id()),
 				"subject", subject,
-				"workspace_ids", ids,
+				"workspace_ids", authorised,
 			)
-			_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: ids})
+			_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
 		})
 
 		// workspace.unsubscribe — leave rooms.
@@ -175,6 +261,9 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 			)
 		})
 
+		// Registered once per socket. Cancels any in-flight dispatch goroutine so
+		// agent-runtime requests are stopped and LLM tokens are not wasted for
+		// clients that have already disconnected.
 		_ = s.On("disconnect", func(args ...any) {
 			reason := ""
 			if len(args) > 0 {
@@ -182,6 +271,7 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 					reason = r
 				}
 			}
+			sd.Session.cancelCurrent()
 			logger.Info("socketio: client disconnected",
 				"socket_id", string(s.Id()),
 				"subject", subject,
@@ -265,15 +355,26 @@ func Handler(io *socket.Server) http.Handler {
 	return io.ServeHandler(nil)
 }
 
-// principalSubjectFromSocket extracts the principal subject stored in socket.Data()
-// by the auth middleware. Returns empty string if unavailable.
+// principalSubjectFromSocket extracts the principal subject stored in socket.Data().
+// After the connection handler runs, Data() holds a *socketData; before it runs (e.g.
+// during auth middleware) it holds a *orchestrator.Principal directly.
+// Returns empty string if unavailable.
 func principalSubjectFromSocket(s *socket.Socket) string {
 	if s == nil {
 		return ""
 	}
-	p, ok := s.Data().(*orchestrator.Principal)
-	if !ok || p == nil {
+	switch d := s.Data().(type) {
+	case *socketData:
+		if d == nil || d.Principal == nil {
+			return ""
+		}
+		return d.Principal.Subject
+	case *orchestrator.Principal:
+		if d == nil {
+			return ""
+		}
+		return d.Subject
+	default:
 		return ""
 	}
-	return p.Subject
 }

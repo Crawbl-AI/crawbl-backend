@@ -16,7 +16,36 @@ import (
 
 // ensureWorkspaceBootstrap ensures the workspace exists and is fully bootstrapped
 // with default agents and conversations.
+//
+// After a successful bootstrap the workspaceID is stored in an in-process
+// sync.Map so that subsequent calls for the same workspace on the same pod
+// short-circuit after a single workspace+agent fetch, skipping the 5+ seed
+// queries that are otherwise executed on every read path. The cache is
+// self-healing: if the fast-path fetch returns an error (e.g. workspace
+// deleted), the entry is evicted so the next call retries the slow path.
 func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Session, userID, workspaceID string) (*orchestrator.Workspace, []*orchestrator.Agent, []*orchestrator.Conversation, *merrors.Error) {
+	if _, alreadyDone := s.bootstrappedWorkspaces.Load(workspaceID); alreadyDone {
+		// Fast path: workspace was bootstrapped earlier in this process.
+		// Still need to return live data, so fetch workspace + agents.
+		workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
+		if mErr != nil {
+			// Evict the stale cache entry so the next call retries the slow
+			// path against the current DB state (e.g. workspace was deleted).
+			s.bootstrappedWorkspaces.Delete(workspaceID)
+			return nil, nil, nil, mErr
+		}
+		agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspaceID)
+		if mErr != nil {
+			return nil, nil, nil, mErr
+		}
+		conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspaceID)
+		if mErr != nil {
+			return nil, nil, nil, mErr
+		}
+		return workspace, agents, conversations, nil
+	}
+
+	// Slow path: full bootstrap. Only cache on success so failures are retried.
 	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, userID, workspaceID)
 	if mErr != nil {
 		return nil, nil, nil, mErr
@@ -43,6 +72,7 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 		return nil, nil, nil, mErr
 	}
 
+	s.bootstrappedWorkspaces.Store(workspaceID, struct{}{})
 	return workspace, agents, conversations, nil
 }
 

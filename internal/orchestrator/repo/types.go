@@ -43,6 +43,10 @@ type WorkspaceRepo interface {
 	ListByUserID(ctx context.Context, sess SessionRunner, userID string) ([]*orchestrator.Workspace, *merrors.Error)
 	// GetByID retrieves a specific workspace by ID, verifying ownership.
 	GetByID(ctx context.Context, sess SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
+	// ListOwnedByUser returns the subset of workspaceIDs owned by userID as a
+	// set for O(1) membership tests. Issues a single SELECT ... WHERE id IN (...)
+	// query regardless of how many IDs are requested.
+	ListOwnedByUser(ctx context.Context, sess SessionRunner, userID string, workspaceIDs []string) (map[string]struct{}, *merrors.Error)
 	// Save persists workspace data, creating a new record or updating an existing one.
 	Save(ctx context.Context, sess SessionRunner, workspace *orchestrator.Workspace) *merrors.Error
 }

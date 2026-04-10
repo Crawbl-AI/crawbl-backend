@@ -1,6 +1,7 @@
 package chatservice
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,7 +80,24 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 		slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
 		if del := ss.lookups.bySlug[slug]; del != nil {
 			ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
-			go ss.svc.completeDelegation("", ss.convID, ss.placeholder.ID, del.ID)
+			triggerMsgID := ss.placeholder.ID
+			delegateAgentID := del.ID
+			userID := ss.userID
+			convID := ss.convID
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("completeDelegation goroutine panic",
+							"panic", r,
+							"user_id", userID,
+							"conv_id", convID,
+							"trigger_message_id", triggerMsgID,
+							"delegate_agent_id", delegateAgentID,
+						)
+					}
+				}()
+				ss.svc.completeDelegation("", convID, triggerMsgID, delegateAgentID)
+			}()
 		}
 	}
 }

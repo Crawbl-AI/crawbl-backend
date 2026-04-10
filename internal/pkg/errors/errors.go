@@ -218,3 +218,10 @@ func IsErrUserFirebaseUIDMismatch(err *Error) bool {
 func IsErrUserWrongFirebaseUID(err *Error) bool {
 	return err == ErrUserWrongFirebaseUID
 }
+
+// IsErrUserBanned checks if the error is a user banned error.
+// This is a convenience function for the common case of checking
+// for a specific user error code.
+func IsErrUserBanned(err *Error) bool {
+	return err != nil && err.Code == ErrCodeUserBanned
+}

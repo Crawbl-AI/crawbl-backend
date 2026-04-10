@@ -7,7 +7,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	"github.com/gocraft/dbr/v2"
 )
 
 func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceID string, params *CreateArtifactParams) (*CreateArtifactResult, error) {
@@ -157,31 +160,40 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		return nil, err
 	}
 
-	newVersion := artifact.CurrentVersion + 1
-	now := time.Now().UTC()
+	result, txErr := database.WithTransaction(sess, "update artifact version", func(tx *dbr.Tx) (*UpdateArtifactResult, *merrors.Error) {
+		newVersion, mErr := s.repos.Artifact.IncrementVersion(ctx, tx, params.ArtifactID)
+		if mErr != nil {
+			return nil, mErr
+		}
 
-	changeSummary := params.ChangeSummary
-	if changeSummary == "" {
-		changeSummary = fmt.Sprintf("Version %d", newVersion)
+		now := time.Now().UTC()
+
+		changeSummary := params.ChangeSummary
+		if changeSummary == "" {
+			changeSummary = fmt.Sprintf("Version %d", newVersion)
+		}
+
+		versionRow := &artifactrepo.ArtifactVersionRow{
+			ID:            uuid.NewString(),
+			ArtifactID:    params.ArtifactID,
+			Version:       newVersion,
+			Content:       params.Content,
+			ChangeSummary: changeSummary,
+			AgentID:       &agentID,
+			AgentSlug:     params.AgentSlug,
+			CreatedAt:     now,
+		}
+		if mErr := s.repos.Artifact.CreateVersion(ctx, tx, versionRow); mErr != nil {
+			return nil, mErr
+		}
+
+		return &UpdateArtifactResult{Version: newVersion}, nil
+	})
+	if txErr != nil {
+		return nil, fmt.Errorf("update artifact: %s", txErr.Error())
 	}
 
-	versionRow := &artifactrepo.ArtifactVersionRow{
-		ID:            uuid.NewString(),
-		ArtifactID:    params.ArtifactID,
-		Version:       newVersion,
-		Content:       params.Content,
-		ChangeSummary: changeSummary,
-		AgentID:       &agentID,
-		AgentSlug:     params.AgentSlug,
-		CreatedAt:     now,
-	}
-	if mErr := s.repos.Artifact.CreateVersion(ctx, sess, versionRow); mErr != nil {
-		return nil, fmt.Errorf("create version: %s", mErr.Error())
-	}
-
-	if mErr := s.repos.Artifact.UpdateVersion(ctx, sess, params.ArtifactID, newVersion); mErr != nil {
-		return nil, fmt.Errorf("update artifact version: %s", mErr.Error())
-	}
+	newVersion := result.Version
 
 	if s.infra.Broadcaster != nil {
 		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{

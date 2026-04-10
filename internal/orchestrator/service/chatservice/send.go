@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -16,6 +17,17 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
+
+// persistedMsg carries the mutable state produced by persistUserMessage.
+// It lives on streamSession rather than on SendMessageOpts so that opts
+// remains read-only after construction.
+type persistedMsg struct {
+	userMessageID string
+	localID       string
+	deliveredOnce *sync.Once
+	readOnce      *sync.Once
+	onPersisted   func(*orchestrator.Message)
+}
 
 // SendMessage sends a user message and returns the agent replies.
 // Dispatches to sendDirectMessage (per-agent conversations) or
@@ -86,12 +98,13 @@ func (s *service) sendDirectMessage(
 	}
 
 	// Persist user message first (same as swarm path).
-	if mErr := s.persistUserMessage(ctx, opts, conversation); mErr != nil {
+	pm, mErr := s.persistUserMessage(ctx, opts, conversation)
+	if mErr != nil {
 		return nil, mErr
 	}
 
 	// Stream response from the agent.
-	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, primaryResponder, lookups, "")
+	return s.callAgentStreaming(ctx, opts, pm, conversation, runtimeState, primaryResponder, lookups, "")
 }
 
 // sendSwarmMessage handles swarm group chat: persist user message first,
@@ -104,7 +117,7 @@ func (s *service) sendSwarmMessage(
 	runtimeState *orchestrator.RuntimeStatus,
 ) ([]*orchestrator.Message, *merrors.Error) {
 	// 1. Persist user message first so it's visible immediately.
-	mErr := s.persistUserMessage(ctx, opts, conversation)
+	pm, mErr := s.persistUserMessage(ctx, opts, conversation)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -116,7 +129,7 @@ func (s *service) sendSwarmMessage(
 
 	if responders != nil {
 		// Mentions resolved — send directly to mentioned agents (parallel).
-		return s.executeParallel(ctx, opts, conversation, runtimeState, responders, lookups)
+		return s.executeParallel(ctx, opts, pm, conversation, runtimeState, responders, lookups)
 	}
 
 	// 3. No mentions — send to Manager. Manager has full context (memory,
@@ -129,14 +142,16 @@ func (s *service) sendSwarmMessage(
 	// Build conversation context so Manager sees recent chat history.
 	conversationContext := s.buildConversationContext(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, lookups, 20)
 
-	return s.callAgentStreaming(ctx, opts, conversation, runtimeState, lookups.manager, lookups, conversationContext)
+	return s.callAgentStreaming(ctx, opts, pm, conversation, runtimeState, lookups.manager, lookups, conversationContext)
 }
 
 // executeParallel fires all agent calls concurrently. Each agent responds
 // independently without seeing other agents' current responses.
+// Each goroutine owns its own dbr.Session so concurrent repo calls are safe.
 func (s *service) executeParallel(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
+	pm *persistedMsg,
 	conversation *orchestrator.Conversation,
 	runtimeState *orchestrator.RuntimeStatus,
 	targetAgents []*orchestrator.Agent,
@@ -147,9 +162,13 @@ func (s *service) executeParallel(
 	wg.Add(len(targetAgents))
 
 	for i, agent := range targetAgents {
-		go func(idx int, agent *orchestrator.Agent) {
+		go func(idx int, ag *orchestrator.Agent) {
 			defer wg.Done()
-			replies, err := s.callAgentStreaming(ctx, opts, conversation, runtimeState, agent, lookups, "")
+			// Create a per-goroutine session — dbr.Session is not goroutine-safe.
+			agentSess := s.db.NewSession(nil)
+			agentOpts := *opts
+			agentOpts.Sess = agentSess
+			replies, err := s.callAgentStreaming(ctx, &agentOpts, pm, conversation, runtimeState, ag, lookups, "")
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}
@@ -167,19 +186,24 @@ func (s *service) executeParallel(
 		}
 	}
 
-	if len(replies) == 0 && lastErr != nil {
-		return nil, lastErr
+	if len(replies) == 0 {
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, merrors.NewServerErrorText(fmt.Sprintf("no agent produced a response for conversation %s", conversation.ID))
 	}
 	return replies, nil
 }
 
-// persistUserMessage saves the user message in its own transaction and
-// broadcasts message.new.
+// persistUserMessage saves the user message in its own transaction,
+// broadcasts message.new, and returns the mutable tracking state as a
+// persistedMsg. SendMessageOpts is not mutated — it remains read-only
+// after construction.
 func (s *service) persistUserMessage(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
-) *merrors.Error {
+) (*persistedMsg, *merrors.Error) {
 	now := time.Now().UTC()
 
 	userMsg := &orchestrator.Message{
@@ -200,7 +224,7 @@ func (s *service) persistUserMessage(
 		}
 		return userMsg, nil
 	}); mErr != nil {
-		return mErr
+		return nil, mErr
 	}
 
 	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMsg)
@@ -210,10 +234,11 @@ func (s *service) persistUserMessage(
 		opts.OnPersisted(userMsg)
 	}
 
-	// Store user message ID for downstream status tracking.
-	opts.UserMessageID = userMsg.ID
-	opts.StatusDeliveredOnce = &sync.Once{}
-	opts.StatusReadOnce = &sync.Once{}
-
-	return nil
+	return &persistedMsg{
+		userMessageID: userMsg.ID,
+		localID:       opts.LocalID,
+		deliveredOnce: &sync.Once{},
+		readOnce:      &sync.Once{},
+		onPersisted:   opts.OnPersisted,
+	}, nil
 }

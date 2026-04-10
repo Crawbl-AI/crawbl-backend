@@ -52,6 +52,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
+	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
 	auditservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/auditservice"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
@@ -335,11 +336,11 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient)
-	defer cleanupRT()
-
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
 	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
+
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
+	defer cleanupRT()
 	toolsRepo := toolsrepo.New()
 	agentSettingsRepo := agentsettingsrepo.New()
 	agentPromptsRepo := agentpromptsrepo.New()
@@ -687,15 +688,22 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // buildRealtime constructs the socket.io broadcaster on top of the shared
 // Redis client. A nil client disables realtime entirely and returns a
 // NopBroadcaster so downstream services remain functional.
-func buildRealtime(logger *slog.Logger, rc redisclient.Client) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+//
+// db, workspaceRepo, and authService are forwarded to the Socket.IO server so
+// it can verify workspace ownership before joining rooms on workspace.subscribe
+// events. authService resolves the Firebase subject to an internal user.ID.
+func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo orchestratorrepo.WorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, func() {}
 	}
 
 	io := socketio.NewServer(&socketio.Config{
-		Logger:      logger,
-		RedisClient: redisclient.Unwrap(rc),
+		Logger:        logger,
+		RedisClient:   redisclient.Unwrap(rc),
+		DB:            db,
+		WorkspaceRepo: workspaceRepo,
+		AuthService:   authService,
 	})
 
 	broadcaster := socketio.NewBroadcaster(io, logger)
@@ -712,8 +720,15 @@ func buildRealtime(logger *slog.Logger, rc redisclient.Client) (realtime.Broadca
 // seedCatalogs upserts all reference catalogs into the database on startup.
 // Covers tools, models, tool categories, integration categories, and
 // integration providers. Idempotent — safe to run on every boot.
+// All 7 phases run inside a single transaction so a crash mid-seed never
+// leaves partial reference data behind.
 func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) error {
 	sess := db.NewSession(nil)
+	tx, err := sess.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("seed catalogs: begin transaction: %w", err)
+	}
+	defer tx.RollbackUnlessCommitted()
 
 	// 1. Tools — uses the existing repo Seed method (dbr builder pattern).
 	catalog := agentruntimetools.DefaultCatalog()
@@ -730,7 +745,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		}
 	}
 	repo := toolsrepo.New()
-	if mErr := repo.Seed(ctx, sess, toolRows); mErr != nil {
+	if mErr := repo.Seed(ctx, tx, toolRows); mErr != nil {
 		logger.Error("tool catalog seed failed", "error", mErr.Error())
 		return fmt.Errorf("tool catalog seed: %s", mErr.Error())
 	}
@@ -738,19 +753,19 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	// 2. Models
 	for i, m := range seed.AvailableModels() {
 		var existing orchestratorrepo.ModelRow
-		err := sess.Select("id").From("models").Where("id = ?", m.ID).LoadOneContext(ctx, &existing)
+		err := tx.Select("id").From("models").Where("id = ?", m.ID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed model %q: %w", m.ID, err)
 		}
 		if existing.ID != "" {
-			_, err = sess.Update("models").
+			_, err = tx.Update("models").
 				Set("name", m.Name).
 				Set("description", m.Description).
 				Set("sort_order", i).
 				Where("id = ?", m.ID).
 				ExecContext(ctx)
 		} else {
-			_, err = sess.InsertInto("models").
+			_, err = tx.InsertInto("models").
 				Pair("id", m.ID).
 				Pair("name", m.Name).
 				Pair("description", m.Description).
@@ -767,19 +782,19 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	for i, c := range agentruntimetools.ToolCategories() {
 		catID := string(c.ID)
 		var existing orchestratorrepo.ToolCategoryRow
-		err := sess.Select("id").From("tool_categories").Where("id = ?", catID).LoadOneContext(ctx, &existing)
+		err := tx.Select("id").From("tool_categories").Where("id = ?", catID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed tool category %q: %w", catID, err)
 		}
 		if existing.ID != "" {
-			_, err = sess.Update("tool_categories").
+			_, err = tx.Update("tool_categories").
 				Set("name", c.Name).
 				Set("image_url", c.ImageURL).
 				Set("sort_order", i).
 				Where("id = ?", catID).
 				ExecContext(ctx)
 		} else {
-			_, err = sess.InsertInto("tool_categories").
+			_, err = tx.InsertInto("tool_categories").
 				Pair("id", catID).
 				Pair("name", c.Name).
 				Pair("image_url", c.ImageURL).
@@ -795,19 +810,19 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	// 4. Integration categories
 	for i, c := range seed.IntegrationCategories() {
 		var existing orchestratorrepo.IntegrationCategoryRow
-		err := sess.Select("id").From("integration_categories").Where("id = ?", c.ID).LoadOneContext(ctx, &existing)
+		err := tx.Select("id").From("integration_categories").Where("id = ?", c.ID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
 		}
 		if existing.ID != "" {
-			_, err = sess.Update("integration_categories").
+			_, err = tx.Update("integration_categories").
 				Set("name", c.Name).
 				Set("image_url", c.ImageURL).
 				Set("sort_order", i).
 				Where("id = ?", c.ID).
 				ExecContext(ctx)
 		} else {
-			_, err = sess.InsertInto("integration_categories").
+			_, err = tx.InsertInto("integration_categories").
 				Pair("id", c.ID).
 				Pair("name", c.Name).
 				Pair("image_url", c.ImageURL).
@@ -823,12 +838,12 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	// 5. Integration providers
 	for i, p := range seed.IntegrationProviders() {
 		var existing orchestratorrepo.IntegrationProviderRow
-		err := sess.Select("provider").From("integration_providers").Where("provider = ?", p.Provider).LoadOneContext(ctx, &existing)
+		err := tx.Select("provider").From("integration_providers").Where("provider = ?", p.Provider).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)
 		}
 		if existing.Provider != "" {
-			_, err = sess.Update("integration_providers").
+			_, err = tx.Update("integration_providers").
 				Set("name", p.Name).
 				Set("description", p.Description).
 				Set("icon_url", p.IconURL).
@@ -838,7 +853,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 				Where("provider = ?", p.Provider).
 				ExecContext(ctx)
 		} else {
-			_, err = sess.InsertInto("integration_providers").
+			_, err = tx.InsertInto("integration_providers").
 				Pair("provider", p.Provider).
 				Pair("name", p.Name).
 				Pair("description", p.Description).
@@ -859,14 +874,14 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		var existing struct {
 			PlanID string `db:"plan_id"`
 		}
-		err := sess.Select("plan_id").From("usage_plans").
+		err := tx.Select("plan_id").From("usage_plans").
 			Where("plan_id = ?", p.PlanID).
 			LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed usage plan %q: %w", p.PlanID, err)
 		}
 		if existing.PlanID != "" {
-			_, err = sess.Update("usage_plans").
+			_, err = tx.Update("usage_plans").
 				Set("name", p.Name).
 				Set("monthly_token_limit", p.MonthlyTokenLimit).
 				Set("daily_request_limit", p.DailyRequestLimit).
@@ -875,7 +890,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 				Where("plan_id = ?", p.PlanID).
 				ExecContext(ctx)
 		} else {
-			_, err = sess.InsertInto("usage_plans").
+			_, err = tx.InsertInto("usage_plans").
 				Pair("plan_id", p.PlanID).
 				Pair("name", p.Name).
 				Pair("monthly_token_limit", p.MonthlyTokenLimit).
@@ -895,7 +910,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		var existing struct {
 			Model string `db:"model"`
 		}
-		err := sess.Select("model").From("model_pricing").
+		err := tx.Select("model").From("model_pricing").
 			Where("provider = ? AND model = ? AND region = ?", p.Provider, p.Model, p.Region).
 			OrderBy("effective_at DESC").
 			Limit(1).
@@ -906,7 +921,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		if existing.Model != "" {
 			continue // Already has pricing — don't overwrite CronJob data
 		}
-		_, err = sess.InsertInto("model_pricing").
+		_, err = tx.InsertInto("model_pricing").
 			Pair("provider", p.Provider).
 			Pair("model", p.Model).
 			Pair("region", p.Region).
@@ -920,6 +935,10 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		if err != nil {
 			return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("seed catalogs: commit: %w", err)
 	}
 
 	logger.Info("catalogs seeded",

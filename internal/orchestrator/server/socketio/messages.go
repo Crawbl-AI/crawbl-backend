@@ -35,11 +35,13 @@ func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
 	}
 
 	// Extract authenticated principal from socket.
-	principal, ok := s.Data().(*orchestrator.Principal)
-	if !ok || principal == nil {
+	// After the connection handler runs, Data() holds *socketData.
+	sd, ok := s.Data().(*socketData)
+	if !ok || sd == nil || sd.Principal == nil {
 		h.emitError(s, "", "", "unauthorized")
 		return
 	}
+	principal := sd.Principal
 
 	// Parse the event payload.
 	payload, ok := parseMessageSendPayload(args[0])
@@ -75,11 +77,13 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 	ctx, cancel := context.WithCancel(h.shutdownCtx)
 	defer cancel()
 
-	// Cancel the context when the socket disconnects, stopping in-flight
-	// the agent runtime requests and saving LLM tokens for disconnected clients.
-	_ = s.On("disconnect", func(...any) {
-		cancel()
-	})
+	// Store the cancel func in the per-socket session so the single disconnect
+	// handler (registered once at connection time) can cancel this goroutine when
+	// the client disconnects. setCancelFunc also cancels any previous in-flight
+	// dispatch for this socket, which can happen when a client sends rapid messages.
+	if sd, ok := s.Data().(*socketData); ok && sd != nil && sd.Session != nil {
+		sd.Session.setCancelFunc(cancel)
+	}
 
 	localID := strings.TrimSpace(payload.LocalID)
 	sess := h.db.NewSession(nil)

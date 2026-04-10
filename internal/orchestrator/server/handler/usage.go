@@ -72,13 +72,13 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 			return
 		}
 
-		tokensUsed, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), sess, user.ID, period)
+		_, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), sess, user.ID, period)
 		if mErr != nil {
 			WriteError(w, mErr)
 			return
 		}
 
-		counters, mErr := c.UsageRepo.GetUserUsage(r.Context(), sess, user.ID, period)
+		counters, mErr := c.UsageRepo.GetWorkspaceUsage(r.Context(), sess, workspaceID)
 		if mErr != nil {
 			WriteError(w, mErr)
 			return
@@ -86,7 +86,7 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 
 		WriteSuccess(w, http.StatusOK, dto.WorkspaceUsageResponse{
 			Period:               period,
-			TokensUsed:           tokensUsed,
+			TokensUsed:           counters.TokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
 			CompletionTokensUsed: counters.CompletionTokensUsed,
 			RequestCount:         counters.RequestCount,

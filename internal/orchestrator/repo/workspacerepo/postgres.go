@@ -65,6 +65,46 @@ func (r *workspaceRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessi
 	return row.ToDomain(), nil
 }
 
+// ListOwnedByUser retrieves the subset of the given workspaceIDs that are owned
+// by userID. The result is a set (map[string]struct{}) for O(1) membership tests.
+// An empty slice is returned (not an error) when none of the requested IDs belong
+// to the user. Returns ErrInvalidInput if sess is nil, userID is empty, or
+// workspaceIDs is empty.
+func (r *workspaceRepo) ListOwnedByUser(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string, workspaceIDs []string) (map[string]struct{}, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(userID) == "" || len(workspaceIDs) == 0 {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	// Build a deduplicated []any slice for dbr's IN expansion.
+	ids := make([]any, 0, len(workspaceIDs))
+	for _, id := range workspaceIDs {
+		if strings.TrimSpace(id) != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return map[string]struct{}{}, nil
+	}
+
+	var rows []struct {
+		ID string `db:"id"`
+	}
+	_, err := sess.Select("id").
+		From("workspaces").
+		Where("user_id = ?", userID).
+		Where("id IN ?", ids).
+		LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, merrors.WrapStdServerError(err, "list owned workspaces by user")
+	}
+
+	owned := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		owned[row.ID] = struct{}{}
+	}
+	return owned, nil
+}
+
 // Save persists workspace data to the database.
 // It handles both creating new workspaces and updating existing ones by checking
 // if a workspace with the same ID exists first.

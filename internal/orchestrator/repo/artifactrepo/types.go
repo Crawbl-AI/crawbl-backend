@@ -75,6 +75,9 @@ type ArtifactReviewRow struct {
 type Repo interface {
 	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactRow) *merrors.Error
 	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, artifactID string) (*ArtifactRow, *merrors.Error)
+	// IncrementVersion atomically increments current_version by 1 and returns the new value.
+	// Must be called inside a transaction to guarantee isolation.
+	IncrementVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (int, *merrors.Error)
 	UpdateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, newVersion int) *merrors.Error
 	CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactVersionRow) *merrors.Error
 	GetLatestVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (*ArtifactVersionRow, *merrors.Error)

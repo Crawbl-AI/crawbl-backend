@@ -36,10 +36,12 @@ func registerRoutes(s *Server) http.Handler {
 	// 2. RealIP - extracts real client IP from headers
 	// 3. PanicRecoverer - catches panics and logs them
 	// 4. RequestLogger - logs every incoming request
+	// 5. MaxBodyBytes - caps request body to 1 MiB to prevent memory exhaustion
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
 	router.Use(httpserver.PanicRecoverer(s.logger))
 	router.Use(httpserver.RequestLogger(s.logger))
+	router.Use(httpserver.MaxBodyBytes)
 
 	router.Route("/v1", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck(h))

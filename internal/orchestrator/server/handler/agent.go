@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -9,6 +10,13 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+)
+
+// Agent memory field length limits — mirror the MCP path enforcement.
+const (
+	MaxAgentMemoryKeyLength      = 256
+	MaxAgentMemoryContentLength  = 16 * 1024 // 16 KiB
+	MaxAgentMemoryCategoryLength = 128
 )
 
 // GetAgent retrieves a single agent by ID.
@@ -308,6 +316,19 @@ func CreateAgentMemory(c *Context) http.HandlerFunc {
 		var body dto.CreateAgentMemoryRequest
 		if err := DecodeJSON(r, &body); err != nil {
 			WriteError(w, merrors.ErrInvalidInput)
+			return
+		}
+
+		if strings.TrimSpace(body.Key) == "" || len(body.Key) > MaxAgentMemoryKeyLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
+		}
+		if strings.TrimSpace(body.Content) == "" || len(body.Content) > MaxAgentMemoryContentLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
+		}
+		if len(body.Category) > MaxAgentMemoryCategoryLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
 			return
 		}
 

@@ -121,6 +121,30 @@ func (r *artifactRepo) UpdateVersion(ctx context.Context, sess orchestratorrepo.
 	return nil
 }
 
+// IncrementVersion atomically bumps current_version and returns the new value.
+// Callers should run it inside a transaction that also writes to artifact_versions
+// so the bump and the version row commit together.
+func (r *artifactRepo) IncrementVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (int, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(artifactID) == "" {
+		return 0, merrors.ErrInvalidInput
+	}
+
+	var newVersion int
+	// Raw SQL: gocraft/dbr has no UPDATE ... RETURNING builder.
+	err := sess.SelectBySql(
+		"UPDATE orchestrator.artifacts SET current_version = current_version + 1, updated_at = NOW() WHERE id = ? RETURNING current_version",
+		artifactID,
+	).LoadOneContext(ctx, &newVersion)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return 0, merrors.ErrArtifactNotFound
+		}
+		return 0, merrors.WrapStdServerError(err, "increment artifact version")
+	}
+
+	return newVersion, nil
+}
+
 // CreateVersion inserts a new version row into artifact_versions.
 func (r *artifactRepo) CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactVersionRow) *merrors.Error {
 	if sess == nil || row == nil {

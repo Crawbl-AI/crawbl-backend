@@ -19,6 +19,7 @@ import (
 type Cache struct {
 	mu      sync.RWMutex
 	entries map[string]Entry // key: "provider:model:region"
+	byModel map[string]Entry // key: model name, first match — used as O(1) fallback
 	db      *dbr.Connection
 	logger  *slog.Logger
 }
@@ -40,6 +41,7 @@ func New(db *dbr.Connection, logger *slog.Logger) *Cache {
 	}
 	return &Cache{
 		entries: make(map[string]Entry),
+		byModel: make(map[string]Entry),
 		db:      db,
 		logger:  logger,
 	}
@@ -98,11 +100,9 @@ func (c *Cache) Compute(provider, model, region string, promptTokens, completion
 		}
 	}
 
-	// Last resort: scan all entries for a matching model.
-	for _, entry := range c.entries {
-		if entry.Model == model {
-			return computeCost(entry, promptTokens, completionTokens, cachedTokens)
-		}
+	// Last resort: O(1) lookup by model name using precomputed index.
+	if entry, ok := c.byModel[model]; ok {
+		return computeCost(entry, promptTokens, completionTokens, cachedTokens)
 	}
 
 	return 0
@@ -164,9 +164,10 @@ func (c *Cache) refresh(ctx context.Context) {
 	}
 
 	entries := make(map[string]Entry, len(rows))
+	byModel := make(map[string]Entry, len(rows))
 	for _, r := range rows {
 		key := cacheKey(r.Provider, r.Model, r.Region)
-		entries[key] = Entry{
+		e := Entry{
 			Provider:           r.Provider,
 			Model:              r.Model,
 			Region:             r.Region,
@@ -174,10 +175,17 @@ func (c *Cache) refresh(ctx context.Context) {
 			OutputCostPerToken: r.OutputCostPerToken,
 			CachedCostPerToken: r.CachedCostPerToken,
 		}
+		entries[key] = e
+		// Populate byModel with the first entry seen for each model name.
+		// This mirrors the semantics of the previous full scan (first match wins).
+		if _, exists := byModel[r.Model]; !exists {
+			byModel[r.Model] = e
+		}
 	}
 
 	c.mu.Lock()
 	c.entries = entries
+	c.byModel = byModel
 	c.mu.Unlock()
 
 	c.logger.Debug("pricing cache refreshed", "entries", len(entries))

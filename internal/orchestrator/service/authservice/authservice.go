@@ -115,7 +115,10 @@ func (s *service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipa
 	// Try to find user by email first, then by subject.
 	user, mErr := s.userRepo.GetUser(ctx, sess, principal.Subject, principal.Email)
 	if mErr == nil && user != nil {
-		// User found - check if deleted.
+		// User found - check if banned or deleted.
+		if user.IsBanned {
+			return nil, merrors.ErrUserBanned
+		}
 		if user.DeletedAt != nil {
 			return nil, merrors.ErrUserDeleted
 		}
@@ -424,10 +427,12 @@ func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *
 		HasAgreedWithPrivacyPolicy: hasAgreedWithLegal,
 	}
 
-	if mErr := s.userRepo.CreateUser(ctx, &orchestratorrepo.CreateUserOpts{
-		Sess:               sess,
-		User:               user,
-		HasAgreedWithLegal: hasAgreedWithLegal,
+	if mErr := database.WithTransactionNoResult(sess, "create user", func(tx *dbr.Tx) *merrors.Error {
+		return s.userRepo.CreateUser(ctx, &orchestratorrepo.CreateUserOpts{
+			Sess:               tx,
+			User:               user,
+			HasAgreedWithLegal: hasAgreedWithLegal,
+		})
 	}); mErr != nil {
 		return nil, mErr
 	}
