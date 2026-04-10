@@ -30,7 +30,7 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 
 ## Code Structure
 
-- Binaries under `cmd/` (currently: `crawbl`, `crawbl-agent-runtime`, `envoy-auth-filter`, `usage-writer`).
+- Binaries under `cmd/` (currently: `crawbl`, `crawbl-agent-runtime`, `envoy-auth-filter`).
 - Domain/application code under `internal/` (`orchestrator`, `agentruntime`, `userswarm`, `memory`, `infra`, `pkg`, `testsuite`).
 - Orchestrator API split:
   - `internal/orchestrator/types.go` — shared domain types and constants

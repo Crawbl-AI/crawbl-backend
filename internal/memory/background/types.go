@@ -20,7 +20,36 @@ import (
 const (
 	QueueMemoryProcess  = "memory_process"
 	QueueMemoryMaintain = "memory_maintain"
+
+	// processConcurrency bounds concurrent LLM classify calls inside the
+	// memory_process queue. Tunable via orchestrator env in a later phase;
+	// kept as a const here until we see real contention.
+	processConcurrency = 3
+
+	// processSweepInterval is the safety-net periodic sweep cadence. The
+	// primary trigger for memory_process is an ad-hoc Insert from the
+	// auto-ingest worker — this interval only catches drawers whose insert
+	// slipped through (e.g. crash between AddIdempotent and Insert).
+	processSweepInterval = time.Minute
 )
+
+// ProcessWorker is the River worker that runs the cold memory processing
+// pipeline: classify raw drawers, link KG entities, cluster, detect conflicts.
+// The business logic lives in internal/memory/jobs.RunProcess — this worker
+// is a thin adapter that builds ProcessDeps and reports metrics.
+type ProcessWorker struct {
+	river.WorkerDefaults[ProcessArgs]
+	deps Deps
+}
+
+// MaintainWorker is the River worker that runs the MemPalace maintenance
+// pipeline: importance decay and low-importance pruning across all active
+// workspaces. The business logic lives in internal/memory/jobs.RunMaintain —
+// this worker is a thin adapter that builds MaintainDeps and reports metrics.
+type MaintainWorker struct {
+	river.WorkerDefaults[MaintainArgs]
+	deps Deps
+}
 
 // Deps bundles everything the River workers need to run MemPalace jobs.
 // It mirrors the dependencies previously constructed in the two standalone

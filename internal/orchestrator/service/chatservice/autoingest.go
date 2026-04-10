@@ -13,7 +13,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 )
 
 const importanceScale = 5.0
@@ -262,7 +262,7 @@ func (s *service) processIngestWork(w ingestWork) {
 		ingested++
 
 		if s.memoryPublisher != nil {
-			s.memoryPublisher.Publish(ctx, w.workspaceID, &memorypublisher.MemoryEvent{
+			s.memoryPublisher.Publish(ctx, w.workspaceID, &queue.MemoryEvent{
 				WorkspaceID: w.workspaceID,
 				DrawerID:    d.ID,
 				Wing:        d.Wing,

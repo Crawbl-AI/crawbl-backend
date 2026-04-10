@@ -6,9 +6,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -24,8 +23,8 @@ func New(
 	broadcaster realtime.Broadcaster,
 	memoryStack layers.Stack,
 	pricingCache *pricing.Cache,
-	usagePublisher *usagepublisher.Publisher,
-	memoryPublisher *memorypublisher.Publisher,
+	usagePublisher *queue.UsagePublisher,
+	memoryPublisher *queue.MemoryPublisher,
 	memDeps MemoryDeps,
 ) orchestratorservice.ChatService {
 	if db == nil {

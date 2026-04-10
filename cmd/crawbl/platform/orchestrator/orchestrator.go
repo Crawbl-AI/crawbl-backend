@@ -26,6 +26,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agentpromptsrepo"
@@ -35,6 +36,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/conversationrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/integrationconnrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
@@ -51,10 +53,10 @@ import (
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
+
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/clickhouse"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
@@ -165,6 +167,17 @@ func runServer(ctx context.Context) error {
 	}
 	logger.Info("river migrations applied")
 
+	clickhouseDB, err := clickhouse.Open(ctx, logger)
+	if err != nil {
+		return fmt.Errorf("clickhouse open: %w", err)
+	}
+	defer func() {
+		if clickhouseDB != nil {
+			_ = clickhouseDB.Close()
+		}
+	}()
+	llmUsageRepo := llmusagerepo.New(clickhouseDB)
+
 	// Build the memory-domain River config.
 	riverCfg, err := background.NewConfig(background.Deps{
 		DB:            db,
@@ -179,6 +192,14 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("river config: %w", err)
 	}
 
+	// Register the usage-write worker onto the same River client. This
+	// replaces the standalone cmd/usage-writer binary that previously
+	// consumed from NATS and wrote to ClickHouse.
+	queue.RegisterUsageWriter(riverCfg.Workers, riverCfg.Queues, queue.UsageWriterDeps{
+		Repo:   llmUsageRepo,
+		Logger: logger,
+	})
+
 	// Construct the River client over the shared *sql.DB pool.
 	riverClient, err := pkgriver.New(db.DB, riverCfg)
 	if err != nil {
@@ -192,7 +213,7 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("river start: %w", err)
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started", "queues", "memory_process,memory_maintain")
+	logger.Info("river client started", "queues", "memory_process,memory_maintain,usage_write")
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
@@ -226,8 +247,8 @@ func runServer(ctx context.Context) error {
 			_ = natsClient.Close()
 		}
 	}()
-	usagePublisher := usagepublisher.New(natsClient, logger)
-	memoryPublisher := memorypublisher.New(natsClient, logger)
+	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
+	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
 	chatService := chatservice.New(
 		db,

@@ -108,7 +108,6 @@ The hook does not run the live E2E suite because that depends on the shared dev 
 | 🤖 | **Agent Runtime** | Per-workspace AI agent pod (gRPC on port 42618) |
 | 🔄 | **Webhook** | Builds and manages per-user AI agent pods |
 | 🔐 | **Auth Filter** | Verifies user identity before requests reach the API |
-| 📊 | **Usage Writer** | Consumes usage events from NATS → batch-inserts into ClickHouse |
 | 💰 | **Pricing Refresh** | Daily CronJob refreshing model pricing from LiteLLM |
 | 🧹 | **Reaper** | Cleans up stale test users + orphaned agent pods |
 | 🏗️ | **Infra** | Pulumi IaC for DOKS cluster + ArgoCD |
@@ -121,7 +120,6 @@ cmd/
 │   └── platform/
 │       └── pricing-refresh/    #    Daily pricing CronJob binary
 ├── crawbl-agent-runtime/       # Per-workspace agent runtime binary
-├── usage-writer/               # NATS → ClickHouse batch writer
 └── envoy-auth-filter/          # Auth filter for Envoy Gateway (WASM)
 
 proto/agentruntime/v1/          # gRPC proto definitions

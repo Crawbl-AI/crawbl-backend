@@ -9,9 +9,9 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/usagepublisher"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -289,7 +289,7 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 	}
 
 	// Publish to NATS for ClickHouse analytics pipeline.
-	ss.svc.usagePublisher.Publish(ss.ctx, ss.wsID, &usagepublisher.UsageEvent{
+	ss.svc.usagePublisher.Publish(ss.ctx, ss.wsID, &queue.UsageEvent{
 		UserID:           ss.userID,
 		WorkspaceID:      ss.wsID,
 		ConversationID:   ss.convID,
