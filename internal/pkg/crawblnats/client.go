@@ -120,11 +120,30 @@ func (c *Client) Publish(ctx context.Context, workspaceID string, payload any) e
 	return nil
 }
 
-// Close drains and closes the NATS connection.
+// Close drains buffered publishes and then closes the NATS connection.
+// Drain() is async — it signals the connection to flush and close in the
+// background. We poll conn.Status() for up to 5 seconds to give in-flight
+// messages a chance to flush before the process exits.
 func (c *Client) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
 	}
+	if err := c.conn.Drain(); err != nil {
+		// Drain failed (e.g. already closed); fall back to hard close.
+		c.conn.Close()
+		return nil
+	}
+	// Wait for drain to complete (status transitions to CLOSED).
+	const pollInterval = 100 * time.Millisecond
+	const maxWait = 5 * time.Second
+	deadline := time.Now().Add(maxWait)
+	for time.Now().Before(deadline) {
+		if c.conn.Status() == nats.CLOSED {
+			return nil
+		}
+		time.Sleep(pollInterval)
+	}
+	// Timed out waiting — force close to avoid leaking the connection.
 	c.conn.Close()
 	return nil
 }
