@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS model_pricing (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_model_pricing_lookup
+CREATE INDEX IF NOT EXISTS idx_model_pricing_lookup
     ON model_pricing(provider, model, region, effective_at DESC);
 
 -- Usage Plans (reference table, seeded from usage_plans.json on startup)
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS usage_quotas (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_usage_quotas_user_active
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_quotas_user_active
     ON usage_quotas(user_id, plan_id)
     WHERE expires_at IS NULL;
 
@@ -72,5 +72,5 @@ CREATE TABLE IF NOT EXISTS agent_usage_counters (
     PRIMARY KEY (agent_id)
 );
 
-CREATE INDEX idx_agent_usage_counters_workspace
+CREATE INDEX IF NOT EXISTS idx_agent_usage_counters_workspace
     ON agent_usage_counters(workspace_id);
