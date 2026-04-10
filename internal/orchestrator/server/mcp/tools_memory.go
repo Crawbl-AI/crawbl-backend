@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -567,7 +567,7 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 		}
 
 		// Generate drawer ID.
-		hash := md5.Sum([]byte(input.Content)) //nolint:gosec // non-cryptographic use for ID generation
+		hash := sha256.Sum256([]byte(input.Content))
 		drawerID := fmt.Sprintf("drawer_%s_%s_%x", input.Wing, input.Room, hash[:8])
 
 		// Classify memory type and derive importance.
@@ -866,7 +866,7 @@ func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWri
 		wing := fmt.Sprintf("wing_%s", agentName)
 		room := "diary"
 
-		hash := md5.Sum([]byte(input.Entry)) //nolint:gosec // non-cryptographic use for ID generation
+		hash := sha256.Sum256([]byte(input.Entry))
 		drawerID := fmt.Sprintf("drawer_%s_%s_%x", wing, room, hash[:8])
 
 		// Best-effort embedding.
