@@ -113,15 +113,27 @@ func PrincipalFromRequest(r *http.Request) (*orchestrator.Principal, error) {
 }
 
 // CurrentUser retrieves the full user from the DB using the principal in context.
+// It rejects banned or soft-deleted users with a 403 Forbidden error so that
+// every authenticated handler fails fast without per-handler checks.
 func (c *Context) CurrentUser(r *http.Request) (*orchestrator.User, *merrors.Error) {
 	principal, err := PrincipalFromRequest(r)
 	if err != nil {
 		return nil, merrors.ErrUnauthorized
 	}
-	return c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
+	user, mErr := c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
 		Sess:    c.NewSession(),
 		Subject: principal.Subject,
 	})
+	if mErr != nil {
+		return nil, mErr
+	}
+	if user.IsBanned {
+		return nil, merrors.ErrUserBanned
+	}
+	if user.DeletedAt != nil {
+		return nil, merrors.ErrUserDeleted
+	}
+	return user, nil
 }
 
 // DecodeJSON reads JSON from the request body into the target.
@@ -179,7 +191,8 @@ func HTTPStatusForError(err *merrors.Error) int {
 		return http.StatusServiceUnavailable
 	case merrors.IsCode(err, merrors.ErrCodeQuotaExceeded):
 		return http.StatusTooManyRequests
-	case merrors.IsCode(err, merrors.ErrCodeUserDeleted):
+	case merrors.IsCode(err, merrors.ErrCodeUserDeleted),
+		merrors.IsCode(err, merrors.ErrCodeUserBanned):
 		return http.StatusForbidden
 	case merrors.IsBusinessError(err):
 		return http.StatusBadRequest

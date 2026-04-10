@@ -115,7 +115,10 @@ func (s *service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipa
 	// Try to find user by email first, then by subject.
 	user, mErr := s.userRepo.GetUser(ctx, sess, principal.Subject, principal.Email)
 	if mErr == nil && user != nil {
-		// User found - check if deleted.
+		// User found - check if banned or deleted.
+		if user.IsBanned {
+			return nil, merrors.ErrUserBanned
+		}
 		if user.DeletedAt != nil {
 			return nil, merrors.ErrUserDeleted
 		}
