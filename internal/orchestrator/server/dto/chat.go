@@ -288,6 +288,9 @@ func MessageContentFromDomain(content orchestrator.MessageContent) MessageConten
 	return response
 }
 
+// MaxMessageTextLength is the maximum allowed byte length for a chat message text.
+const MaxMessageTextLength = 32 * 1024
+
 // ToDomain converts the API message content payload to domain MessageContent.
 // Validates that the content type is supported (currently only text is allowed)
 // and that text content is present for text messages.
@@ -322,6 +325,9 @@ func (payload MessageContentPayload) ToDomain() (orchestrator.MessageContent, *m
 	}
 	if strings.TrimSpace(content.Text) == "" {
 		return orchestrator.MessageContent{}, merrors.ErrEmptyMessageText
+	}
+	if len(content.Text) > MaxMessageTextLength {
+		return orchestrator.MessageContent{}, merrors.NewBusinessError("message text exceeds maximum allowed length", merrors.ErrCodeMessageTextTooLong)
 	}
 
 	return content, nil

@@ -49,6 +49,7 @@ const (
 	ErrCodeMessageNotFound    = "MSG0001" // Message does not exist
 	ErrCodeUnsupportedMessage = "MSG0002" // Message type is not supported
 	ErrCodeEmptyMessageText   = "MSG0003" // Message text is empty
+	ErrCodeMessageTextTooLong = "MSG0004" // Message text exceeds maximum allowed length
 
 	// Quota error codes (QTAxxxx)
 	ErrCodeQuotaExceeded = "QTA0001" // User has exceeded their monthly token quota
