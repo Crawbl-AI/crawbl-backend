@@ -36,6 +36,7 @@ func ConfigFromEnv(prefix string) Config {
 		MaxOpenConnections: intFromEnv(prefix+"DATABASE_MAX_OPEN_CONNECTIONS", DefaultMaxOpenConnections),
 		MaxIdleConnections: intFromEnv(prefix+"DATABASE_MAX_IDLE_CONNECTIONS", DefaultMaxIdleConnections),
 		ConnMaxLifetime:    durationFromEnv(prefix+"DATABASE_CONN_MAX_LIFETIME", DefaultConnMaxLifetime),
+		ConnMaxIdleTime:    durationFromEnv(prefix+"DATABASE_CONN_MAX_IDLE_TIME", DefaultConnMaxIdleTime),
 	}
 }
 
@@ -57,6 +58,7 @@ func New(config Config) (*dbr.Connection, error) {
 	db.SetMaxOpenConns(config.MaxOpenConnections)
 	db.SetMaxIdleConns(config.MaxIdleConnections)
 	db.SetConnMaxLifetime(config.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(config.ConnMaxIdleTime)
 
 	if err := pingWithRetry(context.Background(), db, DefaultPingAttempts, DefaultPingDelay); err != nil {
 		_ = db.Close()
