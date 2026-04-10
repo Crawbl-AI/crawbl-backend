@@ -13,10 +13,50 @@
 -- The scan cost is acceptable while each workspace keeps <10K drawers (the
 -- MemPalace cap is 10K, enforced at write-time in internal/memory/types.go).
 --
--- When we move to AVX2-capable nodes (DigitalOcean paid tier, or newer Digital Ocean
--- SKUs) add a replacement migration that creates the index, run it outside a
--- transaction (golang-migrate requires the index statement to be split or the
--- transaction to be disabled for CONCURRENTLY to work), and benchmark before
--- merging. See GitHub issue tracking follow-up.
+-- =============================================================================
+-- NOTE FOR FUTURE: CREATE INDEX CONCURRENTLY and golang-migrate
+-- =============================================================================
+--
+-- golang-migrate v4 wraps every migration in a transaction by default.
+-- CREATE INDEX CONCURRENTLY is explicitly forbidden inside a transaction block
+-- (Postgres will error: "CREATE INDEX CONCURRENTLY cannot run inside a
+-- transaction block"). This vendored version (v4.19.1) does NOT implement any
+-- built-in "no-transaction" mode — there is no x-no-transaction header comment
+-- or filename-based opt-out (.txn-off suffix) available in this version.
+--
+-- Reliable workarounds for any future CREATE INDEX CONCURRENTLY need:
+--
+--   Option A (recommended): Run the index creation entirely outside the
+--   migration system. After deploying the release, connect to Postgres and run:
+--
+--     SET statement_timeout = 0;
+--     SET lock_timeout = '5s';
+--     CREATE INDEX CONCURRENTLY idx_memory_drawers_embedding
+--         ON memory_drawers USING ivfflat (embedding vector_cosine_ops)
+--         WITH (lists = 100);
+--
+--   Then verify the index is valid:
+--
+--     SELECT indexname, indisvalid
+--     FROM pg_indexes
+--     JOIN pg_class ON pg_class.relname = pg_indexes.indexname
+--     JOIN pg_index ON pg_index.indexrelid = pg_class.oid
+--     WHERE tablename = 'memory_drawers';
+--
+--   Option B: Upgrade golang-migrate to a version that supports the
+--   -- migrate: no-transaction directive (check release notes before use),
+--   then prefix the migration file with that directive so the driver skips
+--   the BEGIN/COMMIT wrapper.
+--
+--   Option C (non-concurrent, acceptable for small tables / maintenance
+--   windows): Use a regular CREATE INDEX (without CONCURRENTLY) inside a
+--   normal migration. This acquires a full table lock but runs inside the
+--   transaction and will roll back cleanly on failure.
+--
+-- When we move to AVX2-capable nodes (DigitalOcean paid tier, or newer
+-- DigitalOcean SKUs), benchmark sequential scan vs. IVFFlat first, then
+-- apply the index via Option A and open a PR documenting the node SKU and
+-- pgvector version used.
+-- =============================================================================
 
 SELECT 1;
