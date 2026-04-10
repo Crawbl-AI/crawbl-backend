@@ -80,6 +80,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 				Type:        string(orchestrator.ItemTypeApp),
 				Provider:    ig.Provider,
 				Enabled:     ig.IsEnabled,
+				IsConnected: ig.IsConnected,
 			})
 		}
 
