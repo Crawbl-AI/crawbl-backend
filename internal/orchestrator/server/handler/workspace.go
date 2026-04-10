@@ -44,7 +44,7 @@ func WorkspacesList(c *Context) http.HandlerFunc {
 		response := make([]dto.WorkspaceResponse, 0, len(workspaces))
 		for _, workspace := range workspaces {
 			resp := toWorkspaceResponse(workspace)
-			enrichWorkspaceResponse(c, r.Context(), workspace.ID, &resp)
+			enrichWorkspaceResponse(c, r.Context(), user.ID, workspace.ID, &resp)
 			response = append(response, resp)
 		}
 
@@ -75,7 +75,7 @@ func WorkspaceGet(c *Context) http.HandlerFunc {
 		}
 
 		resp := toWorkspaceResponse(workspace)
-		enrichWorkspaceResponse(c, r.Context(), workspace.ID, &resp)
+		enrichWorkspaceResponse(c, r.Context(), user.ID, workspace.ID, &resp)
 		WriteSuccess(w, http.StatusOK, resp)
 	}
 }
@@ -105,8 +105,19 @@ func toWorkspaceResponse(workspace *orchestrator.Workspace) dto.WorkspaceRespons
 // enrichWorkspaceResponse fetches aggregate workspace data (agent count, last message)
 // and attaches it to the runtime response. Errors are silently ignored since this
 // data is supplementary and should not block the workspace response.
-func enrichWorkspaceResponse(c *Context, ctx context.Context, workspaceID string, resp *dto.WorkspaceResponse) {
+// userID is required for the defense-in-depth ownership check.
+func enrichWorkspaceResponse(c *Context, ctx context.Context, userID, workspaceID string, resp *dto.WorkspaceResponse) {
 	if resp.Runtime == nil {
+		return
+	}
+
+	// Defense-in-depth: verify ownership before fetching summary data.
+	// Callers already scope by user, but future callers may not.
+	if _, mErr := c.WorkspaceService.GetByID(ctx, &orchestratorservice.GetWorkspaceOpts{
+		Sess:        c.NewSession(),
+		UserID:      userID,
+		WorkspaceID: workspaceID,
+	}); mErr != nil {
 		return
 	}
 
