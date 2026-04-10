@@ -205,11 +205,17 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 		return
 	}
 
+	shutdownCtx := cfg.ShutdownCtx
+	if shutdownCtx == nil {
+		shutdownCtx = context.Background()
+	}
+
 	h := &messageHandler{
 		db:          cfg.DB,
 		chatService: cfg.ChatService,
 		authService: cfg.AuthService,
 		logger:      cfg.Logger,
+		shutdownCtx: shutdownCtx,
 	}
 
 	nsp := io.Of(socketNamespace, nil)

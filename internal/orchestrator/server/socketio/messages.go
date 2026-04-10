@@ -18,6 +18,7 @@ type messageHandler struct {
 	chatService orchestratorservice.ChatService
 	authService orchestratorservice.AuthService
 	logger      *slog.Logger
+	shutdownCtx context.Context
 }
 
 // handleMessageSend processes a message.send event from the Socket.IO client.
@@ -70,7 +71,7 @@ func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
 
 // dispatch runs the message send flow asynchronously.
 func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Principal, payload messageSendPayload) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(h.shutdownCtx)
 	defer cancel()
 
 	// Cancel the context when the socket disconnects, stopping in-flight
