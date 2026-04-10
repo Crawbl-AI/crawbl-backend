@@ -9,9 +9,9 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/riverqueue/river"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
@@ -51,17 +51,18 @@ type MaintainWorker struct {
 	deps Deps
 }
 
-// Deps bundles everything the River workers need to run MemPalace jobs.
-// It mirrors the dependencies previously constructed in the two standalone
-// cmd/crawbl/jobs/* binaries, so the old entrypoints can be deleted without
-// losing any behavior.
+// Deps bundles everything the River workers need to run MemPalace jobs:
+// the cold processing pipeline, the maintenance sweep, and the auto-ingest
+// worker that replaces the chatservice in-process goroutine.
 type Deps struct {
-	DB            *dbr.Connection
-	DrawerRepo    drawer.Repo
-	KGGraph       kg.Graph
-	LLMClassifier extract.LLMClassifier
-	Embedder      embed.Embedder
-	Logger        *slog.Logger
+	DB              *dbr.Connection
+	DrawerRepo      memrepo.DrawerRepo
+	KGRepo          memrepo.KGRepo
+	LLMClassifier   extract.LLMClassifier
+	Classifier      extract.Classifier
+	Embedder        embed.Embedder
+	MemoryPublisher *queue.MemoryPublisher
+	Logger          *slog.Logger
 }
 
 // ProcessArgs triggers a single batch run of RunProcess over all active

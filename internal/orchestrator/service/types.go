@@ -561,17 +561,6 @@ type ChatWriter interface {
 	//
 	// Returns the updated Message on success, or a merrors.Error on failure.
 	RespondToActionCard(ctx context.Context, opts *RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error)
-
-	// StartPendingMessageCleanup launches a background goroutine that periodically
-	// marks stale pending messages as failed. The goroutine stops when ctx is cancelled.
-	// Call this once at server startup. The returned channel is closed when the
-	// goroutine exits, allowing graceful shutdown synchronization.
-	StartPendingMessageCleanup(ctx context.Context) <-chan struct{}
-
-	// StartIngestWorker starts the memory auto-ingest worker that drains the
-	// ingest queue and persists conversation exchanges as memory drawers.
-	// It is a no-op when the drawer repo is not configured.
-	StartIngestWorker(ctx context.Context)
 }
 
 // ChatService is the full interface combining read and write operations.

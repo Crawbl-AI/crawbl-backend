@@ -20,11 +20,13 @@ import (
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/graph"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/identityrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/kgrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/palacegraphrepo"
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
@@ -138,12 +140,19 @@ func runServer(ctx context.Context) error {
 		return err
 	}
 
+	// Shared Redis client — reused by realtime (socket.io adapter) and by
+	// the palace-graph cache. Nil is safe everywhere: palacegraphrepo
+	// degrades to pass-through, buildRealtime falls back to NopBroadcaster.
+	redisClient, cleanupRedis := buildSharedRedis(logger)
+	defer cleanupRedis()
+
 	// Memory system — constructed unconditionally; embedder is optional.
 	// When CRAWBL_EMBED_BASE_URL is empty the embedder and memoryStack remain
 	// nil, and downstream services fall back to messages-only context.
-	drawerRepo := drawer.NewPostgres()
-	kgGraph := kg.NewPostgres()
-	palaceGraph := graph.NewPostgres()
+	var drawerRepo memrepo.DrawerRepo = drawerrepo.NewPostgres()
+	var kgRepo memrepo.KGRepo = kgrepo.NewPostgres()
+	var palaceGraphRepo memrepo.PalaceGraphRepo = palacegraphrepo.NewPostgres(redisClient, logger)
+	var identityRepo memrepo.IdentityRepo = identityrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
 	var memoryStack layers.Stack
@@ -154,7 +163,7 @@ func runServer(ctx context.Context) error {
 			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
 			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
 		})
-		memoryStack = layers.NewStack(drawerRepo, embedder, kgGraph)
+		memoryStack = layers.NewStack(drawerRepo, identityRepo, embedder)
 		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
 	} else {
 		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
@@ -179,14 +188,32 @@ func runServer(ctx context.Context) error {
 	}()
 	llmUsageRepo := llmusagerepo.New(clickhouseDB)
 
+	// NATS client for memory fan-out events. Connected early so the memory
+	// publisher is available to the auto-ingest River worker registered
+	// inside background.NewConfig below.
+	natsCfg := crawblnats.DefaultConfig()
+	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
+	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
+	if natsErr != nil {
+		logger.Warn("NATS connect failed, memory publishing disabled", "error", natsErr)
+	}
+	defer func() {
+		if natsClient != nil {
+			_ = natsClient.Close()
+		}
+	}()
+	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
+
 	// Build the memory-domain River config.
 	riverCfg, err := background.NewConfig(background.Deps{
-		DB:            db,
-		DrawerRepo:    drawerRepo,
-		KGGraph:       kgGraph,
-		LLMClassifier: newLLMClassifierOrNil(),
-		Embedder:      embedder,
-		Logger:        logger,
+		DB:              db,
+		DrawerRepo:      drawerRepo,
+		KGRepo:          kgRepo,
+		LLMClassifier:   newLLMClassifierOrNil(),
+		Classifier:      classifier,
+		Embedder:        embedder,
+		MemoryPublisher: memoryPublisher,
+		Logger:          logger,
 	})
 	if err != nil {
 		logger.Error("river config failed", "error", err)
@@ -218,6 +245,22 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("register pricing refresh: %w", err)
 	}
 
+	// Register the stale-pending-message cleanup worker. Replaces the
+	// previous chatservice.StartPendingMessageCleanup ticker goroutine
+	// with a 1-minute River periodic job.
+	if err := queue.RegisterMessageCleanup(
+		riverCfg.Workers,
+		riverCfg.Queues,
+		&riverCfg.PeriodicJobs,
+		queue.MessageCleanupDeps{
+			DB:          db,
+			MessageRepo: messageRepo,
+			Logger:      logger,
+		},
+	); err != nil {
+		return fmt.Errorf("register message cleanup: %w", err)
+	}
+
 	// Construct the River client over the shared *sql.DB pool.
 	riverClient, err := pkgriver.New(db.DB, riverCfg)
 	if err != nil {
@@ -231,7 +274,7 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("river start: %w", err)
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started", "queues", "memory_process,memory_maintain,usage_write,pricing_refresh")
+	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_autoingest,usage_write,pricing_refresh,message_cleanup")
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
@@ -239,7 +282,7 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient)
 	defer cleanupRT()
 
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
@@ -253,20 +296,7 @@ func runServer(ctx context.Context) error {
 	pricingCache := pricing.New(db, logger)
 	pricingCache.Start(ctx, 5*time.Minute)
 
-	// Connect to NATS for usage event publishing. Disabled when CRAWBL_NATS_URL is unset.
-	natsCfg := crawblnats.DefaultConfig()
-	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
-	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
-	if natsErr != nil {
-		logger.Warn("NATS connect failed, usage publishing disabled", "error", natsErr)
-	}
-	defer func() {
-		if natsClient != nil {
-			_ = natsClient.Close()
-		}
-	}()
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
-	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
 	chatService := chatservice.New(
 		db,
@@ -281,11 +311,8 @@ func runServer(ctx context.Context) error {
 			AgentHistory:  agentHistoryRepo,
 			Usage:         usagerepo.New(),
 		},
-		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher, memoryPublisher,
+		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
 		chatservice.MemoryDeps{
-			DrawerRepo:  drawerRepo,
-			Classifier:  classifier,
-			Embedder:    embedder,
 			RiverClient: riverClient,
 		},
 	)
@@ -305,15 +332,6 @@ func runServer(ctx context.Context) error {
 	integrationConnRepo := integrationconnrepo.New()
 	integrationService := integrationservice.New(logger, integrationConnRepo)
 
-	// Start memory auto-ingest worker (hot path).
-	chatService.StartIngestWorker(ctx)
-
-	// Start background cleanup of orphaned pending messages.
-	// The done channel is closed when the goroutine exits, so we wait
-	// for it on shutdown to avoid DB queries against a closed pool.
-	cleanupDone := chatService.StartPendingMessageCleanup(ctx)
-	defer func() { <-cleanupDone }()
-
 	// Register Socket.IO message.send handler now that services are available.
 	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
 	if ioServer != nil {
@@ -325,7 +343,7 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgGraph, palaceGraph, classifier, embedder, memoryStack)
+	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
 
 	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
 	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
@@ -517,9 +535,10 @@ func buildMCPHandler(
 	artifactRepo artifactrepo.Repo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
-	drawerRepo drawer.Repo,
-	kgGraph kg.Graph,
-	palaceGraph graph.PalaceGraph,
+	drawerRepo memrepo.DrawerRepo,
+	kgRepo memrepo.KGRepo,
+	palaceGraphRepo memrepo.PalaceGraphRepo,
+	identityRepo memrepo.IdentityRepo,
 	classifier extract.Classifier,
 	embedder embed.Embedder,
 	memoryStack layers.Stack,
@@ -578,9 +597,10 @@ func buildMCPHandler(
 		MCPService:   mcpSvc,
 		AuditService: auditSvc,
 		DrawerRepo:   drawerRepo,
-		KG:           kgGraph,
+		KG:           kgRepo,
 		MemoryStack:  memoryStack,
-		PalaceGraph:  palaceGraph,
+		PalaceGraph:  palaceGraphRepo,
+		IdentityRepo: identityRepo,
 		Classifier:   classifier,
 		Embedder:     embedder,
 	})
@@ -588,20 +608,33 @@ func buildMCPHandler(
 	return handler
 }
 
-func buildRealtime(logger *slog.Logger) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+// buildSharedRedis creates the single Redis client used by realtime and the
+// palace-graph cache. Returns (nil, noop) when CRAWBL_REDIS_ADDR is unset or
+// the ping fails — callers are expected to handle a nil client gracefully.
+func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 	addr := strings.TrimSpace(os.Getenv("CRAWBL_REDIS_ADDR"))
 	if addr == "" {
-		logger.Info("realtime disabled: CRAWBL_REDIS_ADDR not set")
-		return realtime.NopBroadcaster{}, nil, nil, func() {}
+		logger.Info("redis disabled: CRAWBL_REDIS_ADDR not set")
+		return nil, func() {}
 	}
-
 	redisCfg := redisclient.ConfigFromEnv("CRAWBL_")
 	rc, err := redisclient.New(redisCfg)
 	if err != nil {
-		logger.Error("failed to connect to Redis, falling back to no realtime", "error", err)
-		return realtime.NopBroadcaster{}, nil, nil, func() {}
+		logger.Error("failed to connect to Redis, continuing without it", "error", err)
+		return nil, func() {}
 	}
 	logger.Info("redis connected", slog.String("addr", redisCfg.Addr))
+	return rc, func() { _ = rc.Close() }
+}
+
+// buildRealtime constructs the socket.io broadcaster on top of the shared
+// Redis client. A nil client disables realtime entirely and returns a
+// NopBroadcaster so downstream services remain functional.
+func buildRealtime(logger *slog.Logger, rc redisclient.Client) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+	if rc == nil {
+		logger.Info("realtime disabled: no redis client")
+		return realtime.NopBroadcaster{}, nil, nil, func() {}
+	}
 
 	io := socketio.NewServer(&socketio.Config{
 		Logger:      logger,
@@ -613,7 +646,6 @@ func buildRealtime(logger *slog.Logger) (realtime.Broadcaster, http.Handler, *so
 
 	cleanup := func() {
 		io.Close(nil)
-		_ = rc.Close()
 	}
 
 	logger.Info("realtime enabled: socket.io + redis")

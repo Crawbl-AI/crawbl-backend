@@ -47,7 +47,7 @@ func (w *ProcessWorker) Work(ctx context.Context, job *river.Job[ProcessArgs]) e
 	result, err := jobs.RunProcess(ctx, jobs.ProcessDeps{
 		DB:            w.deps.DB,
 		DrawerRepo:    w.deps.DrawerRepo,
-		KGGraph:       w.deps.KGGraph,
+		KGRepo:        w.deps.KGRepo,
 		LLMClassifier: w.deps.LLMClassifier,
 		Embedder:      w.deps.Embedder,
 	})

@@ -15,6 +15,7 @@ func NewConfig(deps Deps) (*river.Config, error) {
 	workers := river.NewWorkers()
 	river.AddWorker(workers, NewProcessWorker(deps))
 	river.AddWorker(workers, NewMaintainWorker(deps))
+	river.AddWorker(workers, NewAutoIngestWorker(deps))
 
 	dailyAtMidnight, err := cron.ParseStandard("@midnight")
 	if err != nil {
@@ -24,8 +25,9 @@ func NewConfig(deps Deps) (*river.Config, error) {
 	return &river.Config{
 		Logger: deps.Logger,
 		Queues: map[string]river.QueueConfig{
-			QueueMemoryProcess:  {MaxWorkers: processConcurrency},
-			QueueMemoryMaintain: {MaxWorkers: 1},
+			QueueMemoryProcess:    {MaxWorkers: processConcurrency},
+			QueueMemoryMaintain:   {MaxWorkers: 1},
+			QueueMemoryAutoIngest: {MaxWorkers: autoIngestConcurrency},
 		},
 		Workers: workers,
 		PeriodicJobs: []*river.PeriodicJob{

@@ -145,7 +145,7 @@ func (s *service) callAgentStreaming(
 		if agent != nil {
 			agentID = agent.ID
 		}
-		s.autoIngestConversation(wsID, agentID, opts.Content.Text, replies)
+		s.autoIngestConversation(ctx, wsID, agentID, opts.Content.Text, replies)
 	}
 
 	if len(replies) == 0 {
