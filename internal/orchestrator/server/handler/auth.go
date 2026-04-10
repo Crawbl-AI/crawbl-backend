@@ -56,9 +56,20 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 			return
 		}
 
+		const minFCMTokenLength = 32
+		const maxFCMTokenLength = 4096
+
 		var reqBody dto.SavePushTokenRequest
 		if err := DecodeJSON(r, &reqBody); err != nil || reqBody.PushToken == "" {
 			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if len(reqBody.PushToken) < minFCMTokenLength {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "push token is too short")
+			return
+		}
+		if len(reqBody.PushToken) > maxFCMTokenLength {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "push token exceeds maximum allowed length")
 			return
 		}
 
