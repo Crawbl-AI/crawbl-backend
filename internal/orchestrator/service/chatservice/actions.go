@@ -27,6 +27,14 @@ func (s *service) RespondToActionCard(ctx context.Context, opts *orchestratorser
 		return nil, mErr
 	}
 
+	// Verify the message belongs to the verified workspace by checking its
+	// conversation is scoped to that workspace. GetByID filters by workspaceID,
+	// so a mismatch returns not-found which we surface as unauthorized to
+	// avoid leaking that the message exists in another workspace.
+	if _, mErr := s.conversationRepo.GetByID(ctx, opts.Sess, opts.WorkspaceID, msg.ConversationID); mErr != nil {
+		return nil, merrors.ErrUnauthorized
+	}
+
 	msg.Content.SelectedActionID = &opts.ActionID
 	msg.UpdatedAt = time.Now().UTC()
 

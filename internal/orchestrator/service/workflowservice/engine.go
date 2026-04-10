@@ -16,12 +16,25 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
+// MaxWorkflowDuration caps the total wall-clock time for a single workflow
+// execution. 30 minutes is well above the longest expected agent chain
+// (real workflows complete in seconds to a few minutes), while still ensuring
+// a stuck or runaway workflow is cancelled before leaking resources past the
+// pod's SIGTERM grace window. Tune this if workflows grow beyond ~100 steps.
+const MaxWorkflowDuration = 30 * time.Minute
+
+// WorkflowCleanupTimeout is the time budget for post-failure DB writes when
+// the workflow context has already been cancelled.
+const WorkflowCleanupTimeout = 5 * time.Second
+
 // ExecuteWorkflow runs a workflow asynchronously. Call in a goroutine.
 // It fetches the definition, iterates through steps sequentially, and calls
 // the agent runtime for each step using the specified agent_slug. Step outputs are
 // collected into a context map that supports template variable substitution
 // in subsequent step prompts.
 func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus) {
+	ctx, cancel := context.WithTimeout(ctx, MaxWorkflowDuration)
+	defer cancel()
 	sess := s.db.NewSession(nil)
 
 	execution, mErr := s.workflowRepo.GetExecution(ctx, sess, executionID)
@@ -169,11 +182,17 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			execution.Status = "failed"
 			execution.ErrorMessage = &errMsg
 			execution.CompletedAt = &completedAt
-			if mErr := s.workflowRepo.UpdateExecution(ctx, sess, execution); mErr != nil {
+
+			// Use a fresh context for cleanup writes: the workflow context may
+			// already be cancelled (timeout or shutdown), but we still need to
+			// persist the failed status so the execution row doesn't stay "running".
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), WorkflowCleanupTimeout)
+
+			if mErr := s.workflowRepo.UpdateExecution(cleanupCtx, sess, execution); mErr != nil {
 				slog.Warn("ExecuteWorkflow: failed to mark execution as failed", "execution_id", executionID, "error", mErr.Error())
 			}
 
-			s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
+			s.broadcaster.EmitWorkflowEvent(cleanupCtx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
 				WorkflowID:     definition.ID,
 				ExecutionID:    executionID,
 				WorkflowName:   definition.Name,
@@ -183,6 +202,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 				StepName:       step.Name,
 				Error:          errMsg,
 			})
+			cleanupCancel()
 			return
 		}
 

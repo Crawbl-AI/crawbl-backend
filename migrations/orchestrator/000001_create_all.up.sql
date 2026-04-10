@@ -149,8 +149,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_agent_id ON messages(agent_id);
 -- MCP audit log
 CREATE TABLE IF NOT EXISTS mcp_audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
     session_id TEXT NOT NULL DEFAULT '',
     tool_name TEXT NOT NULL,
     input JSONB NOT NULL DEFAULT '{}'::jsonb,

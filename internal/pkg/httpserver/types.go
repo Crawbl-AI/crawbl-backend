@@ -100,6 +100,9 @@ type successResponseEnvelope struct {
 }
 
 // errorResponseEnvelope wraps error responses in an error envelope.
+// It matches the API contract: {"message": "string", "code": "string", "extra": {}}.
 type errorResponseEnvelope struct {
-	Error string `json:"error"`
+	Message string         `json:"message"`
+	Code    string         `json:"code,omitempty"`
+	Extra   map[string]any `json:"extra,omitempty"`
 }

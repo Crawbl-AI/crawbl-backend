@@ -29,7 +29,7 @@ func PanicRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 						"panic", fmt.Sprintf("%v", rvr),
 						"stack", string(debug.Stack()),
 					)
-					WriteErrorResponse(w, http.StatusInternalServerError, "internal server error")
+					WriteErrorMessage(w, http.StatusInternalServerError, "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
@@ -82,7 +82,7 @@ func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handle
 				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(cfg.E2EToken)) == 1 {
 					e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
 					if e2eUID == "" {
-						WriteErrorResponse(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
+						WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
 						return
 					}
 
@@ -115,7 +115,7 @@ func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handle
 			// Read gateway-verified claims from Envoy-forwarded headers.
 			uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
 			if uid == "" {
-				WriteErrorResponse(w, http.StatusUnauthorized, "unauthorized")
+				WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 

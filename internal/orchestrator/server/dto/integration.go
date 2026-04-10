@@ -24,6 +24,7 @@ type IntegrationItemResponse struct {
 	Type        string `json:"type"`
 	Provider    string `json:"provider,omitempty"`
 	Enabled     bool   `json:"enabled"`
+	IsConnected bool   `json:"is_connected"`
 }
 
 // IntegrationConnectRequest is the body for POST /v1/integrations/connect.

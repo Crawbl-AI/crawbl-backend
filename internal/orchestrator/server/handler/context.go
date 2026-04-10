@@ -67,7 +67,7 @@ func (c *Context) NewSession() *dbr.Session {
 
 // WriteError writes a structured error response with the correct HTTP status.
 func WriteError(w http.ResponseWriter, mErr *merrors.Error) {
-	httpserver.WriteErrorResponse(w, HTTPStatusForError(mErr), merrors.PublicMessage(mErr))
+	httpserver.WriteErrorResponse(w, HTTPStatusForError(mErr), mErr)
 }
 
 // WriteSuccess writes a success response wrapped in {"data": ...} envelope.
@@ -78,6 +78,29 @@ func WriteSuccess(w http.ResponseWriter, status int, data any) {
 // WriteJSON writes a JSON response without envelope wrapper.
 func WriteJSON(w http.ResponseWriter, status int, payload any) {
 	httpserver.WriteJSONResponse(w, status, payload)
+}
+
+// listResponse is the wire shape for paginated list endpoints.
+// Produces {"data": [...], "pagination": {...}} at the top level —
+// no additional envelope wrapper.
+type listResponse struct {
+	Data       any `json:"data"`
+	Pagination any `json:"pagination"`
+}
+
+// WriteMessagesListResponse writes a paginated list response with the shape
+// {"data": [...], "pagination": {...}} — flat top-level, NO outer envelope.
+//
+// This helper is SPECIFIC to the messages list endpoint, whose contract
+// deliberately differs from the rest of the API (which uses the standard
+// {"data": ...} envelope via WriteSuccessResponse). DO NOT use this helper
+// for other list endpoints without first updating the API contract in
+// crawbl-docs/internal-docs/reference/api/endpoints.md.
+func WriteMessagesListResponse(w http.ResponseWriter, items any, pagination any) {
+	httpserver.WriteJSONResponse(w, http.StatusOK, listResponse{
+		Data:       items,
+		Pagination: pagination,
+	})
 }
 
 // PrincipalFromRequest extracts the authenticated principal from request context.

@@ -25,7 +25,7 @@ func ActionCardResponse(c *Context) http.HandlerFunc {
 
 		var req dto.ActionCardRequest
 		if err := DecodeJSON(r, &req); err != nil || req.ActionID == "" {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "action_id is required")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "action_id is required")
 			return
 		}
 

@@ -126,14 +126,11 @@ func MessagesList(c *Context) http.HandlerFunc {
 			response = append(response, dto.ToMessageResponse(message))
 		}
 
-		WriteSuccess(w, http.StatusOK, &dto.MessagesListResponse{
-			Messages: response,
-			Pagination: dto.MessagesPaginationResponse{
-				NextScrollID: page.Pagination.NextScrollID,
-				PrevScrollID: page.Pagination.PrevScrollID,
-				HasNext:      page.Pagination.HasNext,
-				HasPrev:      page.Pagination.HasPrev,
-			},
+		WriteMessagesListResponse(w, response, dto.MessagesPaginationResponse{
+			NextScrollID: page.Pagination.NextScrollID,
+			PrevScrollID: page.Pagination.PrevScrollID,
+			HasNext:      page.Pagination.HasNext,
+			HasPrev:      page.Pagination.HasPrev,
 		})
 	}
 }
@@ -151,17 +148,17 @@ func ConversationCreate(c *Context) http.HandlerFunc {
 
 		var reqBody dto.CreateConversationRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
 		convType := orchestrator.ConversationType(strings.TrimSpace(reqBody.Type))
 		if convType != orchestrator.ConversationTypeSwarm && convType != orchestrator.ConversationTypeAgent {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid value for field 'type'")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid value for field 'type'")
 			return
 		}
 		if convType == orchestrator.ConversationTypeAgent && strings.TrimSpace(reqBody.AgentID) == "" {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "agent_id is required for agent conversations")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "agent_id is required for agent conversations")
 			return
 		}
 
@@ -211,7 +208,7 @@ func ConversationDelete(c *Context) http.HandlerFunc {
 // Not yet implemented — real full-text search comes later.
 func SearchMessages(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpserver.WriteErrorResponse(w, http.StatusNotImplemented, "message search is not yet available")
+		httpserver.WriteErrorMessage(w, http.StatusNotImplemented, "message search is not yet available")
 	}
 }
 
@@ -253,7 +250,7 @@ func MessagesSend(c *Context) http.HandlerFunc {
 
 		var reqBody dto.SendMessageRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
@@ -263,7 +260,8 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		replyMsgs, mErr := c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
+		var userMsg *orchestrator.Message
+		_, mErr = c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
 			Sess:           c.NewSession(),
 			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
@@ -272,6 +270,9 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			Content:        content,
 			Attachments:    dto.AttachmentsToDomain(reqBody.Attachments),
 			Mentions:       dto.MentionsToDomain(reqBody.Mentions),
+			OnPersisted: func(msg *orchestrator.Message) {
+				userMsg = msg
+			},
 		})
 		if mErr != nil {
 			c.Logger.Error("send message failed",
@@ -283,10 +284,14 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		response := make([]dto.MessageResponse, 0, len(replyMsgs))
-		for _, msg := range replyMsgs {
-			response = append(response, dto.ToMessageResponse(msg))
+		if userMsg == nil {
+			c.Logger.Error("send message: OnPersisted not called, user message is nil",
+				"path", r.URL.Path,
+				"user_id", user.ID,
+			)
+			httpserver.WriteErrorMessage(w, http.StatusInternalServerError, "internal error")
+			return
 		}
-		WriteSuccess(w, http.StatusOK, response)
+		WriteSuccess(w, http.StatusCreated, dto.ToMessageResponse(userMsg))
 	}
 }

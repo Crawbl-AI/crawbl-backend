@@ -4,7 +4,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -336,14 +335,16 @@ func runServer(ctx context.Context) error {
 	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
 	if ioServer != nil {
 		socketio.RegisterMessageHandler(ioServer, &socketio.Config{
-			Logger:      logger,
-			DB:          db,
-			ChatService: chatService,
-			AuthService: authService,
+			Logger:           logger,
+			DB:               db,
+			ChatService:      chatService,
+			AuthService:      authService,
+			WorkspaceService: workspaceService,
+			ShutdownCtx:      ctx,
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
+	mcpHandler := buildMCPHandler(ctx, logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
 
 	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
 	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
@@ -416,11 +417,13 @@ func mustBuildRepos(logger *slog.Logger) (
 	logger.Info("configuring storage backend", slog.String("backend", "postgres"))
 	dbConfig := database.ConfigFromEnv("CRAWBL_")
 	if err := database.EnsureSchema(dbConfig); err != nil {
-		log.Fatal(err)
+		// panic instead of log.Fatal so that deferred cleanup (telemetry flush) runs.
+		panic(err)
 	}
 	db, err := database.New(dbConfig)
 	if err != nil {
-		log.Fatal(err)
+		// panic instead of log.Fatal so that deferred cleanup (telemetry flush) runs.
+		panic(err)
 	}
 	return db, userrepo.New(), workspacerepo.New(), agentrepo.New(), conversationrepo.New(), messagerepo.New(), func() {
 		_ = db.Close()
@@ -525,6 +528,7 @@ func newLLMClassifierOrNil() extract.LLMClassifier {
 }
 
 func buildMCPHandler(
+	ctx context.Context,
 	logger *slog.Logger,
 	db *dbr.Connection,
 	workspaceRepo orchestratorrepo.WorkspaceRepo,
@@ -586,6 +590,7 @@ func buildMCPHandler(
 			RuntimeClient: runtimeClient,
 			Broadcaster:   broadcaster,
 			WorkflowExec:  workflowSvc,
+			ShutdownCtx:   ctx,
 		},
 		memoryStack,
 	)

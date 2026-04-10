@@ -80,6 +80,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 				Type:        string(orchestrator.ItemTypeApp),
 				Provider:    ig.Provider,
 				Enabled:     ig.IsEnabled,
+				IsConnected: ig.IsConnected,
 			})
 		}
 
@@ -103,7 +104,7 @@ func IntegrationConnect(c *Context) http.HandlerFunc {
 
 		var req dto.IntegrationConnectRequest
 		if err := DecodeJSON(r, &req); err != nil || req.Provider == "" {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "provider is required")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "provider is required")
 			return
 		}
 
@@ -141,11 +142,11 @@ func IntegrationCallback(c *Context) http.HandlerFunc {
 
 		var req dto.IntegrationCallbackRequest
 		if err := DecodeJSON(r, &req); err != nil {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 		if req.Provider == "" || req.AuthorizationCode == "" || req.CodeVerifier == "" {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "provider, authorization_code, and code_verifier are required")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "provider, authorization_code, and code_verifier are required")
 			return
 		}
 

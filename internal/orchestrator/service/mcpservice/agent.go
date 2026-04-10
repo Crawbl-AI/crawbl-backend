@@ -1,12 +1,12 @@
 package mcpservice
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 func (s *service) ResolveAgentBySlug(ctx contextT, sess sessionT, workspaceID, slug string) (string, error) {
@@ -16,6 +16,16 @@ func (s *service) ResolveAgentBySlug(ctx contextT, sess sessionT, workspaceID, s
 func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID string, params *CreateAgentHistoryParams) error {
 	var agentID string
 	if params.AgentID != "" {
+		// Verify the agent belongs to the HMAC-scoped workspace before using the
+		// caller-supplied ID. Without this check a valid token for workspace A could
+		// write history rows for an agent in workspace B by knowing its UUID.
+		agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, params.AgentID)
+		if mErr != nil {
+			return merrors.ErrAgentNotFound
+		}
+		if agent.WorkspaceID != workspaceID {
+			return merrors.ErrAgentNotFound
+		}
 		agentID = params.AgentID
 	} else if params.AgentSlug != "" {
 		var err error
@@ -24,7 +34,7 @@ func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID st
 			return err
 		}
 	} else {
-		return fmt.Errorf("agent_id or agent_slug is required")
+		return merrors.NewServerErrorText("agent_id or agent_slug is required")
 	}
 
 	var convID *string
@@ -42,7 +52,7 @@ func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID st
 	}
 
 	if mErr := s.repos.AgentHistory.Create(ctx, sess, row); mErr != nil {
-		return fmt.Errorf("create history entry: %s", mErr.Error())
+		return merrors.WrapServerError(mErr, "create history entry")
 	}
 	return nil
 }
