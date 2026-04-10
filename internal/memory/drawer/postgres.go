@@ -182,7 +182,7 @@ func (r *postgresRepo) GetTopByImportance(ctx context.Context, sess database.Ses
 		q = q.Where("wing = ?", wing)
 	}
 	var results []memory.Drawer
-	_, err := q.OrderDir("importance", false).
+	_, err := q.Where("superseded_by IS NULL").Where("state != 'merged'").OrderDir("importance", false).
 		Limit(uint64(limit)).
 		LoadContext(ctx, &results)
 	if err != nil {
@@ -228,7 +228,7 @@ func (r *postgresRepo) GetByWingRoom(ctx context.Context, sess database.SessionR
 		q = q.Where("room = ?", room)
 	}
 	var results []memory.Drawer
-	_, err := q.Limit(uint64(limit)).
+	_, err := q.Where("superseded_by IS NULL").Where("state != 'merged'").Limit(uint64(limit)).
 		LoadContext(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: get by wing/room: %w", err)
