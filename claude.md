@@ -9,6 +9,7 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 - **Never sleep more than 10 seconds** when running commands or waiting for input.
 - Always use the `crawbl` CLI for building, pushing, and deploying images — prefer `crawbl app build` / `crawbl app deploy` over raw docker/kubectl/yq.
 - Always source `.env` for credentials: `set -a && source .env && set +a && <command>`. Never hardcode tokens or API keys.
+- If you dont know what should be the .env key value, Just create it yourself, we will change later. If required add it to AWS
 - Keep LLM provider credentials in the backend, not in agent runtime pods. Runtime secrets are injected via ESO-managed Kubernetes Secrets (`envSecretRef`).
 - Default model access is platform-managed; BYOK comes later.
 - Connected app credentials are per-user and must be revocable.
@@ -94,6 +95,8 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 - Table-driven tests for anything branchy. Fakes over mocks; test through the public interface.
 - No `interface{}` / `any` in the domain layer — use concrete or generic types.
 - Exported identifiers get doc comments starting with the identifier name (`// Service orchestrates ...`).
+- No nested for loops, try to simplify the algorithms as close as O(1) if possible
+- Before creating Cron Jobs, Goroutines, schedualers or smth similar, think first, maybe we can utilize `River` for this purposes.
 
 ## Local Development
 
