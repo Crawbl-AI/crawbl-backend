@@ -16,6 +16,16 @@ func (s *service) ResolveAgentBySlug(ctx contextT, sess sessionT, workspaceID, s
 func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID string, params *CreateAgentHistoryParams) error {
 	var agentID string
 	if params.AgentID != "" {
+		// Verify the agent belongs to the HMAC-scoped workspace before using the
+		// caller-supplied ID. Without this check a valid token for workspace A could
+		// write history rows for an agent in workspace B by knowing its UUID.
+		agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, params.AgentID)
+		if mErr != nil {
+			return fmt.Errorf("agent not found: %s", mErr.Error())
+		}
+		if agent.WorkspaceID != workspaceID {
+			return fmt.Errorf("agent does not belong to workspace")
+		}
 		agentID = params.AgentID
 	} else if params.AgentSlug != "" {
 		var err error
