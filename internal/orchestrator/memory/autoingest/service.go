@@ -9,7 +9,7 @@ import (
 
 	"github.com/alitto/pond/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/config"
 )
 
 // service is the concrete Service backed by a pond.Pool with a bounded

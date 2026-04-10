@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/config"
 )
 
 // testNoiseState loads the noise config and compiles the pattern for use
