@@ -53,6 +53,7 @@ func newStreamSession(
 	ctx context.Context,
 	svc *service,
 	opts *orchestratorservice.SendMessageOpts,
+	pm *persistedMsg,
 	conv *orchestrator.Conversation,
 	agent *orchestrator.Agent,
 	lookups agentLookups,
@@ -73,11 +74,11 @@ func newStreamSession(
 		pending:      make(map[string]pendingToolCall),
 		log:          slog.With("agent", agent.Slug, "conv", conv.ID),
 
-		userMessageID: opts.UserMessageID,
-		localID:       opts.LocalID,
-		deliveredOnce: opts.StatusDeliveredOnce,
-		readOnce:      opts.StatusReadOnce,
-		onPersisted:   opts.OnPersisted,
+		userMessageID: pm.userMessageID,
+		localID:       pm.localID,
+		deliveredOnce: pm.deliveredOnce,
+		readOnce:      pm.readOnce,
+		onPersisted:   pm.onPersisted,
 
 		startTime:  time.Now(),
 		firstChunk: true,
@@ -91,6 +92,7 @@ func newStreamSession(
 func (s *service) callAgentStreaming(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
+	pm *persistedMsg,
 	conversation *orchestrator.Conversation,
 	runtimeState *orchestrator.RuntimeStatus,
 	agent *orchestrator.Agent,
@@ -132,7 +134,7 @@ func (s *service) callAgentStreaming(
 	}
 
 	// 3. Create session and process stream.
-	ss := newStreamSession(ctx, s, opts, conversation, agent, lookups, placeholder)
+	ss := newStreamSession(ctx, s, opts, pm, conversation, agent, lookups, placeholder)
 	ss.emitDelivered()
 	ss.processStream(streamCh)
 
