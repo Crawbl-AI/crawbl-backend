@@ -1,6 +1,6 @@
 // Package server implements the gRPC AgentRuntime service handlers for the
-// crawbl-agent-runtime binary. It wires the runner.Runner and memory.Store
-// into the gRPC server and provides the Converse and Memory service handlers.
+// crawbl-agent-runtime binary. It wires the runner.Runner into the gRPC
+// server and provides the Converse service handler.
 package server
 
 import (

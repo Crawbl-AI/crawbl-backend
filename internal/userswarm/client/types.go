@@ -1,8 +1,7 @@
 // Package client is the orchestrator-side client for the per-workspace
 // crawbl-agent-runtime pods. It manages the UserSwarm CR lifecycle via
 // the Kubernetes API (EnsureRuntime, DeleteRuntime) and forwards agent
-// interactions to the running pod via gRPC (SendText, SendTextStream,
-// Memory CRUD).
+// interactions to the running pod via gRPC (SendText, SendTextStream).
 //
 // The wire protocol between orchestrator and runtime is gRPC over the
 // in-cluster pod network, authenticated with HMAC bearer tokens derived
@@ -11,8 +10,8 @@
 // generated stubs at internal/agentruntime/proto/v1/.
 //
 // There is no HTTP/NDJSON wire anywhere in this package. The legacy
-// /webhook, /webhook/stream, and /api/memory endpoints that the Rust
-// agent runtime exposed are gone.
+// /webhook and /webhook/stream endpoints that the Rust agent runtime
+// exposed are gone.
 package client
 
 import (
@@ -69,43 +68,6 @@ type StreamChunk struct {
 	ThoughtsTokens      int32
 	CachedTokens        int32
 	CallSequence        int32
-}
-
-// MemoryEntry is a single memory row returned by the runtime's Memory
-// service.
-type MemoryEntry struct {
-	Key       string
-	Content   string
-	Category  string
-	CreatedAt string
-	UpdatedAt string
-}
-
-// ListMemoriesOpts carries parameters for ListMemories.
-type ListMemoriesOpts struct {
-	// Runtime carries both the pod routing coordinates and the identity
-	// (UserID, WorkspaceID) used to sign the HMAC bearer token.
-	Runtime *orchestrator.RuntimeStatus
-	// Category optionally filters memories by category (core, daily, conversation).
-	Category string
-	// Limit is the maximum number of entries to return.
-	Limit int
-	// Offset is the number of entries to skip.
-	Offset int
-}
-
-// DeleteMemoryOpts carries parameters for DeleteMemory.
-type DeleteMemoryOpts struct {
-	Runtime *orchestrator.RuntimeStatus
-	Key     string
-}
-
-// CreateMemoryOpts carries parameters for CreateMemory.
-type CreateMemoryOpts struct {
-	Runtime  *orchestrator.RuntimeStatus
-	Key      string
-	Content  string
-	Category string
 }
 
 // Driver constants select which Client implementation is constructed.
@@ -284,15 +246,6 @@ type Client interface {
 
 	// DeleteRuntime removes the UserSwarm CR for a workspace.
 	DeleteRuntime(ctx context.Context, workspaceID string) *merrors.Error
-
-	// ListMemories retrieves memories from the runtime's Memory service.
-	ListMemories(ctx context.Context, opts *ListMemoriesOpts) ([]MemoryEntry, *merrors.Error)
-
-	// DeleteMemory removes a specific memory entry by key.
-	DeleteMemory(ctx context.Context, opts *DeleteMemoryOpts) *merrors.Error
-
-	// CreateMemory stores a new memory entry.
-	CreateMemory(ctx context.Context, opts *CreateMemoryOpts) *merrors.Error
 
 	// Close releases any cached gRPC connections. Call once on
 	// orchestrator shutdown.

@@ -8,7 +8,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/cucumber/godog"
 	"github.com/gocraft/dbr/v2"
@@ -29,7 +28,6 @@ func registerDBSteps(sc *godog.ScenarioContext, tc *testContext) {
 
 	// Agent-runtime assertions (polled up to 30s for async tool effects).
 	sc.Step(`^the assistant should have remembered at least (\d+) notes? for subject "([^"]*)"$`, tc.dbAgentMemoryCountForSubject)
-	sc.Step(`^the assistant remembered note "([^"]*)" should contain "([^"]*)"$`, tc.dbAgentMemoryContains)
 	sc.Step(`^the audit trail should include a "([^"]*)" tool call for subject "([^"]*)"$`, tc.dbMCPAuditLogForSubject)
 	sc.Step(`^the assistant should have delegated at least (\d+) tasks? for subject "([^"]*)"$`, tc.dbAgentDelegationCountForSubject)
 	sc.Step(`^the assistant should have at least (\d+) agent-to-agent messages? for subject "([^"]*)"$`, tc.dbAgentMessageCountForSubject)
@@ -243,8 +241,13 @@ func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
 	return nil
 }
 
-// --- Agent-runtime DB assertions (polled, async-tolerant) -----------
+// --- Memory palace DB assertions (polled, async-tolerant) -----------
 
+// dbAgentMemoryCountForSubject waits until the given subject's default
+// workspace has at least `expected` memory_drawers rows. This is the
+// assertion that backs "the assistant should have remembered at least
+// N notes for subject X" in the Gherkin feature files; the drawer is
+// written by the memory_add_drawer tool during agent turns.
 func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) error {
 	if tc.dbConn == nil {
 		return nil
@@ -254,35 +257,15 @@ func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) 
 	defer cancel()
 	return pollUntil(ctx, func() error {
 		count, err := tc.queryCount(`
-			SELECT COUNT(*) FROM agent_memories
-			JOIN workspaces ON workspaces.id = agent_memories.workspace_id
+			SELECT COUNT(*) FROM memory_drawers
+			JOIN workspaces ON workspaces.id = memory_drawers.workspace_id
 			JOIN users ON users.id = workspaces.user_id
 			WHERE users.subject = $1`, subject)
 		if err != nil {
 			return err
 		}
 		if count < expected {
-			return fmt.Errorf("expected at least %d agent memory(ies) for %q, got %d", expected, alias, count)
-		}
-		return nil
-	})
-}
-
-func (tc *testContext) dbAgentMemoryContains(key, substring string) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		s := tc.sess()
-		var content string
-		row := s.QueryRowContext(context.Background(), "SELECT content FROM agent_memories WHERE key = $1 LIMIT 1", key)
-		if err := row.Scan(&content); err != nil {
-			return fmt.Errorf("agent_memory key %q not found: %w", key, err)
-		}
-		if !strings.Contains(content, substring) {
-			return fmt.Errorf("agent_memory %q does not contain %q", key, substring)
+			return fmt.Errorf("expected at least %d memory drawer(s) for %q, got %d", expected, alias, count)
 		}
 		return nil
 	})

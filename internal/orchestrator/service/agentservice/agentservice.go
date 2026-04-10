@@ -28,6 +28,9 @@ func New(
 	if repos.AgentHistory == nil {
 		panic("agent service agent history repo cannot be nil")
 	}
+	if repos.Drawer == nil {
+		panic("agent service drawer repo cannot be nil")
+	}
 	if runtimeClient == nil {
 		panic("agent service runtime client cannot be nil")
 	}

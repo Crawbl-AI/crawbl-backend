@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
-	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
@@ -19,44 +18,40 @@ import (
 
 // Server is the top-level gRPC server wrapper for crawbl-agent-runtime.
 // It owns the net.Listener, the *grpc.Server, the HealthServer, and
-// holds references to the injected runner + memory store so Shutdown
-// can tear them down in the correct order. main.go constructs one
-// Server via New(), calls Start() in a goroutine, and Shutdown() on
-// SIGTERM.
+// holds a reference to the injected runner so Shutdown can tear it
+// down in the correct order. main.go constructs one Server via New(),
+// calls Start() in a goroutine, and Shutdown() on SIGTERM.
 //
 // Every piece of generic gRPC infrastructure (HMAC auth interceptor,
 // graceful shutdown, PerRPC credentials symmetry with the client)
 // lives in internal/pkg/grpc. This package only contains
-// agentruntime-specific wiring: the Server struct, the Converse +
-// Memory service handlers, and the HealthServer lifecycle.
+// agentruntime-specific wiring: the Server struct, the Converse
+// service handler, and the HealthServer lifecycle.
 type Server struct {
 	cfg      config.Config
 	logger   *slog.Logger
 	listener net.Listener
 	grpcSrv  *grpc.Server
 	health   *HealthServer
-	memStore memory.Store
 	runner   *runner.Runner
 }
 
 // Deps bundles the dependencies main.go constructs before calling New.
 // Passing them through a single struct keeps the server package free
-// of direct Postgres / Redis / model imports and makes the dependency
-// graph obvious at the wiring site.
+// of direct Redis / model imports and makes the dependency graph
+// obvious at the wiring site.
 type Deps struct {
 	// Runner drives Converse turns. Required.
 	Runner *runner.Runner
-	// MemStore backs the gRPC Memory service. Required.
-	MemStore memory.Store
 	// Logger for the server. If nil, slog.Default() is used.
 	Logger *slog.Logger
 }
 
 // New wires a Server ready to Start(). It installs the shared
 // internal/pkg/grpc HMAC auth interceptor, registers the health +
-// reflection services, and registers the AgentRuntime + Memory
-// handlers against the injected dependencies. It does NOT open the
-// listener — Start() does that.
+// reflection services, and registers the AgentRuntime handler against
+// the injected dependencies. It does NOT open the listener — Start()
+// does that.
 //
 // main.go calls srv.Health().SetServing() right after New returns once
 // every dependency is constructed so Kubernetes probes see the pod as
@@ -64,9 +59,6 @@ type Deps struct {
 func New(cfg config.Config, deps Deps) (*Server, error) {
 	if deps.Runner == nil {
 		return nil, fmt.Errorf("server: Deps.Runner is required")
-	}
-	if deps.MemStore == nil {
-		return nil, fmt.Errorf("server: Deps.MemStore is required")
 	}
 	logger := deps.Logger
 	if logger == nil {
@@ -83,7 +75,6 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 	healthpb.RegisterHealthServer(grpcSrv, healthSrv.Inner())
 
 	runtimev1.RegisterAgentRuntimeServer(grpcSrv, newConverseHandler(logger, deps.Runner))
-	runtimev1.RegisterMemoryServer(grpcSrv, newMemoryServer(logger, deps.MemStore))
 
 	// Register gRPC server reflection so local debugging tools
 	// (grpcurl, evans) can enumerate services without a .proto file.
@@ -95,12 +86,11 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 	reflection.Register(grpcSrv)
 
 	return &Server{
-		cfg:      cfg,
-		logger:   logger,
-		grpcSrv:  grpcSrv,
-		health:   healthSrv,
-		memStore: deps.MemStore,
-		runner:   deps.Runner,
+		cfg:     cfg,
+		logger:  logger,
+		grpcSrv: grpcSrv,
+		health:  healthSrv,
+		runner:  deps.Runner,
 	}, nil
 }
 
@@ -125,9 +115,9 @@ func (s *Server) Health() *HealthServer {
 
 // Shutdown initiates a graceful stop of the gRPC server. In-flight
 // RPCs are allowed to finish up to cfg.Startup.GracefulShutdownTimeout;
-// after that, the server force-closes. The runner and memory store
-// are torn down after the gRPC server has drained so active turns
-// can complete against still-live backends.
+// after that, the server force-closes. The runner is torn down after
+// the gRPC server has drained so active turns can complete against
+// still-live backends.
 //
 // The graceful-stop dance itself lives in internal/pkg/grpc so every
 // gRPC server in crawbl-backend shares the same implementation.
@@ -140,11 +130,6 @@ func (s *Server) Shutdown() {
 	if s.runner != nil {
 		if err := s.runner.Close(); err != nil {
 			s.logger.Warn("runner close returned error", "error", err)
-		}
-	}
-	if s.memStore != nil {
-		if err := s.memStore.Close(); err != nil {
-			s.logger.Warn("memory store close returned error", "error", err)
 		}
 	}
 }

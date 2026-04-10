@@ -13,13 +13,12 @@
 //
 // Subpackages:
 //
-//   - config     — CLI + env configuration (workspace ID, MCP endpoint, model, Postgres, Redis).
-//   - server     — gRPC server wiring (Converse bidi stream, Memory unary RPCs, health).
+//   - config     — CLI + env configuration (workspace ID, MCP endpoint, model, Redis).
+//   - server     — gRPC server wiring (Converse bidi stream, health).
 //   - runner     — ADK runner construction and workspace blueprint bootstrap.
 //   - agents     — concrete Manager / Wally / Eve constructors; instruction text comes from the blueprint.
 //   - tools      — tool registry; tools/local/* and tools/mcp/* for local + MCP-bridged tools.
 //   - model      — LLM adapters (OpenAI via adk-utils-go).
-//   - memory     — Postgres-backed durable memory store (agent_memories table).
 //   - session    — Redis-backed ADK session.Service implementation.
 //   - telemetry  — OpenTelemetry exporter wiring to VictoriaMetrics / VictoriaLogs (follow-up).
 //   - storage    — DigitalOcean Spaces client built on aws-sdk-go-v2/service/s3 (follow-up).

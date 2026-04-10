@@ -6,13 +6,13 @@
 // Lifecycle:
 //
 //  1. Parse config from CLI flags + environment variables.
-//  2. Open Postgres + Redis connections (shared with the orchestrator).
+//  2. Open the Redis connection used by the ADK session service.
 //  3. Fetch the workspace blueprint from the orchestrator (HMAC-authed).
 //  4. Construct the LLM adapter, the orchestrator MCP toolset, and the
 //     Redis-backed session service.
 //  5. Build the agent graph (Manager + Wally + Eve) via runner.New.
 //  6. Construct the gRPC server with the HMAC interceptor chain and
-//     register the Converse + Memory handlers.
+//     register the Converse handler.
 //  7. Flip the health server to SERVING.
 //  8. Serve until SIGINT/SIGTERM, then graceful-stop.
 //
@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
-	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/model"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/server"
@@ -38,7 +37,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	agentmcp "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/mcp"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 )
@@ -76,7 +74,6 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		"orchestrator_endpoint", cfg.OrchestratorGRPCEndpoint,
 		"mcp_endpoint", cfg.MCPEndpoint,
 		"openai_model", cfg.OpenAI.ModelName,
-		"postgres_host", cfg.Postgres.Host,
 		"redis_addr", cfg.Redis.Addr,
 	)
 
@@ -98,19 +95,7 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		}
 	}()
 
-	// Step 2a: Postgres.
-	dbConn, err := database.New(cfg.Postgres)
-	if err != nil {
-		return err
-	}
-	memStore := memory.NewPostgresStore(dbConn, nil)
-	defer func() {
-		if cerr := memStore.Close(); cerr != nil {
-			logger.Warn("memory store close error", "error", cerr)
-		}
-	}()
-
-	// Step 2b: Redis (shared client + ADK session service).
+	// Step 2: Redis (shared client + ADK session service).
 	redisCli, err := redisclient.New(cfg.Redis)
 	if err != nil {
 		return err
@@ -210,9 +195,8 @@ func run(cfg config.Config, logger *slog.Logger) error {
 
 	// Step 6: gRPC server.
 	srv, err := server.New(cfg, server.Deps{
-		Runner:   r,
-		MemStore: memStore,
-		Logger:   logger,
+		Runner: r,
+		Logger: logger,
 	})
 	if err != nil {
 		return err

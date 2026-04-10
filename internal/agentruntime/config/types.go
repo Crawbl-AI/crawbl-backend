@@ -17,7 +17,6 @@ package config
 import (
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
@@ -54,11 +53,6 @@ type Config struct {
 
 	// OpenAI holds the LLM adapter configuration.
 	OpenAI OpenAIConfig
-
-	// Postgres carries the orchestrator-shared database connection
-	// settings. The runtime writes durable user memories to the
-	// agent_memories table in the orchestrator schema. Required.
-	Postgres database.Config
 
 	// Redis carries the shared Redis backend settings used by the ADK
 	// session service. Required.

@@ -30,26 +30,11 @@ type runtimeConfig struct {
 	// --mcp-endpoint on the runtime container.
 	MCPEndpoint string
 
-	// PostgresHost / PostgresPort / PostgresUser / PostgresName /
-	// PostgresSchema / PostgresSSLMode carry the orchestrator-shared
-	// database connection settings that runtime pods need to reach
-	// the agent_memories table. Injected as literal env vars
-	// (CRAWBL_DATABASE_*) on every runtime container. The matching
-	// CRAWBL_DATABASE_PASSWORD is projected through the envSecretRef
-	// Secret (runtime-openai-secrets) so secrets never flow through
-	// the webhook process env.
-	PostgresHost    string
-	PostgresPort    string
-	PostgresUser    string
-	PostgresName    string
-	PostgresSchema  string
-	PostgresSSLMode string
-
 	// RedisAddr is the host:port of the cluster-side Redis master
 	// that backs the ADK session.Service. Injected as the literal
 	// CRAWBL_REDIS_ADDR env var on every runtime container. The
 	// matching CRAWBL_REDIS_PASSWORD is projected through the
-	// envSecretRef Secret alongside CRAWBL_DATABASE_PASSWORD.
+	// envSecretRef Secret (runtime-openai-secrets).
 	RedisAddr string
 
 	// OTelEnabled / OTelMetricsEndpoint / OTelEnvironment /
