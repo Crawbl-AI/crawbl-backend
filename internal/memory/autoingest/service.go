@@ -2,10 +2,14 @@ package autoingest
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"regexp"
 	"sync/atomic"
 
 	"github.com/alitto/pond/v2"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
 )
 
 // service is the concrete Service backed by a pond.Pool with a bounded
@@ -17,16 +21,24 @@ type service struct {
 	logger         *slog.Logger
 	dropped        atomic.Uint64
 	centroidErrors atomic.Uint64
+	noiseMinLength int
+	noisePattern   *regexp.Regexp
 }
 
 // NewService constructs a Service backed by a pond.Pool. The pool is
 // started eagerly; the caller must call Shutdown before the process exits.
-// Panics if deps is missing a required collaborator — that would be a
-// wiring bug and the orchestrator should refuse to boot.
-func NewService(deps Deps, cfg Config) Service {
+// Returns an error if deps validation fails or the noise config cannot be
+// loaded — the orchestrator can then log and exit cleanly without panicking.
+func NewService(deps Deps, cfg Config) (Service, error) {
 	if err := deps.Validate(); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("memory.autoingest: invalid deps: %w", err)
 	}
+
+	noiseCfg, err := config.LoadNoiseConfig()
+	if err != nil {
+		return nil, fmt.Errorf("memory.autoingest: load noise config: %w", err)
+	}
+
 	workers := cfg.Workers
 	if workers <= 0 {
 		workers = defaultWorkers
@@ -53,17 +65,19 @@ func NewService(deps Deps, cfg Config) Service {
 	)
 
 	return &service{
-		pool:   pool,
-		deps:   deps,
-		logger: logger,
-	}
+		pool:           pool,
+		deps:           deps,
+		logger:         logger,
+		noiseMinLength: noiseCfg.MinLength,
+		noisePattern:   noiseCfg.CompileNoisePattern(),
+	}, nil
 }
 
 // Submit enqueues one Work for background ingestion. Deps.Validate in
 // NewService guarantees DrawerRepo and Classifier are non-nil, so the
 // hot path only filters noise and hands off to pond.
 func (s *service) Submit(ctx context.Context, work Work) {
-	if isNoise(work.Exchange) {
+	if isNoise(work.Exchange, s.noiseMinLength, s.noisePattern) {
 		return
 	}
 	// Capture a background context so long-lived ingestion does not
