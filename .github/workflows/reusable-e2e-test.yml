@@ -89,6 +89,7 @@ jobs:
             sleep 5
           done
           echo "WARNING: Timed out waiting for ${IMAGE_TAG}"
+          exit 1
 
       - name: Run e2e tests
         env:
