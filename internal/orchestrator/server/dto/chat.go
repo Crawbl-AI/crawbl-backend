@@ -158,6 +158,21 @@ type MessagesPaginationResponse struct {
 	HasPrev bool `json:"has_prev"`
 }
 
+// MessagesListResponse is the paginated response for listing messages.
+// Emitted through the WriteSuccess envelope helper, so the final wire
+// shape is {"data": {"messages": [...], "pagination": {...}}} — the
+// outer "data" is the envelope, the inner "messages" is this struct's
+// Messages field. Do NOT rename the field to Data; that produces a
+// {"data": {"data": [...]}} double-envelope the mobile client cannot
+// parse.
+type MessagesListResponse struct {
+	// Messages is the list of messages for the current page.
+	Messages []MessageResponse `json:"messages"`
+
+	// Pagination contains the cursors and flags for scrolling through results.
+	Pagination MessagesPaginationResponse `json:"pagination"`
+}
+
 // CreateConversationRequest represents the request body for creating a new conversation.
 type CreateConversationRequest struct {
 	// Type is the conversation type: "swarm" or "agent".

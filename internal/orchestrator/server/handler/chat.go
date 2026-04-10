@@ -126,11 +126,14 @@ func MessagesList(c *Context) http.HandlerFunc {
 			response = append(response, dto.ToMessageResponse(message))
 		}
 
-		WriteMessagesListResponse(w, response, dto.MessagesPaginationResponse{
-			NextScrollID: page.Pagination.NextScrollID,
-			PrevScrollID: page.Pagination.PrevScrollID,
-			HasNext:      page.Pagination.HasNext,
-			HasPrev:      page.Pagination.HasPrev,
+		WriteSuccess(w, http.StatusOK, dto.MessagesListResponse{
+			Messages: response,
+			Pagination: dto.MessagesPaginationResponse{
+				NextScrollID: page.Pagination.NextScrollID,
+				PrevScrollID: page.Pagination.PrevScrollID,
+				HasNext:      page.Pagination.HasNext,
+				HasPrev:      page.Pagination.HasPrev,
+			},
 		})
 	}
 }
