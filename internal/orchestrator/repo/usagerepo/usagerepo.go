@@ -235,13 +235,14 @@ func (p *postgres) GetWorkspaceUsage(ctx context.Context, sess orchestratorrepo.
 	}
 
 	var row WorkspaceUsageRow
-	err := sess.SelectBySql(`
-		SELECT COALESCE(SUM(tokens_used), 0)            AS tokens_used,
-		       COALESCE(SUM(prompt_tokens_used), 0)      AS prompt_tokens_used,
-		       COALESCE(SUM(completion_tokens_used), 0)  AS completion_tokens_used,
-		       COALESCE(SUM(request_count), 0)           AS request_count
-		FROM agent_usage_counters
-		WHERE workspace_id = ?`, workspaceID).
+	err := sess.Select(
+		"COALESCE(SUM(tokens_used), 0) AS tokens_used",
+		"COALESCE(SUM(prompt_tokens_used), 0) AS prompt_tokens_used",
+		"COALESCE(SUM(completion_tokens_used), 0) AS completion_tokens_used",
+		"COALESCE(SUM(request_count), 0) AS request_count",
+	).
+		From("agent_usage_counters").
+		Where("workspace_id = ?", workspaceID).
 		LoadOneContext(ctx, &row)
 
 	if err != nil {
