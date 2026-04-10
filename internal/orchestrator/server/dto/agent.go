@@ -58,6 +58,7 @@ type AgentDetailResponse struct {
 	AvatarURL   string             `json:"avatar_url"`
 	Status      string             `json:"status"`
 	SortOrder   int                `json:"sort_order"`
+	Skills      []string           `json:"skills"`
 	Stats       AgentStatsResponse `json:"stats"`
 }
 
@@ -149,6 +150,8 @@ func ToAgentDetailResponse(d *orchestrator.AgentDetails) AgentDetailResponse {
 		AvatarURL:   d.AvatarURL,
 		Status:      string(d.Status),
 		SortOrder:   d.SortOrder,
+		// TODO(skills): populate from agent skills/capabilities when domain model exposes them
+		Skills: []string{},
 		Stats: AgentStatsResponse{
 			TotalMessages: d.Stats.TotalMessages,
 			// TODO(memory): wire memory usage percentage when available
