@@ -58,7 +58,8 @@ func (c *classifier) Classify(text string, minConfidence float64) []ClassifiedMe
 
 	for _, seg := range segments {
 		seg = strings.TrimSpace(seg)
-		if len(seg) < 20 {
+		// Ignore user prompts which are less than 10 tokens/letters
+		if len(seg) < 10 {
 			continue
 		}
 
