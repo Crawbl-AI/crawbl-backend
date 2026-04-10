@@ -14,6 +14,21 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
+// maxRequestBodySize is the upper bound applied to every incoming request body.
+// 1 MiB covers all current JSON endpoints (CreateAgentMemory, ConversationCreate, etc.)
+// without allowing arbitrarily large payloads to exhaust server memory.
+const maxRequestBodySize int64 = 1 << 20 // 1 MiB
+
+// MaxBodyBytes wraps r.Body with http.MaxBytesReader so handlers decoding
+// JSON cannot be crashed by unbounded payloads. A 1 MiB limit covers all
+// current endpoints (CreateAgentMemory, CreateConversation, etc.).
+func MaxBodyBytes(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // PanicRecoverer is middleware that recovers from panics and logs them with full context.
 // It returns a 500 Internal Server Error to the client.
 func PanicRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
