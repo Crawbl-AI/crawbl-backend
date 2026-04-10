@@ -22,6 +22,7 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
@@ -60,7 +61,7 @@ func NewServer(cfg *Config) *socket.Server {
 	// Set up the /v1 namespace with auth middleware and connection handling.
 	nsp := io.Of(socketNamespace, nil)
 	registerAuthMiddleware(nsp, cfg.Logger)
-	registerConnectionHandler(nsp, cfg.Logger, cfg.DB, cfg.WorkspaceRepo)
+	registerConnectionHandler(nsp, cfg.Logger, cfg.DB, cfg.WorkspaceRepo, cfg.AuthService)
 
 	return io
 }
@@ -132,9 +133,11 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 //   - registers workspace.subscribe/unsubscribe event handlers for dynamic room management
 //   - registers a single disconnect handler for cleanup and in-flight dispatch cancellation
 //
-// db and workspaceRepo are used to verify ownership before joining a workspace room.
-// When either is nil the ownership check is skipped (development / test only).
-func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker) {
+// db, workspaceRepo, and authService are used to verify ownership before joining a
+// workspace room. authService resolves the Firebase subject to an internal user.ID so
+// the workspace ownership query uses the correct PK column. When db or workspaceRepo is
+// nil the ownership check is skipped (development / test only).
+func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService orchestratorservice.AuthService) {
 	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {
@@ -183,8 +186,32 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			if db != nil && workspaceRepo != nil {
 				authorised = make([]string, 0, len(ids))
 				sess := db.NewSession(nil)
+
+				// Resolve Firebase subject → internal user.ID. The workspace repo
+				// queries by the internal PK (user_id column), not the subject.
+				// On failure, drop all requested IDs and bail early.
+				var userID string
+				if authService != nil {
+					user, mErr := authService.GetBySubject(context.Background(), &orchestratorservice.GetUserBySubjectOpts{
+						Sess:    sess,
+						Subject: userSubject,
+					})
+					if mErr != nil {
+						logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
+							"socket_id", string(s.Id()),
+							"subject", userSubject,
+							"error", mErr.Error(),
+						)
+						return
+					}
+					userID = user.ID
+				} else {
+					// authService unavailable (dev/test): fall back to subject as-is.
+					userID = userSubject
+				}
+
 				for _, id := range ids {
-					_, mErr := workspaceRepo.GetByID(context.Background(), sess, userSubject, id)
+					_, mErr := workspaceRepo.GetByID(context.Background(), sess, userID, id)
 					if mErr != nil {
 						logger.Warn("socketio: workspace subscribe ownership check failed — dropping id",
 							"socket_id", string(s.Id()),

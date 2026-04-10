@@ -49,6 +49,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
+	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
 	auditservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/auditservice"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
@@ -281,11 +282,11 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo)
-	defer cleanupRT()
-
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
 	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
+
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
+	defer cleanupRT()
 	toolsRepo := toolsrepo.New()
 	agentSettingsRepo := agentsettingsrepo.New()
 	agentPromptsRepo := agentpromptsrepo.New()
@@ -636,9 +637,10 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // Redis client. A nil client disables realtime entirely and returns a
 // NopBroadcaster so downstream services remain functional.
 //
-// db and workspaceRepo are forwarded to the Socket.IO server so it can verify
-// workspace ownership before joining rooms on workspace.subscribe events.
-func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo orchestratorrepo.WorkspaceRepo) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+// db, workspaceRepo, and authService are forwarded to the Socket.IO server so
+// it can verify workspace ownership before joining rooms on workspace.subscribe
+// events. authService resolves the Firebase subject to an internal user.ID.
+func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo orchestratorrepo.WorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, func() {}
@@ -649,6 +651,7 @@ func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connectio
 		RedisClient:   redisclient.Unwrap(rc),
 		DB:            db,
 		WorkspaceRepo: workspaceRepo,
+		AuthService:   authService,
 	})
 
 	broadcaster := socketio.NewBroadcaster(io, logger)
