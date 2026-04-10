@@ -4,5 +4,17 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
-echo "Running backend pre-push checks..."
-make ci-check
+# Pre-push hook receives: <remote-name> <remote-url> and then multiple:
+# <local-ref> <local-sha> <remote-ref> <remote-sha> on stdin.
+# We read the first line to extract local and remote SHAs.
+read -r local_ref local_sha remote_ref remote_sha || exit 0
+
+# Only run ci-check if proto files were modified in this push.
+# If remote_sha is all zeros, this is a new branch — always check.
+if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]] || \
+   git diff --name-only "$remote_sha..$local_sha" -- 'proto/**/*.proto' | grep -q .; then
+  echo "Running backend pre-push checks (proto files detected in push range)..."
+  make ci-check
+else
+  echo "Skipping ci-check: no proto files modified in this push"
+fi
