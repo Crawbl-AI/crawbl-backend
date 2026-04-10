@@ -248,9 +248,10 @@ func mcpDelegationAgent(a *orchestrator.Agent) *realtime.DelegationAgent {
 	}
 }
 
-func truncateStr(s string, maxLen int) string {
-	if len(s) <= maxLen {
+func truncateStr(s string, maxRunes int) string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return string(r[:maxRunes]) + "..."
 }
