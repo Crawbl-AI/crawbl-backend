@@ -424,10 +424,12 @@ func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *
 		HasAgreedWithPrivacyPolicy: hasAgreedWithLegal,
 	}
 
-	if mErr := s.userRepo.CreateUser(ctx, &orchestratorrepo.CreateUserOpts{
-		Sess:               sess,
-		User:               user,
-		HasAgreedWithLegal: hasAgreedWithLegal,
+	if mErr := database.WithTransactionNoResult(sess, "create user", func(tx *dbr.Tx) *merrors.Error {
+		return s.userRepo.CreateUser(ctx, &orchestratorrepo.CreateUserOpts{
+			Sess:               tx,
+			User:               user,
+			HasAgreedWithLegal: hasAgreedWithLegal,
+		})
 	}); mErr != nil {
 		return nil, mErr
 	}
