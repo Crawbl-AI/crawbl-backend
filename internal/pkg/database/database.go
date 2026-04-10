@@ -151,7 +151,7 @@ func IsRecordNotFoundError(err error) bool {
 		return false
 	}
 
-	return errors.Is(err, dbr.ErrNotFound) || errors.Is(err, sql.ErrNoRows) || err == dbr.ErrNotFound
+	return errors.Is(err, dbr.ErrNotFound) || errors.Is(err, sql.ErrNoRows)
 }
 
 // pingWithRetry attempts to ping the database multiple times with a delay between attempts.
