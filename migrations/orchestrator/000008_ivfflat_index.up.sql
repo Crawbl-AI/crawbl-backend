@@ -3,7 +3,7 @@
 -- Original intent was to create an IVFFlat index on memory_drawers.embedding
 -- to speed up pgvector similarity search. We tried:
 --
---   1. HNSW index — crashed the Postgres backend with SIGILL on the Hetzner
+--   1. HNSW index — crashed the Postgres backend with SIGILL on the Digital Ocean
 --      nodes because pgvector's HNSW path uses AVX2 instructions that these
 --      CPUs do not provide.
 --   2. IVFFlat index (this file's original content) — also crashed the
@@ -13,7 +13,7 @@
 -- The scan cost is acceptable while each workspace keeps <10K drawers (the
 -- MemPalace cap is 10K, enforced at write-time in internal/memory/types.go).
 --
--- When we move to AVX2-capable nodes (DigitalOcean paid tier, or newer Hetzner
+-- When we move to AVX2-capable nodes (DigitalOcean paid tier, or newer Digital Ocean
 -- SKUs) add a replacement migration that creates the index, run it outside a
 -- transaction (golang-migrate requires the index statement to be split or the
 -- transaction to be disabled for CONCURRENTLY to work), and benchmark before

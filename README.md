@@ -195,16 +195,16 @@ crawbl app deploy agent-runtime --tag <tag>
 3. Pushes to DOCR (`registry.digitalocean.com/crawbl/`)
 4. Updates image tag in `crawbl-argocd-apps` and pushes
 5. Creates a Git tag (auto-calculated from conventional commits)
-6. Creates a GitHub release with Claude-enriched notes and a full changelog link
+6. Creates a GitHub release with auto-generated notes and a full changelog link
 
-Tag is auto-calculated from conventional commits (`feat:` → minor bump, `!:` → major bump, default → patch). If a tag already exists on remote, patch is bumped until a free tag is found. Override with `--tag` if needed. `crawbl setup` verifies required tools: `docker`, `yq`, `gh`, `claude`.
+Tag is auto-calculated from conventional commits (`feat:` → minor bump, `!:` → major bump, default → patch). If a tag already exists on remote, patch is bumped until a free tag is found. Override with `--tag` if needed. `crawbl setup` verifies required tools: `docker`, `yq`, `gh`.
 
 ```bash
-crawbl app deploy <component>             # Build, push, update ArgoCD, tag, release
-crawbl app deploy all                     # Deploy platform + auth-filter only
-crawbl app deploy docs                    # Deploy docs (no git guard)
-crawbl app deploy website                 # Deploy website (no git guard)
-crawbl app deploy agent-runtime               # Deploy agent-runtime (no git guard)
+crawbl app deploy platform                 # Deploy platform (orchestrator + webhook + reaper)
+crawbl app deploy auth-filter               # Deploy Envoy WASM auth filter
+crawbl app deploy agent-runtime             # Deploy agent-runtime (no git guard)
+crawbl app deploy docs                      # Deploy docs (no git guard)
+crawbl app deploy website                   # Deploy website (no git guard)
 crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
 ```
 

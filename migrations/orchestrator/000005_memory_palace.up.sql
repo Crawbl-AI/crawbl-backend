@@ -24,7 +24,7 @@ CREATE INDEX idx_drawers_workspace      ON memory_drawers (workspace_id);
 CREATE INDEX idx_drawers_workspace_wing ON memory_drawers (workspace_id, wing);
 CREATE INDEX idx_drawers_workspace_room ON memory_drawers (workspace_id, wing, room);
 -- NOTE: HNSW vector index removed — Bitnami PG image uses SIMD instructions
--- (AVX2) that Hetzner CPUs don't support, causing SIGILL crashes on INSERT.
+-- (AVX2) that Digital Ocean CPUs don't support, causing SIGILL crashes on INSERT.
 -- At <10K drawers per workspace, sequential scan is fast enough.
 -- Re-add when the cluster moves to nodes with AVX2 support:
 --   CREATE INDEX idx_drawers_embedding ON memory_drawers
