@@ -356,6 +356,9 @@ func (ss *streamSession) emitRead() {
 // subAgentStream entry, creating a new sub-agent stream when a previously
 // unseen agent slug appears.
 func (ss *streamSession) resolveStream(slug string) *subAgentStream {
+	if ss.primary == nil {
+		return nil
+	}
 	if slug == "" || slug == ss.primary.Slug {
 		return ss.streams[ss.primary.ID]
 	}
