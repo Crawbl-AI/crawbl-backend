@@ -19,7 +19,21 @@ var (
 	breakingRe  = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
 	featRe      = regexp.MustCompile(`^feat(\(.+\))?:`)
 	crawblTagRe = regexp.MustCompile(`^(v.+)-crawbl\.(\d+)$`)
+	// globalSemverTagRe matches plain `vX.Y.Z` tags in the global v*
+	// namespace, excluding prefixed namespaces (e.g. `auth-filter/v0.1.0`
+	// or `agent-runtime/v2.3.4`) that belong to per-component sequences.
+	globalSemverTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$`)
 )
+
+// isGlobalSemverTag reports whether tag is a plain `vX.Y.Z` tag in the
+// global release sequence — no slash-namespaced prefix, parseable as
+// semver after stripping the leading `v`. Returns false for empty input.
+func isGlobalSemverTag(tag string) bool {
+	if tag == "" {
+		return false
+	}
+	return globalSemverTagRe.MatchString(tag)
+}
 
 // Result holds the output of Calculate.
 type Result struct {
@@ -45,9 +59,21 @@ func Calculate() (Result, error) {
 // CalculateForRepo determines the next semantic version tag for the given repo.
 // It queries GitHub for the latest release tag (source of truth), then scans
 // commits since that tag to determine the bump level.
+//
+// Components that live in crawbl-backend fall into two tag namespaces:
+//
+//   - global v* sequence: platform, auth-filter, docs, website
+//   - prefixed sequences: agent-runtime/v*, any other per-component prefix
+//
+// `latestReleaseTag` queries GitHub for the most recent release across the
+// entire repo, which can return a prefixed tag (e.g. `auth-filter/v0.1.0`
+// when the last deploy was actually for auth-filter). Such a tag cannot be
+// parsed as a plain semver, so we reject anything that does not match the
+// global `vX.Y.Z` shape and fall through to the `latestRemoteTag` git query
+// which correctly filters by pattern.
 func CalculateForRepo(repoPath string) (Result, error) {
 	lastTag := latestReleaseTag(repoPath)
-	if lastTag == "" {
+	if !isGlobalSemverTag(lastTag) {
 		lastTag = latestRemoteTag(repoPath, "v*")
 	}
 	if lastTag == "" {
