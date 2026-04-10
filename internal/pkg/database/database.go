@@ -179,25 +179,11 @@ func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Dur
 	return lastErr
 }
 
-// buildDriverDSN constructs a PostgreSQL connection string in the space-separated
-// key=value format preferred by the lib/pq driver. This format includes host, port,
-// credentials, database name, SSL mode, and optionally the schema search path.
-//
-// Unlike BuildDSN which returns a URL format, this returns the driver-specific format
-// required by sql.Open for PostgreSQL connections.
+// buildDriverDSN constructs a PostgreSQL connection string in URL format accepted
+// by lib/pq. Using url.UserPassword ensures special characters in the password
+// (spaces, @, /, etc.) are percent-encoded and cannot break the DSN parsing.
 func buildDriverDSN(config Config, includeSchema bool) string {
-	parts := []string{
-		fmt.Sprintf("host=%s", config.Host),
-		fmt.Sprintf("port=%s", config.Port),
-		fmt.Sprintf("user=%s", config.User),
-		fmt.Sprintf("password=%s", config.Password),
-		fmt.Sprintf("dbname=%s", config.Name),
-		fmt.Sprintf("sslmode=%s", config.SSLMode),
-	}
-	if includeSchema && strings.TrimSpace(config.Schema) != "" {
-		parts = append(parts, fmt.Sprintf("search_path=%s", config.Schema))
-	}
-	return strings.Join(parts, " ")
+	return BuildDSN(config, includeSchema)
 }
 
 // envOrDefault retrieves an environment variable value or returns the fallback
