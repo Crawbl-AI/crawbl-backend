@@ -37,13 +37,63 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
   - `internal/orchestrator/service/` — typed service opts, contracts, business logic
   - `internal/orchestrator/server/` — HTTP handlers, request/response DTOs
   - `internal/pkg/` — shared database, error, runtime, HTTP helpers
-- Follow Soulheim/Skatts style: one `dbr.Session` per request, typed opts through service methods, repos work with a `SessionRunner`.
-- Prefer dbr query builder (`From` / `Where` / `Set`) over raw SQL in the repo layer.
+- **Session / opts / repo pattern.** The HTTP handler creates one `*dbr.Session` per request and passes it down inside a typed opts struct. Service methods take `*XxxOpts`; repo methods take a `SessionRunner` (interface over `*dbr.Session` or `*dbr.Tx`) as first arg. Example:
+
+  ```go
+  // internal/orchestrator/service/types.go
+  type EnsureDefaultWorkspaceOpts struct {
+      Sess   orchestratorrepo.SessionRunner
+      UserID string
+  }
+
+  // service
+  func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *EnsureDefaultWorkspaceOpts) *merrors.Error {
+      ws, err := s.workspaceRepo.ListByUserID(ctx, opts.Sess, opts.UserID)
+      // ...
+  }
+
+  // repo
+  func (r *workspaceRepo) ListByUserID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) ([]*orchestrator.Workspace, *merrors.Error)
+  ```
+
+  `SessionRunner` lives in `internal/pkg/database/types.go` and exposes `Select` / `InsertInto` / `Update` / `DeleteFrom` so repos work with either a raw session or a transaction.
+
+- Prefer the dbr query builder (`From` / `Where` / `Set`) over raw SQL in the repo layer.
 - Keep `types.go` files for request/response types, constants, and interfaces — don't scatter them across handler files.
 - Max 4-5 params per function; group into opts/deps structs. Use typed consts/enums — no magic strings or numbers.
 - No `// ----` separator comments; use proper Go doc comments.
 - Add new API surface in small vertical slices.
 - `internal/infra/` (Pulumi) only bootstraps the DOKS cluster and installs ArgoCD. All Helm charts live in `crawbl-argocd-apps/components/*/chart/` — ArgoCD manages K8s resources after bootstrap. Do not use `crawbl app deploy` for cluster rollouts.
+
+## Architecture & Maintainability
+
+**Layering (Clean Architecture).** Dependency direction is strictly one-way: `server → service → repo → database`. Never import upward.
+
+- `server/` — transport only. Parse, validate, call the service, marshal the response. No business rules, no SQL.
+- `service/` — business logic and orchestration. Operates on domain types + repo interfaces. Must not import `server/`, `net/http`, or any DB driver.
+- `repo/` — persistence only. Takes typed inputs, returns domain types, talks to `SessionRunner`. No business rules.
+- `types.go` — shared domain types with no transport or persistence imports.
+- Transport DTOs (`*Request` / `*Response`) never leak past `server/`. Domain types never carry `json:` tags meant only for the wire.
+
+**SOLID, Go-flavoured.**
+
+- **Single Responsibility.** One service per bounded concept, one repo per aggregate. Handlers are transport-only. Split files when a type starts owning multiple reasons to change.
+- **Open/Closed.** Extend by adding a new interface implementation or a new method — not by piling boolean flags onto an existing function. If you're about to add a fourth `if opts.LegacyX` branch, reach for a strategy interface instead.
+- **Liskov.** Any `SomethingRepo` implementation (Postgres, fake, in-memory test double) must satisfy every caller without type assertions or behavioural carve-outs.
+- **Interface Segregation.** Prefer many small interfaces over one wide one. Define interfaces **at the consumer**, not the producer — e.g., `service` declares the minimal repo surface it actually uses; the repo package exports structs, not interfaces.
+- **Dependency Inversion.** Services depend on interfaces; `cmd/crawbl/platform/orchestrator/orchestrator.go` wires the concrete implementations. No package should `import` a concrete DB struct across layer boundaries.
+
+**Go practices.**
+
+- Accept interfaces, return concrete structs.
+- `context.Context` is always the first parameter on anything that can block, do I/O, or fan out.
+- Errors bubble up via `*merrors.Error`; wrap with context (`merrors.Wrap(err, "loading workspace")`). Never `panic` except in unrecoverable startup in `main`.
+- No hidden global state. Dependencies go through constructors / opts structs; only `main` assembles them.
+- Zero-value-useful structs where practical; explicit constructors (`NewXxx`) when invariants matter.
+- Functions stay short and flat — if you're four `if`s deep or past ~60 lines, split it.
+- Table-driven tests for anything branchy. Fakes over mocks; test through the public interface.
+- No `interface{}` / `any` in the domain layer — use concrete or generic types.
+- Exported identifiers get doc comments starting with the identifier name (`// Service orchestrates ...`).
 
 ## Local Development
 
