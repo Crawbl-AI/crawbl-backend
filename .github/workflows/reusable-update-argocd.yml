@@ -56,6 +56,14 @@ jobs:
           PREV_ORCH=$(yq '.image.tag' components/orchestrator/chart/values.yaml)
           PREV_AUTH=$(grep -oP 'envoy-auth-filter:\K[^ "]+' components/envoy-gateway/resources/envoy-extension-policy.yaml | head -1)
           PREV_PLATFORM=$(grep -oP 'crawbl-platform:\K[^ "]+' components/metacontroller/resources/userswarm-webhook.yaml | head -1)
+          if [ -z "${PREV_AUTH}" ]; then
+            echo "ERROR: could not find previous tag for envoy-auth-filter"
+            exit 1
+          fi
+          if [ -z "${PREV_PLATFORM}" ]; then
+            echo "ERROR: could not find previous tag for crawbl-platform"
+            exit 1
+          fi
           {
             echo "orchestrator=${PREV_ORCH}"
             echo "auth-filter=${PREV_AUTH}"
