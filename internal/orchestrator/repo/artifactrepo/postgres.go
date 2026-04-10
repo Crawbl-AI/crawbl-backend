@@ -121,6 +121,28 @@ func (r *artifactRepo) UpdateVersion(ctx context.Context, sess orchestratorrepo.
 	return nil
 }
 
+// IncrementVersion atomically increments current_version by 1 and returns the new value.
+// Must be called inside a transaction to guarantee isolation.
+func (r *artifactRepo) IncrementVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (int, *merrors.Error) {
+	if sess == nil || strings.TrimSpace(artifactID) == "" {
+		return 0, merrors.ErrInvalidInput
+	}
+
+	var newVersion int
+	err := sess.SelectBySql(
+		"UPDATE orchestrator.artifacts SET current_version = current_version + 1, updated_at = NOW() WHERE id = ? RETURNING current_version",
+		artifactID,
+	).LoadOneContext(ctx, &newVersion)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return 0, merrors.ErrArtifactNotFound
+		}
+		return 0, merrors.WrapStdServerError(err, "increment artifact version")
+	}
+
+	return newVersion, nil
+}
+
 // CreateVersion inserts a new version row into artifact_versions.
 func (r *artifactRepo) CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactVersionRow) *merrors.Error {
 	if sess == nil || row == nil {
