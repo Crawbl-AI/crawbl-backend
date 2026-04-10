@@ -80,6 +80,24 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 	httpserver.WriteJSONResponse(w, status, payload)
 }
 
+// listResponse is the wire shape for paginated list endpoints.
+// Produces {"data": [...], "pagination": {...}} at the top level —
+// no additional envelope wrapper.
+type listResponse struct {
+	Data       any `json:"data"`
+	Pagination any `json:"pagination"`
+}
+
+// WriteListResponse writes a paginated list response with items under "data"
+// and pagination metadata as a sibling key — matching the contract shape
+// {"data": [...], "pagination": {...}}.
+func WriteListResponse(w http.ResponseWriter, items any, pagination any) {
+	httpserver.WriteJSONResponse(w, http.StatusOK, listResponse{
+		Data:       items,
+		Pagination: pagination,
+	})
+}
+
 // PrincipalFromRequest extracts the authenticated principal from request context.
 func PrincipalFromRequest(r *http.Request) (*orchestrator.Principal, error) {
 	principal, ok := httpserver.PrincipalFromContext(r.Context())
