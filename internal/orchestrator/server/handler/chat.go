@@ -263,7 +263,8 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		replyMsgs, mErr := c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
+		var userMsg *orchestrator.Message
+		_, mErr = c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
 			Sess:           c.NewSession(),
 			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
@@ -272,6 +273,9 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			Content:        content,
 			Attachments:    dto.AttachmentsToDomain(reqBody.Attachments),
 			Mentions:       dto.MentionsToDomain(reqBody.Mentions),
+			OnPersisted: func(msg *orchestrator.Message) {
+				userMsg = msg
+			},
 		})
 		if mErr != nil {
 			c.Logger.Error("send message failed",
@@ -283,10 +287,6 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		response := make([]dto.MessageResponse, 0, len(replyMsgs))
-		for _, msg := range replyMsgs {
-			response = append(response, dto.ToMessageResponse(msg))
-		}
-		WriteSuccess(w, http.StatusOK, response)
+		WriteSuccess(w, http.StatusCreated, dto.ToMessageResponse(userMsg))
 	}
 }
