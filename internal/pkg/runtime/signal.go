@@ -40,6 +40,15 @@ func RunUntilSignal(run func() error, stop func(context.Context) error, timeout 
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		return stop(ctx)
+		if err := stop(ctx); err != nil {
+			return err
+		}
+		// Second drain: catch errors that arrived during stop().
+		select {
+		case err := <-errChannel:
+			return err
+		default:
+			return nil
+		}
 	}
 }

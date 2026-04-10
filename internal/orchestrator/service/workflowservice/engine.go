@@ -16,9 +16,11 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-// MaxWorkflowDuration is the total time cap for a single workflow execution.
-// Individual steps may also have per-step timeouts; this cap applies to the
-// entire workflow regardless of how many steps it contains.
+// MaxWorkflowDuration caps the total wall-clock time for a single workflow
+// execution. 30 minutes is well above the longest expected agent chain
+// (real workflows complete in seconds to a few minutes), while still ensuring
+// a stuck or runaway workflow is cancelled before leaking resources past the
+// pod's SIGTERM grace window. Tune this if workflows grow beyond ~100 steps.
 const MaxWorkflowDuration = 30 * time.Minute
 
 // WorkflowCleanupTimeout is the time budget for post-failure DB writes when

@@ -1,12 +1,12 @@
 package mcpservice
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 func (s *service) ResolveAgentBySlug(ctx contextT, sess sessionT, workspaceID, slug string) (string, error) {
@@ -21,10 +21,10 @@ func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID st
 		// write history rows for an agent in workspace B by knowing its UUID.
 		agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, params.AgentID)
 		if mErr != nil {
-			return fmt.Errorf("agent not found: %s", mErr.Error())
+			return merrors.ErrAgentNotFound
 		}
 		if agent.WorkspaceID != workspaceID {
-			return fmt.Errorf("agent does not belong to workspace")
+			return merrors.ErrAgentNotFound
 		}
 		agentID = params.AgentID
 	} else if params.AgentSlug != "" {
@@ -34,7 +34,7 @@ func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID st
 			return err
 		}
 	} else {
-		return fmt.Errorf("agent_id or agent_slug is required")
+		return merrors.NewServerErrorText("agent_id or agent_slug is required")
 	}
 
 	var convID *string
@@ -52,7 +52,7 @@ func (s *service) CreateAgentHistory(ctx contextT, sess sessionT, workspaceID st
 	}
 
 	if mErr := s.repos.AgentHistory.Create(ctx, sess, row); mErr != nil {
-		return fmt.Errorf("create history entry: %s", mErr.Error())
+		return merrors.WrapServerError(mErr, "create history entry")
 	}
 	return nil
 }

@@ -88,10 +88,15 @@ type listResponse struct {
 	Pagination any `json:"pagination"`
 }
 
-// WriteListResponse writes a paginated list response with items under "data"
-// and pagination metadata as a sibling key — matching the contract shape
-// {"data": [...], "pagination": {...}}.
-func WriteListResponse(w http.ResponseWriter, items any, pagination any) {
+// WriteMessagesListResponse writes a paginated list response with the shape
+// {"data": [...], "pagination": {...}} — flat top-level, NO outer envelope.
+//
+// This helper is SPECIFIC to the messages list endpoint, whose contract
+// deliberately differs from the rest of the API (which uses the standard
+// {"data": ...} envelope via WriteSuccessResponse). DO NOT use this helper
+// for other list endpoints without first updating the API contract in
+// crawbl-docs/internal-docs/reference/api/endpoints.md.
+func WriteMessagesListResponse(w http.ResponseWriter, items any, pagination any) {
 	httpserver.WriteJSONResponse(w, http.StatusOK, listResponse{
 		Data:       items,
 		Pagination: pagination,

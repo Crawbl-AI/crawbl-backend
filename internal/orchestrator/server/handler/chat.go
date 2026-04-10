@@ -126,7 +126,7 @@ func MessagesList(c *Context) http.HandlerFunc {
 			response = append(response, dto.ToMessageResponse(message))
 		}
 
-		WriteListResponse(w, response, dto.MessagesPaginationResponse{
+		WriteMessagesListResponse(w, response, dto.MessagesPaginationResponse{
 			NextScrollID: page.Pagination.NextScrollID,
 			PrevScrollID: page.Pagination.PrevScrollID,
 			HasNext:      page.Pagination.HasNext,
