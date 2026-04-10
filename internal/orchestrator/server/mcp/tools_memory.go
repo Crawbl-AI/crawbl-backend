@@ -9,7 +9,7 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
 const (

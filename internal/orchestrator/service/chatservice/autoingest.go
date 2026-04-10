@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/autoingest"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
 )
 
 // autoIngestConversation submits a conversation exchange to the in-process

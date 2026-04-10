@@ -18,18 +18,17 @@ import (
 	"riverqueue.com/riverui"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/autoingest"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/jobs"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/centroidrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/drawerrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/identityrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/kgrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/palacegraphrepo"
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/identityrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/palacegraphrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
@@ -199,9 +198,9 @@ func runServer(ctx context.Context) error {
 	}()
 	llmUsageRepo := llmusagerepo.New(clickhouseDB)
 
-	// NATS client for memory fan-out events. Connected early so the memory
-	// publisher is available to the auto-ingest River worker registered
-	// inside background.NewConfig below.
+	// NATS client for memory fan-out events. Connected early so the
+	// memory publisher is available to the auto-ingest pool built
+	// further down.
 	natsCfg := crawblnats.DefaultConfig()
 	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
 	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
@@ -215,63 +214,26 @@ func runServer(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
-	// Build the memory-domain River config. Auto-ingest lives in the
-	// in-process pond pool constructed further down — this config only
-	// covers the cold classification, maintenance, enrichment, and
-	// centroid-recompute workers.
-	riverCfg, err := background.NewConfig(background.Deps{
-		DB:            db,
-		DrawerRepo:    drawerRepo,
-		KGRepo:        kgRepo,
-		CentroidRepo:  centroidRepo,
-		LLMClassifier: newLLMClassifierOrNil(),
-		Embedder:      embedder,
-		Logger:        logger,
+	// Build the single river.Config covering every background job,
+	// periodic sweep, and cron the orchestrator owns. Auto-ingest is
+	// NOT on this list — it runs in-process under
+	// internal/orchestrator/memory/autoingest so the chat-turn hot
+	// path never writes to river_job.
+	riverCfg, err := queue.NewConfig(queue.Deps{
+		DB:               db,
+		Logger:           logger,
+		DrawerRepo:       drawerRepo,
+		KGRepo:           kgRepo,
+		CentroidRepo:     centroidRepo,
+		LLMClassifier:    newLLMClassifierOrNil(),
+		Embedder:         embedder,
+		MessageRepo:      messageRepo,
+		ModelPricingRepo: modelpricingrepo.New(),
+		LLMUsageRepo:     llmUsageRepo,
 	})
 	if err != nil {
 		logger.Error("river config failed", "error", err)
 		return fmt.Errorf("river config: %w", err)
-	}
-
-	// Register the usage-write worker onto the same River client. This
-	// replaces the standalone cmd/usage-writer binary that previously
-	// consumed from NATS and wrote to ClickHouse.
-	queue.RegisterUsageWriter(riverCfg.Workers, riverCfg.Queues, queue.UsageWriterDeps{
-		Repo:   llmUsageRepo,
-		Logger: logger,
-	})
-
-	// Register the pricing refresh worker. Replaces the old
-	// cmd/crawbl/platform/pricing-refresh CronJob with a daily
-	// in-process River job that fetches LiteLLM pricing and appends
-	// new rows to model_pricing when upstream values drift.
-	if err := queue.RegisterPricingRefresh(
-		riverCfg.Workers,
-		riverCfg.Queues,
-		&riverCfg.PeriodicJobs,
-		queue.PricingRefreshDeps{
-			DB:     db,
-			Repo:   modelpricingrepo.New(),
-			Logger: logger,
-		},
-	); err != nil {
-		return fmt.Errorf("register pricing refresh: %w", err)
-	}
-
-	// Register the stale-pending-message cleanup worker. Replaces the
-	// previous chatservice.StartPendingMessageCleanup ticker goroutine
-	// with a 1-minute River periodic job.
-	if err := queue.RegisterMessageCleanup(
-		riverCfg.Workers,
-		riverCfg.Queues,
-		&riverCfg.PeriodicJobs,
-		queue.MessageCleanupDeps{
-			DB:          db,
-			MessageRepo: messageRepo,
-			Logger:      logger,
-		},
-	); err != nil {
-		return fmt.Errorf("register message cleanup: %w", err)
 	}
 
 	// Construct the River client over the shared *sql.DB pool.
