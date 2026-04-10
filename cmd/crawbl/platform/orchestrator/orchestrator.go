@@ -272,7 +272,7 @@ func runServer(ctx context.Context) error {
 	// defaults are 16 workers × 1024 queue.
 	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
 	ingestCapacity, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_CAPACITY"))
-	ingestPool := autoingest.NewService(autoingest.Deps{
+	ingestPool, err := autoingest.NewService(autoingest.Deps{
 		DB:              db,
 		DrawerRepo:      drawerRepo,
 		CentroidRepo:    centroidRepo,
@@ -284,6 +284,9 @@ func runServer(ctx context.Context) error {
 		Workers:   ingestWorkers,
 		QueueSize: ingestCapacity,
 	})
+	if err != nil {
+		return fmt.Errorf("memory.autoingest: %w", err)
+	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

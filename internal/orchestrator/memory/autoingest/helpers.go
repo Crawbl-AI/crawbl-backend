@@ -8,28 +8,15 @@ import (
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/config"
 )
 
 // importanceScale turns the classifier's 0..1 confidence into the
 // memory_drawers.importance scale used by the ranking pipeline.
 const importanceScale = 5.0
 
-// noiseConfig holds the loaded noise-filter pattern at package init so
-// we never pay the regex compile cost per Work.
-var (
-	noiseConfig      = mustLoadNoiseConfig()
-	noisePattern     = noiseConfig.CompileNoisePattern()
-	sentenceBoundary = regexp.MustCompile(`([.!?])\s+`)
-)
-
-func mustLoadNoiseConfig() *config.NoiseConfig {
-	cfg, err := config.LoadNoiseConfig()
-	if err != nil {
-		panic(fmt.Sprintf("memory.autoingest: load noise config: %v", err))
-	}
-	return cfg
-}
+// sentenceBoundary splits text on sentence-ending punctuation followed by
+// whitespace. Compiled once at package init; this pattern is always valid.
+var sentenceBoundary = regexp.MustCompile(`([.!?])\s+`)
 
 // buildDrawer assembles the memory.Drawer row we are about to insert.
 // Tier and state are injected by the caller based on heuristic
@@ -55,11 +42,11 @@ func buildDrawer(work Work, chunk, memType, room string, importance float64, tie
 
 // isNoise reports whether text is too short or matches a greeting/filler
 // pattern and should be dropped before chunking.
-func isNoise(text string) bool {
-	if len(text) < noiseConfig.MinLength {
+func isNoise(text string, minLength int, pattern *regexp.Regexp) bool {
+	if len(text) < minLength {
 		return true
 	}
-	return noisePattern.MatchString(strings.TrimSpace(text))
+	return pattern.MatchString(strings.TrimSpace(text))
 }
 
 // chunkText splits text on sentence boundaries into chunks of at most

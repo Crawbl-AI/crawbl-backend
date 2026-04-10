@@ -153,15 +153,27 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 		return fmt.Errorf("update classification: %w", err)
 	}
 
+	// Sync the in-memory struct so downstream helpers (clusterDrawers,
+	// detectDrawerConflicts) see fresh values instead of the raw pre-classification state.
+	d.MemoryType = classification.MemoryType
+	d.Summary = classification.Summary
+	d.Room = room
+	d.Importance = scaledImportance
+
 	linkEntities(ctx, sess, deps, d.WorkspaceID, classification)
 
-	// Embed once for clustering and conflict detection.
+	// Embed once for clustering and conflict detection, then persist so the
+	// drawer is visible to vector search (#62).
 	var embedding []float32
 	if deps.Embedder != nil {
 		var embedErr error
 		embedding, embedErr = deps.Embedder.Embed(ctx, d.Content)
 		if embedErr != nil {
 			slog.Warn("memory-process: embed failed", "drawer_id", d.ID, "error", embedErr)
+		} else if len(embedding) > 0 {
+			if embedErr = deps.DrawerRepo.UpdateEmbedding(ctx, sess, d.WorkspaceID, d.ID, embedding); embedErr != nil {
+				slog.Warn("memory-process: persist embedding failed", "drawer_id", d.ID, "error", embedErr)
+			}
 		}
 	}
 

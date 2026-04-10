@@ -2,12 +2,28 @@ package autoingest
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
 )
+
+// testNoiseState loads the noise config and compiles the pattern for use
+// in unit tests. It fatally fails if the embedded config is broken.
+func testNoiseState(t *testing.T) (int, *regexp.Regexp) {
+	t.Helper()
+	cfg, err := config.LoadNoiseConfig()
+	if err != nil {
+		t.Fatalf("testNoiseState: load noise config: %v", err)
+	}
+	return cfg.MinLength, cfg.CompileNoisePattern()
+}
 
 func TestIsNoise(t *testing.T) {
 	t.Parallel()
+
+	minLen, pattern := testNoiseState(t)
 
 	tests := []struct {
 		name string
@@ -29,7 +45,7 @@ func TestIsNoise(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := isNoise(tc.text); got != tc.want {
+			if got := isNoise(tc.text, minLen, pattern); got != tc.want {
 				t.Fatalf("isNoise(%q) = %v, want %v", tc.text, got, tc.want)
 			}
 		})

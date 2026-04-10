@@ -398,6 +398,17 @@ func (r *Postgres) UpdateState(ctx context.Context, sess database.SessionRunner,
 	return err
 }
 
+// UpdateEmbedding persists a freshly generated embedding vector for a drawer.
+// Called by the cold worker after classification so vector search can find the drawer.
+func (r *Postgres) UpdateEmbedding(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, embedding []float32) error {
+	vec := pgvector.NewVector(embedding)
+	_, err := sess.Update("memory_drawers").
+		Set("embedding", vec).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		ExecContext(ctx)
+	return err
+}
+
 func (r *Postgres) UpdateClassification(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, memoryType, summary, room string, importance float64) error {
 	_, err := sess.Update("memory_drawers").
 		Set("memory_type", memoryType).
@@ -434,6 +445,23 @@ func (r *Postgres) TouchAccess(ctx context.Context, sess database.SessionRunner,
 	return err
 }
 
+// TouchAccessBatch updates last_accessed_at and increments access_count for
+// all provided drawer IDs in a single UPDATE statement. This is the preferred
+// path over calling TouchAccess in a loop — one round-trip means partial
+// failure cannot skew retrieval ranking.
+func (r *Postgres) TouchAccessBatch(ctx context.Context, sess database.SessionRunner, workspaceID string, drawerIDs []string) error {
+	if len(drawerIDs) == 0 {
+		return nil
+	}
+	_, err := sess.Update("memory_drawers").
+		Set("last_accessed_at", dbr.Expr("NOW()")).
+		Set("access_count", dbr.Expr("access_count + 1")).
+		Where("workspace_id = ?", workspaceID).
+		Where("id IN ?", drawerIDs).
+		ExecContext(ctx)
+	return err
+}
+
 func (r *Postgres) IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("retry_count", dbr.Expr("retry_count + 1")).
@@ -462,12 +490,16 @@ func (r *Postgres) DecayImportance(ctx context.Context, sess database.SessionRun
 }
 
 func (r *Postgres) PruneLowImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, threshold float64, minAccessCount, keepMin int) (int, error) {
+	// ORDER BY importance DESC with OFFSET keepMin skips the top-keepMin rows
+	// (the ones to keep) and targets the remainder — the lowest-importance drawers —
+	// for deletion. The previous ASC ordering was inverted and deleted the
+	// slightly-better drawers instead.
 	res, err := sess.DeleteFrom("memory_drawers").
 		Where(dbr.Expr(
 			`id IN (
 			   SELECT id FROM memory_drawers
 			   WHERE workspace_id = ? AND importance < ? AND access_count < ?
-			   ORDER BY importance ASC
+			   ORDER BY importance DESC
 			   OFFSET ?
 			 )`,
 			workspaceID, threshold, minAccessCount, keepMin,

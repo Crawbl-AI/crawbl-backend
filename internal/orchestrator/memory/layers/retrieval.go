@@ -73,17 +73,23 @@ func HybridRetrieve(
 }
 
 // touchReturnedDrawers bumps last_accessed_at on every drawer we just
-// surfaced so recency scoring reflects the interaction. Errors are logged
-// and swallowed — a failed touch never blocks a user-facing search.
+// surfaced so recency scoring reflects the interaction. A single batch
+// UPDATE is used so partial failure cannot leave some drawers touched and
+// others not, which would skew retrieval ranking. Errors are logged and
+// swallowed — a failed touch never blocks a user-facing search.
 func touchReturnedDrawers(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, workspaceID string, results []RetrievalResult) {
+	if len(results) == 0 {
+		return
+	}
+	ids := make([]string, len(results))
 	for i := range results {
-		if err := drawerRepo.TouchAccess(ctx, sess, workspaceID, results[i].ID); err != nil {
-			slog.WarnContext(ctx, "memory-retrieval: touch access failed",
-				slog.String("drawer_id", results[i].ID),
-				slog.String("workspace_id", workspaceID),
-				slog.String("error", err.Error()),
-			)
-		}
+		ids[i] = results[i].ID
+	}
+	if err := drawerRepo.TouchAccessBatch(ctx, sess, workspaceID, ids); err != nil {
+		slog.WarnContext(ctx, "memory-retrieval: touch access batch failed",
+			slog.String("workspace_id", workspaceID),
+			slog.String("error", err.Error()),
+		)
 	}
 }
 

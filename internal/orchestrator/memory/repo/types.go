@@ -72,6 +72,11 @@ type DrawerRepo interface {
 	// UpdateClassification sets the memory type, summary, room, and importance after LLM classification.
 	UpdateClassification(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, memoryType, summary, room string, importance float64) error
 
+	// UpdateEmbedding persists a generated embedding vector for a drawer so it
+	// becomes visible to vector search. Called by the cold worker after
+	// classification.
+	UpdateEmbedding(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, embedding []float32) error
+
 	// SetSupersededBy marks a drawer as superseded by another drawer.
 	SetSupersededBy(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, supersededBy string) error
 
@@ -80,6 +85,11 @@ type DrawerRepo interface {
 
 	// TouchAccess updates last_accessed_at and increments access_count for a drawer.
 	TouchAccess(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
+
+	// TouchAccessBatch updates last_accessed_at and increments access_count for
+	// all provided drawer IDs in a single UPDATE, eliminating the partial-failure
+	// risk of a per-drawer loop.
+	TouchAccessBatch(ctx context.Context, sess database.SessionRunner, workspaceID string, drawerIDs []string) error
 
 	// IncrementRetryCount bumps the retry counter for a drawer.
 	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error

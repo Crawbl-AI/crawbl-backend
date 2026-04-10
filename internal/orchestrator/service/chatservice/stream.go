@@ -99,17 +99,16 @@ func (s *service) callAgentStreaming(
 	lookups agentLookups,
 	extraContext string,
 ) ([]*orchestrator.Message, *merrors.Error) {
+	if agent == nil {
+		return nil, merrors.ErrAgentNotFound
+	}
+
 	wsID := opts.WorkspaceID
 	convID := conversation.ID
 
 	// 1. Emit thinking + create placeholder.
-	var log *slog.Logger
-	if agent != nil {
-		log = slog.With("agent", agent.Slug, "conv", convID)
-		s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusThinking), convID)
-	} else {
-		log = slog.With("conv", convID)
-	}
+	log := slog.With("agent", agent.Slug, "conv", convID)
+	s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusThinking), convID)
 
 	placeholder := s.newPlaceholder(conversation.ID, agent)
 	if mErr := s.savePlaceholder(ctx, opts.Sess, placeholder); mErr != nil {
@@ -143,10 +142,7 @@ func (s *service) callAgentStreaming(
 
 	// Auto-ingest conversation into MemPalace memory (non-blocking).
 	if len(replies) > 0 {
-		agentID := ""
-		if agent != nil {
-			agentID = agent.ID
-		}
+		agentID := agent.ID
 		s.autoIngestConversation(ctx, wsID, agentID, opts.Content.Text, replies)
 	}
 
@@ -311,6 +307,9 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 // resolveStreamReadOnly looks up the subAgentStream for a slug without
 // creating a new one. Returns nil if not found.
 func (ss *streamSession) resolveStreamReadOnly(slug string) *subAgentStream {
+	if ss.primary == nil {
+		return nil
+	}
 	if slug == "" || slug == ss.primary.Slug {
 		return ss.streams[ss.primary.ID]
 	}
