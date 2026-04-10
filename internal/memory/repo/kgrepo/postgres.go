@@ -1,4 +1,9 @@
-package kg
+// Package kgrepo provides the PostgreSQL implementation of the MemPalace
+// knowledge graph repository. Entities live in memory_entities and
+// temporal relationship triples in memory_triples; the repo owns the
+// SQL, id-derivation, and dedup logic the rest of the memory subsystem
+// relies on.
+package kgrepo
 
 import (
 	"context"
@@ -12,11 +17,13 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-type postgresGraph struct{}
+// Postgres is the knowledge graph repository backed by PostgreSQL. It
+// implements repo.KGRepo; callers hold it through that interface.
+type Postgres struct{}
 
-// NewPostgres creates a new knowledge Graph backed by PostgreSQL.
-func NewPostgres() Graph {
-	return &postgresGraph{}
+// NewPostgres creates a new knowledge graph repository backed by PostgreSQL.
+func NewPostgres() *Postgres {
+	return &Postgres{}
 }
 
 // entityID derives a stable, collision-resistant entity ID from a name.
@@ -44,11 +51,10 @@ func sanitizeForID(s string) string {
 func tripleID(subID, pred, objID string) string {
 	raw := fmt.Sprintf("%s_%s_%s_%d", subID, pred, objID, time.Now().UnixNano())
 	hash := md5.Sum([]byte(raw))
-	hash8 := fmt.Sprintf("%x", hash)[:8]
-	return fmt.Sprintf("t_%s_%s_%s_%s", subID, pred, objID, hash8)
+	return fmt.Sprintf("t_%s_%s_%s_%x", subID, pred, objID, hash[:4])
 }
 
-func (g *postgresGraph) AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType, properties string) (string, error) {
+func (g *Postgres) AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType, properties string) (string, error) {
 	id := entityID(name)
 	now := time.Now().UTC()
 
@@ -67,59 +73,25 @@ func (g *postgresGraph) AddEntity(ctx context.Context, sess database.SessionRunn
 	return id, nil
 }
 
-func (g *postgresGraph) AddTriple(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) (string, error) {
-	// Check entity count limit before auto-creating entities.
-	var entityCount int
-	err := sess.Select("COUNT(*)").
-		From("memory_entities").
-		Where("workspace_id = ?", workspaceID).
-		LoadOneContext(ctx, &entityCount)
-	if err != nil {
-		return "", fmt.Errorf("kg: count entities: %w", err)
-	}
-	if entityCount >= memory.MaxEntitiesPerWorkspace {
-		return "", fmt.Errorf("kg: entity limit reached (%d)", memory.MaxEntitiesPerWorkspace)
-	}
-
-	// Check triple count limit.
-	var tripleCount int
-	err = sess.Select("COUNT(*)").
-		From("memory_triples").
-		Where("workspace_id = ?", workspaceID).
-		LoadOneContext(ctx, &tripleCount)
-	if err != nil {
-		return "", fmt.Errorf("kg: count triples: %w", err)
-	}
-	if tripleCount >= memory.MaxTriplesPerWorkspace {
-		return "", fmt.Errorf("kg: triple limit reached (%d)", memory.MaxTriplesPerWorkspace)
+func (g *Postgres) AddTriple(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) (string, error) {
+	if err := g.checkWorkspaceLimits(ctx, sess, workspaceID); err != nil {
+		return "", err
 	}
 
 	subID := entityID(t.Subject)
 	objID := entityID(t.Object)
 
-	// Check for existing identical active triple.
-	var existingID string
-	err = sess.Select("id").
-		From("memory_triples").
-		Where("workspace_id = ? AND subject = ? AND predicate = ? AND object = ? AND valid_to IS NULL",
-			workspaceID, subID, t.Predicate, objID).
-		LoadOneContext(ctx, &existingID)
-	if err == nil && existingID != "" {
-		return existingID, nil
+	if existing, err := g.findActiveTripleID(ctx, sess, workspaceID, subID, t.Predicate, objID); err == nil && existing != "" {
+		return existing, nil
 	}
 
-	// Auto-create subject and object entities (upsert — safe if they already exist).
-	if _, err = g.AddEntity(ctx, sess, workspaceID, t.Subject, "entity", "{}"); err != nil {
-		return "", fmt.Errorf("kg: auto-create subject entity: %w", err)
-	}
-	if _, err = g.AddEntity(ctx, sess, workspaceID, t.Object, "entity", "{}"); err != nil {
-		return "", fmt.Errorf("kg: auto-create object entity: %w", err)
+	if err := g.ensureTripleEntities(ctx, sess, workspaceID, t); err != nil {
+		return "", err
 	}
 
 	id := tripleID(subID, t.Predicate, objID)
 	now := time.Now().UTC()
-
-	_, err = sess.InsertBySql(
+	_, err := sess.InsertBySql(
 		`INSERT INTO memory_triples
 		   (id, workspace_id, subject, predicate, object, valid_from, valid_to, confidence, source_closet, source_file, extracted_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -132,7 +104,61 @@ func (g *postgresGraph) AddTriple(ctx context.Context, sess database.SessionRunn
 	return id, nil
 }
 
-func (g *postgresGraph) Invalidate(ctx context.Context, sess database.SessionRunner, workspaceID, subject, predicate, object, ended string) error {
+// checkWorkspaceLimits enforces the per-workspace entity and triple caps
+// before we auto-create endpoints for a new triple. Returns an error when
+// either quota is exceeded so AddTriple can bail without inserting.
+func (g *Postgres) checkWorkspaceLimits(ctx context.Context, sess database.SessionRunner, workspaceID string) error {
+	var entityCount int
+	if err := sess.Select("COUNT(*)").
+		From("memory_entities").
+		Where("workspace_id = ?", workspaceID).
+		LoadOneContext(ctx, &entityCount); err != nil {
+		return fmt.Errorf("kg: count entities: %w", err)
+	}
+	if entityCount >= memory.MaxEntitiesPerWorkspace {
+		return fmt.Errorf("kg: entity limit reached (%d)", memory.MaxEntitiesPerWorkspace)
+	}
+
+	var tripleCount int
+	if err := sess.Select("COUNT(*)").
+		From("memory_triples").
+		Where("workspace_id = ?", workspaceID).
+		LoadOneContext(ctx, &tripleCount); err != nil {
+		return fmt.Errorf("kg: count triples: %w", err)
+	}
+	if tripleCount >= memory.MaxTriplesPerWorkspace {
+		return fmt.Errorf("kg: triple limit reached (%d)", memory.MaxTriplesPerWorkspace)
+	}
+	return nil
+}
+
+// findActiveTripleID returns the id of an existing active triple with the
+// same subject/predicate/object tuple, or an empty string if no match.
+// Callers use this to dedup concurrent inserts.
+func (g *Postgres) findActiveTripleID(ctx context.Context, sess database.SessionRunner, workspaceID, subID, predicate, objID string) (string, error) {
+	var existingID string
+	err := sess.Select("id").
+		From("memory_triples").
+		Where("workspace_id = ? AND subject = ? AND predicate = ? AND object = ? AND valid_to IS NULL",
+			workspaceID, subID, predicate, objID).
+		LoadOneContext(ctx, &existingID)
+	return existingID, err
+}
+
+// ensureTripleEntities upserts the subject and object entity rows for a
+// triple. Both are safe to re-run — AddEntity uses ON CONFLICT — but
+// either error aborts the caller so we never insert a dangling triple.
+func (g *Postgres) ensureTripleEntities(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) error {
+	if _, err := g.AddEntity(ctx, sess, workspaceID, t.Subject, "entity", "{}"); err != nil {
+		return fmt.Errorf("kg: auto-create subject entity: %w", err)
+	}
+	if _, err := g.AddEntity(ctx, sess, workspaceID, t.Object, "entity", "{}"); err != nil {
+		return fmt.Errorf("kg: auto-create object entity: %w", err)
+	}
+	return nil
+}
+
+func (g *Postgres) Invalidate(ctx context.Context, sess database.SessionRunner, workspaceID, subject, predicate, object, ended string) error {
 	subID := entityID(subject)
 	objID := entityID(object)
 
@@ -158,7 +184,7 @@ FROM memory_triples t
 LEFT JOIN memory_entities se ON se.workspace_id = t.workspace_id AND se.id = t.subject
 LEFT JOIN memory_entities oe ON oe.workspace_id = t.workspace_id AND oe.id = t.object`
 
-func (g *postgresGraph) QueryEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, asOf, direction string) ([]memory.TripleResult, error) {
+func (g *Postgres) QueryEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, asOf, direction string) ([]memory.TripleResult, error) {
 	id := entityID(name)
 
 	var whereClause string
@@ -172,21 +198,12 @@ func (g *postgresGraph) QueryEntity(ctx context.Context, sess database.SessionRu
 	switch direction {
 	case "incoming":
 		whereClause = "WHERE t.workspace_id = $1 AND t.object = $2" + asOfFilter
-		args = []any{workspaceID, id}
 	case "outgoing":
 		whereClause = "WHERE t.workspace_id = $1 AND t.subject = $2" + asOfFilter
-		args = []any{workspaceID, id}
 	default: // "both"
-		if asOf != "" {
-			whereClause = `WHERE t.workspace_id = $1 AND (t.subject = $2 OR t.object = $2)
-			               AND (t.valid_from IS NULL OR t.valid_from <= $3)
-			               AND (t.valid_to IS NULL OR t.valid_to >= $3)`
-		} else {
-			whereClause = "WHERE t.workspace_id = $1 AND (t.subject = $2 OR t.object = $2)"
-		}
-		args = []any{workspaceID, id}
+		whereClause = "WHERE t.workspace_id = $1 AND (t.subject = $2 OR t.object = $2)" + asOfFilter
 	}
-
+	args = []any{workspaceID, id}
 	if asOf != "" {
 		args = append(args, asOf)
 	}
@@ -206,7 +223,7 @@ func (g *postgresGraph) QueryEntity(ctx context.Context, sess database.SessionRu
 	return results, nil
 }
 
-func (g *postgresGraph) QueryRelationship(ctx context.Context, sess database.SessionRunner, workspaceID, predicate, asOf string) ([]memory.TripleResult, error) {
+func (g *Postgres) QueryRelationship(ctx context.Context, sess database.SessionRunner, workspaceID, predicate, asOf string) ([]memory.TripleResult, error) {
 	var query string
 	var args []any
 
@@ -239,7 +256,7 @@ LIMIT 500`
 	return results, nil
 }
 
-func (g *postgresGraph) Timeline(ctx context.Context, sess database.SessionRunner, workspaceID, entityName string) ([]memory.TripleResult, error) {
+func (g *Postgres) Timeline(ctx context.Context, sess database.SessionRunner, workspaceID, entityName string) ([]memory.TripleResult, error) {
 	var query string
 	var args []any
 
@@ -271,7 +288,7 @@ LIMIT 100`
 	return results, nil
 }
 
-func (g *postgresGraph) Stats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.KGStats, error) {
+func (g *Postgres) Stats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.KGStats, error) {
 	var entities int
 	err := sess.Select("COUNT(*)").
 		From("memory_entities").

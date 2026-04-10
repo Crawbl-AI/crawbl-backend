@@ -117,6 +117,15 @@ type DrawerSearchResult struct {
 	Similarity float64 `db:"similarity"`
 }
 
+// HybridSearchResult extends Drawer with similarity score and a KG-hit flag.
+// Produced by drawerrepo.Repo.SearchHybrid in one round-trip across pgvector
+// ANN and the knowledge-graph entity lookup.
+type HybridSearchResult struct {
+	Drawer
+	Similarity float64 `db:"similarity"`
+	ViaKG      bool    `db:"via_kg"`
+}
+
 // Entity is a node in the knowledge graph.
 type Entity struct {
 	ID          string    `db:"id"`
@@ -207,4 +216,31 @@ type KGStats struct {
 	CurrentFacts      int      `json:"current_facts"`
 	ExpiredFacts      int      `json:"expired_facts"`
 	RelationshipTypes []string `json:"relationship_types"`
+}
+
+// TraversalResult is a room found during a palace-graph BFS traversal.
+type TraversalResult struct {
+	Room         string   `json:"room"`
+	Wings        []string `json:"wings"`
+	Halls        []string `json:"halls"`
+	Count        int      `json:"count"`
+	Hop          int      `json:"hop"`
+	ConnectedVia []string `json:"connected_via,omitempty"`
+}
+
+// Tunnel is a room that bridges two or more wings in the palace graph.
+type Tunnel struct {
+	Room  string   `json:"room"`
+	Wings []string `json:"wings"`
+	Halls []string `json:"halls"`
+	Count int      `json:"count"`
+}
+
+// PalaceGraphStats holds palace graph overview statistics.
+type PalaceGraphStats struct {
+	TotalRooms   int            `json:"total_rooms"`
+	TunnelRooms  int            `json:"tunnel_rooms"`
+	TotalEdges   int            `json:"total_edges"`
+	RoomsPerWing map[string]int `json:"rooms_per_wing"`
+	TopTunnels   []Tunnel       `json:"top_tunnels"`
 }

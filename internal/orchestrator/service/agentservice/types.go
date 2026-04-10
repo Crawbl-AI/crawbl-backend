@@ -5,7 +5,7 @@
 package agentservice
 
 import (
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -22,7 +22,7 @@ type Repos struct {
 	AgentPrompts  orchestratorrepo.AgentPromptsRepo
 	AgentHistory  orchestratorrepo.AgentHistoryRepo
 	Usage         usagerepo.Repo
-	Drawer        drawer.Repo
+	Drawer        memrepo.DrawerRepo
 }
 
 // service implements the orchestratorservice.AgentService interface.
@@ -35,5 +35,5 @@ type service struct {
 	agentHistoryRepo  orchestratorrepo.AgentHistoryRepo
 	runtimeClient     userswarmclient.Client
 	usageRepo         usagerepo.Repo
-	drawerRepo        drawer.Repo
+	drawerRepo        memrepo.DrawerRepo
 }

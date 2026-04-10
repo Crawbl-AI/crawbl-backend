@@ -2,14 +2,14 @@ package layers
 
 import (
 	"context"
+	"log/slog"
 	"math"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
-	drawerpkg "github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -27,15 +27,21 @@ const (
 	agentAffinityBoost   = 0.1
 	defaultRecencyFactor = 0.5
 	hoursPerDay          = 24.0
+	// minQueryWordLen is the minimum length for a query token to be forwarded
+	// as a KG lookup term. Shorter words are noise (stopwords, articles).
+	minQueryWordLen = 4
 )
 
-// HybridRetrieve performs parallel pgvector search + KG entity lookup,
-// merges results, and ranks by importance × recency × relevance + agent affinity.
+// HybridRetrieve issues a single hybrid search query (pgvector ANN unioned
+// with a KG entity-name lookup) and ranks the merged results by
+// importance × recency × relevance + agent affinity.
+//
+// This function does no fan-out — the CTE in drawerrepo.SearchHybrid does
+// both lookups in one round-trip, so no goroutines are involved.
 func HybridRetrieve(
 	ctx context.Context,
 	sess database.SessionRunner,
-	drawerRepo drawerpkg.Repo,
-	kgGraph kg.Graph,
+	drawerRepo memrepo.DrawerRepo,
 	embedder embed.Embedder,
 	workspaceID, query, agentSlug string,
 	limit int,
@@ -49,94 +55,71 @@ func HybridRetrieve(
 		return nil, err
 	}
 
-	var (
-		vectorResults []memory.DrawerSearchResult
-		kgDrawerIDs   []string
-		vectorErr     error
-		wg            sync.WaitGroup
-	)
+	terms := extractQueryWords(query)
 
-	// Parallel fan-out: vector search + KG entity lookup.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		vectorResults, vectorErr = drawerRepo.Search(ctx, sess, workspaceID, queryEmbedding, "", "", limit*2)
-	}()
-
-	// KG lookup: two-step (exact match first, embedding fallback).
-	if kgGraph != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			kgDrawerIDs = kgEntityLookup(ctx, sess, kgGraph, workspaceID, query)
-		}()
+	rows, err := drawerRepo.SearchHybrid(ctx, sess, workspaceID, queryEmbedding, terms, limit*2)
+	if err != nil {
+		return nil, err
 	}
 
-	wg.Wait()
-
-	if vectorErr != nil {
-		return nil, vectorErr
-	}
-
-	// Merge results by drawer ID.
-	seen := make(map[string]*RetrievalResult)
-
-	for i := range vectorResults {
-		r := &vectorResults[i]
-		seen[r.ID] = &RetrievalResult{
-			Drawer:     r.Drawer,
-			Similarity: r.Similarity,
-		}
-	}
-
-	// KG results: boost existing vector results and load KG-only drawers.
-	for _, id := range kgDrawerIDs {
-		if existing, exists := seen[id]; exists {
-			existing.GraphScore = 1.0
-			continue
-		}
-		// Load drawer from DB for KG-only hits.
-		d, err := drawerRepo.GetByID(ctx, sess, workspaceID, id)
-		if err != nil || d == nil {
-			continue
-		}
-		seen[id] = &RetrievalResult{
-			Drawer:     *d,
-			GraphScore: 1.0,
-		}
-	}
-
-	// Rank and collect.
-	results := make([]RetrievalResult, 0, len(seen))
-	now := time.Now()
-
-	for _, r := range seen {
-		relevance := math.Max(r.Similarity, r.GraphScore)
-		recency := recencyFactor(r.LastAccessedAt, now)
-		affinity := 0.0
-		if agentSlug != "" && r.AddedByAgent == agentSlug {
-			affinity = agentAffinityBoost
-		}
-		r.FinalScore = r.Importance*recency*relevance + affinity
-		results = append(results, *r)
-	}
-
-	// Sort by FinalScore descending.
-	sortByScore(results)
-
-	// Touch access for returned results.
-	for i := range results {
-		if i >= limit {
-			break
-		}
-		_ = drawerRepo.TouchAccess(ctx, sess, workspaceID, results[i].ID)
-	}
+	results := rankHybridResults(rows, agentSlug, time.Now())
 
 	if len(results) > limit {
 		results = results[:limit]
 	}
 
+	touchReturnedDrawers(ctx, sess, drawerRepo, workspaceID, results)
 	return results, nil
+}
+
+// touchReturnedDrawers bumps last_accessed_at on every drawer we just
+// surfaced so recency scoring reflects the interaction. Errors are logged
+// and swallowed — a failed touch never blocks a user-facing search.
+func touchReturnedDrawers(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, workspaceID string, results []RetrievalResult) {
+	for i := range results {
+		if err := drawerRepo.TouchAccess(ctx, sess, workspaceID, results[i].ID); err != nil {
+			slog.WarnContext(ctx, "memory-retrieval: touch access failed",
+				slog.String("drawer_id", results[i].ID),
+				slog.String("workspace_id", workspaceID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+}
+
+// rankHybridResults is the pure ranking function: given raw hybrid rows and
+// the requesting agent, produce sorted RetrievalResults. No DB, no context,
+// no side effects — trivially unit-testable.
+func rankHybridResults(rows []memory.HybridSearchResult, agentSlug string, now time.Time) []RetrievalResult {
+	results := make([]RetrievalResult, 0, len(rows))
+	for i := range rows {
+		row := &rows[i]
+
+		graphScore := 0.0
+		if row.ViaKG {
+			graphScore = 1.0
+		}
+		relevance := math.Max(row.Similarity, graphScore)
+		recency := recencyFactor(row.LastAccessedAt, now)
+
+		affinity := 0.0
+		if agentSlug != "" && row.AddedByAgent == agentSlug {
+			affinity = agentAffinityBoost
+		}
+
+		results = append(results, RetrievalResult{
+			Drawer:     row.Drawer,
+			Similarity: row.Similarity,
+			GraphScore: graphScore,
+			FinalScore: row.Importance*recency*relevance + affinity,
+		})
+	}
+
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].FinalScore > results[j].FinalScore
+	})
+
+	return results
 }
 
 // recencyFactor returns a decay factor based on days since last access.
@@ -152,52 +135,15 @@ func recencyFactor(lastAccessed *time.Time, now time.Time) float64 {
 	return 1.0 / (1.0 + days/30.0)
 }
 
-// sortByScore sorts results by FinalScore descending.
-func sortByScore(results []RetrievalResult) {
-	for i := 1; i < len(results); i++ {
-		for j := i; j > 0 && results[j].FinalScore > results[j-1].FinalScore; j-- {
-			results[j], results[j-1] = results[j-1], results[j]
-		}
-	}
-}
-
-// kgEntityLookup performs two-step entity lookup:
-// Step 1: exact match on entity names extracted from query (~1ms)
-// Step 2: embedding fallback (if Step 1 returns nothing) — deferred to backlog
-func kgEntityLookup(ctx context.Context, sess database.SessionRunner, kgGraph kg.Graph, workspaceID, query string) []string {
-	// Step 1: Extract words > 3 chars, try exact match.
-	words := extractQueryWords(query)
-	if len(words) == 0 {
-		return nil
-	}
-
-	var drawerIDs []string
-	for _, word := range words {
-		// Query KG for this entity.
-		results, err := kgGraph.QueryEntity(ctx, sess, workspaceID, word, "", "both")
-		if err != nil || len(results) == 0 {
-			continue
-		}
-		// Collect source_closet references (which contain drawer IDs).
-		for i := range results {
-			r := &results[i]
-			if r.SourceCloset != "" {
-				drawerIDs = append(drawerIDs, r.SourceCloset)
-			}
-		}
-	}
-
-	return drawerIDs
-}
-
-// extractQueryWords returns lowercase words longer than 3 characters.
+// extractQueryWords returns lowercase words of length > minQueryWordLen-1,
+// stripped of surrounding punctuation. These feed the KG branch of the
+// hybrid search CTE.
 func extractQueryWords(query string) []string {
 	words := strings.Fields(strings.ToLower(query))
-	var filtered []string
+	filtered := make([]string, 0, len(words))
 	for _, w := range words {
-		// Strip punctuation.
 		w = strings.Trim(w, ".,;:!?\"'()-")
-		if len(w) > 3 {
+		if len(w) >= minQueryWordLen {
 			filtered = append(filtered, w)
 		}
 	}

@@ -1,4 +1,4 @@
-package kg
+package kgrepo
 
 import (
 	"crypto/sha256"

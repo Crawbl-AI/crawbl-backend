@@ -1,6 +1,11 @@
-// Package drawer provides the vector store for MemPalace memory drawers
-// backed by PostgreSQL with pgvector for semantic search.
-package drawer
+// Package repo holds the interface contracts for every MemPalace
+// persistence boundary. Concrete Postgres implementations live in the
+// drawerrepo, kgrepo, palacegraphrepo, and identityrepo sub-packages.
+//
+// Keeping every repo interface in one file makes the memory subsystem's
+// persistence surface easy to audit at a glance and gives callers a single
+// import when they need to hold a fake/mock for tests.
+package repo
 
 import (
 	"context"
@@ -9,8 +14,11 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-// Repo defines the drawer persistence operations.
-type Repo interface {
+// DrawerRepo is the memory_drawers persistence contract. The store is
+// append-mostly: rows are inserted, mutated by the cold worker (state,
+// classification, clustering), then either archived via state transitions
+// or decayed/pruned by the maintenance worker.
+type DrawerRepo interface {
 	// Add inserts a drawer with its embedding. Checks workspace limits.
 	Add(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
 
@@ -24,6 +32,13 @@ type Repo interface {
 	// Returns drawers ordered by similarity (highest first).
 	// Filters by wing and/or room if provided.
 	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)
+
+	// SearchHybrid performs a single-round-trip hybrid retrieval that unions
+	// pgvector ANN results with knowledge-graph entity-name matches against
+	// memory_entities/memory_triples, then re-joins memory_drawers to return
+	// the full drawer rows. queryTerms are lowercased words extracted from
+	// the query; pass an empty slice to skip the KG branch.
+	SearchHybrid(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, queryTerms []string, limit int) ([]memory.HybridSearchResult, error)
 
 	// CheckDuplicate finds drawers above the similarity threshold.
 	CheckDuplicate(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32, threshold float64, limit int) ([]memory.DrawerSearchResult, error)
@@ -83,4 +98,56 @@ type Repo interface {
 
 	// GetByID returns a single drawer by ID within a workspace.
 	GetByID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) (*memory.Drawer, error)
+}
+
+// KGRepo is the knowledge graph persistence contract: entity nodes plus
+// temporal relationship triples in memory_entities and memory_triples.
+type KGRepo interface {
+	// AddEntity upserts an entity node.
+	AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType string, properties string) (string, error)
+
+	// AddTriple adds a relationship triple. Auto-creates entities if they don't exist.
+	// Returns the triple ID. If an identical active triple exists, returns its ID without inserting.
+	AddTriple(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) (string, error)
+
+	// Invalidate marks a relationship as no longer valid by setting valid_to.
+	Invalidate(ctx context.Context, sess database.SessionRunner, workspaceID, subject, predicate, object, ended string) error
+
+	// QueryEntity returns all relationships for an entity.
+	// direction: "outgoing", "incoming", or "both"
+	// asOf: optional date filter (YYYY-MM-DD) — only facts valid at that date
+	QueryEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, asOf, direction string) ([]memory.TripleResult, error)
+
+	// QueryRelationship returns all triples with a given predicate.
+	QueryRelationship(ctx context.Context, sess database.SessionRunner, workspaceID, predicate, asOf string) ([]memory.TripleResult, error)
+
+	// Timeline returns facts in chronological order, optionally for one entity.
+	Timeline(ctx context.Context, sess database.SessionRunner, workspaceID, entityName string) ([]memory.TripleResult, error)
+
+	// Stats returns knowledge graph statistics.
+	Stats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.KGStats, error)
+}
+
+// PalaceGraphRepo provides palace navigation operations: BFS traversal,
+// tunnel detection, and overall graph statistics. Reads are derived from
+// memory_drawers groupings and cached per workspace inside the repo.
+type PalaceGraphRepo interface {
+	// Traverse walks the graph from a starting room via BFS.
+	Traverse(ctx context.Context, sess database.SessionRunner, workspaceID, startRoom string, maxHops int) ([]memory.TraversalResult, error)
+
+	// FindTunnels returns rooms that bridge two wings.
+	FindTunnels(ctx context.Context, sess database.SessionRunner, workspaceID, wingA, wingB string) ([]memory.Tunnel, error)
+
+	// GraphStats returns palace graph overview statistics.
+	GraphStats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.PalaceGraphStats, error)
+}
+
+// IdentityRepo is the memory_identities persistence contract.
+type IdentityRepo interface {
+	// Get returns the workspace's identity row, or (nil, nil) when none is
+	// configured yet. Callers treat nil as "no identity set".
+	Get(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.Identity, error)
+
+	// Set upserts the identity text for a workspace, stamping updated_at=NOW().
+	Set(ctx context.Context, sess database.SessionRunner, workspaceID, content string) error
 }

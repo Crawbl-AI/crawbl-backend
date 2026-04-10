@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -75,7 +76,7 @@ type chatResponse struct {
 }
 
 func (c *openAIClassifier) chat(ctx context.Context, systemPrompt, userContent string) (string, error) {
-	reqBody := chatRequest{
+	return c.sendChat(ctx, chatRequest{
 		Model: c.model,
 		Messages: []chatMessage{
 			{Role: "system", Content: systemPrompt},
@@ -84,8 +85,15 @@ func (c *openAIClassifier) chat(ctx context.Context, systemPrompt, userContent s
 		MaxTokens:      classifyMaxTokens,
 		Temperature:    classifyTemperature,
 		ResponseFormat: &responseFormat{Type: "json_object"},
-	}
+	})
+}
 
+// sendChat performs one OpenAI-style /chat/completions call and returns
+// the first choice's message content. All the HTTP plumbing (marshal,
+// auth header, size-capped read, status check, decode) lives here so
+// ClassifyAndExtract / ClassifyBatch / DetectConflict / MergeSummary can
+// focus on prompts and result shapes.
+func (c *openAIClassifier) sendChat(ctx context.Context, reqBody chatRequest) (string, error) {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("llm classify: marshal: %w", err)
@@ -110,25 +118,27 @@ func (c *openAIClassifier) chat(ctx context.Context, systemPrompt, userContent s
 	if err != nil {
 		return "", fmt.Errorf("llm classify: read body: %w", err)
 	}
-
 	if resp.StatusCode != http.StatusOK {
-		preview := string(respBody)
-		if len(preview) > maxPreviewLen {
-			preview = preview[:maxPreviewLen]
-		}
-		return "", fmt.Errorf("llm classify: status %d: %s", resp.StatusCode, preview)
+		return "", fmt.Errorf("llm classify: status %d: %s", resp.StatusCode, previewString(string(respBody)))
 	}
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
 		return "", fmt.Errorf("llm classify: unmarshal response: %w", err)
 	}
-
 	if len(chatResp.Choices) == 0 {
 		return "", fmt.Errorf("llm classify: empty choices")
 	}
-
 	return chatResp.Choices[0].Message.Content, nil
+}
+
+// previewString returns a capped copy of s suitable for error messages
+// and log lines. Centralised so every call site truncates identically.
+func previewString(s string) string {
+	if len(s) > maxPreviewLen {
+		return s[:maxPreviewLen]
+	}
+	return s
 }
 
 const classifySystemPrompt = `You are a memory classifier. Analyze the given text and return a JSON object with:
@@ -147,18 +157,27 @@ func (c *openAIClassifier) ClassifyAndExtract(ctx context.Context, content strin
 
 	var result LLMClassification
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		preview := raw
-		if len(preview) > maxPreviewLen {
-			preview = preview[:maxPreviewLen]
-		}
-		slog.Warn("llm classify: parse failed, returning fallback", "error", err, "raw", preview)
-		summary := content
-		if len(summary) > 100 {
-			summary = summary[:100]
-		}
-		return &LLMClassification{MemoryType: "fact", Importance: fallbackImportance, Summary: summary}, nil
+		slog.Warn("llm classify: parse failed, returning fallback",
+			"error", err, "raw", previewString(raw))
+		return fallbackClassification(content), nil
 	}
 	return &result, nil
+}
+
+// fallbackClassification returns a minimal placeholder classification
+// used when the LLM response cannot be parsed. The summary is a prefix of
+// the original content so downstream consumers still get *something*
+// vaguely descriptive to store.
+func fallbackClassification(content string) *LLMClassification {
+	summary := content
+	if len(summary) > 100 {
+		summary = summary[:100]
+	}
+	return &LLMClassification{
+		MemoryType: "fact",
+		Importance: fallbackImportance,
+		Summary:    summary,
+	}
 }
 
 const batchClassifySystemPrompt = `You are a memory classifier. You will receive N numbered memory snippets.
@@ -179,79 +198,38 @@ func (c *openAIClassifier) ClassifyBatch(ctx context.Context, contents []string)
 		return nil, nil
 	}
 
-	// Build numbered prompt.
-	input := fmt.Sprintf("Classify each of the following %d memory snippets:\n\n", len(contents))
-	for i, content := range contents {
-		input += fmt.Sprintf("%d.\n%s\n\n", i+1, content)
-	}
-
-	// Use a higher token budget for batch responses.
-	reqBody := chatRequest{
+	raw, err := c.sendChat(ctx, chatRequest{
 		Model: c.model,
 		Messages: []chatMessage{
 			{Role: "system", Content: batchClassifySystemPrompt},
-			{Role: "user", Content: input},
+			{Role: "user", Content: buildBatchPrompt(contents)},
 		},
 		MaxTokens:   batchClassifyMaxTokens,
 		Temperature: classifyTemperature,
-		// Note: json_object forces a single object; for arrays we rely on prompt and parse directly.
-	}
-
-	body, err := json.Marshal(reqBody)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("llm classify batch: marshal: %w", err)
+		return nil, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("llm classify batch: request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("llm classify batch: http: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxLLMResponseBytes))
-	if err != nil {
-		return nil, fmt.Errorf("llm classify batch: read body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		preview := string(respBody)
-		if len(preview) > maxPreviewLen {
-			preview = preview[:maxPreviewLen]
-		}
-		return nil, fmt.Errorf("llm classify batch: status %d: %s", resp.StatusCode, preview)
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("llm classify batch: unmarshal response: %w", err)
-	}
-	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("llm classify batch: empty choices")
-	}
-
-	raw := chatResp.Choices[0].Message.Content
 
 	var results []*LLMClassification
-	if err := json.Unmarshal([]byte(raw), &results); err != nil || len(results) != len(contents) {
-		preview := raw
-		if len(preview) > maxPreviewLen {
-			preview = preview[:maxPreviewLen]
-		}
+	if jsonErr := json.Unmarshal([]byte(raw), &results); jsonErr != nil || len(results) != len(contents) {
 		slog.Warn("llm classify batch: parse failed, falling back to individual calls",
-			"error", err, "got", len(results), "want", len(contents), "raw", preview)
+			"error", jsonErr, "got", len(results), "want", len(contents), "raw", previewString(raw))
 		return c.classifyBatchFallback(ctx, contents), nil
 	}
-
 	return results, nil
+}
+
+// buildBatchPrompt formats a numbered list of memory snippets for the
+// batch classifier. Kept separate so ClassifyBatch carries the dispatch
+// logic and this helper owns the prompt shape.
+func buildBatchPrompt(contents []string) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Classify each of the following %d memory snippets:\n\n", len(contents))
+	for i, content := range contents {
+		fmt.Fprintf(&sb, "%d.\n%s\n\n", i+1, content)
+	}
+	return sb.String()
 }
 
 // classifyBatchFallback calls ClassifyAndExtract individually for each content.
@@ -261,11 +239,7 @@ func (c *openAIClassifier) classifyBatchFallback(ctx context.Context, contents [
 		r, err := c.ClassifyAndExtract(ctx, content)
 		if err != nil {
 			slog.Warn("llm classify batch fallback: individual call failed", "index", i, "error", err)
-			summary := content
-			if len(summary) > 100 {
-				summary = summary[:100]
-			}
-			r = &LLMClassification{MemoryType: "fact", Importance: fallbackImportance, Summary: summary}
+			r = fallbackClassification(content)
 		}
 		results[i] = r
 	}
@@ -296,10 +270,11 @@ const mergeSystemPrompt = `Merge these related memory snippets into one concise 
 Return JSON: {"summary": "merged summary text"}`
 
 func (c *openAIClassifier) MergeSummary(ctx context.Context, contents []string) (string, error) {
-	input := ""
+	var sb strings.Builder
 	for i, content := range contents {
-		input += fmt.Sprintf("Snippet %d:\n%s\n\n", i+1, content)
+		fmt.Fprintf(&sb, "Snippet %d:\n%s\n\n", i+1, content)
 	}
+	input := sb.String()
 
 	raw, err := c.chat(ctx, mergeSystemPrompt, input)
 	if err != nil {

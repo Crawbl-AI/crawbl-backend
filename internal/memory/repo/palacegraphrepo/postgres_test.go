@@ -1,8 +1,10 @@
-package graph
+package palacegraphrepo
 
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 )
 
 func TestContainsStr(t *testing.T) {
@@ -202,7 +204,7 @@ func TestRoomNodeJSONTags(t *testing.T) {
 
 func TestTraversalResultJSONTags(t *testing.T) {
 	t.Run("with connected_via", func(t *testing.T) {
-		tr := TraversalResult{
+		tr := memory.TraversalResult{
 			Room:         "hall",
 			Wings:        []string{"north"},
 			Halls:        []string{"corridor"},
@@ -232,7 +234,7 @@ func TestTraversalResultJSONTags(t *testing.T) {
 	})
 
 	t.Run("connected_via omitted when empty", func(t *testing.T) {
-		tr := TraversalResult{
+		tr := memory.TraversalResult{
 			Room:  "room",
 			Count: 1,
 			Hop:   0,

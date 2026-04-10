@@ -39,8 +39,8 @@ func NewClassifier() Classifier {
 
 	return &classifier{
 		markers:          cfg.CompileMarkers(),
-		positive:         positiveWords,
-		negative:         negativeWords,
+		positive:         cfg.CompilePositiveWords(),
+		negative:         cfg.CompileNegativeWords(),
 		resolvers:        cfg.CompileResolvers(),
 		codeLines:        cfg.CompileCodeLines(),
 		blockquote:       segments["blockquote"],
@@ -58,20 +58,15 @@ func (c *classifier) Classify(text string, minConfidence float64) []ClassifiedMe
 
 	for _, seg := range segments {
 		seg = strings.TrimSpace(seg)
-		// Ignore user prompts which are less than 10 tokens/letters
-		if len(seg) < 10 {
+		// Ignore segments under 20 characters — typically stray speaker
+		// labels or one-word replies with no classifiable signal.
+		if len(seg) < 20 {
 			continue
 		}
 
 		prose := c.extractProse(seg)
 
-		scores := make(map[string]float64)
-		for memType, markers := range c.markers {
-			score := c.scoreMarkers(prose, markers)
-			if score > 0 {
-				scores[memType] = score
-			}
-		}
+		scores := c.scoreAllMarkers(prose)
 		if len(scores) == 0 {
 			continue
 		}
@@ -107,6 +102,17 @@ func (c *classifier) Classify(text string, minConfidence float64) []ClassifiedMe
 	}
 
 	return results
+}
+
+// scoreAllMarkers returns the non-zero marker scores for one segment across every memory type.
+func (c *classifier) scoreAllMarkers(prose string) map[string]float64 {
+	scores := make(map[string]float64, len(c.markers))
+	for memType, markers := range c.markers {
+		if score := c.scoreMarkers(prose, markers); score > 0 {
+			scores[memType] = score
+		}
+	}
+	return scores
 }
 
 // scoreMarkers counts how many times any marker matches the text.
@@ -233,12 +239,8 @@ func (c *classifier) splitIntoSegments(text string) []string {
 
 	turnCount := 0
 	for _, line := range lines {
-		stripped := strings.TrimSpace(line)
-		for _, p := range turnPatterns {
-			if p.MatchString(stripped) {
-				turnCount++
-				break
-			}
+		if lineMatchesAny(strings.TrimSpace(line), turnPatterns) {
+			turnCount++
 		}
 	}
 
@@ -280,25 +282,28 @@ func splitByTurns(lines []string, turnPatterns []*regexp.Regexp) []string {
 	var current []string
 
 	for _, line := range lines {
-		stripped := strings.TrimSpace(line)
-		isTurn := false
-		for _, p := range turnPatterns {
-			if p.MatchString(stripped) {
-				isTurn = true
-				break
-			}
-		}
+		isTurn := lineMatchesAny(strings.TrimSpace(line), turnPatterns)
 		if isTurn && len(current) > 0 {
 			segments = append(segments, strings.Join(current, "\n"))
 			current = []string{line}
-		} else {
-			current = append(current, line)
+			continue
 		}
+		current = append(current, line)
 	}
 	if len(current) > 0 {
 		segments = append(segments, strings.Join(current, "\n"))
 	}
 	return segments
+}
+
+// lineMatchesAny reports whether any of the supplied regexps matches line.
+func lineMatchesAny(line string, patterns []*regexp.Regexp) bool {
+	for _, p := range patterns {
+		if p.MatchString(line) {
+			return true
+		}
+	}
+	return false
 }
 
 // tokenize extracts lowercase words from text.
@@ -331,29 +336,4 @@ func maxKey(m map[string]float64) string {
 		}
 	}
 	return best
-}
-
-// =============================================================================
-// Sentiment word sets
-// =============================================================================
-
-var positiveWords = map[string]bool{
-	"pride": true, "proud": true, "joy": true, "happy": true,
-	"love": true, "loving": true, "beautiful": true, "amazing": true,
-	"wonderful": true, "incredible": true, "fantastic": true, "brilliant": true,
-	"perfect": true, "excited": true, "thrilled": true, "grateful": true,
-	"warm": true, "breakthrough": true, "success": true, "works": true,
-	"working": true, "solved": true, "fixed": true, "nailed": true,
-	"heart": true, "hug": true, "precious": true, "adore": true,
-}
-
-var negativeWords = map[string]bool{
-	"bug": true, "error": true, "crash": true, "crashing": true,
-	"crashed": true, "fail": true, "failed": true, "failing": true,
-	"failure": true, "broken": true, "broke": true, "breaking": true,
-	"breaks": true, "issue": true, "problem": true, "wrong": true,
-	"stuck": true, "blocked": true, "unable": true, "impossible": true,
-	"missing": true, "terrible": true, "horrible": true, "awful": true,
-	"worse": true, "worst": true, "panic": true, "disaster": true,
-	"mess": true,
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	drawerpkg "github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -13,7 +13,7 @@ import (
 const l3MaxSnippetLen = 300
 
 // renderL3 performs semantic search and formats results.
-func renderL3(ctx context.Context, sess database.SessionRunner, drawerRepo drawerpkg.Repo, embedder embed.Embedder, workspaceID, query, wing, room string, limit int) (string, error) {
+func renderL3(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, embedder embed.Embedder, workspaceID, query, wing, room string, limit int) (string, error) {
 	if limit <= 0 {
 		limit = 5
 	}

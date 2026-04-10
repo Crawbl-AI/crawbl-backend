@@ -9,9 +9,8 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -25,8 +24,8 @@ const (
 // ProcessDeps holds dependencies for the memory processing job.
 type ProcessDeps struct {
 	DB            *dbr.Connection
-	DrawerRepo    drawer.Repo
-	KGGraph       kg.Graph
+	DrawerRepo    memrepo.DrawerRepo
+	KGRepo        memrepo.KGRepo
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 }
@@ -41,7 +40,6 @@ type ProcessResult struct {
 func RunProcess(ctx context.Context, deps ProcessDeps) (*ProcessResult, error) {
 	sess := deps.DB.NewSession(nil)
 
-	// Get active workspaces with raw drawers.
 	activeIDs, err := deps.DrawerRepo.ActiveWorkspaces(ctx, sess, activeWorkspaceHours)
 	if err != nil {
 		return nil, fmt.Errorf("list active workspaces: %w", err)
@@ -54,58 +52,93 @@ func RunProcess(ctx context.Context, deps ProcessDeps) (*ProcessResult, error) {
 
 	result := &ProcessResult{}
 	for _, wsID := range activeIDs {
-		drawers, err := deps.DrawerRepo.ListByState(ctx, sess, wsID, string(memory.DrawerStateRaw), rawDrawerBatchSize)
-		if err != nil {
-			slog.Warn("memory-process: list raw drawers failed", "workspace_id", wsID, "error", err)
-			continue
-		}
+		processWorkspace(ctx, sess, deps, wsID, result)
+	}
+	return result, nil
+}
 
-		// Collect all contents for a single batch LLM call per workspace.
-		contents := make([]string, len(drawers))
-		for i := range drawers {
-			contents[i] = drawers[i].Content
-		}
-
-		classifyCtx, cancelBatch := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
-		classifications, batchErr := deps.LLMClassifier.ClassifyBatch(classifyCtx, contents)
-		cancelBatch()
-
-		for i := range drawers {
-			d := &drawers[i]
-
-			var classification *extract.LLMClassification
-			if batchErr != nil || i >= len(classifications) || classifications[i] == nil {
-				// Batch failed entirely or result missing for this index — fall back to individual call.
-				slog.Warn("memory-process: batch classify unavailable, falling back",
-					"drawer_id", d.ID, "workspace_id", wsID, "error", batchErr)
-				singleCtx, cancelSingle := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
-				classification, err = deps.LLMClassifier.ClassifyAndExtract(singleCtx, d.Content)
-				cancelSingle()
-				if err != nil {
-					slog.Warn("memory-process: drawer classify failed",
-						"drawer_id", d.ID, "workspace_id", d.WorkspaceID,
-						"retry_count", d.RetryCount, "error", err)
-					handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
-					result.Failed++
-					continue
-				}
-			} else {
-				classification = classifications[i]
-			}
-
-			if err := applyClassification(ctx, sess, deps, d, classification); err != nil {
-				slog.Warn("memory-process: drawer failed",
-					"drawer_id", d.ID, "workspace_id", d.WorkspaceID,
-					"retry_count", d.RetryCount, "error", err)
-				handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
-				result.Failed++
-				continue
-			}
-			result.Processed++
-		}
+// processWorkspace runs the cold pipeline for every raw drawer in one workspace.
+func processWorkspace(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, wsID string, result *ProcessResult) {
+	drawers, err := deps.DrawerRepo.ListByState(ctx, sess, wsID, string(memory.DrawerStateRaw), rawDrawerBatchSize)
+	if err != nil {
+		slog.Warn("memory-process: list raw drawers failed", "workspace_id", wsID, "error", err)
+		return
+	}
+	if len(drawers) == 0 {
+		return
 	}
 
-	return result, nil
+	classifications, batchErr := classifyBatch(ctx, deps.LLMClassifier, drawers)
+
+	for i := range drawers {
+		processSingleDrawer(ctx, sess, deps, wsID, &drawers[i], classifications, i, batchErr, result)
+	}
+}
+
+// classifyBatch runs one batch LLM classify call for all drawers in a workspace.
+// Callers fall back to per-drawer classification when a batch slot is missing.
+func classifyBatch(ctx context.Context, classifier extract.LLMClassifier, drawers []memory.Drawer) ([]*extract.LLMClassification, error) {
+	contents := make([]string, len(drawers))
+	for i := range drawers {
+		contents[i] = drawers[i].Content
+	}
+	batchCtx, cancel := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
+	defer cancel()
+	return classifier.ClassifyBatch(batchCtx, contents)
+}
+
+// processSingleDrawer applies one drawer's classification, falling back to
+// a per-drawer LLM call when the batch entry is missing. Updates result
+// counters in place.
+func processSingleDrawer(
+	ctx context.Context,
+	sess database.SessionRunner,
+	deps ProcessDeps,
+	wsID string,
+	d *memory.Drawer,
+	classifications []*extract.LLMClassification,
+	idx int,
+	batchErr error,
+	result *ProcessResult,
+) {
+	classification, err := resolveClassification(ctx, deps.LLMClassifier, d, classifications, idx, batchErr)
+	if err != nil {
+		slog.Warn("memory-process: drawer classify failed",
+			"drawer_id", d.ID, "workspace_id", wsID, "retry_count", d.RetryCount, "error", err)
+		handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
+		result.Failed++
+		return
+	}
+
+	if err := applyClassification(ctx, sess, deps, d, classification); err != nil {
+		slog.Warn("memory-process: drawer failed",
+			"drawer_id", d.ID, "workspace_id", wsID, "retry_count", d.RetryCount, "error", err)
+		handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
+		result.Failed++
+		return
+	}
+	result.Processed++
+}
+
+// resolveClassification returns the batch classification for idx, falling
+// back to a per-drawer LLM call when the batch failed entirely or the slot
+// is missing.
+func resolveClassification(
+	ctx context.Context,
+	classifier extract.LLMClassifier,
+	d *memory.Drawer,
+	classifications []*extract.LLMClassification,
+	idx int,
+	batchErr error,
+) (*extract.LLMClassification, error) {
+	if batchErr == nil && idx < len(classifications) && classifications[idx] != nil {
+		return classifications[idx], nil
+	}
+	slog.Warn("memory-process: batch classify unavailable, falling back",
+		"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", batchErr)
+	singleCtx, cancel := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
+	defer cancel()
+	return classifier.ClassifyAndExtract(singleCtx, d.Content)
 }
 
 // applyClassification persists a classification result and runs downstream steps
@@ -138,11 +171,11 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 }
 
 func linkEntities(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, workspaceID string, classification *extract.LLMClassification) {
-	if deps.KGGraph == nil {
+	if deps.KGRepo == nil {
 		return
 	}
 	for _, entity := range classification.Entities {
-		if _, err := deps.KGGraph.AddEntity(ctx, sess, workspaceID, entity.Name, entity.Type, "{}"); err != nil {
+		if _, err := deps.KGRepo.AddEntity(ctx, sess, workspaceID, entity.Name, entity.Type, "{}"); err != nil {
 			slog.Warn("memory-process: add entity failed", "entity", entity.Name, "error", err)
 		}
 	}
@@ -154,7 +187,7 @@ func linkEntities(ctx context.Context, sess database.SessionRunner, deps Process
 			Object:      triple.Object,
 			Confidence:  1.0,
 		}
-		if _, err := deps.KGGraph.AddTriple(ctx, sess, workspaceID, t); err != nil {
+		if _, err := deps.KGRepo.AddTriple(ctx, sess, workspaceID, t); err != nil {
 			slog.Warn("memory-process: add triple failed",
 				"subject", triple.Subject, "predicate", triple.Predicate, "error", err)
 		}
@@ -190,11 +223,27 @@ func clusterDrawers(ctx context.Context, sess database.SessionRunner, deps Proce
 		return
 	}
 	for i := range cluster {
-		member := &cluster[i]
-		_ = deps.DrawerRepo.SetClusterID(ctx, sess, d.WorkspaceID, member.ID, d.ID)
-		_ = deps.DrawerRepo.UpdateState(ctx, sess, d.WorkspaceID, member.ID, string(memory.DrawerStateMerged))
+		mergeClusterMember(ctx, sess, deps, d, &cluster[i])
 	}
-	_ = deps.DrawerRepo.UpdateClassification(ctx, sess, d.WorkspaceID, d.ID, d.MemoryType, mergedSummary, d.Room, d.Importance)
+	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, d.WorkspaceID, d.ID, d.MemoryType, mergedSummary, d.Room, d.Importance); err != nil {
+		slog.Warn("memory-process: update cluster leader classification failed",
+			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
+	}
+}
+
+// mergeClusterMember attaches a similar drawer to the cluster leader and
+// marks it merged. Errors on either step are logged and swallowed — the
+// member stays where it was and the next sweep will retry.
+func mergeClusterMember(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, leader *memory.Drawer, member *memory.DrawerSearchResult) {
+	if err := deps.DrawerRepo.SetClusterID(ctx, sess, leader.WorkspaceID, member.ID, leader.ID); err != nil {
+		slog.Warn("memory-process: set cluster id failed",
+			"member_id", member.ID, "leader_id", leader.ID, "error", err)
+		return
+	}
+	if err := deps.DrawerRepo.UpdateState(ctx, sess, leader.WorkspaceID, member.ID, string(memory.DrawerStateMerged)); err != nil {
+		slog.Warn("memory-process: mark cluster member merged failed",
+			"member_id", member.ID, "leader_id", leader.ID, "error", err)
+	}
 }
 
 func detectDrawerConflicts(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, d *memory.Drawer, embedding []float32) {
@@ -203,33 +252,54 @@ func detectDrawerConflicts(ctx context.Context, sess database.SessionRunner, dep
 	}
 	neighbors, err := deps.DrawerRepo.Search(ctx, sess, d.WorkspaceID, embedding, "", "", 5)
 	if err != nil {
+		slog.Warn("memory-process: neighbor search for conflict detection failed",
+			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
 		return
 	}
 	for i := range neighbors {
-		neighbor := &neighbors[i]
-		if neighbor.ID == d.ID {
-			continue
-		}
-		if neighbor.Similarity < memory.ColdWorkerConflictLow || neighbor.Similarity >= memory.ColdWorkerConflictHigh {
-			continue
-		}
-		conflicts, err := deps.LLMClassifier.DetectConflict(ctx, d.Content, neighbor.Content)
-		if err != nil {
-			continue
-		}
-		if conflicts {
-			slog.Info("memory-process: conflict detected",
-				"new_drawer", d.ID, "old_drawer", neighbor.ID, "similarity", neighbor.Similarity)
-			_ = deps.DrawerRepo.SetSupersededBy(ctx, sess, d.WorkspaceID, neighbor.ID, d.ID)
-		}
+		resolveNeighborConflict(ctx, sess, deps, d, &neighbors[i])
 	}
 }
 
-func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo drawer.Repo, d *memory.Drawer) {
-	_ = drawerRepo.IncrementRetryCount(ctx, sess, d.WorkspaceID, d.ID)
-	if d.RetryCount+1 >= memory.ColdWorkerMaxRetries {
-		slog.Warn("memory-process: max retries, marking failed",
-			"drawer_id", d.ID, "workspace_id", d.WorkspaceID)
-		_ = drawerRepo.UpdateState(ctx, sess, d.WorkspaceID, d.ID, string(memory.DrawerStateFailed))
+// resolveNeighborConflict evaluates one neighbor drawer for a potential
+// supersede relationship. Any LLM or repo error is logged and the
+// relationship is left untouched so a later sweep can retry.
+func resolveNeighborConflict(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, d *memory.Drawer, neighbor *memory.DrawerSearchResult) {
+	if neighbor.ID == d.ID {
+		return
+	}
+	if neighbor.Similarity < memory.ColdWorkerConflictLow || neighbor.Similarity >= memory.ColdWorkerConflictHigh {
+		return
+	}
+	conflicts, err := deps.LLMClassifier.DetectConflict(ctx, d.Content, neighbor.Content)
+	if err != nil {
+		slog.Warn("memory-process: detect conflict llm call failed",
+			"new_drawer", d.ID, "old_drawer", neighbor.ID, "error", err)
+		return
+	}
+	if !conflicts {
+		return
+	}
+	slog.Info("memory-process: conflict detected",
+		"new_drawer", d.ID, "old_drawer", neighbor.ID, "similarity", neighbor.Similarity)
+	if err := deps.DrawerRepo.SetSupersededBy(ctx, sess, d.WorkspaceID, neighbor.ID, d.ID); err != nil {
+		slog.Warn("memory-process: mark superseded failed",
+			"new_drawer", d.ID, "old_drawer", neighbor.ID, "error", err)
+	}
+}
+
+func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, d *memory.Drawer) {
+	if err := drawerRepo.IncrementRetryCount(ctx, sess, d.WorkspaceID, d.ID); err != nil {
+		slog.Warn("memory-process: increment retry count failed",
+			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
+	}
+	if d.RetryCount+1 < memory.ColdWorkerMaxRetries {
+		return
+	}
+	slog.Warn("memory-process: max retries, marking failed",
+		"drawer_id", d.ID, "workspace_id", d.WorkspaceID)
+	if err := drawerRepo.UpdateState(ctx, sess, d.WorkspaceID, d.ID, string(memory.DrawerStateFailed)); err != nil {
+		slog.Warn("memory-process: mark drawer failed state update failed",
+			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
 	}
 }

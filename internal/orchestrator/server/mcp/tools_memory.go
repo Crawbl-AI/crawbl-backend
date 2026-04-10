@@ -667,14 +667,11 @@ func newMemorySetIdentityHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySetIden
 			return nil, memorySetIdentityOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxIdentityLength)}, nil
 		}
 
+		if deps.IdentityRepo == nil {
+			return nil, memorySetIdentityOutput{Info: "identity repo unavailable"}, nil
+		}
 		sess := deps.newSession()
-		_, err := sess.InsertBySql(
-			`INSERT INTO memory_identities (workspace_id, content, updated_at)
-			 VALUES (?, ?, NOW())
-			 ON CONFLICT (workspace_id) DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()`,
-			workspaceID, input.Content,
-		).ExecContext(ctx)
-		if err != nil {
+		if err := deps.IdentityRepo.Set(ctx, sess, workspaceID, input.Content); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to set identity", "error", err)
 			return nil, memorySetIdentityOutput{Info: "failed to update identity"}, nil
 		}

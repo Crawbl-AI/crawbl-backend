@@ -3,41 +3,35 @@ package layers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
-	drawerpkg "github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 type stack struct {
-	drawerRepo drawerpkg.Repo
-	embedder   embed.Embedder
-	kgGraph    kg.Graph
+	drawerRepo   memrepo.DrawerRepo
+	identityRepo memrepo.IdentityRepo
+	embedder     embed.Embedder
 }
 
-// NewStack creates a new memory stack. Pass nil for kgGraph to disable hybrid retrieval.
-func NewStack(drawerRepo drawerpkg.Repo, embedder embed.Embedder, kgGraph kg.Graph) Stack {
+// NewStack creates a new memory stack. The hybrid retrieval path uses the
+// drawer repo's SearchHybrid method — there is no longer a separate KG
+// graph handle passed in, since the CTE in drawerrepo owns the KG join.
+func NewStack(drawerRepo memrepo.DrawerRepo, identityRepo memrepo.IdentityRepo, embedder embed.Embedder) Stack {
 	return &stack{
-		drawerRepo: drawerRepo,
-		embedder:   embedder,
-		kgGraph:    kgGraph,
+		drawerRepo:   drawerRepo,
+		identityRepo: identityRepo,
+		embedder:     embedder,
 	}
 }
 
 func (s *stack) WakeUp(ctx context.Context, sess database.SessionRunner, workspaceID, wing string) (string, error) {
-	parts := make([]string, 0, 2)
-
-	// L0: Identity.
-	l0 := renderL0(ctx, sess, workspaceID)
-	parts = append(parts, l0)
-
-	// L1: Essential Story.
+	l0 := renderL0(ctx, sess, s.identityRepo, workspaceID)
 	l1 := renderL1(ctx, sess, s.drawerRepo, workspaceID, wing)
-	parts = append(parts, l1)
-
-	return strings.Join(parts, "\n\n"), nil
+	return l0 + "\n\n" + l1, nil
 }
 
 func (s *stack) Recall(ctx context.Context, sess database.SessionRunner, workspaceID, wing, room string, limit int) (string, error) {
@@ -45,13 +39,17 @@ func (s *stack) Recall(ctx context.Context, sess database.SessionRunner, workspa
 }
 
 func (s *stack) Search(ctx context.Context, sess database.SessionRunner, workspaceID, query, wing, room string, limit int) (string, error) {
-	if s.kgGraph == nil {
-		// Fallback to pure vector search.
+	if s.embedder == nil {
 		return renderL3(ctx, sess, s.drawerRepo, s.embedder, workspaceID, query, wing, room, limit)
 	}
 
-	results, err := HybridRetrieve(ctx, sess, s.drawerRepo, s.kgGraph, s.embedder, workspaceID, query, "", limit)
+	results, err := HybridRetrieve(ctx, sess, s.drawerRepo, s.embedder, workspaceID, query, "", limit)
 	if err != nil {
+		slog.WarnContext(ctx, "memory-search: hybrid retrieval failed, falling back to pure vector search",
+			slog.String("workspace_id", workspaceID),
+			slog.String("query", query),
+			slog.String("error", err.Error()),
+		)
 		return renderL3(ctx, sess, s.drawerRepo, s.embedder, workspaceID, query, wing, room, limit)
 	}
 	if len(results) == 0 {

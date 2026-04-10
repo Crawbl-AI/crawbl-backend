@@ -1,23 +1,38 @@
-package graph
+package palacegraphrepo
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
 const maxGraphResults = 50
 
-type postgresGraph struct {
+// frontier tracks a BFS cursor through the palace room graph.
+type frontier struct {
+	room  string
+	depth int
+}
+
+// Postgres is the palace-graph repository backed by PostgreSQL. It
+// implements repo.PalaceGraphRepo; the per-workspace room-node aggregation
+// is cached in Redis so repeated Traverse / FindTunnels / GraphStats calls
+// reuse the same projection instead of re-scanning memory_drawers.
+type Postgres struct {
 	cache *graphCache
 }
 
-// NewPostgres returns a PalaceGraph backed by Postgres.
-func NewPostgres() PalaceGraph {
-	return &postgresGraph{
-		cache: newGraphCache(),
+// NewPostgres returns a palace-graph repository backed by Postgres. Pass a
+// non-nil redisclient.Client to enable the shared TTL cache; nil disables
+// caching entirely and every call hits Postgres directly.
+func NewPostgres(redis redisclient.Client, logger *slog.Logger) *Postgres {
+	return &Postgres{
+		cache: newGraphCache(redis, logger),
 	}
 }
 
@@ -29,8 +44,8 @@ type drawerMeta struct {
 	Cnt  int    `db:"cnt"`
 }
 
-func (g *postgresGraph) buildNodes(ctx context.Context, sess database.SessionRunner, workspaceID string) (map[string]*RoomNode, error) {
-	if cached, ok := g.cache.get(workspaceID); ok {
+func (g *Postgres) buildNodes(ctx context.Context, sess database.SessionRunner, workspaceID string) (map[string]*RoomNode, error) {
+	if cached, ok := g.cache.get(ctx, workspaceID); ok {
 		return cached, nil
 	}
 
@@ -67,12 +82,12 @@ func (g *postgresGraph) buildNodes(ctx context.Context, sess database.SessionRun
 		sort.Strings(node.Halls)
 	}
 
-	g.cache.set(workspaceID, nodes)
+	g.cache.set(ctx, workspaceID, nodes)
 	return nodes, nil
 }
 
 // Traverse walks the graph from startRoom via BFS up to maxHops.
-func (g *postgresGraph) Traverse(ctx context.Context, sess database.SessionRunner, workspaceID, startRoom string, maxHops int) ([]TraversalResult, error) {
+func (g *Postgres) Traverse(ctx context.Context, sess database.SessionRunner, workspaceID, startRoom string, maxHops int) ([]memory.TraversalResult, error) {
 	if maxHops <= 0 {
 		maxHops = 2
 	}
@@ -87,7 +102,7 @@ func (g *postgresGraph) Traverse(ctx context.Context, sess database.SessionRunne
 	}
 
 	visited := map[string]bool{startRoom: true}
-	results := []TraversalResult{{
+	results := []memory.TraversalResult{{
 		Room:  startRoom,
 		Wings: start.Wings,
 		Halls: start.Halls,
@@ -95,10 +110,6 @@ func (g *postgresGraph) Traverse(ctx context.Context, sess database.SessionRunne
 		Hop:   0,
 	}}
 
-	type frontier struct {
-		room  string
-		depth int
-	}
 	queue := []frontier{{startRoom, 0}}
 
 	for len(queue) > 0 {
@@ -107,30 +118,7 @@ func (g *postgresGraph) Traverse(ctx context.Context, sess database.SessionRunne
 		if cur.depth >= maxHops {
 			continue
 		}
-
-		curNode := nodes[cur.room]
-		curWings := toSet(curNode.Wings)
-
-		for room, node := range nodes {
-			if visited[room] {
-				continue
-			}
-			shared := intersect(curWings, toSet(node.Wings))
-			if len(shared) > 0 {
-				visited[room] = true
-				results = append(results, TraversalResult{
-					Room:         room,
-					Wings:        node.Wings,
-					Halls:        node.Halls,
-					Count:        node.Count,
-					Hop:          cur.depth + 1,
-					ConnectedVia: setToSorted(shared),
-				})
-				if cur.depth+1 < maxHops {
-					queue = append(queue, frontier{room, cur.depth + 1})
-				}
-			}
-		}
+		queue = expandFrontier(nodes, visited, &results, queue, cur, maxHops)
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -147,13 +135,13 @@ func (g *postgresGraph) Traverse(ctx context.Context, sess database.SessionRunne
 }
 
 // FindTunnels returns rooms that appear in both wingA and wingB (or any 2+ wings if both empty).
-func (g *postgresGraph) FindTunnels(ctx context.Context, sess database.SessionRunner, workspaceID, wingA, wingB string) ([]Tunnel, error) {
+func (g *Postgres) FindTunnels(ctx context.Context, sess database.SessionRunner, workspaceID, wingA, wingB string) ([]memory.Tunnel, error) {
 	nodes, err := g.buildNodes(ctx, sess, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	var tunnels []Tunnel
+	var tunnels []memory.Tunnel
 	for _, node := range nodes {
 		if len(node.Wings) < 2 {
 			continue
@@ -164,7 +152,7 @@ func (g *postgresGraph) FindTunnels(ctx context.Context, sess database.SessionRu
 		if wingB != "" && !containsStr(node.Wings, wingB) {
 			continue
 		}
-		tunnels = append(tunnels, Tunnel{
+		tunnels = append(tunnels, memory.Tunnel{
 			Room:  node.Room,
 			Wings: node.Wings,
 			Halls: node.Halls,
@@ -180,7 +168,7 @@ func (g *postgresGraph) FindTunnels(ctx context.Context, sess database.SessionRu
 }
 
 // GraphStats returns a summary of the palace graph structure.
-func (g *postgresGraph) GraphStats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*Stats, error) {
+func (g *Postgres) GraphStats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.PalaceGraphStats, error) {
 	nodes, err := g.buildNodes(ctx, sess, workspaceID)
 	if err != nil {
 		return nil, err
@@ -188,21 +176,22 @@ func (g *postgresGraph) GraphStats(ctx context.Context, sess database.SessionRun
 
 	tunnelCount := 0
 	wingCounts := make(map[string]int)
-	var topTunnels []Tunnel
+	totalEdges := 0
+	var topTunnels []memory.Tunnel
 
 	for _, node := range nodes {
-		for _, w := range node.Wings {
-			wingCounts[w]++
+		addWingCounts(wingCounts, node.Wings)
+		totalEdges += wingEdges(len(node.Wings))
+		if len(node.Wings) < 2 {
+			continue
 		}
-		if len(node.Wings) >= 2 {
-			tunnelCount++
-			topTunnels = append(topTunnels, Tunnel{
-				Room:  node.Room,
-				Wings: node.Wings,
-				Halls: node.Halls,
-				Count: node.Count,
-			})
-		}
+		tunnelCount++
+		topTunnels = append(topTunnels, memory.Tunnel{
+			Room:  node.Room,
+			Wings: node.Wings,
+			Halls: node.Halls,
+			Count: node.Count,
+		})
 	}
 
 	sort.Slice(topTunnels, func(i, j int) bool {
@@ -212,21 +201,67 @@ func (g *postgresGraph) GraphStats(ctx context.Context, sess database.SessionRun
 		topTunnels = topTunnels[:10]
 	}
 
-	totalEdges := 0
-	for _, node := range nodes {
-		n := len(node.Wings)
-		if n >= 2 {
-			totalEdges += n * (n - 1) / 2
-		}
-	}
-
-	return &Stats{
+	return &memory.PalaceGraphStats{
 		TotalRooms:   len(nodes),
 		TunnelRooms:  tunnelCount,
 		TotalEdges:   totalEdges,
 		RoomsPerWing: wingCounts,
 		TopTunnels:   topTunnels,
 	}, nil
+}
+
+// expandFrontier visits every unseen room that shares a wing with cur,
+// appends traversal results for each one, and returns the queue extended
+// with any rooms still within the hop budget.
+func expandFrontier(
+	nodes map[string]*RoomNode,
+	visited map[string]bool,
+	results *[]memory.TraversalResult,
+	queue []frontier,
+	cur frontier,
+	maxHops int,
+) []frontier {
+	curNode := nodes[cur.room]
+	curWings := toSet(curNode.Wings)
+	for room, node := range nodes {
+		if visited[room] {
+			continue
+		}
+		shared := intersect(curWings, toSet(node.Wings))
+		if len(shared) == 0 {
+			continue
+		}
+		visited[room] = true
+		*results = append(*results, memory.TraversalResult{
+			Room:         room,
+			Wings:        node.Wings,
+			Halls:        node.Halls,
+			Count:        node.Count,
+			Hop:          cur.depth + 1,
+			ConnectedVia: setToSorted(shared),
+		})
+		if cur.depth+1 < maxHops {
+			queue = append(queue, frontier{room, cur.depth + 1})
+		}
+	}
+	return queue
+}
+
+// addWingCounts increments per-wing counters for one room.
+func addWingCounts(counts map[string]int, wings []string) {
+	for _, w := range wings {
+		counts[w]++
+	}
+}
+
+// wingEdges returns the edge contribution of a single room to the palace
+// graph: the number of wing pairs that share this room. Zero when the
+// room belongs to fewer than two wings.
+func wingEdges(wingCount int) int {
+	if wingCount < 2 {
+		return 0
+	}
+	return wingCount * (wingCount - 1) / 2
 }
 
 // helpers

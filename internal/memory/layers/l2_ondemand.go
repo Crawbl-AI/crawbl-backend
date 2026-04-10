@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	drawerpkg "github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 const l2MaxSnippetLen = 300
 
 // renderL2 retrieves on-demand drawers filtered by wing/room.
-func renderL2(ctx context.Context, sess database.SessionRunner, drawerRepo drawerpkg.Repo, workspaceID, wing, room string, limit int) (string, error) {
+func renderL2(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, workspaceID, wing, room string, limit int) (string, error) {
 	if limit <= 0 {
 		limit = 10
 	}

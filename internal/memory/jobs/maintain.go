@@ -9,7 +9,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 )
 
 const decaySkipRecentDays = 7
@@ -17,7 +17,7 @@ const decaySkipRecentDays = 7
 // MaintainDeps holds dependencies for the memory maintenance job.
 type MaintainDeps struct {
 	DB         *dbr.Connection
-	DrawerRepo drawer.Repo
+	DrawerRepo memrepo.DrawerRepo
 }
 
 // MaintainResult holds the outcome of a maintenance run.

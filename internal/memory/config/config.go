@@ -47,6 +47,34 @@ type ClassifyConfig struct {
 	MemoryMarkers    map[string][]string `json:"memory_markers"`
 	ResolverPatterns []string            `json:"resolver_patterns"`
 	CodeLinePatterns []string            `json:"code_line_patterns"`
+	Sentiment        SentimentWords      `json:"sentiment"`
+}
+
+// SentimentWords is the positive/negative lexicon the classifier uses to
+// tune sentiment-aware disambiguation. Kept alongside the regex patterns
+// so all classifier tuning lives in a single JSON file.
+type SentimentWords struct {
+	Positive []string `json:"positive"`
+	Negative []string `json:"negative"`
+}
+
+// CompilePositiveWords returns the positive lexicon as a lookup set.
+func (c *ClassifyConfig) CompilePositiveWords() map[string]bool {
+	return wordSet(c.Sentiment.Positive)
+}
+
+// CompileNegativeWords returns the negative lexicon as a lookup set.
+func (c *ClassifyConfig) CompileNegativeWords() map[string]bool {
+	return wordSet(c.Sentiment.Negative)
+}
+
+// wordSet materialises a slice of sentiment words into a lookup map.
+func wordSet(words []string) map[string]bool {
+	out := make(map[string]bool, len(words))
+	for _, w := range words {
+		out[w] = true
+	}
+	return out
 }
 
 // LoadClassifyConfig loads classifier patterns from the embedded JSON file.
@@ -75,36 +103,32 @@ func (c *ClassifyConfig) CompileSegmentPatterns() map[string]*regexp.Regexp {
 func (c *ClassifyConfig) CompileMarkers() map[string][]*regexp.Regexp {
 	compiled := make(map[string][]*regexp.Regexp, len(c.MemoryMarkers))
 	for memType, patterns := range c.MemoryMarkers {
-		for _, p := range patterns {
-			r, err := regexp.Compile(p)
-			if err == nil {
-				compiled[memType] = append(compiled[memType], r)
-			}
-		}
+		compiled[memType] = compileRegexList(patterns)
 	}
 	return compiled
+}
+
+// compileRegexList compiles a slice of pattern strings into regexps,
+// silently dropping any pattern that fails to compile. Shared by
+// CompileMarkers, CompileResolvers, and CompileCodeLines so no call site
+// has to own the compile-or-skip loop.
+func compileRegexList(patterns []string) []*regexp.Regexp {
+	out := make([]*regexp.Regexp, 0, len(patterns))
+	for _, p := range patterns {
+		r, err := regexp.Compile(p)
+		if err == nil {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // CompileResolvers compiles the resolution-detection patterns.
 func (c *ClassifyConfig) CompileResolvers() []*regexp.Regexp {
-	var compiled []*regexp.Regexp
-	for _, p := range c.ResolverPatterns {
-		r, err := regexp.Compile(p)
-		if err == nil {
-			compiled = append(compiled, r)
-		}
-	}
-	return compiled
+	return compileRegexList(c.ResolverPatterns)
 }
 
 // CompileCodeLines compiles the code-line detection patterns.
 func (c *ClassifyConfig) CompileCodeLines() []*regexp.Regexp {
-	var compiled []*regexp.Regexp
-	for _, p := range c.CodeLinePatterns {
-		r, err := regexp.Compile(p)
-		if err == nil {
-			compiled = append(compiled, r)
-		}
-	}
-	return compiled
+	return compileRegexList(c.CodeLinePatterns)
 }

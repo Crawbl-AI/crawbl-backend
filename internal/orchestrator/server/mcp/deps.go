@@ -7,11 +7,9 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/graph"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/kg"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
@@ -59,12 +57,13 @@ type Deps struct {
 	AuditService auditService
 
 	// Memory palace dependencies.
-	DrawerRepo  drawer.Repo
-	KG          kg.Graph
-	MemoryStack layers.Stack
-	PalaceGraph graph.PalaceGraph
-	Classifier  extract.Classifier
-	Embedder    embed.Embedder
+	DrawerRepo   memrepo.DrawerRepo
+	KG           memrepo.KGRepo
+	MemoryStack  layers.Stack
+	PalaceGraph  memrepo.PalaceGraphRepo
+	IdentityRepo memrepo.IdentityRepo
+	Classifier   extract.Classifier
+	Embedder     embed.Embedder
 }
 
 // newSession creates a new database session for MCP tool queries.
