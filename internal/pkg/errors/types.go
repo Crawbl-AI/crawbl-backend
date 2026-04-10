@@ -41,7 +41,8 @@ const (
 	ErrCodeWorkspaceNotFound = "WSP0001" // Workspace does not exist
 
 	// Agent error codes (AGTxxxx)
-	ErrCodeAgentNotFound = "AGT0001" // Agent does not exist
+	ErrCodeAgentNotFound           = "AGT0001" // Agent does not exist
+	ErrCodeAgentMemoryFieldTooLong = "AGT0002" // Agent memory field exceeds maximum length
 
 	// Conversation/Chat error codes (CHTxxxx)
 	ErrCodeConversationNotFound = "CHT0001" // Conversation does not exist
@@ -91,7 +92,8 @@ var (
 	ErrWorkspaceNotFound = NewBusinessError("Workspace not found", ErrCodeWorkspaceNotFound)
 
 	// Agent errors
-	ErrAgentNotFound = NewBusinessError("Agent not found", ErrCodeAgentNotFound)
+	ErrAgentNotFound           = NewBusinessError("Agent not found", ErrCodeAgentNotFound)
+	ErrAgentMemoryFieldTooLong = NewBusinessError("Agent memory field exceeds maximum allowed length", ErrCodeAgentMemoryFieldTooLong)
 
 	// Conversation errors
 	ErrConversationNotFound = NewBusinessError("Conversation not found", ErrCodeConversationNotFound)

@@ -11,6 +11,13 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// Agent memory field length limits — mirror the MCP path enforcement.
+const (
+	MaxAgentMemoryKeyLength      = 256
+	MaxAgentMemoryContentLength  = 16 * 1024 // 16 KiB
+	MaxAgentMemoryCategoryLength = 128
+)
+
 // GetAgent retrieves a single agent by ID.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgent(c *Context) http.HandlerFunc {
@@ -308,6 +315,19 @@ func CreateAgentMemory(c *Context) http.HandlerFunc {
 		var body dto.CreateAgentMemoryRequest
 		if err := DecodeJSON(r, &body); err != nil {
 			WriteError(w, merrors.ErrInvalidInput)
+			return
+		}
+
+		if body.Key == "" || len(body.Key) > MaxAgentMemoryKeyLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
+		}
+		if body.Content == "" || len(body.Content) > MaxAgentMemoryContentLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
+		}
+		if len(body.Category) > MaxAgentMemoryCategoryLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
 			return
 		}
 
