@@ -5,6 +5,8 @@
 package chatservice
 
 import (
+	"sync"
+
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
@@ -65,4 +67,11 @@ type service struct {
 	// riverClient is used by autoIngestConversation to enqueue
 	// memory_autoingest jobs. Nil disables auto-ingest cleanly.
 	riverClient *pkgriver.Client
+	// bootstrappedWorkspaces caches workspace IDs that have already been
+	// bootstrapped in this process. The value is always struct{}{}. This
+	// eliminates redundant seed queries on every read path (ListConversations,
+	// GetConversation, ListMessages, SendMessage). The cache is process-local
+	// and intentionally lost on pod restart — the first request per workspace
+	// per pod pays the bootstrap cost once, which is acceptable.
+	bootstrappedWorkspaces sync.Map
 }
