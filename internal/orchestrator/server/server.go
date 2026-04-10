@@ -100,6 +100,8 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		Addr:              ":" + config.Port,
 		Handler:           handler,
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
+		ReadTimeout:       DefaultReadTimeout,
+		WriteTimeout:      DefaultWriteTimeout,
 	}
 
 	return srv
