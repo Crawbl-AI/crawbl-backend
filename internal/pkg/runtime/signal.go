@@ -23,6 +23,17 @@ func RunUntilSignal(run func() error, stop func(context.Context) error, timeout 
 	case err := <-errChannel:
 		return err
 	case <-signalChannel:
+		// Drain the error channel: if run() failed concurrently with the signal,
+		// prefer returning the error so the process exits non-zero and Kubernetes
+		// restarts the pod.
+		select {
+		case err := <-errChannel:
+			if err != nil {
+				return err
+			}
+		default:
+		}
+
 		if stop == nil {
 			return nil
 		}
