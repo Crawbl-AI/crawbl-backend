@@ -6,6 +6,5 @@ e2e/*.log
 e2e/*.xml
 bin/
 .omc/
-/crawbl
 usage-writer
 mempalace/
