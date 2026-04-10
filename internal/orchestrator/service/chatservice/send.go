@@ -96,6 +96,9 @@ func (s *service) sendDirectMessage(
 	if len(responders) > 0 {
 		primaryResponder = responders[0]
 	}
+	if primaryResponder == nil {
+		return nil, merrors.ErrAgentNotFound
+	}
 
 	// Persist user message first (same as swarm path).
 	pm, mErr := s.persistUserMessage(ctx, opts, conversation)
