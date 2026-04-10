@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/config"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/memorypublisher"
@@ -270,6 +271,21 @@ func (s *service) processIngestWork(w ingestWork) {
 				AgentID:     w.agentSlug,
 				ContentLen:  len(chunk),
 			})
+		}
+
+		// Enqueue an ad-hoc process job so the cold pipeline runs within ~100ms
+		// instead of waiting up to a minute for the periodic River sweep.
+		// Safety-net sweep still runs every minute — UniqueOpts dedupes overlap.
+		// Non-transactional on purpose: if this Insert fails the drawer survives
+		// as `raw` and the periodic sweep picks it up.
+		if s.riverClient != nil {
+			if _, enqErr := s.riverClient.Insert(ctx, background.ProcessArgs{}, nil); enqErr != nil {
+				slog.Warn("auto-ingest: river enqueue failed",
+					slog.String("workspace_id", w.workspaceID),
+					slog.String("drawer_id", d.ID),
+					slog.String("error", enqErr.Error()),
+				)
+			}
 		}
 	}
 

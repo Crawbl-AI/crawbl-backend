@@ -20,6 +20,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -71,6 +72,28 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		}
 		mux.Handle("/", handler)
 		handler = mux
+	}
+
+	// Host-gate the River UI dashboard. Requests whose Host header matches
+	// RiverUIHost are routed to the riverui handler; all others fall through
+	// to the normal API. Auth is enforced at the Envoy Gateway layer via a
+	// SecurityPolicy — no application-level auth middleware is applied here.
+	if opts.RiverUIHandler != nil && opts.RiverUIHost != "" {
+		apiHandler := handler
+		riverHost := opts.RiverUIHost
+		riverHandler := opts.RiverUIHandler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Strip port from the Host header; Envoy strips it but be defensive.
+			host := r.Host
+			if idx := strings.IndexByte(host, ':'); idx >= 0 {
+				host = host[:idx]
+			}
+			if host == riverHost {
+				riverHandler.ServeHTTP(w, r)
+				return
+			}
+			apiHandler.ServeHTTP(w, r)
+		})
 	}
 
 	srv.httpServer = &http.Server{

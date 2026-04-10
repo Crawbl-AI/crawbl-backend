@@ -85,6 +85,7 @@ func New(
 		llmClassifier:     memDeps.LLMClassifier,
 		embedder:          memDeps.Embedder,
 		kgGraph:           memDeps.KGGraph,
+		riverClient:       memDeps.RiverClient,
 		ingestQueue:       make(chan ingestWork, memory.IngestQueueSize),
 	}
 }

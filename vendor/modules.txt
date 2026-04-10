@@ -314,6 +314,15 @@ github.com/fsnotify/fsnotify/internal
 # github.com/fxamacker/cbor/v2 v2.9.0
 ## explicit; go 1.20
 github.com/fxamacker/cbor/v2
+# github.com/gabriel-vasile/mimetype v1.4.12
+## explicit; go 1.21
+github.com/gabriel-vasile/mimetype
+github.com/gabriel-vasile/mimetype/internal/charset
+github.com/gabriel-vasile/mimetype/internal/csv
+github.com/gabriel-vasile/mimetype/internal/json
+github.com/gabriel-vasile/mimetype/internal/magic
+github.com/gabriel-vasile/mimetype/internal/markup
+github.com/gabriel-vasile/mimetype/internal/scan
 # github.com/go-chi/chi/v5 v5.2.5
 ## explicit; go 1.22
 github.com/go-chi/chi/v5
@@ -403,6 +412,16 @@ github.com/go-openapi/jsonreference/internal
 # github.com/go-openapi/swag v0.23.0
 ## explicit; go 1.20
 github.com/go-openapi/swag
+# github.com/go-playground/locales v0.14.1
+## explicit; go 1.17
+github.com/go-playground/locales
+github.com/go-playground/locales/currency
+# github.com/go-playground/universal-translator v0.18.1
+## explicit; go 1.18
+github.com/go-playground/universal-translator
+# github.com/go-playground/validator/v10 v10.30.1
+## explicit; go 1.24.0
+github.com/go-playground/validator/v10
 # github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c
 ## explicit; go 1.20
 github.com/go-shiori/dom
@@ -539,6 +558,32 @@ github.com/inconshreveable/mousetrap
 # github.com/iwdgo/sigintwindows v0.2.2
 ## explicit; go 1.14
 github.com/iwdgo/sigintwindows
+# github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
+## explicit; go 1.12
+github.com/jackc/pgerrcode
+# github.com/jackc/pgpassfile v1.0.0
+## explicit; go 1.12
+github.com/jackc/pgpassfile
+# github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+## explicit; go 1.14
+github.com/jackc/pgservicefile
+# github.com/jackc/pgx/v5 v5.9.1
+## explicit; go 1.25.0
+github.com/jackc/pgx/v5
+github.com/jackc/pgx/v5/internal/iobufpool
+github.com/jackc/pgx/v5/internal/pgio
+github.com/jackc/pgx/v5/internal/sanitize
+github.com/jackc/pgx/v5/internal/stmtcache
+github.com/jackc/pgx/v5/pgconn
+github.com/jackc/pgx/v5/pgconn/ctxwatch
+github.com/jackc/pgx/v5/pgconn/internal/bgreader
+github.com/jackc/pgx/v5/pgproto3
+github.com/jackc/pgx/v5/pgtype
+github.com/jackc/pgx/v5/pgxpool
+# github.com/jackc/puddle/v2 v2.2.2
+## explicit; go 1.19
+github.com/jackc/puddle/v2
+github.com/jackc/puddle/v2/internal/genstack
 # github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99
 ## explicit
 github.com/jbenet/go-context/io
@@ -563,7 +608,11 @@ github.com/klauspost/compress/internal/le
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/lib/pq v1.12.0
+# github.com/leodido/go-urn v1.4.0
+## explicit; go 1.18
+github.com/leodido/go-urn
+github.com/leodido/go-urn/scim/schema
+# github.com/lib/pq v1.12.3
 ## explicit; go 1.21
 github.com/lib/pq
 github.com/lib/pq/internal/pgpass
@@ -707,6 +756,9 @@ github.com/pkg/errors
 # github.com/pkg/term v1.1.0
 ## explicit; go 1.14
 github.com/pkg/term/termios
+# github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+## explicit
+github.com/pmezard/go-difflib/difflib
 # github.com/prometheus/client_model v0.6.2
 ## explicit; go 1.22.0
 # github.com/pulumi/appdash v0.0.0-20231130102222-75f619a67231
@@ -906,9 +958,72 @@ github.com/redis/go-redis/v9/internal/routing
 github.com/redis/go-redis/v9/internal/util
 github.com/redis/go-redis/v9/maintnotifications
 github.com/redis/go-redis/v9/push
+# github.com/riverqueue/apiframe v0.0.0-20251229202423-2b52ce1c482e
+## explicit; go 1.24.0
+github.com/riverqueue/apiframe/apiendpoint
+github.com/riverqueue/apiframe/apierror
+github.com/riverqueue/apiframe/apimiddleware
+github.com/riverqueue/apiframe/apitype
+github.com/riverqueue/apiframe/internal/validate
+# github.com/riverqueue/river v0.34.0
+## explicit; go 1.25.0
+github.com/riverqueue/river
+github.com/riverqueue/river/internal/dblist
+github.com/riverqueue/river/internal/dbunique
+github.com/riverqueue/river/internal/execution
+github.com/riverqueue/river/internal/hooklookup
+github.com/riverqueue/river/internal/jobcompleter
+github.com/riverqueue/river/internal/jobexecutor
+github.com/riverqueue/river/internal/jobstats
+github.com/riverqueue/river/internal/leadership
+github.com/riverqueue/river/internal/maintenance
+github.com/riverqueue/river/internal/middlewarelookup
+github.com/riverqueue/river/internal/notifier
+github.com/riverqueue/river/internal/notifylimiter
+github.com/riverqueue/river/internal/rivercommon
+github.com/riverqueue/river/internal/util/chanutil
+github.com/riverqueue/river/internal/workunit
+github.com/riverqueue/river/rivermigrate
+# github.com/riverqueue/river/riverdriver v0.34.0
+## explicit; go 1.25.0
+github.com/riverqueue/river/riverdriver
+# github.com/riverqueue/river/riverdriver/riverdatabasesql v0.34.0
+## explicit; go 1.25.0
+github.com/riverqueue/river/riverdriver/riverdatabasesql
+github.com/riverqueue/river/riverdriver/riverdatabasesql/internal/dbsqlc
+# github.com/riverqueue/river/rivershared v0.34.0
+## explicit; go 1.25.0
+github.com/riverqueue/river/rivershared/baseservice
+github.com/riverqueue/river/rivershared/circuitbreaker
+github.com/riverqueue/river/rivershared/levenshtein
+github.com/riverqueue/river/rivershared/riverpilot
+github.com/riverqueue/river/rivershared/riversharedmaintenance
+github.com/riverqueue/river/rivershared/riversharedtest
+github.com/riverqueue/river/rivershared/slogtest
+github.com/riverqueue/river/rivershared/sqlctemplate
+github.com/riverqueue/river/rivershared/startstop
+github.com/riverqueue/river/rivershared/structtag
+github.com/riverqueue/river/rivershared/testsignal
+github.com/riverqueue/river/rivershared/uniquestates
+github.com/riverqueue/river/rivershared/util/dbutil
+github.com/riverqueue/river/rivershared/util/maputil
+github.com/riverqueue/river/rivershared/util/ptrutil
+github.com/riverqueue/river/rivershared/util/randutil
+github.com/riverqueue/river/rivershared/util/savepointutil
+github.com/riverqueue/river/rivershared/util/serviceutil
+github.com/riverqueue/river/rivershared/util/sliceutil
+github.com/riverqueue/river/rivershared/util/testutil
+github.com/riverqueue/river/rivershared/util/timeutil
+github.com/riverqueue/river/rivershared/util/valutil
+# github.com/riverqueue/river/rivertype v0.34.0
+## explicit; go 1.25.0
+github.com/riverqueue/river/rivertype
 # github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
+# github.com/robfig/cron/v3 v3.0.1
+## explicit; go 1.12
+github.com/robfig/cron/v3
 # github.com/rogpeppe/go-internal v1.14.1
 ## explicit; go 1.23
 github.com/rogpeppe/go-internal/internal/syscall/windows
@@ -950,13 +1065,18 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.10
 ## explicit; go 1.12
 github.com/spf13/pflag
+# github.com/stretchr/testify v1.11.1
+## explicit; go 1.17
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/assert/yaml
+github.com/stretchr/testify/require
 # github.com/texttheater/golang-levenshtein v1.0.1
 ## explicit; go 1.13
 github.com/texttheater/golang-levenshtein/levenshtein
 # github.com/tidwall/gjson v1.18.0
 ## explicit; go 1.12
 github.com/tidwall/gjson
-# github.com/tidwall/match v1.1.1
+# github.com/tidwall/match v1.2.0
 ## explicit; go 1.15
 github.com/tidwall/match
 # github.com/tidwall/pretty v1.2.1
@@ -1152,6 +1272,10 @@ go.opentelemetry.io/proto/otlp/trace/v1
 # go.uber.org/atomic v1.11.0
 ## explicit; go 1.18
 go.uber.org/atomic
+# go.uber.org/goleak v1.3.0
+## explicit; go 1.20
+go.uber.org/goleak
+go.uber.org/goleak/internal/stack
 # go.uber.org/mock v0.5.0
 ## explicit; go 1.22
 go.uber.org/mock/mockgen
@@ -1191,8 +1315,8 @@ golang.org/x/crypto/ssh/knownhosts
 # golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
 ## explicit; go 1.20
 golang.org/x/exp/maps
-# golang.org/x/mod v0.33.0
-## explicit; go 1.24.0
+# golang.org/x/mod v0.34.0
+## explicit; go 1.25.0
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
@@ -1233,6 +1357,7 @@ golang.org/x/oauth2/jwt
 # golang.org/x/sync v0.20.0
 ## explicit; go 1.25.0
 golang.org/x/sync/errgroup
+golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
 # golang.org/x/sys v0.42.0
 ## explicit; go 1.25.0
@@ -1247,6 +1372,7 @@ golang.org/x/sys/windows/registry
 golang.org/x/term
 # golang.org/x/text v0.35.0
 ## explicit; go 1.25.0
+golang.org/x/text/cases
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
 golang.org/x/text/encoding/htmlindex
@@ -1257,6 +1383,7 @@ golang.org/x/text/encoding/korean
 golang.org/x/text/encoding/simplifiedchinese
 golang.org/x/text/encoding/traditionalchinese
 golang.org/x/text/encoding/unicode
+golang.org/x/text/internal
 golang.org/x/text/internal/language
 golang.org/x/text/internal/language/compact
 golang.org/x/text/internal/tag
@@ -1264,10 +1391,12 @@ golang.org/x/text/internal/utf8internal
 golang.org/x/text/language
 golang.org/x/text/runes
 golang.org/x/text/secure/bidirule
+golang.org/x/text/secure/precis
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/unicode/rangetable
+golang.org/x/text/width
 # golang.org/x/time v0.14.0
 ## explicit; go 1.24.0
 golang.org/x/time/rate
@@ -1757,6 +1886,12 @@ k8s.io/utils/ptr
 # lukechampine.com/frand v1.5.1
 ## explicit; go 1.23.1
 lukechampine.com/frand
+# riverqueue.com/riverui v0.15.0
+## explicit; go 1.25.0
+riverqueue.com/riverui
+riverqueue.com/riverui/internal/apibundle
+riverqueue.com/riverui/internal/querycacher
+riverqueue.com/riverui/uiendpoints
 # rsc.io/omap v1.2.0
 ## explicit; go 1.23rc1
 rsc.io/omap

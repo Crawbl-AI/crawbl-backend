@@ -81,6 +81,18 @@ type NewServerOpts struct {
 
 	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
 	MCPSigningKey string
+
+	// RiverUIHandler is the HTTP handler for the River job dashboard (riverui).
+	// When non-nil and RiverUIHost is set, requests whose Host header matches
+	// RiverUIHost are routed to this handler instead of the API router.
+	// Auth is enforced at the Envoy Gateway layer (SecurityPolicy basic auth)
+	// so no application-level auth middleware is applied here.
+	RiverUIHandler http.Handler
+
+	// RiverUIHost is the hostname (without port) that activates the River UI.
+	// Example: "dev.river.crawbl.com". When empty, RiverUIHandler is ignored
+	// and the server serves only the API (feature flag off).
+	RiverUIHost string
 }
 
 // Server is the orchestrator HTTP server that handles all mobile-facing API requests.

@@ -19,6 +19,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -39,12 +40,19 @@ type Repos struct {
 
 // MemoryDeps groups the memory pipeline dependencies.
 // All fields are optional — when nil, the corresponding feature is disabled.
+// RiverClient is optional; when non-nil, auto-ingest can enqueue ad-hoc
+// memory_process jobs for near-realtime processing (Phase 4). When nil the
+// periodic River sweep still runs — callers remain fully functional.
 type MemoryDeps struct {
 	DrawerRepo    drawer.Repo
 	Classifier    extract.Classifier
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 	KGGraph       kg.Graph
+	// RiverClient is the in-process River job queue client. Optional — nil is
+	// safe everywhere; Phase 4 will use it to enqueue ad-hoc process jobs from
+	// auto-ingest immediately after a raw drawer is written.
+	RiverClient *pkgriver.Client
 }
 
 // service implements the ChatService interface.
@@ -72,7 +80,10 @@ type service struct {
 	llmClassifier extract.LLMClassifier
 	embedder      embed.Embedder
 	kgGraph       kg.Graph
-	ingestQueue   chan ingestWork
+	// riverClient is the River job queue client for enqueuing ad-hoc
+	// memory_process jobs. Nil when not wired (safe — periodic sweep covers it).
+	riverClient *pkgriver.Client
+	ingestQueue chan ingestWork
 }
 
 // ingestWork represents a unit of work for the memory auto-ingest pipeline.

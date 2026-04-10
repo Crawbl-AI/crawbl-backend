@@ -16,7 +16,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zishang520/socket.io/v2/socket"
 
+	"riverqueue.com/riverui"
+
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/drawer"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/graph"
@@ -60,6 +63,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
+	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
@@ -153,6 +157,43 @@ func runServer(ctx context.Context) error {
 		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
 	}
 
+	// River schema migration — runs after app migrations, before HTTP server.
+	// Fatal on error: River is load-bearing; a failed migration must block boot.
+	if err := pkgriver.Migrate(ctx, db.DB); err != nil {
+		logger.Error("river migration failed", "error", err)
+		return fmt.Errorf("river migration failed: %w", err)
+	}
+	logger.Info("river migrations applied")
+
+	// Build the memory-domain River config.
+	riverCfg, err := background.NewConfig(background.Deps{
+		DB:            db,
+		DrawerRepo:    drawerRepo,
+		KGGraph:       kgGraph,
+		LLMClassifier: newLLMClassifierOrNil(),
+		Embedder:      embedder,
+		Logger:        logger,
+	})
+	if err != nil {
+		logger.Error("river config failed", "error", err)
+		return fmt.Errorf("river config: %w", err)
+	}
+
+	// Construct the River client over the shared *sql.DB pool.
+	riverClient, err := pkgriver.New(db.DB, riverCfg)
+	if err != nil {
+		logger.Error("river client construction failed", "error", err)
+		return fmt.Errorf("river client: %w", err)
+	}
+
+	// Start the client — beyond this point, a defer will handle graceful shutdown.
+	if err := riverClient.Start(ctx); err != nil {
+		logger.Error("river client start failed", "error", err)
+		return fmt.Errorf("river start: %w", err)
+	}
+	defer pkgriver.Shutdown(riverClient, logger)
+	logger.Info("river client started", "queues", "memory_process,memory_maintain")
+
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
 		return err
@@ -203,9 +244,10 @@ func runServer(ctx context.Context) error {
 		},
 		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher, memoryPublisher,
 		chatservice.MemoryDeps{
-			DrawerRepo: drawerRepo,
-			Classifier: classifier,
-			Embedder:   embedder,
+			DrawerRepo:  drawerRepo,
+			Classifier:  classifier,
+			Embedder:    embedder,
+			RiverClient: riverClient,
 		},
 	)
 	agentService := agentservice.New(
@@ -246,6 +288,28 @@ func runServer(ctx context.Context) error {
 
 	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgGraph, palaceGraph, classifier, embedder, memoryStack)
 
+	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
+	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
+	var riverUIHandler http.Handler
+	riverUIHost := strings.TrimSpace(os.Getenv("CRAWBL_RIVERUI_HOST"))
+	if riverUIHost != "" {
+		endpoints := riverui.NewEndpoints(riverClient, nil)
+		ruiHandler, ruiErr := riverui.NewHandler(&riverui.HandlerOpts{
+			Endpoints: endpoints,
+			Logger:    logger,
+		})
+		if ruiErr != nil {
+			logger.Error("riverui handler construction failed", "error", ruiErr)
+			return fmt.Errorf("riverui handler: %w", ruiErr)
+		}
+		if ruiErr = ruiHandler.Start(ctx); ruiErr != nil {
+			logger.Error("riverui handler start failed", "error", ruiErr)
+			return fmt.Errorf("riverui start: %w", ruiErr)
+		}
+		riverUIHandler = ruiHandler
+		logger.Info("riverui enabled", slog.String("host", riverUIHost))
+	}
+
 	srv := server.NewServer(&server.Config{
 		Port: envOrDefault("CRAWBL_SERVER_PORT", server.DefaultServerPort),
 	}, &server.NewServerOpts{
@@ -262,6 +326,8 @@ func runServer(ctx context.Context) error {
 		MCPHandler:         mcpHandler,
 		IntegrationService: integrationService,
 		MCPSigningKey:      strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY")),
+		RiverUIHandler:     riverUIHandler,
+		RiverUIHost:        riverUIHost,
 	})
 
 	return srv.Run(ctx, shutdownTimeout)
@@ -369,6 +435,36 @@ func int32FromEnv(key string, fallback int32) int32 {
 		}
 	}
 	return fallback
+}
+
+// newLLMClassifierOrNil constructs an LLM-backed drawer classifier using the
+// same env vars as the standalone memory-process job binary. Returns nil when
+// the required env vars are absent so the River worker degrades gracefully
+// (the periodic sweep will still run but skip LLM classification steps).
+// Phase 9 will add these vars to the orchestrator Helm values so they are
+// always present in the cluster environment.
+//
+// Required env vars (same as memory-process pod):
+//   - CRAWBL_LLM_BASE_URL  (falls back to CRAWBL_EMBED_BASE_URL)
+//   - CRAWBL_LLM_API_KEY   (falls back to CRAWBL_EMBED_API_KEY)
+//   - CRAWBL_CLASSIFY_MODEL
+func newLLMClassifierOrNil() extract.LLMClassifier {
+	llmBaseURL := strings.TrimSpace(os.Getenv("CRAWBL_LLM_BASE_URL"))
+	if llmBaseURL == "" {
+		llmBaseURL = strings.TrimSpace(os.Getenv("CRAWBL_EMBED_BASE_URL"))
+	}
+	if llmBaseURL == "" {
+		return nil
+	}
+	llmAPIKey := strings.TrimSpace(os.Getenv("CRAWBL_LLM_API_KEY"))
+	if llmAPIKey == "" {
+		llmAPIKey = strings.TrimSpace(os.Getenv("CRAWBL_EMBED_API_KEY"))
+	}
+	return extract.NewLLMClassifier(extract.LLMClassifierConfig{
+		BaseURL: llmBaseURL,
+		APIKey:  llmAPIKey,
+		Model:   strings.TrimSpace(os.Getenv("CRAWBL_CLASSIFY_MODEL")),
+	})
 }
 
 func buildMCPHandler(
