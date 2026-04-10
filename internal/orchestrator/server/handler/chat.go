@@ -284,6 +284,14 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
+		if userMsg == nil {
+			c.Logger.Error("send message: OnPersisted not called, user message is nil",
+				"path", r.URL.Path,
+				"user_id", user.ID,
+			)
+			httpserver.WriteErrorMessage(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 		WriteSuccess(w, http.StatusCreated, dto.ToMessageResponse(userMsg))
 	}
 }
