@@ -35,6 +35,12 @@ const defaultSearchLimit = 20
 // maxSearchLimit is the maximum number of messages returned by search tools.
 const maxSearchLimit = 50
 
+// maxArtifactContentLength caps artifact content stored via MCP tools (512 KiB).
+const maxArtifactContentLength = 512 * 1024
+
+// maxWorkflowStepsLength caps workflow steps JSON stored via MCP tools (128 KiB).
+const maxWorkflowStepsLength = 128 * 1024
+
 // contextKey is a private type for context value keys to avoid collisions.
 type contextKey string
 

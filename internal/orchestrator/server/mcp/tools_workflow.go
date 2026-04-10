@@ -85,6 +85,9 @@ func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowIn
 		if input.Name == "" || input.Steps == "" {
 			return nil, createWorkflowOutput{Info: "name and steps are required"}, nil
 		}
+		if len(input.Steps) > maxWorkflowStepsLength {
+			return nil, createWorkflowOutput{Info: "steps exceeds maximum allowed size"}, nil
+		}
 
 		sess := deps.newSession()
 		result, err := deps.MCPService.CreateWorkflow(ctx, sess, workspaceID, &mcpservice.CreateWorkflowParams{

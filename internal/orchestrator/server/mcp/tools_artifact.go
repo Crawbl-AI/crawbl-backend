@@ -89,6 +89,9 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 		if input.Title == "" || input.Content == "" {
 			return nil, createArtifactOutput{Info: "title and content are required"}, nil
 		}
+		if len(input.Content) > maxArtifactContentLength {
+			return nil, createArtifactOutput{Info: "content exceeds maximum allowed size"}, nil
+		}
 		if input.AgentID == "" && input.AgentSlug == "" {
 			return nil, createArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
@@ -162,6 +165,9 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 		}
 		if input.ArtifactID == "" || input.Content == "" {
 			return nil, updateArtifactOutput{Info: "artifact_id and content are required"}, nil
+		}
+		if len(input.Content) > maxArtifactContentLength {
+			return nil, updateArtifactOutput{Info: "content exceeds maximum allowed size"}, nil
 		}
 		if input.AgentID == "" && input.AgentSlug == "" {
 			return nil, updateArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
