@@ -64,8 +64,11 @@ type AgentDetailResponse struct {
 
 // AgentStatsResponse contains aggregate statistics for an agent.
 type AgentStatsResponse struct {
-	TotalMessages int     `json:"total_messages"`
-	MemoryUsedPct float64 `json:"memory_used_pct"`
+	TotalMessages         int   `json:"total_messages"`
+	TotalTokensUsed       int64 `json:"total_tokens_used"`
+	TotalPromptTokens     int64 `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64 `json:"total_completion_tokens"`
+	TotalRequests         int   `json:"total_requests"`
 }
 
 // AgentToolResponse represents a tool available to an agent.
@@ -153,9 +156,11 @@ func ToAgentDetailResponse(d *orchestrator.AgentDetails) AgentDetailResponse {
 		// TODO(skills): populate from agent skills/capabilities when domain model exposes them
 		Skills: []string{},
 		Stats: AgentStatsResponse{
-			TotalMessages: d.Stats.TotalMessages,
-			// TODO(memory): wire memory usage percentage when available
-			MemoryUsedPct: 0,
+			TotalMessages:         d.Stats.TotalMessages,
+			TotalTokensUsed:       d.Stats.TotalTokensUsed,
+			TotalPromptTokens:     d.Stats.TotalPromptTokens,
+			TotalCompletionTokens: d.Stats.TotalCompletionTokens,
+			TotalRequests:         d.Stats.TotalRequests,
 		},
 	}
 	if !d.UpdatedAt.IsZero() {
