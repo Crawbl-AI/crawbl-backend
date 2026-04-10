@@ -89,6 +89,11 @@ github.com/achetronic/adk-utils-go/genai/openai
 # github.com/agext/levenshtein v1.2.3
 ## explicit
 github.com/agext/levenshtein
+# github.com/alitto/pond/v2 v2.7.0
+## explicit; go 1.20
+github.com/alitto/pond/v2
+github.com/alitto/pond/v2/internal/future
+github.com/alitto/pond/v2/internal/linkedbuffer
 # github.com/andybalholm/brotli v1.2.0
 ## explicit; go 1.22
 github.com/andybalholm/brotli

@@ -597,17 +597,18 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 		}
 
 		d := &memory.Drawer{
-			ID:          drawerID,
-			WorkspaceID: workspaceID,
-			Wing:        input.Wing,
-			Room:        input.Room,
-			Content:     input.Content,
-			MemoryType:  memoryType,
-			Importance:  importance,
-			SourceFile:  input.SourceFile,
-			AddedBy:     input.AddedBy,
-			FiledAt:     time.Now().UTC(),
-			CreatedAt:   time.Now().UTC(),
+			ID:           drawerID,
+			WorkspaceID:  workspaceID,
+			Wing:         input.Wing,
+			Room:         input.Room,
+			Content:      input.Content,
+			MemoryType:   memoryType,
+			Importance:   importance,
+			SourceFile:   input.SourceFile,
+			AddedBy:      input.AddedBy,
+			PipelineTier: memory.PipelineTierLLM,
+			FiledAt:      time.Now().UTC(),
+			CreatedAt:    time.Now().UTC(),
 		}
 
 		sess := deps.newSession()
@@ -878,17 +879,18 @@ func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWri
 		}
 
 		d := &memory.Drawer{
-			ID:          drawerID,
-			WorkspaceID: workspaceID,
-			Wing:        wing,
-			Room:        room,
-			Hall:        input.Topic,
-			Content:     input.Entry,
-			MemoryType:  "diary",
-			Importance:  defaultImportance,
-			AddedBy:     input.AgentName,
-			FiledAt:     time.Now().UTC(),
-			CreatedAt:   time.Now().UTC(),
+			ID:           drawerID,
+			WorkspaceID:  workspaceID,
+			Wing:         wing,
+			Room:         room,
+			Hall:         input.Topic,
+			Content:      input.Entry,
+			MemoryType:   "diary",
+			Importance:   defaultImportance,
+			AddedBy:      input.AgentName,
+			PipelineTier: memory.PipelineTierLLM,
+			FiledAt:      time.Now().UTC(),
+			CreatedAt:    time.Now().UTC(),
 		}
 
 		sess := deps.newSession()

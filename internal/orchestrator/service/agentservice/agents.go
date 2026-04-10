@@ -406,16 +406,17 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		}
 
 		drawer := &memory.Drawer{
-			ID:          opts.Key,
-			WorkspaceID: agent.WorkspaceID,
-			Wing:        wing,
-			Room:        room,
-			Content:     opts.Content,
-			Importance:  memory.DefaultImportance,
-			MemoryType:  string(memory.MemoryTypePreference),
-			AddedBy:     memory.DefaultAddedBy,
-			FiledAt:     now,
-			CreatedAt:   now,
+			ID:           opts.Key,
+			WorkspaceID:  agent.WorkspaceID,
+			Wing:         wing,
+			Room:         room,
+			Content:      opts.Content,
+			Importance:   memory.DefaultImportance,
+			MemoryType:   string(memory.MemoryTypePreference),
+			AddedBy:      memory.DefaultAddedBy,
+			PipelineTier: memory.PipelineTierLLM,
+			FiledAt:      now,
+			CreatedAt:    now,
 		}
 		if err := s.drawerRepo.Add(ctx, opts.Sess, drawer, nil); err != nil {
 			return merrors.WrapStdServerError(err, "create drawer memory")

@@ -18,10 +18,13 @@ import (
 	"riverqueue.com/riverui"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/jobs"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/centroidrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/identityrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/repo/kgrepo"
@@ -73,7 +76,14 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
-const shutdownTimeout = 10 * time.Second
+const (
+	shutdownTimeout = 10 * time.Second
+	// centroidSeedTimeout bounds the best-effort centroid warm-up that
+	// runs once at startup so Phase 2 is not dormant until the first
+	// weekly cron tick. A missing or broken pgvector install can never
+	// gate orchestrator boot.
+	centroidSeedTimeout = 30 * time.Second
+)
 
 // NewOrchestratorCommand creates the "orchestrator" parent command.
 // Running it directly starts the HTTP server; "migrate" is a subcommand.
@@ -152,6 +162,7 @@ func runServer(ctx context.Context) error {
 	var kgRepo memrepo.KGRepo = kgrepo.NewPostgres()
 	var palaceGraphRepo memrepo.PalaceGraphRepo = palacegraphrepo.NewPostgres(redisClient, logger)
 	var identityRepo memrepo.IdentityRepo = identityrepo.NewPostgres()
+	var centroidRepo memrepo.CentroidRepo = centroidrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
 	var memoryStack layers.Stack
@@ -203,16 +214,18 @@ func runServer(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
-	// Build the memory-domain River config.
+	// Build the memory-domain River config. Auto-ingest lives in the
+	// in-process pond pool constructed further down — this config only
+	// covers the cold classification, maintenance, enrichment, and
+	// centroid-recompute workers.
 	riverCfg, err := background.NewConfig(background.Deps{
-		DB:              db,
-		DrawerRepo:      drawerRepo,
-		KGRepo:          kgRepo,
-		LLMClassifier:   newLLMClassifierOrNil(),
-		Classifier:      classifier,
-		Embedder:        embedder,
-		MemoryPublisher: memoryPublisher,
-		Logger:          logger,
+		DB:            db,
+		DrawerRepo:    drawerRepo,
+		KGRepo:        kgRepo,
+		CentroidRepo:  centroidRepo,
+		LLMClassifier: newLLMClassifierOrNil(),
+		Embedder:      embedder,
+		Logger:        logger,
 	})
 	if err != nil {
 		logger.Error("river config failed", "error", err)
@@ -273,7 +286,48 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("river start: %w", err)
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_autoingest,usage_write,pricing_refresh,message_cleanup")
+	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
+
+	// Best-effort centroid seed: populates memory_type_centroids with
+	// whatever LLM-labelled history exists so Phase 2 is not dormant
+	// until the first weekly cron tick. Bounded to 30s so a missing or
+	// broken pgvector install can never gate orchestrator boot.
+	seedCtx, seedCancel := context.WithTimeout(ctx, centroidSeedTimeout)
+	if _, err := jobs.RunCentroidRecompute(seedCtx, jobs.CentroidRecomputeDeps{
+		DB:           db,
+		DrawerRepo:   drawerRepo,
+		CentroidRepo: centroidRepo,
+		Logger:       logger,
+	}); err != nil {
+		logger.Warn("memory.centroid.seed_skipped", "reason", err.Error())
+	}
+	seedCancel()
+
+	// In-process auto-ingest pool. Replaces the memory_autoingest River
+	// queue so the chat-turn hot path pays zero river_job inserts per
+	// message. Sized via CRAWBL_AUTOINGEST_WORKERS / _CAPACITY env vars;
+	// defaults are 16 workers × 1024 queue.
+	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
+	ingestCapacity, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_CAPACITY"))
+	ingestPool := autoingest.NewService(autoingest.Deps{
+		DB:              db,
+		DrawerRepo:      drawerRepo,
+		CentroidRepo:    centroidRepo,
+		Classifier:      classifier,
+		Embedder:        embedder,
+		MemoryPublisher: memoryPublisher,
+		Logger:          logger,
+	}, autoingest.Config{
+		Workers:   ingestWorkers,
+		QueueSize: ingestCapacity,
+	})
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := ingestPool.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("memory.autoingest: shutdown timeout", "error", err)
+		}
+	}()
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
@@ -311,9 +365,7 @@ func runServer(ctx context.Context) error {
 			Usage:         usagerepo.New(),
 		},
 		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
-		chatservice.MemoryDeps{
-			RiverClient: riverClient,
-		},
+		ingestPool,
 	)
 	agentService := agentservice.New(
 		agentservice.Repos{

@@ -3,6 +3,7 @@ package chatservice
 import (
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
@@ -14,7 +15,8 @@ import (
 
 // New creates a new ChatService with the provided dependencies.
 // db is required for request sessions. memoryStack may be nil; when nil,
-// context building falls back to recent messages only.
+// context building falls back to recent messages only. ingestPool may
+// be nil, in which case auto-ingest is disabled cleanly.
 func New(
 	db *dbr.Connection,
 	repos Repos,
@@ -23,7 +25,7 @@ func New(
 	memoryStack layers.Stack,
 	pricingCache *pricing.Cache,
 	usagePublisher *queue.UsagePublisher,
-	memDeps MemoryDeps,
+	ingestPool autoingest.Service,
 ) orchestratorservice.ChatService {
 	if db == nil {
 		panic("chat service db cannot be nil")
@@ -76,6 +78,6 @@ func New(
 		memoryStack:       memoryStack,
 		pricingCache:      pricingCache,
 		usagePublisher:    usagePublisher,
-		riverClient:       memDeps.RiverClient,
+		ingestPool:        ingestPool,
 	}
 }

@@ -2,19 +2,16 @@ package chatservice
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/background"
+	"github.com/Crawbl-AI/crawbl-backend/internal/memory/autoingest"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
-// autoIngestConversation enqueues a conversation exchange for background
-// memory ingestion via River. The heavy lifting (chunking, classification,
-// embedding, dedup, persistence) lives in the memory_autoingest worker so
-// nothing blocks the chat response path.
+// autoIngestConversation submits a conversation exchange to the in-process
+// memory auto-ingest pool. Non-blocking: see autoingest.Service.Submit.
 func (s *service) autoIngestConversation(ctx context.Context, workspaceID, agentSlug, userText string, replies []*orchestrator.Message) {
-	if s.riverClient == nil {
+	if s.ingestPool == nil {
 		return
 	}
 	exchange := buildExchange(userText, replies)
@@ -22,22 +19,16 @@ func (s *service) autoIngestConversation(ctx context.Context, workspaceID, agent
 		return
 	}
 
-	if _, err := s.riverClient.Insert(ctx, background.AutoIngestArgs{
+	s.ingestPool.Submit(ctx, autoingest.Work{
 		WorkspaceID: workspaceID,
 		AgentSlug:   agentSlug,
 		Exchange:    exchange,
-	}, nil); err != nil {
-		slog.WarnContext(ctx, "auto-ingest: river insert failed",
-			slog.String("workspace_id", workspaceID),
-			slog.String("agent", agentSlug),
-			slog.String("error", err.Error()),
-		)
-	}
+	})
 }
 
 // buildExchange constructs a paired user/agent exchange string from a
 // user message and agent replies, skipping empty or delegation-type
-// replies. Stays in chatservice so the memory background package never
+// replies. Stays in chatservice so the memory autoingest package never
 // imports the orchestrator message domain type.
 func buildExchange(userText string, replies []*orchestrator.Message) string {
 	var b strings.Builder

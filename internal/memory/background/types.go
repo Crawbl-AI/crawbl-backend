@@ -11,7 +11,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
 	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
@@ -20,17 +19,31 @@ import (
 const (
 	QueueMemoryProcess  = "memory_process"
 	QueueMemoryMaintain = "memory_maintain"
+	QueueMemoryEnrich   = "memory_enrich"
+	QueueMemoryCentroid = "memory_centroid"
 
 	// processConcurrency bounds concurrent LLM classify calls inside the
 	// memory_process queue. Tunable via orchestrator env in a later phase;
 	// kept as a const here until we see real contention.
 	processConcurrency = 3
 
-	// processSweepInterval is the safety-net periodic sweep cadence. The
-	// primary trigger for memory_process is an ad-hoc Insert from the
-	// auto-ingest worker — this interval only catches drawers whose insert
-	// slipped through (e.g. crash between AddIdempotent and Insert).
+	// processSweepInterval is the periodic sweep cadence for the cold
+	// classification pipeline. After Phase 0 the auto-ingest hot path no
+	// longer enqueues follow-up ProcessArgs, so this interval is the
+	// primary trigger for raw-drawer classification.
 	processSweepInterval = time.Minute
+
+	// enrichSweepInterval is the cadence at which the enrichment worker
+	// picks up processed drawers that skipped the LLM path and still need
+	// KG entity linking.
+	enrichSweepInterval = 10 * time.Minute
+
+	// centroidRecomputeDedupWindow collapses duplicate centroid recompute
+	// inserts to at most one per day. The weekly cron fires on Sunday
+	// 03:00 UTC, so a 24h uniqueness window is wider than the schedule
+	// but still prevents a manual enqueue storm from re-running the
+	// expensive recompute in under a day.
+	centroidRecomputeDedupWindow = 24 * time.Hour
 )
 
 // ProcessWorker is the River worker that runs the cold memory processing
@@ -51,18 +64,19 @@ type MaintainWorker struct {
 	deps Deps
 }
 
-// Deps bundles everything the River workers need to run MemPalace jobs:
-// the cold processing pipeline, the maintenance sweep, and the auto-ingest
-// worker that replaces the chatservice in-process goroutine.
+// Deps bundles everything the River-backed MemPalace workers need to
+// run cold classification, KG enrichment, maintenance, and centroid
+// recompute. Auto-ingest is no longer in this set — it runs in-process
+// under internal/memory/autoingest so the chat-turn hot path never
+// writes to river_job.
 type Deps struct {
-	DB              *dbr.Connection
-	DrawerRepo      memrepo.DrawerRepo
-	KGRepo          memrepo.KGRepo
-	LLMClassifier   extract.LLMClassifier
-	Classifier      extract.Classifier
-	Embedder        embed.Embedder
-	MemoryPublisher *queue.MemoryPublisher
-	Logger          *slog.Logger
+	DB            *dbr.Connection
+	DrawerRepo    memrepo.DrawerRepo
+	KGRepo        memrepo.KGRepo
+	CentroidRepo  memrepo.CentroidRepo
+	LLMClassifier extract.LLMClassifier
+	Embedder      embed.Embedder
+	Logger        *slog.Logger
 }
 
 // ProcessArgs triggers a single batch run of RunProcess over all active
@@ -94,8 +108,7 @@ type MaintainArgs struct{}
 // Kind implements river.JobArgs.
 func (MaintainArgs) Kind() string { return "memory_maintain" }
 
-// InsertOpts routes maintain jobs onto their own queue and prevents duplicate
-// concurrent runs via a 1-hour uniqueness window.
+// InsertOpts implements river.JobArgsWithInsertOpts.
 func (MaintainArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
 		Queue: QueueMemoryMaintain,
@@ -104,4 +117,56 @@ func (MaintainArgs) InsertOpts() river.InsertOpts {
 			ByPeriod: time.Hour,
 		},
 	}
+}
+
+// EnrichArgs triggers a sweep of the memory enrichment worker which
+// backfills KG entity/triple links for drawers that took the heuristic
+// or centroid fast path. Runs periodically (every 10 minutes) and
+// dedupes overlapping runs via the standard ByArgs+ByPeriod pattern.
+type EnrichArgs struct{}
+
+// Kind implements river.JobArgs.
+func (EnrichArgs) Kind() string { return "memory_enrich" }
+
+// InsertOpts implements river.JobArgsWithInsertOpts.
+func (EnrichArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue: QueueMemoryEnrich,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:   true,
+			ByPeriod: enrichSweepInterval,
+		},
+	}
+}
+
+// EnrichWorker is the River worker adapter for RunEnrich.
+type EnrichWorker struct {
+	river.WorkerDefaults[EnrichArgs]
+	deps Deps
+}
+
+// CentroidRecomputeArgs triggers the weekly centroid rebuild over the
+// last 90 days of LLM-labelled drawers. The struct is intentionally
+// empty: a single run processes every memory type in one pass.
+type CentroidRecomputeArgs struct{}
+
+// Kind implements river.JobArgs.
+func (CentroidRecomputeArgs) Kind() string { return "memory_centroid_recompute" }
+
+// InsertOpts implements river.JobArgsWithInsertOpts.
+func (CentroidRecomputeArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue: QueueMemoryCentroid,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:   true,
+			ByPeriod: centroidRecomputeDedupWindow,
+		},
+	}
+}
+
+// CentroidRecomputeWorker is the River worker adapter for
+// jobs.RunCentroidRecompute.
+type CentroidRecomputeWorker struct {
+	river.WorkerDefaults[CentroidRecomputeArgs]
+	deps Deps
 }
