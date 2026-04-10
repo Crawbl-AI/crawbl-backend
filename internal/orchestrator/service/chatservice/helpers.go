@@ -317,8 +317,9 @@ func (s *service) buildConversationContext(
 		// Remaining budget for messages after memory.
 		remaining := memory.TokenBudgetTotal - sb.Len()
 		if remaining > 0 {
-			if len(messagesText) > remaining {
-				messagesText = messagesText[:remaining]
+			runes := []rune(messagesText)
+			if len(runes) > remaining {
+				messagesText = string(runes[:remaining])
 			}
 			sb.WriteString(messagesText)
 		}
@@ -326,9 +327,9 @@ func (s *service) buildConversationContext(
 
 	// Hard cap on total output.
 	result := sb.String()
-	if len(result) > memory.TokenBudgetTotal {
+	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
 		// Truncate L1 portion to fit within budget while keeping L0 intact.
-		result = result[:memory.TokenBudgetTotal]
+		result = string(resultRunes[:memory.TokenBudgetTotal])
 	}
 
 	return "\n\n" + result
