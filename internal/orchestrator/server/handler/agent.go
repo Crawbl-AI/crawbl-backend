@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -318,11 +319,11 @@ func CreateAgentMemory(c *Context) http.HandlerFunc {
 			return
 		}
 
-		if body.Key == "" || len(body.Key) > MaxAgentMemoryKeyLength {
+		if strings.TrimSpace(body.Key) == "" || len(body.Key) > MaxAgentMemoryKeyLength {
 			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
 			return
 		}
-		if body.Content == "" || len(body.Content) > MaxAgentMemoryContentLength {
+		if strings.TrimSpace(body.Content) == "" || len(body.Content) > MaxAgentMemoryContentLength {
 			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
 			return
 		}
