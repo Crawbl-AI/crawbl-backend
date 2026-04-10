@@ -1,8 +1,22 @@
--- IVFFlat vector index for memory_drawers.
--- Using IVFFlat instead of HNSW because Hetzner CPUs lack AVX2 support
--- which causes SIGILL crashes with HNSW. IVFFlat may work without AVX2.
--- If this also crashes, fall back to sequential scan (acceptable at <10K drawers).
-CREATE INDEX CONCURRENTLY idx_drawers_embedding_ivfflat
-ON orchestrator.memory_drawers
-USING ivfflat (embedding public.vector_cosine_ops)
-WITH (lists = 100);
+-- No-op: vector index creation is deferred.
+--
+-- Original intent was to create an IVFFlat index on memory_drawers.embedding
+-- to speed up pgvector similarity search. We tried:
+--
+--   1. HNSW index — crashed the Postgres backend with SIGILL on the Hetzner
+--      nodes because pgvector's HNSW path uses AVX2 instructions that these
+--      CPUs do not provide.
+--   2. IVFFlat index (this file's original content) — also crashed the
+--      Postgres backend with SIGILL on the same nodes during build.
+--
+-- Acceptable fallback: sequential scan via the default pgvector operator.
+-- The scan cost is acceptable while each workspace keeps <10K drawers (the
+-- MemPalace cap is 10K, enforced at write-time in internal/memory/types.go).
+--
+-- When we move to AVX2-capable nodes (DigitalOcean paid tier, or newer Hetzner
+-- SKUs) add a replacement migration that creates the index, run it outside a
+-- transaction (golang-migrate requires the index statement to be split or the
+-- transaction to be disabled for CONCURRENTLY to work), and benchmark before
+-- merging. See GitHub issue tracking follow-up.
+
+SELECT 1;
