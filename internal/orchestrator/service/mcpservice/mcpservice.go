@@ -7,7 +7,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 )
 
 // Convenience type aliases to keep method signatures short.

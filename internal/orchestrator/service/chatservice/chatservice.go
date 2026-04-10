@@ -3,9 +3,9 @@ package chatservice
 import (
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/autoingest"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"

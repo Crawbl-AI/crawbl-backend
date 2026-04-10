@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"

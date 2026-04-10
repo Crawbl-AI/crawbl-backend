@@ -5,7 +5,7 @@
 package agentservice
 
 import (
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"

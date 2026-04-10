@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	memory "github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	memory "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
 // agentContextMaxTextLen caps the text length per message when building conversation context.

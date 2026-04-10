@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
 func TestBuildExchange(t *testing.T) {

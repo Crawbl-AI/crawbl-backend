@@ -7,9 +7,9 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/memory/layers"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/memory/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
+	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
