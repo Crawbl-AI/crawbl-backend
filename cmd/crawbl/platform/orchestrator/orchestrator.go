@@ -39,6 +39,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
@@ -200,6 +201,23 @@ func runServer(ctx context.Context) error {
 		Logger: logger,
 	})
 
+	// Register the pricing refresh worker. Replaces the old
+	// cmd/crawbl/platform/pricing-refresh CronJob with a daily
+	// in-process River job that fetches LiteLLM pricing and appends
+	// new rows to model_pricing when upstream values drift.
+	if err := queue.RegisterPricingRefresh(
+		riverCfg.Workers,
+		riverCfg.Queues,
+		&riverCfg.PeriodicJobs,
+		queue.PricingRefreshDeps{
+			DB:     db,
+			Repo:   modelpricingrepo.New(),
+			Logger: logger,
+		},
+	); err != nil {
+		return fmt.Errorf("register pricing refresh: %w", err)
+	}
+
 	// Construct the River client over the shared *sql.DB pool.
 	riverClient, err := pkgriver.New(db.DB, riverCfg)
 	if err != nil {
@@ -213,7 +231,7 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("river start: %w", err)
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started", "queues", "memory_process,memory_maintain,usage_write")
+	logger.Info("river client started", "queues", "memory_process,memory_maintain,usage_write,pricing_refresh")
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
