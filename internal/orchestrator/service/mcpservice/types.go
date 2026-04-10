@@ -81,6 +81,12 @@ type Infra struct {
 	RuntimeClient userswarmclient.Client
 	Broadcaster   realtime.Broadcaster
 	WorkflowExec  WorkflowExecutor
+	// ShutdownCtx is the server-lifetime context. Goroutines spawned by the
+	// service (e.g. workflow executors) derive their contexts from this so
+	// they die on SIGTERM rather than surviving the HTTP request or leaking.
+	// If nil, workflow goroutines fall back to context.Background() (useful
+	// for tests).
+	ShutdownCtx context.Context
 }
 
 type logger interface {

@@ -340,10 +340,11 @@ func runServer(ctx context.Context) error {
 			DB:          db,
 			ChatService: chatService,
 			AuthService: authService,
+			ShutdownCtx: ctx,
 		})
 	}
 
-	mcpHandler := buildMCPHandler(logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
+	mcpHandler := buildMCPHandler(ctx, logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
 
 	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
 	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
@@ -525,6 +526,7 @@ func newLLMClassifierOrNil() extract.LLMClassifier {
 }
 
 func buildMCPHandler(
+	ctx context.Context,
 	logger *slog.Logger,
 	db *dbr.Connection,
 	workspaceRepo orchestratorrepo.WorkspaceRepo,
@@ -586,6 +588,7 @@ func buildMCPHandler(
 			RuntimeClient: runtimeClient,
 			Broadcaster:   broadcaster,
 			WorkflowExec:  workflowSvc,
+			ShutdownCtx:   ctx,
 		},
 		memoryStack,
 	)

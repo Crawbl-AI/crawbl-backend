@@ -106,7 +106,11 @@ func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspace
 	}
 
 	if s.infra.WorkflowExec != nil {
-		go s.infra.WorkflowExec.ExecuteWorkflow(context.Background(), execID, workspaceID, runtime)
+		parentCtx := s.infra.ShutdownCtx
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		go s.infra.WorkflowExec.ExecuteWorkflow(parentCtx, execID, workspaceID, runtime)
 	}
 
 	return &TriggerWorkflowResult{

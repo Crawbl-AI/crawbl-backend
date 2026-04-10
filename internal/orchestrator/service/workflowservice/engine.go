@@ -16,12 +16,23 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
+// MaxWorkflowDuration is the total time cap for a single workflow execution.
+// Individual steps may also have per-step timeouts; this cap applies to the
+// entire workflow regardless of how many steps it contains.
+const MaxWorkflowDuration = 30 * time.Minute
+
+// WorkflowCleanupTimeout is the time budget for post-failure DB writes when
+// the workflow context has already been cancelled.
+const WorkflowCleanupTimeout = 5 * time.Second
+
 // ExecuteWorkflow runs a workflow asynchronously. Call in a goroutine.
 // It fetches the definition, iterates through steps sequentially, and calls
 // the agent runtime for each step using the specified agent_slug. Step outputs are
 // collected into a context map that supports template variable substitution
 // in subsequent step prompts.
 func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus) {
+	ctx, cancel := context.WithTimeout(ctx, MaxWorkflowDuration)
+	defer cancel()
 	sess := s.db.NewSession(nil)
 
 	execution, mErr := s.workflowRepo.GetExecution(ctx, sess, executionID)
