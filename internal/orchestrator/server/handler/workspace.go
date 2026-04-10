@@ -19,7 +19,7 @@ func WorkspacesList(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorResponse(w, http.StatusUnauthorized, err.Error())
+			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 

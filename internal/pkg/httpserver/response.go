@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // WriteSuccessResponse writes a JSON success response with the given status code and data.
@@ -23,13 +25,35 @@ func WriteNoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// WriteErrorResponse writes a JSON error response with the given status code and message.
-// The response is wrapped in an error envelope: {"error": <message>}.
+// WriteErrorResponse writes a JSON error response from a structured *merrors.Error.
+// The response matches the API contract: {"message": "...", "code": "...", "extra": {}}.
+// For business errors the code field is populated; for server errors it is omitted.
 // This function sets the Content-Type header to application/json and logs encoding errors.
-func WriteErrorResponse(w http.ResponseWriter, statusCode int, message string) {
+func WriteErrorResponse(w http.ResponseWriter, statusCode int, mErr *merrors.Error) {
+	envelope := &errorResponseEnvelope{}
+	if mErr != nil {
+		if merrors.IsBusinessError(mErr) {
+			envelope.Message = mErr.Message
+			envelope.Code = mErr.Code
+		} else {
+			envelope.Message = "internal server error"
+		}
+	}
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(&errorResponseEnvelope{Error: message}); err != nil {
+	if err := json.NewEncoder(w).Encode(envelope); err != nil {
+		slog.Error("failed to encode error response", slog.String("error", err.Error()))
+	}
+}
+
+// WriteErrorMessage writes a JSON error response from a plain string message.
+// Use this for cases where no *merrors.Error is available (e.g. input validation
+// before the service layer is reached). Produces {"message": <message>} with no code.
+// This function sets the Content-Type header to application/json and logs encoding errors.
+func WriteErrorMessage(w http.ResponseWriter, statusCode int, message string) {
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(&errorResponseEnvelope{Message: message}); err != nil {
 		slog.Error("failed to encode error response", slog.String("error", err.Error()))
 	}
 }

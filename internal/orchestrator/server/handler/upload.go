@@ -11,6 +11,6 @@ import (
 // Not yet implemented — real file storage (S3/DO Spaces) comes later.
 func FileUpload(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpserver.WriteErrorResponse(w, http.StatusNotImplemented, "file uploads are not yet available")
+		httpserver.WriteErrorMessage(w, http.StatusNotImplemented, "file uploads are not yet available")
 	}
 }

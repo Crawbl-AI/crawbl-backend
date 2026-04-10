@@ -67,7 +67,7 @@ func (c *Context) NewSession() *dbr.Session {
 
 // WriteError writes a structured error response with the correct HTTP status.
 func WriteError(w http.ResponseWriter, mErr *merrors.Error) {
-	httpserver.WriteErrorResponse(w, HTTPStatusForError(mErr), merrors.PublicMessage(mErr))
+	httpserver.WriteErrorResponse(w, HTTPStatusForError(mErr), mErr)
 }
 
 // WriteSuccess writes a success response wrapped in {"data": ...} envelope.

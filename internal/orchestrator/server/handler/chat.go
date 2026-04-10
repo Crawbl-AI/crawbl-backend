@@ -148,17 +148,17 @@ func ConversationCreate(c *Context) http.HandlerFunc {
 
 		var reqBody dto.CreateConversationRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
 		convType := orchestrator.ConversationType(strings.TrimSpace(reqBody.Type))
 		if convType != orchestrator.ConversationTypeSwarm && convType != orchestrator.ConversationTypeAgent {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid value for field 'type'")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid value for field 'type'")
 			return
 		}
 		if convType == orchestrator.ConversationTypeAgent && strings.TrimSpace(reqBody.AgentID) == "" {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "agent_id is required for agent conversations")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "agent_id is required for agent conversations")
 			return
 		}
 
@@ -208,7 +208,7 @@ func ConversationDelete(c *Context) http.HandlerFunc {
 // Not yet implemented — real full-text search comes later.
 func SearchMessages(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpserver.WriteErrorResponse(w, http.StatusNotImplemented, "message search is not yet available")
+		httpserver.WriteErrorMessage(w, http.StatusNotImplemented, "message search is not yet available")
 	}
 }
 
@@ -250,7 +250,7 @@ func MessagesSend(c *Context) http.HandlerFunc {
 
 		var reqBody dto.SendMessageRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
