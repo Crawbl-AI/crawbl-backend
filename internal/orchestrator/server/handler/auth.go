@@ -239,10 +239,31 @@ func UpdateUser(c *Context) http.HandlerFunc {
 			return
 		}
 
+		const maxProfileNameLength = 64
+
 		var reqBody dto.UserUpdateRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
 			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
 			return
+		}
+		if reqBody.Nickname != nil && len(*reqBody.Nickname) > maxProfileNameLength {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "nickname exceeds maximum allowed length")
+			return
+		}
+		if reqBody.Name != nil && len(*reqBody.Name) > maxProfileNameLength {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "name exceeds maximum allowed length")
+			return
+		}
+		if reqBody.Surname != nil && len(*reqBody.Surname) > maxProfileNameLength {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "surname exceeds maximum allowed length")
+			return
+		}
+		if reqBody.CountryCode != nil && *reqBody.CountryCode != "" {
+			cc := *reqBody.CountryCode
+			if len(cc) != 2 || cc[0] < 'A' || cc[0] > 'Z' || cc[1] < 'A' || cc[1] > 'Z' {
+				httpserver.WriteErrorResponse(w, http.StatusBadRequest, "country_code must be a 2-letter uppercase ISO 3166-1 alpha-2 code")
+				return
+			}
 		}
 
 		var preferences *orchestrator.UserPreferences
