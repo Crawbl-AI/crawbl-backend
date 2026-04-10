@@ -1,7 +1,6 @@
 package mcpservice
 
 import (
-	"fmt"
 	"log/slog"
 )
 
@@ -20,7 +19,7 @@ func (s *service) SendPush(ctx contextT, sess sessionT, userID, title, message s
 			slog.String("error", err.Error()),
 			slog.String("user_id", userID),
 		)
-		return false, fmt.Sprintf("failed to deliver notification: %s", err.Error()), nil
+		return false, "failed to deliver notification", nil
 	}
 
 	s.infra.Logger.InfoContext(ctx, "push notification sent",
