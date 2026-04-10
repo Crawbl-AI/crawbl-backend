@@ -30,6 +30,9 @@ flowchart LR
     orch["Orchestrator"]
     db["Postgres"]
     redis["Redis"]
+    nats["NATS JetStream"]
+    uw["Usage Writer"]
+    ch["ClickHouse"]
     cr["UserSwarm CR"]
     mc["Metacontroller"]
     runtime["Agent Runtime"]
@@ -40,10 +43,13 @@ flowchart LR
     envoy --> orch
     orch --> db
     orch --> redis
+    orch --> nats
+    nats --> uw
+    uw --> ch
     orch --> cr
     cr --> mc
     mc --> runtime
-    orch --> runtime
+    orch -->|gRPC bidi stream| runtime
     runtime --> mcp
     mcp --> orch
     runtime --> llm
@@ -99,44 +105,66 @@ The hook does not run the live E2E suite because that depends on the shared dev 
 | | Component | What it does |
 |---|-----------|-------------|
 | 🌐 | **Orchestrator** | Mobile-facing HTTP API + MCP server |
+| 🤖 | **Agent Runtime** | Per-workspace AI agent pod (gRPC on port 42618) |
 | 🔄 | **Webhook** | Builds and manages per-user AI agent pods |
 | 🔐 | **Auth Filter** | Verifies user identity before requests reach the API |
+| 📊 | **Usage Writer** | Consumes usage events from NATS → batch-inserts into ClickHouse |
+| 💰 | **Pricing Refresh** | Daily CronJob refreshing model pricing from LiteLLM |
 | 🧹 | **Reaper** | Cleans up stale test users + orphaned agent pods |
 | 🏗️ | **Infra** | Pulumi IaC for DOKS cluster + ArgoCD |
 
 ## 🗂️ Structure
 
 ```
-cmd/crawbl/                     # Main binary: CLI + servers
-cmd/envoy-auth-filter/          # Auth filter for Envoy Gateway
+cmd/
+├── crawbl/                     # Main binary: CLI + servers
+│   └── platform/
+│       └── pricing-refresh/    #    Daily pricing CronJob binary
+├── crawbl-agent-runtime/       # Per-workspace agent runtime binary
+├── usage-writer/               # NATS → ClickHouse batch writer
+└── envoy-auth-filter/          # Auth filter for Envoy Gateway (WASM)
+
+proto/agentruntime/v1/          # gRPC proto definitions
+
 internal/
 ├── orchestrator/               # 🌐 API domain
-│   ├── mcp/                    #    MCP server (agent ↔ orchestrator tools)
-│   ├── integration/            #    OAuth connections (Gmail, Slack, etc.)
-│   ├── server/                 #    HTTP handlers + Socket.IO realtime
+│   ├── server/                 #    HTTP handlers, Socket.IO, MCP endpoint
+│   │   ├── handler/            #      Route handlers
+│   │   ├── dto/                #      Request/response types
+│   │   ├── socketio/           #      Socket.IO broadcaster
+│   │   └── mcp/                #      Embedded MCP server
 │   ├── service/                #    Business logic layer
-│   └── repo/                   #    Data access (Postgres)
+│   │   ├── chatservice/        #      Message sending + gRPC streaming
+│   │   ├── usagepublisher/     #      NATS usage event publishing
+│   │   └── mcpservice/         #      MCP tool handlers
+│   ├── repo/                   #    Data access (Postgres)
+│   │   └── usagerepo/          #      Usage counters + quota queries
+│   └── integration/            #    OAuth connections (Gmail, Slack, etc.)
 ├── userswarm/                  # 🔄 Agent pod lifecycle
-│   ├── client/                 #    Creates and manages agent pods on K8s
+│   ├── client/                 #    gRPC client to runtime pods
 │   ├── webhook/                #    Builds pod specs when agents are provisioned
 │   └── reaper/                 #    Cleans up stale users + orphaned pods
-├── agent-runtime/                   # 🧠 Agent runtime config + tool catalog
+├── agentruntime/               # 🤖 Agent runtime (deployed per-workspace)
+│   ├── server/                 #    gRPC Converse + Memory handlers
+│   ├── runner/                 #    ADK-Go agent runner
+│   ├── session/                #    Redis-backed session state
+│   ├── storage/                #    DO Spaces file storage
+│   └── memory/                 #    Postgres-backed durable memory
 ├── pkg/                        # 📦 Shared packages
-│   ├── configenv/              #    Environment variable loading
+│   ├── crawblnats/             #    NATS JetStream client
 │   ├── database/               #    Postgres connection + migrations
 │   ├── errors/                 #    Typed error codes
-│   ├── fileutil/               #    File + TOML helpers
-│   ├── firebase/               #    FCM push notifications
+│   ├── grpc/                   #    gRPC HMAC auth interceptors
 │   ├── hmac/                   #    HMAC token signing + validation
 │   ├── httpserver/             #    HTTP middleware + auth
-│   ├── kube/                   #    Kubernetes helpers
-│   ├── realtime/               #    Socket.IO + Redis pub/sub
-│   ├── redisclient/            #    Redis connection
-│   ├── runtime/                #    Graceful shutdown helpers
-│   └── yamlvalues/             #    YAML file patching
+│   ├── pricing/                #    In-memory model pricing cache
+│   ├── realtime/               #    Socket.IO event types + broadcasting
+│   └── ...                     #    firebase, kube, redis, telemetry, etc.
 └── infra/                      # 🏗️ Pulumi IaC
-config/                         # 📋 Config reference + samples
-migrations/                     # 📊 Postgres schema migrations
+
+migrations/
+├── orchestrator/               # 📊 Postgres schema (6 migrations + seed data)
+└── clickhouse/                 # 📊 ClickHouse analytics DDL
 api/                            # 📐 Kubernetes CRD types
 ```
 
@@ -200,13 +228,16 @@ make deploy-website      # Deploy website only
 |---------|-----|---------|
 | VictoriaMetrics | [dev.metrics.crawbl.com](https://dev.metrics.crawbl.com) | Metrics storage + Prometheus-compatible query API |
 | VictoriaLogs | [dev.logs.crawbl.com](https://dev.logs.crawbl.com) | Log storage + query UI |
-| Fluent Bit | cluster-internal | Collects all container logs from every namespace, ships to VictoriaLogs |
+| Fluent Bit | cluster-internal | Collects all container logs, ships to VictoriaLogs |
+| ClickHouse | cluster-internal | LLM usage analytics (token counts, costs) |
+| NATS JetStream | cluster-internal | Usage event streaming (orchestrator → ClickHouse) |
 
 ## 🔗 Related
 
 | | Repo | |
 |---|------|---|
 | 📚 | [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) | Docs, API reference, architecture |
-| 🤖 | Agent Runtime | Per-workspace agent orchestration service (in-tree) |
+| 🤖 | Agent Runtime | Per-workspace agent service (in-tree: `cmd/crawbl-agent-runtime/`) |
 | 📱 | [crawbl-mobile](https://github.com/Crawbl-AI/crawbl-mobile) | Flutter mobile app |
+| 🌐 | [crawbl-website](https://github.com/Crawbl-AI/crawbl-website) | Next.js marketing site at crawbl.com |
 | ☸️ | [crawbl-argocd-apps](https://github.com/Crawbl-AI/crawbl-argocd-apps) | K8s manifests + Helm values |

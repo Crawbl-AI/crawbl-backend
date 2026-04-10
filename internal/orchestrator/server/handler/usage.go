@@ -40,7 +40,6 @@ func UserUsageSummary(c *Context) http.HandlerFunc {
 			TokensUsed:           tokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
 			CompletionTokensUsed: counters.CompletionTokensUsed,
-			CostUSD:              counters.CostUSD,
 			RequestCount:         counters.RequestCount,
 			TokenLimit:           tokenLimit,
 			PlanID:               counters.PlanID,
@@ -90,7 +89,6 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 			TokensUsed:           tokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
 			CompletionTokensUsed: counters.CompletionTokensUsed,
-			CostUSD:              counters.CostUSD,
 			RequestCount:         counters.RequestCount,
 			TokenLimit:           tokenLimit,
 		})
