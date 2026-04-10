@@ -321,7 +321,7 @@ func (payload MessageContentPayload) ToDomain() (orchestrator.MessageContent, *m
 		return orchestrator.MessageContent{}, merrors.ErrUnsupportedMessage
 	}
 	if strings.TrimSpace(content.Text) == "" {
-		return orchestrator.MessageContent{}, merrors.ErrUnsupportedMessage
+		return orchestrator.MessageContent{}, merrors.ErrEmptyMessageText
 	}
 
 	return content, nil
