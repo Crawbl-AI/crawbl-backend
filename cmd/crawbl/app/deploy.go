@@ -22,15 +22,15 @@ func newDeployCommand() *cobra.Command {
 		Short: "Build, push, and deploy a component",
 		Long:  "Build and deploy a component. Backend components use Docker + ArgoCD. Docs and website deploy to Cloudflare Pages.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
+  crawbl app deploy auth-filter --tag v1.0.0
   crawbl app deploy agent-runtime --tag v1.0.0
   crawbl app deploy docs
-  crawbl app deploy website
-  crawbl app deploy all --tag v1.0.0`,
+  crawbl app deploy website`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, agent-runtime, docs, website, all)", args[0])
+			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter, agent-runtime, docs, website)", args[0])
 		},
 	}
 
@@ -39,7 +39,6 @@ func newDeployCommand() *cobra.Command {
 	cmd.AddCommand(newDeployAgentRuntimeCommand())
 	cmd.AddCommand(newDeployDocsCommand())
 	cmd.AddCommand(newDeployWebsiteCommand())
-	cmd.AddCommand(newDeployAllCommand())
 
 	return cmd
 }
@@ -380,122 +379,6 @@ func newDeployWebsiteCommand() *cobra.Command {
 	}
 
 	addStaticDeployFlags(cmd, &tag, &path, "crawbl-website")
-	return cmd
-}
-
-func newDeployAllCommand() *cobra.Command {
-	var (
-		tag        string
-		platform   string
-		argocdRepo string
-	)
-
-	cmd := &cobra.Command{
-		Use:   "all",
-		Short: "Deploy all backend components",
-		Long:  "Build, push, and update argocd for platform and auth-filter. External components (docs, website, agent-runtime) must be deployed individually.",
-		Example: `  crawbl app deploy all --tag v1.0.0
-  crawbl app deploy all --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			if err := checkAllTools(); err != nil {
-				return err
-			}
-
-			// Platform uses the global v* tag sequence.
-			platformResolved, err := resolveDeployTag(tag, "")
-			if err != nil {
-				return err
-			}
-			platformTag := platformResolved.Tag
-
-			// Auth-filter uses its own auth-filter/v* tag sequence.
-			afResolved, err := resolveDeployTag(tag, "auth-filter/")
-			if err != nil {
-				return err
-			}
-			afGitTag := afResolved.Tag
-			afImageTag := strings.TrimPrefix(afGitTag, "auth-filter/")
-
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-
-			// --- Build phase ---
-
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildPlatformImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildPlatformDockerfile),
-				contextDir: rootDir,
-				tag:        platformTag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
-				return fmt.Errorf("platform build: %w", err)
-			}
-
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildAuthFilterImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterDockerfile),
-				contextDir: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterContext),
-				tag:        afImageTag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
-				return fmt.Errorf("auth-filter build: %w", err)
-			}
-
-			// --- ArgoCD update phase ---
-
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-
-			if err := (&argocd.Update{RepoPath: repoPath, Tag: platformTag}).PullLatest(ctx); err != nil {
-				return err
-			}
-
-			platformUpdate := &argocd.Update{RepoPath: repoPath, Tag: platformTag}
-			if err := platformUpdate.UpdateOrchestrator(ctx); err != nil {
-				return err
-			}
-			if err := platformUpdate.UpdatePlatform(ctx); err != nil {
-				return err
-			}
-
-			afUpdate := &argocd.Update{RepoPath: repoPath, Tag: afImageTag}
-			if err := afUpdate.UpdateAuthFilter(ctx); err != nil {
-				return err
-			}
-
-			if err := platformUpdate.CommitAndPush(ctx, "all"); err != nil {
-				return err
-			}
-
-			// --- Tag + release (platform tag is the primary release) ---
-
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: "Crawbl-AI/crawbl-backend",
-				Tag:      platformTag,
-				PrevTag:  platformResolved.PrevTag,
-			}); err != nil {
-				return err
-			}
-
-			// Tag auth-filter separately in its own namespace.
-			return release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: "Crawbl-AI/crawbl-backend",
-				Tag:      afGitTag,
-				PrevTag:  afResolved.PrevTag,
-			})
-		},
-	}
-
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
 	return cmd
 }
 
