@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/redis/go-redis/v9"
@@ -37,7 +38,14 @@ func NewServer(cfg *Config) *socket.Server {
 
 	opts := socket.DefaultServerOptions()
 	opts.SetCors(&types.Cors{
-		Origin:      "*",
+		// Explicit origin allowlist — wildcard + Credentials is rejected by browsers.
+		// Supports: local dev (any localhost port), all *.crawbl.com subdomains over
+		// HTTPS, and the Crawbl mobile app custom scheme.
+		Origin: []any{
+			regexp.MustCompile(`^http://localhost(:\d+)?$`),
+			regexp.MustCompile(`^https://[a-zA-Z0-9-]+\.crawbl\.com$`),
+			"crawbl://app",
+		},
 		Credentials: true,
 	})
 	// Only allow websocket transport — mobile client sets setTransports(['websocket']).
