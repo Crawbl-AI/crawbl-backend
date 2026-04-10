@@ -4,7 +4,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -417,11 +416,13 @@ func mustBuildRepos(logger *slog.Logger) (
 	logger.Info("configuring storage backend", slog.String("backend", "postgres"))
 	dbConfig := database.ConfigFromEnv("CRAWBL_")
 	if err := database.EnsureSchema(dbConfig); err != nil {
-		log.Fatal(err)
+		// panic instead of log.Fatal so that deferred cleanup (telemetry flush) runs.
+		panic(err)
 	}
 	db, err := database.New(dbConfig)
 	if err != nil {
-		log.Fatal(err)
+		// panic instead of log.Fatal so that deferred cleanup (telemetry flush) runs.
+		panic(err)
 	}
 	return db, userrepo.New(), workspacerepo.New(), agentrepo.New(), conversationrepo.New(), messagerepo.New(), func() {
 		_ = db.Close()
