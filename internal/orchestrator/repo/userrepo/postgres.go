@@ -253,49 +253,51 @@ func (r *userRepo) ClearPushTokens(ctx context.Context, sess orchestratorrepo.Se
 	return nil
 }
 
-// saveUserRow inserts or updates a user record in the database.
-// It checks for an existing record by subject first; if found, all mutable fields
-// are updated. Otherwise a new row is inserted.
+// saveUserRow atomically upserts a user record in the database.
+// A single INSERT ... ON CONFLICT (id) DO UPDATE SET ... is used so that
+// concurrent first-login requests for the same user cannot race into a
+// primary-key violation.
+//
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *userRepo) saveUserRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.UserRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existing orchestratorrepo.UserRow
-	err := sess.Select("*").From("users").Where("subject = ?", row.Subject).LoadOneContext(ctx, &existing)
-	if err == nil {
-		// Record exists — update all mutable fields.
-		_, err = sess.Update("users").
-			Where("subject = ?", row.Subject).
-			Set("email", row.Email).
-			Set("nickname", row.Nickname).
-			Set("name", row.Name).
-			Set("surname", row.Surname).
-			Set("avatar_url", row.AvatarURL).
-			Set("country_code", row.CountryCode).
-			Set("date_of_birth", row.DateOfBirth).
-			Set("is_banned", row.IsBanned).
-			Set("has_agreed_with_terms", row.HasAgreedWithTerms).
-			Set("has_agreed_with_privacy_policy", row.HasAgreedWithPrivacyPolicy).
-			Set("updated_at", row.UpdatedAt).
-			Set("deleted_at", row.DeletedAt).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update user")
-		}
-		return nil
-	}
+	const query = `
+INSERT INTO users (
+	id, subject, email, nickname, name, surname,
+	avatar_url, country_code, date_of_birth, is_banned,
+	has_agreed_with_terms, has_agreed_with_privacy_policy,
+	created_at, updated_at, deleted_at
+) VALUES (
+	?, ?, ?, ?, ?, ?,
+	?, ?, ?, ?,
+	?, ?,
+	?, ?, ?
+)
+ON CONFLICT (id) DO UPDATE SET
+	email                          = EXCLUDED.email,
+	nickname                       = EXCLUDED.nickname,
+	name                           = EXCLUDED.name,
+	surname                        = EXCLUDED.surname,
+	avatar_url                     = EXCLUDED.avatar_url,
+	country_code                   = EXCLUDED.country_code,
+	date_of_birth                  = EXCLUDED.date_of_birth,
+	is_banned                      = EXCLUDED.is_banned,
+	has_agreed_with_terms          = EXCLUDED.has_agreed_with_terms,
+	has_agreed_with_privacy_policy = EXCLUDED.has_agreed_with_privacy_policy,
+	updated_at                     = EXCLUDED.updated_at,
+	deleted_at                     = EXCLUDED.deleted_at`
 
-	// Record does not exist — insert.
-	_, err = sess.InsertInto("users").
-		Columns("id", "subject", "email", "nickname", "name", "surname",
-			"avatar_url", "country_code", "date_of_birth", "is_banned",
-			"has_agreed_with_terms", "has_agreed_with_privacy_policy",
-			"created_at", "updated_at", "deleted_at").
-		Record(row).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.ID, row.Subject, row.Email, row.Nickname, row.Name, row.Surname,
+		row.AvatarURL, row.CountryCode, row.DateOfBirth, row.IsBanned,
+		row.HasAgreedWithTerms, row.HasAgreedWithPrivacyPolicy,
+		row.CreatedAt, row.UpdatedAt, row.DeletedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		return merrors.WrapStdServerError(err, "insert user")
+		return merrors.WrapStdServerError(err, "upsert user")
 	}
 
 	return nil
