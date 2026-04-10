@@ -139,11 +139,7 @@ func GetAgentSettings(c *Context) http.HandlerFunc {
 		}
 
 		WriteSuccess(w, http.StatusOK, dto.AgentSettingsResponse{
-			Model: dto.AgentModelResponse{
-				ID:          settings.Model.ID,
-				Name:        settings.Model.Name,
-				Description: settings.Model.Description,
-			},
+			Model:          settings.Model.ID,
 			ResponseLength: string(settings.ResponseLength),
 			Prompts:        prompts,
 		})

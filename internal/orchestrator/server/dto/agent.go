@@ -95,7 +95,7 @@ type AgentModelResponse struct {
 
 // AgentSettingsResponse represents the settings for an agent.
 type AgentSettingsResponse struct {
-	Model          AgentModelResponse    `json:"model"`
+	Model          string                `json:"model"`
 	ResponseLength string                `json:"response_length"`
 	Prompts        []AgentPromptResponse `json:"prompts"`
 }
