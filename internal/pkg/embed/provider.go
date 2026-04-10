@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -177,30 +178,11 @@ func isNetworkError(err error) bool {
 		return false
 	}
 	var netErr net.Error
-	if ok := isError[net.Error](err, &netErr); ok {
+	if errors.As(err, &netErr) {
 		return true
 	}
 	var opErr *net.OpError
-	return isError[*net.OpError](err, &opErr)
-}
-
-// isError is a small generic helper that unwraps err into target via errors.As.
-func isError[T error](err error, target *T) bool {
-	if err == nil {
-		return false
-	}
-	// Use the standard library unwrap chain.
-	for {
-		if e, ok := err.(T); ok {
-			*target = e
-			return true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
+	return errors.As(err, &opErr)
 }
 
 // Dimensions returns the embedding vector dimension.

@@ -101,8 +101,13 @@ func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRun
 
 // CreateUser creates a new user with the specified legal agreement status.
 // It inserts both the user record and the associated user preferences record.
-// Returns a business error with code USR0003 if the user already exists.
-// Note: The caller is responsible for transaction management if needed.
+//
+// The user INSERT uses ON CONFLICT (subject) DO UPDATE so that two concurrent
+// first-login requests for the same Firebase subject (which generate different
+// UUIDs locally) both resolve to the same database row. The winning row's id
+// is written back to opts.User.ID so the caller can use it for subsequent
+// inserts (workspace, usage quota, etc.).
+//
 // Returns ErrInvalidInput if opts, opts.Sess, or opts.User is nil.
 func (r *userRepo) CreateUser(ctx context.Context, opts *orchestratorrepo.CreateUserOpts) *merrors.Error {
 	if opts == nil || opts.Sess == nil || opts.User == nil {
@@ -111,39 +116,58 @@ func (r *userRepo) CreateUser(ctx context.Context, opts *orchestratorrepo.Create
 
 	user := opts.User
 
-	// Insert user
-	_, err := opts.Sess.InsertInto("users").
-		Pair("id", user.ID).
-		Pair("subject", user.Subject).
-		Pair("email", user.Email).
-		Pair("nickname", user.Nickname).
-		Pair("name", user.Name).
-		Pair("surname", user.Surname).
-		Pair("avatar_url", user.AvatarURL).
-		Pair("country_code", user.CountryCode).
-		Pair("date_of_birth", user.DateOfBirth).
-		Pair("is_banned", user.IsBanned).
-		Pair("has_agreed_with_terms", opts.HasAgreedWithLegal).
-		Pair("has_agreed_with_privacy_policy", opts.HasAgreedWithLegal).
-		Pair("created_at", user.CreatedAt).
-		Pair("updated_at", user.UpdatedAt).
-		ExecContext(ctx)
-	if err != nil {
-		if database.IsRecordExistsError(err) {
-			return merrors.ErrUserAlreadyExists
-		}
+	// INSERT ... ON CONFLICT (subject) DO UPDATE SET updated_at = NOW() RETURNING id
+	//
+	// If a concurrent request already inserted a row for this subject, the
+	// conflict target fires and we update updated_at (a no-op in practice) and
+	// return the existing id. This makes CreateUser idempotent under concurrent
+	// first-login races on the subject UNIQUE constraint.
+	//
+	// Raw SQL is required because dbr has no ON CONFLICT … RETURNING builder.
+	const userQuery = `
+INSERT INTO users (
+	id, subject, email, nickname, name, surname,
+	avatar_url, country_code, date_of_birth, is_banned,
+	has_agreed_with_terms, has_agreed_with_privacy_policy,
+	created_at, updated_at
+) VALUES (
+	?, ?, ?, ?, ?, ?,
+	?, ?, ?, ?,
+	?, ?,
+	?, ?
+)
+ON CONFLICT (subject) DO UPDATE SET
+	updated_at = EXCLUDED.updated_at
+RETURNING id`
+
+	var resolvedID string
+	if err := opts.Sess.InsertBySql(userQuery,
+		user.ID, user.Subject, user.Email, user.Nickname, user.Name, user.Surname,
+		user.AvatarURL, user.CountryCode, user.DateOfBirth, user.IsBanned,
+		opts.HasAgreedWithLegal, opts.HasAgreedWithLegal,
+		user.CreatedAt, user.UpdatedAt,
+	).LoadContext(ctx, &resolvedID); err != nil {
 		return merrors.WrapStdServerError(err, "insert user")
 	}
+	// Write back the winning id — may differ from user.ID if a concurrent
+	// insert won the race and the existing row was returned.
+	opts.User.ID = resolvedID
 
-	// Insert user preferences
-	_, err = opts.Sess.InsertInto("user_preferences").
-		Pair("user_id", user.ID).
-		Pair("platform_theme", user.Preferences.PlatformTheme).
-		Pair("platform_language", user.Preferences.PlatformLanguage).
-		Pair("currency_code", user.Preferences.CurrencyCode).
-		Pair("updated_at", user.UpdatedAt).
-		ExecContext(ctx)
-	if err != nil {
+	// Insert user preferences using ON CONFLICT DO NOTHING: if a concurrent
+	// request already created the row (because it won the users INSERT race),
+	// we leave the existing preferences untouched.
+	const prefsQuery = `
+INSERT INTO user_preferences (user_id, platform_theme, platform_language, currency_code, updated_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (user_id) DO NOTHING`
+
+	if _, err := opts.Sess.InsertBySql(prefsQuery,
+		resolvedID,
+		user.Preferences.PlatformTheme,
+		user.Preferences.PlatformLanguage,
+		user.Preferences.CurrencyCode,
+		user.UpdatedAt,
+	).ExecContext(ctx); err != nil {
 		return merrors.WrapStdServerError(err, "insert user preferences")
 	}
 
