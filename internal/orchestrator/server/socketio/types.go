@@ -68,6 +68,11 @@ type workspaceOwnerChecker interface {
 	// GetByID returns the workspace only when it exists and userID matches.
 	// Any error (not-found or server error) must be treated as "not authorised".
 	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
+
+	// ListOwnedByUser returns the subset of workspaceIDs owned by userID as a
+	// set for O(1) membership tests. Issues a single SELECT ... WHERE id IN (...)
+	// query regardless of how many IDs are requested.
+	ListOwnedByUser(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string, workspaceIDs []string) (map[string]struct{}, *merrors.Error)
 }
 
 // Config holds the dependencies for creating a Socket.IO server.

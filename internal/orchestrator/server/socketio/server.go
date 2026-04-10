@@ -61,7 +61,11 @@ func NewServer(cfg *Config) *socket.Server {
 	// Set up the /v1 namespace with auth middleware and connection handling.
 	nsp := io.Of(socketNamespace, nil)
 	registerAuthMiddleware(nsp, cfg.Logger)
-	registerConnectionHandler(nsp, cfg.Logger, cfg.DB, cfg.WorkspaceRepo, cfg.AuthService)
+	shutdownCtx := cfg.ShutdownCtx
+	if shutdownCtx == nil {
+		shutdownCtx = context.Background()
+	}
+	registerConnectionHandler(nsp, cfg.Logger, cfg.DB, cfg.WorkspaceRepo, cfg.AuthService, shutdownCtx)
 
 	return io
 }
@@ -137,7 +141,7 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 // workspace room. authService resolves the Firebase subject to an internal user.ID so
 // the workspace ownership query uses the correct PK column. When db or workspaceRepo is
 // nil the ownership check is skipped (development / test only).
-func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService orchestratorservice.AuthService) {
+func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService orchestratorservice.AuthService, shutdownCtx context.Context) {
 	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {
@@ -192,7 +196,7 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 				// On failure, drop all requested IDs and bail early.
 				var userID string
 				if authService != nil {
-					user, mErr := authService.GetBySubject(context.Background(), &orchestratorservice.GetUserBySubjectOpts{
+					user, mErr := authService.GetBySubject(shutdownCtx, &orchestratorservice.GetUserBySubjectOpts{
 						Sess:    sess,
 						Subject: userSubject,
 					})
@@ -210,17 +214,19 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 					userID = userSubject
 				}
 
+				owned, mErr := workspaceRepo.ListOwnedByUser(shutdownCtx, sess, userID, ids)
+				if mErr != nil {
+					logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
+						"socket_id", string(s.Id()),
+						"subject", userSubject,
+						"error", mErr.Error(),
+					)
+					return
+				}
 				for _, id := range ids {
-					_, mErr := workspaceRepo.GetByID(context.Background(), sess, userID, id)
-					if mErr != nil {
-						logger.Warn("socketio: workspace subscribe ownership check failed — dropping id",
-							"socket_id", string(s.Id()),
-							"subject", userSubject,
-							"workspace_id", id,
-						)
-						continue
+					if _, ok := owned[id]; ok {
+						authorised = append(authorised, id)
 					}
-					authorised = append(authorised, id)
 				}
 			}
 
