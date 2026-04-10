@@ -30,6 +30,11 @@ type Repo interface {
 	// GetUserUsage returns detailed usage counters for a user and billing period.
 	// If no counter row exists, returns a zero-value row (no error).
 	GetUserUsage(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, period string) (*UserUsageRow, *merrors.Error)
+
+	// GetWorkspaceUsage returns aggregated usage counters for a specific workspace,
+	// summed across all agents in that workspace. If no counters exist, returns a
+	// zero-value row (no error).
+	GetWorkspaceUsage(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) (*WorkspaceUsageRow, *merrors.Error)
 }
 
 // IncrementUsageOpts carries the token counts to add to a user's period counter.
@@ -70,6 +75,15 @@ type UserUsageRow struct {
 	CostUSD              float64 `db:"cost_usd"`
 	RequestCount         int     `db:"request_count"`
 	PlanID               string  `db:"plan_id"`
+}
+
+// WorkspaceUsageRow represents aggregated usage counters for a workspace,
+// summed across all agents that belong to it.
+type WorkspaceUsageRow struct {
+	TokensUsed           int64 `db:"tokens_used"`
+	PromptTokensUsed     int64 `db:"prompt_tokens_used"`
+	CompletionTokensUsed int64 `db:"completion_tokens_used"`
+	RequestCount         int   `db:"request_count"`
 }
 
 type postgres struct{}
@@ -210,6 +224,31 @@ func (p *postgres) GetUserUsage(ctx context.Context, sess orchestratorrepo.Sessi
 			return &UserUsageRow{}, nil
 		}
 		return nil, merrors.WrapStdServerError(err, fmt.Sprintf("usagerepo: get user usage for %s period %s", userID, period))
+	}
+
+	return &row, nil
+}
+
+func (p *postgres) GetWorkspaceUsage(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) (*WorkspaceUsageRow, *merrors.Error) {
+	if workspaceID == "" {
+		return nil, merrors.ErrInvalidInput
+	}
+
+	var row WorkspaceUsageRow
+	err := sess.SelectBySql(`
+		SELECT COALESCE(SUM(tokens_used), 0)            AS tokens_used,
+		       COALESCE(SUM(prompt_tokens_used), 0)      AS prompt_tokens_used,
+		       COALESCE(SUM(completion_tokens_used), 0)  AS completion_tokens_used,
+		       COALESCE(SUM(request_count), 0)           AS request_count
+		FROM agent_usage_counters
+		WHERE workspace_id = ?`, workspaceID).
+		LoadOneContext(ctx, &row)
+
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return &WorkspaceUsageRow{}, nil
+		}
+		return nil, merrors.WrapStdServerError(err, fmt.Sprintf("usagerepo: get workspace usage for %s", workspaceID))
 	}
 
 	return &row, nil
