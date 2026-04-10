@@ -111,8 +111,8 @@ func DecodeJSON(r *http.Request, target any) error {
 	return json.NewDecoder(r.Body).Decode(target)
 }
 
-// IntQueryParam extracts an integer value from a query parameter.
-// Returns 0 if the parameter is missing or cannot be parsed as an integer.
+// IntQueryParam extracts a non-negative integer value from a query parameter.
+// Returns 0 if the parameter is missing, cannot be parsed, or is negative.
 func IntQueryParam(r *http.Request, key string) int {
 	raw := strings.TrimSpace(r.URL.Query().Get(key))
 	if raw == "" {
@@ -120,6 +120,9 @@ func IntQueryParam(r *http.Request, key string) int {
 	}
 	var parsed int
 	_, _ = fmt.Sscanf(raw, "%d", &parsed)
+	if parsed < 0 {
+		return 0
+	}
 	return parsed
 }
 

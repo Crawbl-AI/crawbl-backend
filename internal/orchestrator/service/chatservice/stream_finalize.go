@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,12 +24,16 @@ func (ss *streamSession) finalize() []*orchestrator.Message {
 		text := strings.TrimSpace(primarySt.accumulated.String())
 
 		// Find a sub-agent that was delegated to. In multi-delegation scenarios
-		// (rare), the picked agent is non-deterministic -- acceptable because
-		// the delegation card is a summary, not per-sub-agent.
+		// pick the one with the lexicographically smallest ID for determinism.
 		var delegatee *orchestrator.Agent
-		for _, st := range ss.streams {
-			if st.agent.ID != ss.primary.ID {
-				delegatee = st.agent
+		streamIDs := make([]string, 0, len(ss.streams))
+		for id := range ss.streams {
+			streamIDs = append(streamIDs, id)
+		}
+		sort.Strings(streamIDs)
+		for _, id := range streamIDs {
+			if id != ss.primary.ID {
+				delegatee = ss.streams[id].agent
 				break
 			}
 		}

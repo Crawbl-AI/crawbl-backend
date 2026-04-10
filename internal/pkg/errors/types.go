@@ -48,6 +48,8 @@ const (
 	// Message error codes (MSGxxxx)
 	ErrCodeMessageNotFound    = "MSG0001" // Message does not exist
 	ErrCodeUnsupportedMessage = "MSG0002" // Message type is not supported
+	ErrCodeEmptyMessageText   = "MSG0003" // Message text is empty
+	ErrCodeMessageTextTooLong = "MSG0004" // Message text exceeds maximum allowed length
 
 	// Quota error codes (QTAxxxx)
 	ErrCodeQuotaExceeded = "QTA0001" // User has exceeded their monthly token quota
@@ -96,6 +98,7 @@ var (
 	// Message errors
 	ErrMessageNotFound    = NewBusinessError("Message not found", ErrCodeMessageNotFound)
 	ErrUnsupportedMessage = NewBusinessError("Only text messages are supported right now", ErrCodeUnsupportedMessage)
+	ErrEmptyMessageText   = NewBusinessError("message text cannot be empty", ErrCodeEmptyMessageText)
 
 	// Quota errors
 	ErrQuotaExceeded = NewBusinessError("Monthly token quota exceeded", ErrCodeQuotaExceeded)

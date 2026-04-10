@@ -120,8 +120,9 @@ func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspac
 		// Fill remaining budget with recent messages.
 		remaining := memory.TokenBudgetTotal - sb.Len()
 		if remaining > 0 {
-			if len(messagesText) > remaining {
-				messagesText = messagesText[:remaining]
+			runes := []rune(messagesText)
+			if len(runes) > remaining {
+				messagesText = string(runes[:remaining])
 			}
 			sb.WriteString(messagesText)
 		}
@@ -129,8 +130,8 @@ func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspac
 
 	// Hard cap on total output.
 	result := sb.String()
-	if len(result) > memory.TokenBudgetTotal {
-		result = result[:memory.TokenBudgetTotal]
+	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
+		result = string(resultRunes[:memory.TokenBudgetTotal])
 	}
 	return result
 }

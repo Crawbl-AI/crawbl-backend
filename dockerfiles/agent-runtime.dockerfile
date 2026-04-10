@@ -18,6 +18,8 @@
 
 FROM golang:1.25.8 AS builder
 
+ARG GOARCH=amd64
+
 WORKDIR /build
 
 # Cache-friendly dependency copy first.
@@ -36,7 +38,7 @@ RUN apt-get update -qq && apt-get install -y -qq patch >/dev/null 2>&1; \
     for p in vendor-patches/*.patch; do [ -f "$p" ] && patch -p1 < "$p"; done
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} \
     go build -mod=vendor -trimpath -ldflags="-s -w -X main.version=$(date -u +%Y%m%dT%H%M%SZ)" \
     -o /out/crawbl-agent-runtime ./cmd/crawbl-agent-runtime
 

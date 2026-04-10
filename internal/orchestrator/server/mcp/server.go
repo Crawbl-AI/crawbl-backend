@@ -125,7 +125,11 @@ func extractToolCallParams(req sdkmcp.Request) (toolName string, argsJSON string
 	}
 	input := "{}"
 	if len(params.Arguments) > 0 {
-		input = string(params.Arguments)
+		s := strings.ToValidUTF8(string(params.Arguments), "")
+		if len(s) > auditMaxResponseBytes {
+			s = s[:auditMaxResponseBytes] + "..."
+		}
+		input = s
 	}
 	return params.Name, input
 }

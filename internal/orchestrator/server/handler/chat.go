@@ -160,6 +160,10 @@ func ConversationCreate(c *Context) http.HandlerFunc {
 			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "invalid value for field 'type'")
 			return
 		}
+		if convType == orchestrator.ConversationTypeAgent && strings.TrimSpace(reqBody.AgentID) == "" {
+			httpserver.WriteErrorResponse(w, http.StatusBadRequest, "agent_id is required for agent conversations")
+			return
+		}
 
 		conversation, mErr := c.ChatService.CreateConversation(r.Context(), &orchestratorservice.CreateConversationOpts{
 			Sess:        c.NewSession(),

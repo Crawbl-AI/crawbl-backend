@@ -22,6 +22,14 @@ const (
 	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
 	// This prevents slowloris attacks by timing out slow clients.
 	DefaultReadHeaderTimeout = 5 * time.Second
+
+	// DefaultReadTimeout is the maximum duration for reading the entire request,
+	// including the body.
+	DefaultReadTimeout = 1 * time.Minute
+
+	// DefaultWriteTimeout is the maximum duration before timing out writes of the
+	// response. Set generously to accommodate long-running agent streaming responses.
+	DefaultWriteTimeout = 5 * time.Minute
 )
 
 // Config holds the configuration settings for the HTTP server.

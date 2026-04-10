@@ -2,6 +2,7 @@
 package httpserver
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -78,7 +79,7 @@ func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handle
 			// to authenticate via X-E2E-UID/Email/Name instead of Firebase JWT.
 			// This is disabled in production even if the env var is accidentally set.
 			if cfg.E2EToken != "" && env != "production" && env != "prod" {
-				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && token == cfg.E2EToken {
+				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(cfg.E2EToken)) == 1 {
 					e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
 					if e2eUID == "" {
 						WriteErrorResponse(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")

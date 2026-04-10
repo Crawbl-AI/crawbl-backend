@@ -66,6 +66,10 @@ const (
 	// DefaultConnMaxLifetime is the default maximum lifetime of a connection.
 	DefaultConnMaxLifetime = 5 * time.Minute
 
+	// DefaultConnMaxIdleTime is the default maximum idle time for a connection.
+	// Set below PostgreSQL's default idle-in-transaction timeout to avoid stale connections.
+	DefaultConnMaxIdleTime = 2 * time.Minute
+
 	// DefaultPingAttempts is the default number of attempts to ping the database on startup.
 	DefaultPingAttempts = 5
 
@@ -107,4 +111,9 @@ type Config struct {
 
 	// ConnMaxLifetime is the maximum amount of time a connection may be reused.
 	ConnMaxLifetime time.Duration
+
+	// ConnMaxIdleTime is the maximum amount of time a connection may sit idle
+	// before being closed. Should be less than the server-side idle timeout
+	// (PostgreSQL default: 10 min) to avoid "unexpected EOF" errors.
+	ConnMaxIdleTime time.Duration
 }
