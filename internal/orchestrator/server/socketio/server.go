@@ -200,8 +200,8 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger) {
 // supports multiple listeners, so this works alongside the existing connection
 // handler that manages workspace subscriptions.
 func RegisterMessageHandler(io *socket.Server, cfg *Config) {
-	if cfg.DB == nil || cfg.ChatService == nil || cfg.AuthService == nil {
-		cfg.Logger.Info("socketio: message.send handler disabled (missing DB, ChatService, or AuthService)")
+	if cfg.DB == nil || cfg.ChatService == nil || cfg.AuthService == nil || cfg.WorkspaceService == nil {
+		cfg.Logger.Info("socketio: message.send handler disabled (missing DB, ChatService, AuthService, or WorkspaceService)")
 		return
 	}
 
@@ -211,11 +211,12 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 	}
 
 	h := &messageHandler{
-		db:          cfg.DB,
-		chatService: cfg.ChatService,
-		authService: cfg.AuthService,
-		logger:      cfg.Logger,
-		shutdownCtx: shutdownCtx,
+		db:               cfg.DB,
+		chatService:      cfg.ChatService,
+		authService:      cfg.AuthService,
+		workspaceService: cfg.WorkspaceService,
+		logger:           cfg.Logger,
+		shutdownCtx:      shutdownCtx,
 	}
 
 	nsp := io.Of(socketNamespace, nil)

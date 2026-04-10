@@ -40,6 +40,10 @@ type Config struct {
 	// Required for message.send handling. Nil disables chat over WebSocket.
 	AuthService orchestratorservice.AuthService
 
+	// WorkspaceService verifies workspace ownership before message dispatch.
+	// Required for message.send handling. Nil disables chat over WebSocket.
+	WorkspaceService orchestratorservice.WorkspaceService
+
 	// ShutdownCtx is the server lifetime context. Dispatch goroutines derive
 	// their contexts from this so that in-flight DB writes are cancelled when
 	// the server receives SIGTERM and the DB pool closes.

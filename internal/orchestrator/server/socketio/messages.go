@@ -14,11 +14,12 @@ import (
 
 // messageHandler holds the dependencies for handling message.send events.
 type messageHandler struct {
-	db          *dbr.Connection
-	chatService orchestratorservice.ChatService
-	authService orchestratorservice.AuthService
-	logger      *slog.Logger
-	shutdownCtx context.Context
+	db               *dbr.Connection
+	chatService      orchestratorservice.ChatService
+	authService      orchestratorservice.AuthService
+	workspaceService orchestratorservice.WorkspaceService
+	logger           *slog.Logger
+	shutdownCtx      context.Context
 }
 
 // handleMessageSend processes a message.send event from the Socket.IO client.
@@ -94,6 +95,22 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 			"error", mErr.Error(),
 		)
 		h.emitError(s, localID, payload.ConversationID, "user not found")
+		return
+	}
+
+	// Verify the authenticated user owns the workspace supplied in the payload.
+	// Defense-in-depth: the client-supplied workspace_id must not route messages
+	// to a workspace owned by another user.
+	if _, mErr := h.workspaceService.GetByID(ctx, &orchestratorservice.GetWorkspaceOpts{
+		Sess:        sess,
+		UserID:      user.ID,
+		WorkspaceID: payload.WorkspaceID,
+	}); mErr != nil {
+		h.logger.Warn("socketio: message.send workspace ownership check failed",
+			"user_id", user.ID,
+			"workspace_id", payload.WorkspaceID,
+		)
+		h.emitError(s, localID, payload.ConversationID, "unauthorized")
 		return
 	}
 

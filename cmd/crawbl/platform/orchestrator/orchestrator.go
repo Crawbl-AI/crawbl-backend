@@ -335,11 +335,12 @@ func runServer(ctx context.Context) error {
 	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
 	if ioServer != nil {
 		socketio.RegisterMessageHandler(ioServer, &socketio.Config{
-			Logger:      logger,
-			DB:          db,
-			ChatService: chatService,
-			AuthService: authService,
-			ShutdownCtx: ctx,
+			Logger:           logger,
+			DB:               db,
+			ChatService:      chatService,
+			AuthService:      authService,
+			WorkspaceService: workspaceService,
+			ShutdownCtx:      ctx,
 		})
 	}
 
