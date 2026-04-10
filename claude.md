@@ -283,23 +283,6 @@ To delete a dev user: remove the user row from the port-forwarded Postgres, then
 - `time.Time` contains a pointer to `time.Location`; for high-volume timestamp storage use `int64` Unix seconds/nanos to dodge the GC scan cost.
 - Avoid `interface{}`/`any` in the domain layer **and** in hot paths — boxing via `runtime.convT2E` forces heap allocation. (Already a project rule — restated with the perf rationale.)
 
-### Testing
-
-- Test through the public API (already a project rule); use external `package_test` naming for API tests. Reserve internal tests for white-box cases.
-- Table-driven tests with `t.Run` subtests for each case. Descriptive `name` field, not index-based case identification. Human-readable subtest names that survive `-run` filtering.
-- Every helper that produces assertion failures calls `t.Helper()` so failures blame the caller.
-- Use `github.com/google/go-cmp/cmp` (`cmp.Equal`/`cmp.Diff`) for struct comparison, not `reflect.DeepEqual`. Print diffs with `- want` / `+ got` labels.
-- Output order is `got` then `want`: `t.Errorf("Foo(%v) = %v; want %v", in, got, want)`.
-- Don't compare serialized strings (JSON, proto text). Parse and compare structured values.
-- Don't match on error message substrings — assert on error identity via `errors.Is`/`errors.As`. Error strings are change detectors, not contracts.
-- No third-party assert libraries; use `t.Errorf`/`t.Fatalf` directly.
-- `t.Fatal`/`t.FailNow` only for setup failures or inside `t.Run` bodies. Inside naked table loops use `t.Error` so every case still runs.
-- Run `go test -race ./...` for any package that spawns goroutines. Add `go.uber.org/goleak` to assert zero goroutine leaks at test teardown.
-- Benchmarks: `-count=20` (or more) + `benchstat` for statistical significance — never eyeball one run. Track `AllocsPerRun` to catch allocation regressions. Results under 0.5 ns/op usually mean the compiler optimized the loop body away.
-- `go test -short` skips slow tests; gate expensive tests behind `testing.Short()`.
-- Fuzzing (`go test -fuzz`) for anything that parses untrusted input — catches SQL injection, XSS, parser DoS, boundary bugs. Seed corpus with known edge cases.
-- Run `go vet ./...` and `govulncheck` in CI as blocking gates.
-
 ### Logging
 
 - Log at boundaries (request entry/exit, external call edges). Domain logic returns errors; boundaries decide to log them.
