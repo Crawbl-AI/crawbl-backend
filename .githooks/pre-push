@@ -11,8 +11,9 @@ read -r local_ref local_sha remote_ref remote_sha || exit 0
 
 # Only run ci-check if proto files were modified in this push.
 # If remote_sha is all zeros, this is a new branch — always check.
+# Use 'proto/' pathspec to match any file under the proto directory.
 if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]] || \
-   git diff --name-only "$remote_sha..$local_sha" -- 'proto/**/*.proto' | grep -q .; then
+   git diff --name-only "$remote_sha..$local_sha" -- 'proto/' | grep -q .; then
   echo "Running backend pre-push checks (proto files detected in push range)..."
   make ci-check
 else
