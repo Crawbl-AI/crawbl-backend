@@ -5,19 +5,70 @@ package socketio
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/zishang520/socket.io/v2/socket"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
+
+// socketSession holds per-socket cancellation state for in-flight dispatch goroutines.
+// A single cancel func is kept per socket; each new dispatch replaces the previous one
+// after cancelling it. The disconnect handler (registered once at connect time) calls
+// cancelCurrent to stop any in-flight dispatch when the client disconnects.
+type socketSession struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+}
+
+// setCancelFunc replaces the active cancel func, calling the previous one first so
+// that any goroutine still running for an earlier message is cancelled immediately.
+func (ss *socketSession) setCancelFunc(cancel context.CancelFunc) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if ss.cancel != nil {
+		ss.cancel()
+	}
+	ss.cancel = cancel
+}
+
+// cancelCurrent cancels the currently active dispatch (if any).
+func (ss *socketSession) cancelCurrent() {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if ss.cancel != nil {
+		ss.cancel()
+		ss.cancel = nil
+	}
+}
+
+// socketData is stored in socket.Data() after the connection handler runs.
+// It bundles the authenticated principal with the per-socket cancellation session
+// so both are accessible from any event handler on the socket.
+type socketData struct {
+	Principal *orchestrator.Principal
+	Session   *socketSession
+}
 
 // socketNamespace is the Socket.IO namespace path that the mobile client connects to.
 const socketNamespace = "/v1"
 
 // workspaceRoomPrefix is prepended to workspace IDs to form room names.
 const workspaceRoomPrefix = "workspace:"
+
+// workspaceOwnerChecker is the minimal repo surface needed to verify that a
+// given workspace belongs to the authenticated user before joining its room.
+// Defined at the consumer (socketio package) per interface-segregation.
+type workspaceOwnerChecker interface {
+	// GetByID returns the workspace only when it exists and userID matches.
+	// Any error (not-found or server error) must be treated as "not authorised".
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
+}
 
 // Config holds the dependencies for creating a Socket.IO server.
 type Config struct {
@@ -29,8 +80,13 @@ type Config struct {
 	RedisClient *redis.Client
 
 	// DB is the database connection for creating per-request sessions.
-	// Required for message.send handling. Nil disables chat over WebSocket.
+	// Required for workspace ownership checks and message.send handling.
+	// When nil, workspace.subscribe skips the ownership check (dev/test only).
 	DB *dbr.Connection
+
+	// WorkspaceRepo verifies workspace ownership on workspace.subscribe.
+	// When nil, the ownership check is skipped (dev/test only).
+	WorkspaceRepo workspaceOwnerChecker
 
 	// ChatService handles message sending and agent interactions.
 	// Required for message.send handling. Nil disables chat over WebSocket.
