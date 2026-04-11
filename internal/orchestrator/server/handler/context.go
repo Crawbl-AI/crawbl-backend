@@ -23,6 +23,10 @@ import (
 )
 
 // Context holds shared dependencies for all handlers.
+//
+// Service fields use the consumer-side interfaces declared in ports.go
+// (authPort / workspacePort / chatPort / agentPort / integrationPort)
+// so handlers never import the producer-owned service contracts.
 type Context struct {
 	// DB is the database connection pool for all persistence operations.
 	DB *dbr.Connection
@@ -31,19 +35,19 @@ type Context struct {
 	Logger *slog.Logger
 
 	// AuthService handles user authentication, registration, and profile management.
-	AuthService orchestratorservice.AuthService
+	AuthService authPort
 
 	// WorkspaceService manages workspace provisioning and runtime state.
-	WorkspaceService orchestratorservice.WorkspaceService
+	WorkspaceService workspacePort
 
 	// ChatService handles conversations, messages, and agent interactions.
-	ChatService orchestratorservice.ChatService
+	ChatService chatPort
 
 	// AgentService handles agent details, settings, tools, and history retrieval.
-	AgentService orchestratorservice.AgentService
+	AgentService agentPort
 
 	// IntegrationService manages third-party OAuth connections.
-	IntegrationService orchestratorservice.IntegrationService
+	IntegrationService integrationPort
 
 	// HTTPMiddleware contains authentication and request middleware configuration.
 	HTTPMiddleware *middleware.MiddlewareConfig

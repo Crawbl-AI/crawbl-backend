@@ -35,8 +35,6 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
@@ -56,20 +54,23 @@ import (
 // nil → the usage_write worker no-ops silently). Workers check their
 // own fields; NewConfig does not refuse to boot when one repo is
 // missing because partial startup is often the intended mode.
+//
+// Repo fields are typed against consumer-side interfaces declared in
+// ports.go so the queue layer never holds a producer-owned interface.
 type Deps struct {
 	// Shared infrastructure.
 	DB     *dbr.Connection
 	Logger *slog.Logger
 
 	// Memory domain.
-	DrawerRepo    memrepo.DrawerRepo
-	KGRepo        memrepo.KGRepo
-	CentroidRepo  memrepo.CentroidRepo
+	DrawerRepo    drawerStore
+	KGRepo        kgStore
+	CentroidRepo  centroidStore
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 
 	// Messaging — stale pending message cleanup.
-	MessageRepo orchestratorrepo.MessageRepo
+	MessageRepo messageStore
 
 	// Pricing — daily LiteLLM mirror + in-memory cache refresh.
 	ModelPricingRepo modelpricingrepo.Repo

@@ -10,7 +10,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -22,10 +21,12 @@ const (
 )
 
 // ProcessDeps holds dependencies for the memory processing job.
+// Repo fields are typed against consumer-side interfaces declared in
+// ports.go.
 type ProcessDeps struct {
 	DB            *dbr.Connection
-	DrawerRepo    memrepo.DrawerRepo
-	KGRepo        memrepo.KGRepo
+	DrawerRepo    drawerStore
+	KGRepo        kgStore
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 }
@@ -300,7 +301,7 @@ func resolveNeighborConflict(ctx context.Context, sess database.SessionRunner, d
 	}
 }
 
-func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, d *memory.Drawer) {
+func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, d *memory.Drawer) {
 	if err := drawerRepo.IncrementRetryCount(ctx, sess, d.WorkspaceID, d.ID); err != nil {
 		slog.Warn("memory-process: increment retry count failed",
 			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)

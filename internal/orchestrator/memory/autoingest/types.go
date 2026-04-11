@@ -16,7 +16,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -50,11 +49,12 @@ type Work struct {
 // Deps bundles every collaborator the pool needs to drive a chunk
 // pipeline. CentroidRepo is optional — Phase 2 wires it in; Phase 0/1
 // leave it nil and the worker skips the centroid branch cleanly. So is
-// MemoryPublisher (disabled cleanly when NATS is down).
+// MemoryPublisher (disabled cleanly when NATS is down). Repo fields are
+// consumer-side interfaces declared in ports.go.
 type Deps struct {
 	DB              *dbr.Connection
-	DrawerRepo      memrepo.DrawerRepo
-	CentroidRepo    memrepo.CentroidRepo
+	DrawerRepo      drawerStore
+	CentroidRepo    centroidStore
 	Classifier      extract.Classifier
 	Embedder        embed.Embedder
 	MemoryPublisher *queue.MemoryPublisher

@@ -9,7 +9,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 )
@@ -28,11 +27,12 @@ var (
 
 // EnrichDeps holds dependencies for the memory enrichment sweep. It
 // deliberately mirrors ProcessDeps so jobs/process.go helpers can be
-// reused where practical.
+// reused where practical. Repo fields are consumer-side interfaces from
+// ports.go.
 type EnrichDeps struct {
 	DB            *dbr.Connection
-	DrawerRepo    memrepo.DrawerRepo
-	KGRepo        memrepo.KGRepo
+	DrawerRepo    drawerStore
+	KGRepo        kgStore
 	LLMClassifier extract.LLMClassifier
 	Logger        *slog.Logger
 }

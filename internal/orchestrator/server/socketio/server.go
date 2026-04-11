@@ -141,7 +141,7 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 // workspace room. authService resolves the Firebase subject to an internal user.ID so
 // the workspace ownership query uses the correct PK column. When db or workspaceRepo is
 // nil the ownership check is skipped (development / test only).
-func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService orchestratorservice.AuthService, shutdownCtx context.Context) {
+func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService authResolver, shutdownCtx context.Context) {
 	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {

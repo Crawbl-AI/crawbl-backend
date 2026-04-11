@@ -8,7 +8,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
@@ -57,6 +56,9 @@ type auditService interface {
 }
 
 // Deps holds all dependencies needed by the MCP server and tool handlers.
+// Memory repo fields are typed against the consumer-side interfaces
+// declared in ports.go so this package never imports producer-owned
+// repo interfaces.
 type Deps struct {
 	DB           *dbr.Connection
 	Logger       *slog.Logger
@@ -65,11 +67,11 @@ type Deps struct {
 	AuditService auditService
 
 	// Memory palace dependencies.
-	DrawerRepo   memrepo.DrawerRepo
-	KG           memrepo.KGRepo
+	DrawerRepo   drawerStore
+	KG           kgStore
 	MemoryStack  layers.Stack
-	PalaceGraph  memrepo.PalaceGraphRepo
-	IdentityRepo memrepo.IdentityRepo
+	PalaceGraph  palaceGraphStore
+	IdentityRepo identityStore
 	Classifier   extract.Classifier
 	Embedder     embed.Embedder
 }

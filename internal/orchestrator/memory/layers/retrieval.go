@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -41,7 +40,7 @@ const (
 func HybridRetrieve(
 	ctx context.Context,
 	sess database.SessionRunner,
-	drawerRepo memrepo.DrawerRepo,
+	drawerRepo drawerStore,
 	embedder embed.Embedder,
 	workspaceID, query, agentSlug string,
 	limit int,
@@ -77,7 +76,7 @@ func HybridRetrieve(
 // UPDATE is used so partial failure cannot leave some drawers touched and
 // others not, which would skew retrieval ranking. Errors are logged and
 // swallowed — a failed touch never blocks a user-facing search.
-func touchReturnedDrawers(ctx context.Context, sess database.SessionRunner, drawerRepo memrepo.DrawerRepo, workspaceID string, results []RetrievalResult) {
+func touchReturnedDrawers(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, workspaceID string, results []RetrievalResult) {
 	if len(results) == 0 {
 		return
 	}

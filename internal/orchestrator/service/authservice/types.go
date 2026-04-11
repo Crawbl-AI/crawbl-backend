@@ -20,7 +20,7 @@ type usageQuotaCreator interface {
 
 // service implements the orchestratorservice.AuthService interface.
 type service struct {
-	userRepo              orchestratorrepo.UserRepo
+	userRepo              userStore
 	workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper
 	legalDocuments        *legalDocumentsConfig
 	usageQuotaRepo        usageQuotaCreator

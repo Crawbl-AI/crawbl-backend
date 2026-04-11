@@ -6,21 +6,23 @@ import (
 	"log/slog"
 	"strings"
 
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 type stack struct {
-	drawerRepo   memrepo.DrawerRepo
-	identityRepo memrepo.IdentityRepo
+	drawerRepo   drawerStore
+	identityRepo identityStore
 	embedder     embed.Embedder
 }
 
 // NewStack creates a new memory stack. The hybrid retrieval path uses the
 // drawer repo's SearchHybrid method — there is no longer a separate KG
 // graph handle passed in, since the CTE in drawerrepo owns the KG join.
-func NewStack(drawerRepo memrepo.DrawerRepo, identityRepo memrepo.IdentityRepo, embedder embed.Embedder) Stack {
+// Both repo arguments are typed against the consumer-side interfaces in
+// ports.go; the concrete postgres repos in memory/repo/... satisfy them
+// implicitly.
+func NewStack(drawerRepo drawerStore, identityRepo identityStore, embedder embed.Embedder) Stack {
 	return &stack{
 		drawerRepo:   drawerRepo,
 		identityRepo: identityRepo,

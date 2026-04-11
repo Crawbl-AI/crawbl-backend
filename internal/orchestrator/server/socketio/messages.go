@@ -13,11 +13,14 @@ import (
 )
 
 // messageHandler holds the dependencies for handling message.send events.
+// Service fields use the consumer-side interfaces declared in types.go
+// so this package never imports the producer AuthService/ChatService/
+// WorkspaceService contracts.
 type messageHandler struct {
 	db               *dbr.Connection
-	chatService      orchestratorservice.ChatService
-	authService      orchestratorservice.AuthService
-	workspaceService orchestratorservice.WorkspaceService
+	chatService      chatSender
+	authService      authResolver
+	workspaceService workspaceAuthorizer
 	logger           *slog.Logger
 	shutdownCtx      context.Context
 }

@@ -23,7 +23,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/identityrepo"
@@ -141,8 +140,13 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("auto-migration failed: %w", err)
 	}
 
-	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
+	db, repos, cleanup := mustBuildRepos(logger)
 	defer cleanup()
+	userRepo := repos.User
+	workspaceRepo := repos.Workspace
+	agentRepo := repos.Agent
+	conversationRepo := repos.Conversation
+	messageRepo := repos.Message
 
 	// Seed global catalogs (tools, models, tool categories, integration categories,
 	// integration providers) from embedded data on every startup (idempotent).
@@ -159,11 +163,14 @@ func runServer(ctx context.Context) error {
 	// Memory system — constructed unconditionally; embedder is optional.
 	// When CRAWBL_EMBED_BASE_URL is empty the embedder and memoryStack remain
 	// nil, and downstream services fall back to messages-only context.
-	var drawerRepo memrepo.DrawerRepo = drawerrepo.NewPostgres()
-	var kgRepo memrepo.KGRepo = kgrepo.NewPostgres()
-	var palaceGraphRepo memrepo.PalaceGraphRepo = palacegraphrepo.NewPostgres(redisClient, logger)
-	var identityRepo memrepo.IdentityRepo = identityrepo.NewPostgres()
-	var centroidRepo memrepo.CentroidRepo = centroidrepo.NewPostgres()
+	// The concrete *Postgres structs are narrowed to the wiring-layer
+	// interfaces declared in ports.go; downstream services narrow further
+	// via their own consumer-side ports.
+	var drawerRepo mcpDrawerRepoRaw = drawerrepo.NewPostgres()
+	var kgRepo mcpKGRepoRaw = kgrepo.NewPostgres()
+	var palaceGraphRepo mcpPalaceGraphRepoRaw = palacegraphrepo.NewPostgres(redisClient, logger)
+	var identityRepo mcpIdentityRepoRaw = identityrepo.NewPostgres()
+	var centroidRepo mcpCentroidRepoRaw = centroidrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
 	var memoryStack layers.Stack
@@ -425,15 +432,20 @@ func buildHTTPMiddleware() *middleware.MiddlewareConfig {
 	}
 }
 
-func mustBuildRepos(logger *slog.Logger) (
-	*dbr.Connection,
-	orchestratorrepo.UserRepo,
-	orchestratorrepo.WorkspaceRepo,
-	orchestratorrepo.AgentRepo,
-	orchestratorrepo.ConversationRepo,
-	orchestratorrepo.MessageRepo,
-	func(),
-) {
+// coreRepoWiring is declared at the wiring layer (cmd) where these repos
+// are constructed. Fields are the narrow consumer-side interfaces needed
+// by the various orchestrator wiring callsites (buildRealtime,
+// buildMCPHandler, chatservice, etc.). Keeping the field types as
+// interfaces avoids cross-package exposure of concrete repo structs.
+type coreRepoWiring struct {
+	User         coreUserRepo
+	Workspace    coreWorkspaceRepo
+	Agent        coreAgentRepo
+	Conversation coreConversationRepo
+	Message      coreMessageRepo
+}
+
+func mustBuildRepos(logger *slog.Logger) (*dbr.Connection, coreRepoWiring, func()) {
 	logger.Info("configuring storage backend", slog.String("backend", "postgres"))
 	dbConfig := database.ConfigFromEnv("CRAWBL_")
 	if err := database.EnsureSchema(dbConfig); err != nil {
@@ -445,9 +457,15 @@ func mustBuildRepos(logger *slog.Logger) (
 		// panic instead of log.Fatal so that deferred cleanup (telemetry flush) runs.
 		panic(err)
 	}
-	return db, userrepo.New(), workspacerepo.New(), agentrepo.New(), conversationrepo.New(), messagerepo.New(), func() {
-		_ = db.Close()
-	}
+	return db, coreRepoWiring{
+			User:         userrepo.New(),
+			Workspace:    workspacerepo.New(),
+			Agent:        agentrepo.New(),
+			Conversation: conversationrepo.New(),
+			Message:      messagerepo.New(),
+		}, func() {
+			_ = db.Close()
+		}
 }
 
 func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
@@ -551,18 +569,18 @@ func buildMCPHandler(
 	ctx context.Context,
 	logger *slog.Logger,
 	db *dbr.Connection,
-	workspaceRepo orchestratorrepo.WorkspaceRepo,
-	agentRepo orchestratorrepo.AgentRepo,
-	conversationRepo orchestratorrepo.ConversationRepo,
-	messageRepo orchestratorrepo.MessageRepo,
-	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
+	workspaceRepo coreWorkspaceRepo,
+	agentRepo coreAgentRepo,
+	conversationRepo coreConversationRepo,
+	messageRepo coreMessageRepo,
+	agentHistoryRepo mcpAgentHistoryCreator,
 	artifactRepo artifactrepo.Repo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
-	drawerRepo memrepo.DrawerRepo,
-	kgRepo memrepo.KGRepo,
-	palaceGraphRepo memrepo.PalaceGraphRepo,
-	identityRepo memrepo.IdentityRepo,
+	drawerRepo mcpDrawerRepoRaw,
+	kgRepo mcpKGRepoRaw,
+	palaceGraphRepo mcpPalaceGraphRepoRaw,
+	identityRepo mcpIdentityRepoRaw,
 	classifier extract.Classifier,
 	embedder embed.Embedder,
 	memoryStack layers.Stack,
@@ -659,7 +677,7 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // db, workspaceRepo, and authService are forwarded to the Socket.IO server so
 // it can verify workspace ownership before joining rooms on workspace.subscribe
 // events. authService resolves the Firebase subject to an internal user.ID.
-func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo orchestratorrepo.WorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, func() {}

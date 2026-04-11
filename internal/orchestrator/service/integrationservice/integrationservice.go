@@ -7,7 +7,6 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/integration"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
@@ -15,7 +14,7 @@ import (
 
 // New creates a new IntegrationService, returning an error if any required
 // dependency is nil.
-func New(logger *slog.Logger, connRepo orchestratorrepo.IntegrationConnRepo) (orchestratorservice.IntegrationService, error) {
+func New(logger *slog.Logger, connRepo integrationConnStore) (orchestratorservice.IntegrationService, error) {
 	if logger == nil {
 		return nil, errors.New("integrationservice: logger is required")
 	}
@@ -28,7 +27,7 @@ func New(logger *slog.Logger, connRepo orchestratorrepo.IntegrationConnRepo) (or
 
 // MustNew wraps New and panics on dependency-validation errors. Intended for
 // use from main/init paths where misconfiguration is unrecoverable.
-func MustNew(logger *slog.Logger, connRepo orchestratorrepo.IntegrationConnRepo) orchestratorservice.IntegrationService {
+func MustNew(logger *slog.Logger, connRepo integrationConnStore) orchestratorservice.IntegrationService {
 	svc, err := New(logger, connRepo)
 	if err != nil {
 		panic(err)

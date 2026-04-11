@@ -35,7 +35,7 @@ import (
 //   - legalDocuments: Configuration for legal document URLs and versions. May be nil for defaults.
 //
 // Returns an AuthService implementation ready for use.
-func New(userRepo orchestratorrepo.UserRepo, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) orchestratorservice.AuthService {
+func New(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) orchestratorservice.AuthService {
 	if userRepo == nil {
 		panic("auth service user repo cannot be nil")
 	}
