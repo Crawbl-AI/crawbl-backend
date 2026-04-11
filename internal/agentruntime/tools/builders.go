@@ -138,17 +138,15 @@ func lookupToolDescription(name string) (string, bool) {
 	return desc, ok
 }
 
-// toolCtxOrBackground extracts a context.Context from an ADK
-// tool.Context. The vendored ADK tool.Context interface does not
-// expose the underlying invocation context via a public accessor, so
-// every tool currently runs on context.Background. Tool handlers
-// apply their own timeouts (HTTP client, SQL query timeouts) so
-// losing per-turn cancellation here is a bounded liability.
+// toolCtxOrBackground returns context.Background() because the vendored
+// ADK tool.Context interface does not expose the underlying invocation
+// context via a public accessor.
+//
+// TODO(https://github.com/google/adk-go/issues/track): thread per-turn
+// ctx once the ADK exposes it on tool.Context. Currently every tool runs
+// on background ctx, which means user disconnect does not cancel in-flight
+// HTTP calls made from within tools.
 func toolCtxOrBackground(tctx adktool.Context) context.Context {
-	// TODO(agentruntime): thread per-turn ctx once the ADK exposes it
-	// on tool.Context. Until then every tool runs on background ctx,
-	// which means user disconnection does not cancel in-flight HTTP
-	// calls — tool-level timeouts are the only safety net.
 	_ = tctx
 	return context.Background()
 }

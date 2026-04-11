@@ -17,6 +17,21 @@ import (
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 )
 
+// validateSendOpts enforces the common preconditions for SendText and
+// SendTextStream. Returns a typed error that callers can return directly.
+func validateSendOpts(opts *SendTextOpts) *merrors.Error {
+	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
+		return merrors.ErrInvalidInput
+	}
+	if !opts.Runtime.Verified || strings.TrimSpace(opts.Runtime.ServiceName) == "" || strings.TrimSpace(opts.Runtime.RuntimeNamespace) == "" {
+		return merrors.ErrRuntimeNotReady
+	}
+	if strings.TrimSpace(opts.Runtime.UserID) == "" || strings.TrimSpace(opts.Runtime.WorkspaceID) == "" {
+		return merrors.NewServerErrorText("runtime missing identity (EnsureRuntime must stamp UserID + WorkspaceID)")
+	}
+	return nil
+}
+
 // dialRuntime dials the runtime pod via the cached gRPC pool and stamps
 // the caller's identity onto the context for HMAC signing. Returns the
 // connection, the authenticated context, and an error if dialing fails.
@@ -48,14 +63,8 @@ func (c *userSwarmClient) dialRuntime(ctx context.Context, rt *orchestrator.Runt
 // request ctx via crawblgrpc.WithAuthIdentity before opening the stream.
 // Every RPC on the stream automatically attaches the signed bearer.
 func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]AgentTurn, *merrors.Error) {
-	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
-		return nil, merrors.ErrInvalidInput
-	}
-	if !opts.Runtime.Verified || strings.TrimSpace(opts.Runtime.ServiceName) == "" || strings.TrimSpace(opts.Runtime.RuntimeNamespace) == "" {
-		return nil, merrors.ErrRuntimeNotReady
-	}
-	if strings.TrimSpace(opts.Runtime.UserID) == "" || strings.TrimSpace(opts.Runtime.WorkspaceID) == "" {
-		return nil, merrors.NewServerErrorText("runtime missing identity (EnsureRuntime must stamp UserID + WorkspaceID)")
+	if err := validateSendOpts(opts); err != nil {
+		return nil, err
 	}
 
 	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
@@ -120,14 +129,8 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 // translated StreamChunk events. The channel closes when the runtime
 // sends its DoneEvent, the context is canceled, or the stream fails.
 func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts) (<-chan StreamChunk, *merrors.Error) {
-	if opts == nil || opts.Runtime == nil || strings.TrimSpace(opts.Message) == "" {
-		return nil, merrors.ErrInvalidInput
-	}
-	if !opts.Runtime.Verified || strings.TrimSpace(opts.Runtime.ServiceName) == "" || strings.TrimSpace(opts.Runtime.RuntimeNamespace) == "" {
-		return nil, merrors.ErrRuntimeNotReady
-	}
-	if strings.TrimSpace(opts.Runtime.UserID) == "" || strings.TrimSpace(opts.Runtime.WorkspaceID) == "" {
-		return nil, merrors.NewServerErrorText("runtime missing identity (EnsureRuntime must stamp UserID + WorkspaceID)")
+	if err := validateSendOpts(opts); err != nil {
+		return nil, err
 	}
 
 	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
@@ -170,6 +173,18 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 
 	const streamChunkBufSize = 16
 	ch := make(chan StreamChunk, streamChunkBufSize)
+	// The receive goroutine exits via two paths:
+	//  1. recvErr != nil — upstream stream error, EOF, or the server closed
+	//     the stream gracefully. `defer close(ch)` closes the channel and the
+	//     caller's range loop terminates naturally.
+	//  2. ctx.Done() — the caller's context was cancelled. The outer select
+	//     exits the goroutine and `defer close(ch)` signals the caller.
+	//
+	// Both exit paths are guarded: every `ch <- chunk` send is wrapped in a
+	// select that also listens on ctx.Done(), so the goroutine cannot block
+	// forever if the caller drops the channel without draining it. A dropped
+	// channel will eventually expire via context cancellation or server-side
+	// stream deadline.
 	go func() {
 		defer close(ch)
 		var chunkCount int

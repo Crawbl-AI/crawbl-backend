@@ -241,5 +241,5 @@ func resolveRuntimeImage(sw *crawblv1alpha1.UserSwarm, cfg *runtimeConfig) strin
 	if sw.Spec.Runtime.Image != "" {
 		return sw.Spec.Runtime.Image
 	}
-	return "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"
+	return defaultAgentRuntimeImage
 }

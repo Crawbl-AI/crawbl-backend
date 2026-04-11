@@ -17,6 +17,11 @@ const (
 	// runtimeAppName is the app.kubernetes.io/name label applied to every
 	// child resource. Used by the selector on Service and Deployment.
 	runtimeAppName = "crawbl-agent-runtime"
+
+	// defaultAgentRuntimeImage is the fallback image used when the webhook
+	// cannot derive the agent-runtime image from the userswarm spec. Points
+	// at the dev tag so local clusters work without extra configuration.
+	defaultAgentRuntimeImage = "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"
 )
 
 // workspaceIDFromSwarmName strips the "workspace-" prefix off a CR name to

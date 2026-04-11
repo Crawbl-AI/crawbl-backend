@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
+	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
@@ -10,11 +12,14 @@ import (
 // Redis defaults live in internal/pkg/database and internal/pkg/redisclient
 // respectively and are composed in via DefaultConfig() below — the
 // agent runtime does not duplicate them.
-const (
-	// DefaultGRPCListen is the port the runtime serves gRPC on inside
-	// the workspace pod.
-	DefaultGRPCListen = ":42618"
 
+// DefaultGRPCListen is the port the runtime serves gRPC on inside the
+// workspace pod. Derived from crawblv1alpha1.DefaultGatewayPort so there
+// is a single source of truth for the port number across the operator,
+// the runtime, and any tooling that probes the pod.
+var DefaultGRPCListen = fmt.Sprintf(":%d", crawblv1alpha1.DefaultGatewayPort)
+
+const (
 	// DefaultOpenAIModel is the OpenAI model identifier. Matches the
 	// orchestrator's default so a workspace that does not override its
 	// model setting resolves to the same model on both sides of the
