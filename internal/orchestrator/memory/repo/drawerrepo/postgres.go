@@ -225,14 +225,21 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	// both bugs by running the query through the underlying
 	// database/sql driver directly — lib/pq knows how to pass pgvector
 	// values and the $N placeholder reuse is native Postgres.
+	//
+	// The explicit `::vector` casts on each $1 usage are required
+	// because pgvector.Vector.Value() emits a text-shaped literal that
+	// Postgres types as "unknown" when reused in multiple operator
+	// sites. Without the cast, Postgres raises
+	// "operator does not exist: vector <=> unknown" on the first
+	// operator site.
 	const query = `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 	                      source_file, added_by, filed_at, created_at,
 	                      state, summary, added_by_agent,
-	                      1 - (embedding <=> $1) AS similarity
+	                      1 - (embedding <=> $1::vector) AS similarity
 	               FROM memory_drawers
 	               WHERE workspace_id = $2 AND embedding IS NOT NULL
-	                 AND 1 - (embedding <=> $1) >= $3
-	               ORDER BY embedding <=> $1
+	                 AND 1 - (embedding <=> $1::vector) >= $3
+	               ORDER BY embedding <=> $1::vector
 	               LIMIT $4`
 
 	db, ok := sess.(*dbr.Session)
