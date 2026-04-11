@@ -69,10 +69,12 @@ func (tc *testContext) userShouldHaveOneWorkspaceInDatabase(alias string) error 
 // --- Profile ---------------------------------------------------------
 
 func (tc *testContext) userOpensProfile(alias string) error {
-	if _, err := tc.doRequest("GET", "/v1/users/profile", alias, nil); err != nil {
-		return err
-	}
-	return tc.assertStatus(http.StatusOK)
+	// Does not assert status — callers use an explicit
+	// `Then the response status should be ...` step so this helper
+	// can serve both success and failure paths (e.g. verifying a
+	// deleted account is rejected with 403).
+	_, err := tc.doRequest("GET", "/v1/users/profile", alias, nil)
+	return err
 }
 
 func (tc *testContext) userShouldSeeDefaultProfileDetails(alias string) error {

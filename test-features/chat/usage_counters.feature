@@ -6,14 +6,14 @@ Feature: Agent token usage tracking
   Background:
     Given user "primary" has signed up
     And user "primary" opens their default workspace
-    And user "primary" waits until their assistant is ready
 
   Scenario: A fresh user starts with zero recorded token usage
     Then the assistant's recorded usage should be zero for agent "manager"
 
   @llm-flaky
   Scenario: Sending a message increments the agent's token counter
-    Given the assistant's usage counter for agent "manager" should be captured as the baseline
+    Given user "primary" waits until their assistant is ready
+    And the assistant's usage counter for agent "manager" should be captured as the baseline
     When user "primary" opens the swarm conversation
     And user "primary" sends the message "Reply with exactly the word 'token'." in the current conversation
     Then the assistant reply should succeed
@@ -22,7 +22,8 @@ Feature: Agent token usage tracking
 
   @llm-flaky
   Scenario: The workspace usage summary reflects recent activity
-    Given user "primary" opens the swarm conversation
+    Given user "primary" waits until their assistant is ready
+    And user "primary" opens the swarm conversation
     And user "primary" sends the message "Reply with exactly the word 'usage'." in the current conversation
     And the assistant reply should succeed
     Then the workspace usage summary should show recent activity
