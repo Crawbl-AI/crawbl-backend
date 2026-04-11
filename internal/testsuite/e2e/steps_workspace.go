@@ -70,10 +70,20 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 		snapshot := runtimeSnapshotFromBody(tc.lastBody)
 		if snapshot.ready() {
 			if err := tc.sendWarmupMessage(alias); err != nil {
-				return err
+				// Cold-start can exceed the per-request HTTP client
+				// timeout; treat any transport-level error as "retry
+				// and keep polling the runtime" rather than a hard
+				// failure. The outer deadline still bounds the loop.
+				time.Sleep(tc.runtimePollInterval())
+				continue
 			}
 			switch tc.lastStatus {
-			case statusOK:
+			case statusOK, statusCreated:
+				// 201 Created is the current contract for POST
+				// /v1/workspaces/{id}/conversations/{id}/messages —
+				// the handler persists the user message and returns
+				// immediately, leaving the assistant reply to stream
+				// over Socket.IO.
 				return nil
 			case 0, 500, statusServiceUnavailable:
 				// Runtime reports ready but still warming up internally.

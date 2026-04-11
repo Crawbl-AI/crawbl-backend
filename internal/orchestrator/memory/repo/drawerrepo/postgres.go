@@ -217,18 +217,23 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	}
 
 	vec := pgvector.NewVector(embedding)
+	// NOTE: dbr.SelectBySql counts placeholders by textual occurrence
+	// rather than by $N, so reusing $1 three times (similarity select,
+	// threshold filter, ORDER BY) trips "wrong placeholder count".
+	// Pass the vector three times with distinct numbers — Postgres
+	// handles the repetition natively and dbr's count now matches.
 	query := `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 	                 source_file, added_by, filed_at, created_at,
 	                 state, summary, added_by_agent,
 	                 1 - (embedding <=> $1) AS similarity
 	          FROM memory_drawers
 	          WHERE workspace_id = $2 AND embedding IS NOT NULL
-	            AND 1 - (embedding <=> $1) >= $3
-	          ORDER BY embedding <=> $1
-	          LIMIT $4`
+	            AND 1 - (embedding <=> $3) >= $4
+	          ORDER BY embedding <=> $5
+	          LIMIT $6`
 
 	var results []memory.DrawerSearchResult
-	_, err := sess.SelectBySql(query, vec, workspaceID, threshold, limit).LoadContext(ctx, &results)
+	_, err := sess.SelectBySql(query, vec, workspaceID, vec, threshold, vec, limit).LoadContext(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: check duplicate: %w", err)
 	}

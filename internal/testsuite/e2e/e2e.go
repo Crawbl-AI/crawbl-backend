@@ -75,6 +75,18 @@ type Config struct {
 	// test-features/ (e.g. "chat", "tools", "auth"). When empty,
 	// all subfolders are included.
 	Category string
+
+	// Tags is a godog tag filter expression passed straight through to
+	// godog.Options.Tags. Use it to skip flaky scenarios during gating
+	// runs (e.g. "~@llm-flaky") or to include only specific tags
+	// ("@smoke"). When empty, every scenario runs regardless of tags.
+	//
+	// Syntax is the standard Cucumber tag expression grammar:
+	//   "@foo"              – only scenarios tagged @foo
+	//   "~@bar"             – exclude scenarios tagged @bar
+	//   "@foo && ~@bar"     – tagged @foo AND not @bar
+	//   "@foo || @baz"      – tagged @foo OR @baz
+	Tags string
 }
 
 // Results holds the aggregate outcome of a test run.
@@ -128,6 +140,7 @@ func Run(cfg *Config) *Results {
 		Output:    colors.Colored(os.Stdout),
 		Strict:    true,
 		Randomize: 0,
+		Tags:      cfg.Tags,
 	}
 
 	if !cfg.Verbose {

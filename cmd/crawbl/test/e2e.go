@@ -126,6 +126,7 @@ func newE2ECommand() *cobra.Command {
 		runtimePollInterval time.Duration
 		databaseDSN         string
 		category            string
+		tags                string
 		portForwardFlag     bool
 	)
 
@@ -196,6 +197,7 @@ runs only test-features/chat/).`,
 				RuntimePollInterval: runtimePollInterval,
 				DatabaseDSN:         databaseDSN,
 				Category:            category,
+				Tags:                tags,
 
 				RedisAddr:       os.Getenv("CRAWBL_E2E_REDIS_ADDR"),
 				RedisPassword:   os.Getenv("CRAWBL_E2E_REDIS_PASSWORD"),
@@ -223,11 +225,12 @@ runs only test-features/chat/).`,
 	cmd.Flags().StringVar(&name, "name", "E2E Test User", "Display name for the test user")
 	cmd.Flags().StringVar(&e2eToken, "e2e-token", os.Getenv("CRAWBL_E2E_TOKEN"), "Shared secret for gateway auth bypass, or set CRAWBL_E2E_TOKEN")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print detailed test output")
-	cmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "HTTP request timeout (includes agent tool-call latency)")
+	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "HTTP request timeout (includes agent tool-call latency and runtime cold-start)")
 	cmd.Flags().DurationVar(&runtimeReadyTimeout, "runtime-ready-timeout", 3*time.Minute, "How long to wait for a workspace runtime to become ready before chat scenarios fail")
 	cmd.Flags().DurationVar(&runtimePollInterval, "runtime-poll-interval", 2*time.Second, "How often to poll workspace runtime readiness during chat scenarios")
 	cmd.Flags().StringVar(&databaseDSN, "database-dsn", os.Getenv("CRAWBL_E2E_DATABASE_DSN"), "Postgres DSN for database assertions")
 	cmd.Flags().StringVar(&category, "category", "", "Run only tests from a specific subfolder (e.g. chat, tools, auth, mcp)")
+	cmd.Flags().StringVar(&tags, "tags", "", "Godog tag filter expression (e.g. \"~@llm-flaky\" to skip flaky scenarios, \"@smoke\" to run only smoke tests)")
 	cmd.Flags().BoolVar(&portForwardFlag, "port-forward", false, "Auto-start kubectl port-forwards for orchestrator, postgres, and redis")
 
 	// Hidden aliases for common shortcuts.

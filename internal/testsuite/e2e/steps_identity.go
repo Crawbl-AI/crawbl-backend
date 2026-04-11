@@ -87,9 +87,13 @@ func (tc *testContext) identitySet(alias, content string) error {
 	if s == nil {
 		return nil
 	}
+	// dbr's InsertBySql counts "?" placeholder occurrences, not
+	// Postgres-style "$N" — the earlier version of this query used
+	// $1/$2 and got "wrong placeholder count" every run. Using "?"
+	// placeholders lets dbr drive the substitution normally.
 	_, execErr := s.InsertBySql(
 		`INSERT INTO memory_identities (workspace_id, content, updated_at)
-		 VALUES ($1, $2, NOW())
+		 VALUES (?, ?, NOW())
 		 ON CONFLICT (workspace_id) DO UPDATE
 		   SET content = EXCLUDED.content, updated_at = NOW()`,
 		wsID, content,
