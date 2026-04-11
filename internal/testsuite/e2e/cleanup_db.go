@@ -36,6 +36,58 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
+// hardDeleteUserBySubject purges a single e2e user plus every
+// workspace-scoped memory_* row for that user. Returns true when a
+// row was actually removed (i.e. the subject existed in the DB).
+//
+// Used by userHasSignedUp to recover from the post-refactor auth
+// contract where /v1/auth/sign-up refuses to resurrect a soft-deleted
+// account: when a prior scenario (e.g. auth/cleanup.feature) has
+// soft-deleted the shared test user, this helper wipes the row so
+// the next scenario's sign-up creates a fresh user with the same
+// subject instead of hitting USR0001.
+func (tc *testContext) hardDeleteUserBySubject(subject string) bool {
+	if tc.dbConn == nil || subject == "" {
+		return false
+	}
+	sess := tc.dbConn.NewSession(nil)
+	ctx := context.Background()
+
+	var workspaceIDs []string
+	if _, err := sess.Select("w.id").
+		From(dbr.I("workspaces").As("w")).
+		Join(dbr.I("users").As("u"), "u.id = w.user_id").
+		Where("u.subject = ?", subject).
+		LoadContext(ctx, &workspaceIDs); err != nil {
+		log.Printf("e2e hardDelete: collect workspace ids for %q: %v", subject, err)
+		return false
+	}
+	if len(workspaceIDs) > 0 {
+		for _, table := range memoryWorkspaceTables {
+			if _, err := sess.DeleteFrom(table).
+				Where("workspace_id IN ?", workspaceIDs).
+				ExecContext(ctx); err != nil {
+				log.Printf("e2e hardDelete: wipe %s for %q: %v", table, subject, err)
+			}
+		}
+		if _, err := sess.DeleteFrom("mcp_audit_logs").
+			Where("workspace_id IN ?", workspaceIDs).
+			ExecContext(ctx); err != nil {
+			log.Printf("e2e hardDelete: wipe mcp_audit_logs for %q: %v", subject, err)
+		}
+	}
+
+	res, err := sess.DeleteFrom("users").
+		Where("subject = ?", subject).
+		ExecContext(ctx)
+	if err != nil {
+		log.Printf("e2e hardDelete: delete user %q: %v", subject, err)
+		return false
+	}
+	n, _ := res.RowsAffected()
+	return n > 0
+}
+
 // e2eSubjectPattern is the LIKE pattern every test user's subject
 // matches. It is set once in Run() from the suite's fixed
 // `e2e-<alias>-<unix-ns>` subject format.

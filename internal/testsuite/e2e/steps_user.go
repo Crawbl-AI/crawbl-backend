@@ -5,6 +5,8 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/cucumber/godog"
 )
@@ -46,10 +48,22 @@ func (tc *testContext) userHasSignedUp(alias string) error {
 	}
 	// Invalidate any cached resolution so resolveUser re-reads the new row.
 	tc.invalidateResolvedUser(alias)
-	// Sign-up is idempotent — safe to call multiple times.
-	_, err := tc.doRequest("POST", "/v1/auth/sign-up", alias, nil)
-	if err != nil {
+	// Sign-up is idempotent for fresh/existing users — safe to call
+	// multiple times.
+	if _, err := tc.doRequest("POST", "/v1/auth/sign-up", alias, nil); err != nil {
 		return err
+	}
+	// The auth service refuses to resurrect a soft-deleted user: if a
+	// prior scenario (e.g. auth/cleanup.feature) deleted this test
+	// user, sign-up responds 403 USR0001. Hard-purge the stale row
+	// and retry so subsequent scenarios start from a clean state.
+	if tc.lastStatus == http.StatusForbidden && strings.Contains(string(tc.lastBody), "USR0001") {
+		if tc.hardDeleteUserBySubject(user.subject) {
+			tc.invalidateResolvedUser(alias)
+			if _, err := tc.doRequest("POST", "/v1/auth/sign-up", alias, nil); err != nil {
+				return err
+			}
+		}
 	}
 	user.signedUp = true
 	return nil
