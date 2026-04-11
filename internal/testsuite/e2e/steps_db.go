@@ -249,94 +249,82 @@ func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
 // N notes for subject X" in the Gherkin feature files; the drawer is
 // written by the memory_add_drawer tool during agent turns.
 func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		count, err := tc.queryCount(`
-			SELECT COUNT(*) FROM memory_drawers
-			JOIN workspaces ON workspaces.id = memory_drawers.workspace_id
-			JOIN users ON users.id = workspaces.user_id
-			WHERE users.subject = $1`, subject)
-		if err != nil {
-			return err
-		}
-		if count < expected {
-			return fmt.Errorf("expected at least %d memory drawer(s) for %q, got %d", expected, alias, count)
-		}
-		return nil
+	return tc.withDB(func(_ *dbr.Session) error {
+		subject := tc.resolveSubject(alias)
+		return tc.pollDefault(func() error {
+			count, err := tc.queryCount(`
+				SELECT COUNT(*) FROM memory_drawers
+				JOIN workspaces ON workspaces.id = memory_drawers.workspace_id
+				JOIN users ON users.id = workspaces.user_id
+				WHERE users.subject = $1`, subject)
+			if err != nil {
+				return err
+			}
+			if count < expected {
+				return fmt.Errorf("expected at least %d memory drawer(s) for %q, got %d", expected, alias, count)
+			}
+			return nil
+		})
 	})
 }
 
 func (tc *testContext) dbMCPAuditLogForSubject(toolName, alias string) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		count, err := tc.queryCount(`
-			SELECT COUNT(*) FROM mcp_audit_logs
-			JOIN users ON users.id::text = mcp_audit_logs.user_id
-			WHERE users.subject = $1 AND mcp_audit_logs.tool_name = $2`, subject, toolName)
-		if err != nil {
-			return err
-		}
-		if count == 0 {
-			return fmt.Errorf("no mcp_audit_logs row for tool %q and subject %q", toolName, alias)
-		}
-		return nil
+	return tc.withDB(func(_ *dbr.Session) error {
+		subject := tc.resolveSubject(alias)
+		return tc.pollDefault(func() error {
+			count, err := tc.queryCount(`
+				SELECT COUNT(*) FROM mcp_audit_logs
+				JOIN users ON users.id::text = mcp_audit_logs.user_id
+				WHERE users.subject = $1 AND mcp_audit_logs.tool_name = $2`, subject, toolName)
+			if err != nil {
+				return err
+			}
+			if count == 0 {
+				return fmt.Errorf("no mcp_audit_logs row for tool %q and subject %q", toolName, alias)
+			}
+			return nil
+		})
 	})
 }
 
 func (tc *testContext) dbAgentDelegationCountForSubject(expected int, alias string) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		count, err := tc.queryCount(`
-			SELECT COUNT(*) FROM agent_delegations
-			JOIN conversations ON conversations.id = agent_delegations.conversation_id
-			JOIN workspaces ON workspaces.id = conversations.workspace_id
-			JOIN users ON users.id = workspaces.user_id
-			WHERE users.subject = $1`, subject)
-		if err != nil {
-			return err
-		}
-		if count < expected {
-			return fmt.Errorf("expected at least %d delegation(s) for %q, got %d", expected, alias, count)
-		}
-		return nil
+	return tc.withDB(func(_ *dbr.Session) error {
+		subject := tc.resolveSubject(alias)
+		return tc.pollDefault(func() error {
+			count, err := tc.queryCount(`
+				SELECT COUNT(*) FROM agent_delegations
+				JOIN conversations ON conversations.id = agent_delegations.conversation_id
+				JOIN workspaces ON workspaces.id = conversations.workspace_id
+				JOIN users ON users.id = workspaces.user_id
+				WHERE users.subject = $1`, subject)
+			if err != nil {
+				return err
+			}
+			if count < expected {
+				return fmt.Errorf("expected at least %d delegation(s) for %q, got %d", expected, alias, count)
+			}
+			return nil
+		})
 	})
 }
 
 func (tc *testContext) dbAgentMessageCountForSubject(expected int, alias string) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	subject := tc.resolveSubject(alias)
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		count, err := tc.queryCount(`
-			SELECT COUNT(*) FROM agent_messages
-			JOIN conversations ON conversations.id = agent_messages.conversation_id
-			JOIN workspaces ON workspaces.id = conversations.workspace_id
-			JOIN users ON users.id = workspaces.user_id
-			WHERE users.subject = $1`, subject)
-		if err != nil {
-			return err
-		}
-		if count < expected {
-			return fmt.Errorf("expected at least %d agent-to-agent message(s) for %q, got %d", expected, alias, count)
-		}
-		return nil
+	return tc.withDB(func(_ *dbr.Session) error {
+		subject := tc.resolveSubject(alias)
+		return tc.pollDefault(func() error {
+			count, err := tc.queryCount(`
+				SELECT COUNT(*) FROM agent_messages
+				JOIN conversations ON conversations.id = agent_messages.conversation_id
+				JOIN workspaces ON workspaces.id = conversations.workspace_id
+				JOIN users ON users.id = workspaces.user_id
+				WHERE users.subject = $1`, subject)
+			if err != nil {
+				return err
+			}
+			if count < expected {
+				return fmt.Errorf("expected at least %d agent-to-agent message(s) for %q, got %d", expected, alias, count)
+			}
+			return nil
+		})
 	})
 }

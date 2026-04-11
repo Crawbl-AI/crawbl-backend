@@ -9,6 +9,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
+
+	"github.com/gocraft/dbr/v2"
 )
 
 // resolvedUser is the cached result of a single subject lookup.
@@ -79,4 +82,32 @@ func (tc *testContext) invalidateResolvedUser(alias string) {
 		return
 	}
 	delete(tc.resolved, alias)
+}
+
+// withDB invokes fn with a fresh dbr session if the suite is
+// configured with a --database-dsn, otherwise returns nil so steps
+// without DB access still pass. This replaces the "if tc.dbConn
+// == nil return nil" boilerplate at the top of assertion steps.
+func (tc *testContext) withDB(fn func(s *dbr.Session) error) error {
+	if tc == nil || tc.dbConn == nil {
+		return nil
+	}
+	return fn(tc.dbConn.NewSession(nil))
+}
+
+// pollFor runs fn on a fixed interval until it returns nil or the
+// given timeout expires. This replaces the 3-line
+// context.WithTimeout(context.Background(), ...) + pollUntil
+// boilerplate that was repeated in every polling assertion step.
+func (tc *testContext) pollFor(timeout time.Duration, fn func() error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return pollUntil(ctx, fn)
+}
+
+// pollDefault is sugar for pollFor(asyncAssertTimeout, fn). Use it
+// when the step has no reason to override the default 30-second
+// window.
+func (tc *testContext) pollDefault(fn func() error) error {
+	return tc.pollFor(asyncAssertTimeout, fn)
 }

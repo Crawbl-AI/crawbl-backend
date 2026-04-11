@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/gocraft/dbr/v2"
 	"github.com/tidwall/gjson"
 )
 
@@ -77,34 +78,32 @@ func (tc *testContext) usageTokensForAgent(alias, slug string) (int64, error) {
 // usageAssertZeroForAgent checks that the given agent has no recorded token
 // usage for a freshly signed-up user. Passes silently when no DB is available.
 func (tc *testContext) usageAssertZeroForAgent(slug string) error {
-	if tc.dbConn == nil {
+	return tc.withDB(func(_ *dbr.Session) error {
+		got, err := tc.usageTokensForAgent("primary", slug)
+		if err != nil {
+			return fmt.Errorf("reading usage for agent %q: %w", slug, err)
+		}
+		if got != 0 {
+			return fmt.Errorf("expected zero recorded tokens for agent %q on a fresh user, got %d", slug, got)
+		}
 		return nil
-	}
-	got, err := tc.usageTokensForAgent("primary", slug)
-	if err != nil {
-		return fmt.Errorf("reading usage for agent %q: %w", slug, err)
-	}
-	if got != 0 {
-		return fmt.Errorf("expected zero recorded tokens for agent %q on a fresh user, got %d", slug, got)
-	}
-	return nil
+	})
 }
 
 // usageCaptureBaselineForAgent reads the current tokens_used for the agent
 // and stores it so usageAssertIncreasedFromBaseline can compare later.
 func (tc *testContext) usageCaptureBaselineForAgent(slug string) error {
-	if tc.dbConn == nil {
+	return tc.withDB(func(_ *dbr.Session) error {
+		baseline, err := tc.usageTokensForAgent("primary", slug)
+		if err != nil {
+			return fmt.Errorf("capturing baseline for agent %q: %w", slug, err)
+		}
+		if tc.saved == nil {
+			tc.saved = make(map[string]string)
+		}
+		tc.saved[usageBaselineKey("primary", slug)] = fmt.Sprintf("%d", baseline)
 		return nil
-	}
-	baseline, err := tc.usageTokensForAgent("primary", slug)
-	if err != nil {
-		return fmt.Errorf("capturing baseline for agent %q: %w", slug, err)
-	}
-	if tc.saved == nil {
-		tc.saved = make(map[string]string)
-	}
-	tc.saved[usageBaselineKey("primary", slug)] = fmt.Sprintf("%d", baseline)
-	return nil
+	})
 }
 
 // usageAssertIncreasedFromBaseline polls until the tokens_used for the
@@ -116,60 +115,55 @@ func (tc *testContext) usageCaptureBaselineForAgent(slug string) error {
 // pass as long as any captured baseline was exceeded — the polling covers all
 // agents whose baselines were captured in this scenario.
 func (tc *testContext) usageAssertIncreasedFromBaseline(seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-
-	// Collect all baselines captured in this scenario.
-	type baselineEntry struct {
-		alias    string
-		slug     string
-		baseline int64
-	}
-	var entries []baselineEntry
-
-	// We only capture baselines for "primary" + "manager" in the scenario
-	// but iterate over all saved keys to be forward-compatible.
-	for key, val := range tc.saved {
-		// Keys written by usageCaptureBaselineForAgent are "<alias>:<slug>".
-		// Skip any tc.saved entries that are not in this format.
-		alias, slug, ok := strings.Cut(key, ":")
-		if !ok || alias == "" || slug == "" {
-			continue
+	return tc.withDB(func(_ *dbr.Session) error {
+		// Collect all baselines captured in this scenario.
+		type baselineEntry struct {
+			alias    string
+			slug     string
+			baseline int64
 		}
-		var baseline int64
-		if _, err := fmt.Sscanf(val, "%d", &baseline); err != nil {
-			continue
-		}
-		entries = append(entries, baselineEntry{alias: alias, slug: slug, baseline: baseline})
-	}
+		var entries []baselineEntry
 
-	if len(entries) == 0 {
-		// No baseline was captured — treat as a configuration error so the
-		// scenario surfaces a meaningful failure rather than silently passing.
-		return fmt.Errorf("no usage baseline captured; call 'the assistant's usage counter for agent X should be captured as the baseline' before this step")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-
-	return pollUntil(ctx, func() error {
-		for _, e := range entries {
-			current, err := tc.usageTokensForAgent(e.alias, e.slug)
-			if err != nil {
-				return fmt.Errorf("polling usage for agent %q: %w", e.slug, err)
+		// We only capture baselines for "primary" + "manager" in the scenario
+		// but iterate over all saved keys to be forward-compatible.
+		for key, val := range tc.saved {
+			// Keys written by usageCaptureBaselineForAgent are "<alias>:<slug>".
+			// Skip any tc.saved entries that are not in this format.
+			alias, slug, ok := strings.Cut(key, ":")
+			if !ok || alias == "" || slug == "" {
+				continue
 			}
-			if current > e.baseline {
-				return nil
+			var baseline int64
+			if _, err := fmt.Sscanf(val, "%d", &baseline); err != nil {
+				continue
 			}
+			entries = append(entries, baselineEntry{alias: alias, slug: slug, baseline: baseline})
 		}
-		// Build a summary for the timeout error message.
-		var summary string
-		for _, e := range entries {
-			current, _ := tc.usageTokensForAgent(e.alias, e.slug)
-			summary += fmt.Sprintf(" agent=%q baseline=%d current=%d;", e.slug, e.baseline, current)
+
+		if len(entries) == 0 {
+			// No baseline was captured — treat as a configuration error so the
+			// scenario surfaces a meaningful failure rather than silently passing.
+			return fmt.Errorf("no usage baseline captured; call 'the assistant's usage counter for agent X should be captured as the baseline' before this step")
 		}
-		return fmt.Errorf("token count has not increased from baseline:%s", summary)
+
+		return tc.pollFor(time.Duration(seconds)*time.Second, func() error {
+			for _, e := range entries {
+				current, err := tc.usageTokensForAgent(e.alias, e.slug)
+				if err != nil {
+					return fmt.Errorf("polling usage for agent %q: %w", e.slug, err)
+				}
+				if current > e.baseline {
+					return nil
+				}
+			}
+			// Build a summary for the timeout error message.
+			var summary string
+			for _, e := range entries {
+				current, _ := tc.usageTokensForAgent(e.alias, e.slug)
+				summary += fmt.Sprintf(" agent=%q baseline=%d current=%d;", e.slug, e.baseline, current)
+			}
+			return fmt.Errorf("token count has not increased from baseline:%s", summary)
+		})
 	})
 }
 
@@ -183,10 +177,7 @@ func (tc *testContext) usageWorkspaceSummaryShowsActivity() error {
 	state := tc.userState("primary")
 
 	// Allow time for the async usage write to propagate before reading the summary.
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-
-	return pollUntil(ctx, func() error {
+	return tc.pollDefault(func() error {
 		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/usage", "primary", nil); err != nil {
 			return err
 		}

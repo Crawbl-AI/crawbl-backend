@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/gocraft/dbr/v2"
 )
 
 // registerRiverSteps binds all Gherkin phrases that assert background job state.
@@ -81,38 +82,35 @@ func (tc *testContext) riverUsageWriteCompleted(ctx context.Context, userID stri
 // riverUsageWriteWithin asserts that a usage_write job completed for the
 // "primary" user within the given number of seconds.
 func (tc *testContext) riverUsageWriteWithin(seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	r, err := tc.resolveUser("primary")
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-	return tc.riverUsageWriteCompleted(ctx, r.UserID)
+	return tc.withDB(func(_ *dbr.Session) error {
+		r, err := tc.resolveUser("primary")
+		if err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
+		defer cancel()
+		return tc.riverUsageWriteCompleted(ctx, r.UserID)
+	})
 }
 
 // riverMessageCleanupWithin asserts that at least one message_cleanup job
 // completed within the given number of seconds.
 func (tc *testContext) riverMessageCleanupWithin(seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-	return tc.riverJobCompleted(ctx, "message_cleanup")
+	return tc.withDB(func(_ *dbr.Session) error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
+		defer cancel()
+		return tc.riverJobCompleted(ctx, "message_cleanup")
+	})
 }
 
 // riverMemoryMaintainWithin asserts that at least one memory_maintain job
 // completed within the given number of seconds.
 func (tc *testContext) riverMemoryMaintainWithin(seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-	return tc.riverJobCompleted(ctx, "memory_maintain")
+	return tc.withDB(func(_ *dbr.Session) error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
+		defer cancel()
+		return tc.riverJobCompleted(ctx, "memory_maintain")
+	})
 }
 
 // isTableNotExistError reports whether err indicates that a queried relation

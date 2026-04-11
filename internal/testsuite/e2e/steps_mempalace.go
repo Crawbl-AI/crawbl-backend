@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/gocraft/dbr/v2"
 )
 
 // registerMempalaceSteps binds all Gherkin phrases that assert memory palace pipeline behaviour.
@@ -24,63 +25,53 @@ func registerMempalaceSteps(sc *godog.ScenarioContext, tc *testContext) {
 // mempalaceSavedNoteAppearsWithin polls memory_drawers until at least one row
 // exists for the primary user's default workspace, within the given seconds.
 func (tc *testContext) mempalaceSavedNoteAppearsWithin(seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	r, err := tc.resolveUser("primary")
-	if err != nil {
-		return err
-	}
-	if r.WorkspaceID == "" {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		count, err := tc.queryCount(
-			`SELECT COUNT(*) FROM memory_drawers WHERE workspace_id = $1`, r.WorkspaceID)
+	return tc.withDB(func(_ *dbr.Session) error {
+		r, err := tc.resolveUser("primary")
 		if err != nil {
 			return err
 		}
-		if count == 0 {
-			return fmt.Errorf("saved note has not yet appeared in the assistant's memory for %q", "primary")
+		if r.WorkspaceID == "" {
+			return nil
 		}
-		return nil
+		return tc.pollFor(time.Duration(seconds)*time.Second, func() error {
+			count, err := tc.queryCount(
+				`SELECT COUNT(*) FROM memory_drawers WHERE workspace_id = $1`, r.WorkspaceID)
+			if err != nil {
+				return err
+			}
+			if count == 0 {
+				return fmt.Errorf("saved note has not yet appeared in the assistant's memory for %q", "primary")
+			}
+			return nil
+		})
 	})
 }
 
 // mempalaceSavedNoteProcessedWithin polls until the most-recent memory_drawers
 // row for the primary user reaches state = 'processed', within the given seconds.
 func (tc *testContext) mempalaceSavedNoteProcessedWithin(seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	r, err := tc.resolveUser("primary")
-	if err != nil {
-		return err
-	}
-	if r.WorkspaceID == "" {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		s := tc.sess()
-		if s == nil {
+	return tc.withDB(func(s *dbr.Session) error {
+		r, err := tc.resolveUser("primary")
+		if err != nil {
+			return err
+		}
+		if r.WorkspaceID == "" {
 			return nil
 		}
-		var state sql.NullString
-		row := s.QueryRowContext(context.Background(), `
-			SELECT state FROM memory_drawers
-			WHERE workspace_id = $1
-			ORDER BY created_at DESC LIMIT 1`, r.WorkspaceID)
-		if err := row.Scan(&state); err != nil {
-			return fmt.Errorf("querying note state: %w", err)
-		}
-		if !state.Valid || state.String != "processed" {
-			return fmt.Errorf("saved note not yet marked as processed for %q (current state: %v)", "primary", state)
-		}
-		return nil
+		return tc.pollFor(time.Duration(seconds)*time.Second, func() error {
+			var state sql.NullString
+			row := s.QueryRowContext(context.Background(), `
+				SELECT state FROM memory_drawers
+				WHERE workspace_id = $1
+				ORDER BY created_at DESC LIMIT 1`, r.WorkspaceID)
+			if err := row.Scan(&state); err != nil {
+				return fmt.Errorf("querying note state: %w", err)
+			}
+			if !state.Valid || state.String != "processed" {
+				return fmt.Errorf("saved note not yet marked as processed for %q (current state: %v)", "primary", state)
+			}
+			return nil
+		})
 	})
 }
 
@@ -88,35 +79,28 @@ func (tc *testContext) mempalaceSavedNoteProcessedWithin(seconds int) error {
 // primary user has been classified (memory_type is non-empty), confirming the
 // assistant has recognised the subject of the note within the given seconds.
 func (tc *testContext) mempalaceNoteRecognized(subject string, seconds int) error {
-	if tc.dbConn == nil {
-		return nil
-	}
-	r, err := tc.resolveUser("primary")
-	if err != nil {
-		return err
-	}
-	if r.WorkspaceID == "" {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
-	defer cancel()
-	return pollUntil(ctx, func() error {
-		s := tc.sess()
-		if s == nil {
+	return tc.withDB(func(s *dbr.Session) error {
+		r, err := tc.resolveUser("primary")
+		if err != nil {
+			return err
+		}
+		if r.WorkspaceID == "" {
 			return nil
 		}
-		var memType sql.NullString
-		row := s.QueryRowContext(context.Background(), `
-			SELECT memory_type FROM memory_drawers
-			WHERE workspace_id = $1
-			ORDER BY created_at DESC LIMIT 1`, r.WorkspaceID)
-		if err := row.Scan(&memType); err != nil {
-			return fmt.Errorf("querying note classification for subject %q: %w", subject, err)
-		}
-		if !memType.Valid || memType.String == "" {
-			return fmt.Errorf("assistant has not yet recognised the note about %q (memory_type still empty)", subject)
-		}
-		return nil
+		return tc.pollFor(time.Duration(seconds)*time.Second, func() error {
+			var memType sql.NullString
+			row := s.QueryRowContext(context.Background(), `
+				SELECT memory_type FROM memory_drawers
+				WHERE workspace_id = $1
+				ORDER BY created_at DESC LIMIT 1`, r.WorkspaceID)
+			if err := row.Scan(&memType); err != nil {
+				return fmt.Errorf("querying note classification for subject %q: %w", subject, err)
+			}
+			if !memType.Valid || memType.String == "" {
+				return fmt.Errorf("assistant has not yet recognised the note about %q (memory_type still empty)", subject)
+			}
+			return nil
+		})
 	})
 }
 

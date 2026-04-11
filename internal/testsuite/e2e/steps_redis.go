@@ -36,15 +36,13 @@ func (tc *testContext) assistantSessionShouldExist() error {
 		return fmt.Errorf("primary user workspace not initialized")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-
-	return pollUntil(ctx, func() error {
+	return tc.pollDefault(func() error {
 		// The session service keys are prefixed with crawbl:session:
 		// followed by app:user:sessionID. We look for any key matching
 		// the workspace-scoped pattern.
 		pattern := "crawbl:session:*"
 		var cursor uint64
+		ctx := context.Background()
 		keys, _, err := tc.redisClient.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
 			return fmt.Errorf("redis SCAN failed: %w", err)
@@ -63,12 +61,10 @@ func (tc *testContext) assistantSessionShouldHaveTTL() error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-
-	return pollUntil(ctx, func() error {
+	return tc.pollDefault(func() error {
 		pattern := "crawbl:session:*"
 		var cursor uint64
+		ctx := context.Background()
 		keys, _, err := tc.redisClient.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
 			return fmt.Errorf("redis SCAN failed: %w", err)
