@@ -358,8 +358,15 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		MemoryType:   string(memory.MemoryTypePreference),
 		AddedBy:      memory.DefaultAddedBy,
 		PipelineTier: memory.PipelineTierLLM,
-		FiledAt:      now,
-		CreatedAt:    now,
+		// State must be 'raw' so the cold-pipeline memory_process
+		// worker picks this drawer up via the state='raw' index.
+		// Without this, the drawer lands with an empty state and is
+		// invisible to every downstream pipeline step (memory_process,
+		// memory_enrich, etc.), so the mobile API "save a note" path
+		// silently drops notes out of the palace workflow.
+		State:     string(memory.DrawerStateRaw),
+		FiledAt:   now,
+		CreatedAt: now,
 	}
 	if err := s.drawerRepo.Add(ctx, opts.Sess, drawer, nil); err != nil {
 		return merrors.WrapStdServerError(err, "create drawer memory")
