@@ -9,11 +9,13 @@ Feature: Everyday messaging
     And user "primary" opens the swarm conversation
     And user "primary" waits until their assistant is ready
 
+  @llm-flaky
   Scenario: A user can send a message once the assistant is ready
-    When user "primary" sends the message "Hello. Please introduce yourself in one sentence." in the current conversation
+    When user "primary" sends the message "Reply with exactly the word 'ready' and nothing else." in the current conversation
     Then the assistant reply should succeed
     And the assistant reply should contain text
     And the assistant reply should come from an agent
+    And the assistant reply should mention "ready"
 
   Scenario: The conversation exposes pagination metadata
     When user "primary" opens the messages in the current conversation

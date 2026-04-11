@@ -19,6 +19,8 @@ Feature: Mobile first-launch journey
     And user "primary" sends the message "Say hello in one short sentence." in the current conversation
     Then the assistant reply should succeed
     And the assistant reply should contain text
+    And the assistant reply should mention "hello"
+    And the assistant reply should come from an agent
 
   Scenario: A returning user can get back to their workspace quickly
     Given user "primary" has signed up

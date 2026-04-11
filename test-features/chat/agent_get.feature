@@ -8,9 +8,15 @@ Feature: Individual agent access
     And user "primary" opens their default workspace
     And user "primary" opens the agents in their default workspace
 
-  Scenario: A user can retrieve a single agent
+  Scenario: A user can retrieve a single agent's details
     When user "primary" opens the details for agent "wally"
     Then the response status should be 200
+    And the response JSON at "data.name" should not be empty
+
+  Scenario: A user can retrieve a single agent by identifier
+    When user "primary" opens the agent "wally"
+    Then the response status should be 200
+    And the response JSON at "data.slug" should equal "wally"
     And the response JSON at "data.name" should not be empty
 
   Scenario: A non-existent agent returns not found

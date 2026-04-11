@@ -9,12 +9,14 @@ Feature: Conversation context across turns
     And user "primary" opens the swarm conversation
     And user "primary" waits until their assistant is ready
 
+  @llm-flaky
   Scenario: The assistant remembers the current conversation context across turns
     When user "primary" sends the message "My name is TestUser and I am planning a trip to Tokyo." in the current conversation
     Then the assistant reply should succeed
     And the assistant reply should contain text
-    When user "primary" sends the message "What city am I planning to visit?" in the current conversation
+    When user "primary" sends the message "What city am I planning to visit? Answer with exactly one word." in the current conversation
     Then the assistant reply should succeed
     And the assistant reply should contain text
+    And the assistant reply should mention "tokyo"
     And the assistant should remember the current conversation context
     And the assistant session should expire automatically

@@ -355,4 +355,12 @@ func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
 	registerIntegrationSteps(sc, tc)
 	registerRedisSteps(sc, tc)
 	registerSpacesSteps(sc, tc)
+	registerMempalaceSteps(sc, tc)
+	registerIdentitySteps(sc, tc)
+	registerAuditSteps(sc, tc)
+	registerRiverSteps(sc, tc)
+	registerQuotaSteps(sc, tc)
+	registerUsageCountersSteps(sc, tc)
+	registerBlueprintSteps(sc, tc)
+	registerStreamSteps(sc, tc)
 }
