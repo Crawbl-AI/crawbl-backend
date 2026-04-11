@@ -1,9 +1,9 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/cucumber/godog"
 )
@@ -60,8 +60,10 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 	if state.currentConversation == "" {
 		state.currentConversation = state.swarmConversationID
 	}
-	deadline := time.Now().Add(tc.runtimeReadyTimeout())
-	for {
+	ctx, cancel := context.WithTimeout(context.Background(), tc.runtimeReadyTimeout())
+	defer cancel()
+
+	return pollUntil(ctx, func() error {
 		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
 			return err
 		}
@@ -74,9 +76,8 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 				// Cold-start can exceed the per-request HTTP client
 				// timeout; treat any transport-level error as "retry
 				// and keep polling the runtime" rather than a hard
-				// failure. The outer deadline still bounds the loop.
-				time.Sleep(tc.runtimePollInterval())
-				continue
+				// failure. The context deadline still bounds the loop.
+				return err
 			}
 			switch tc.lastStatus {
 			case http.StatusOK, http.StatusCreated:
@@ -88,6 +89,7 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 				return nil
 			case 0, 500, http.StatusServiceUnavailable:
 				// Runtime reports ready but still warming up internally.
+				return fmt.Errorf("runtime warming up (status=%d)", tc.lastStatus)
 			default:
 				return fmt.Errorf("assistant warmup failed with unexpected status %d; body: %s", tc.lastStatus, abbreviatedBody(tc.lastBody))
 			}
@@ -98,12 +100,8 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 			}
 			return fmt.Errorf("workspace runtime entered failed state: status=%q phase=%q", snapshot.Status, snapshot.Phase)
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("workspace runtime did not become ready in %s; last status=%q phase=%q verified=%t error=%q",
-				tc.runtimeReadyTimeout(), snapshot.Status, snapshot.Phase, snapshot.Verified, snapshot.LastError)
-		}
-		time.Sleep(tc.runtimePollInterval())
-	}
+		return fmt.Errorf("runtime not ready: status=%q phase=%q verified=%t error=%q", snapshot.Status, snapshot.Phase, snapshot.Verified, snapshot.LastError)
+	})
 }
 
 func (tc *testContext) userShouldSeeWorkspaceRuntimeReady(alias string) error {

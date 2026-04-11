@@ -14,9 +14,14 @@ import (
 )
 
 const (
-	// argoCDHelmTimeout is the seconds to wait for the ArgoCD Helm release to complete.
+	// argoCDHelmTimeout bounds how long Pulumi waits for the ArgoCD Helm
+	// chart install to complete before reporting a timeout. 600 seconds
+	// matches the longest observed crawbl-dev cold-start in CI.
 	argoCDHelmTimeout = 600
-	// backupLifecycleDays is the number of days before hourly backups are expired.
+
+	// backupLifecycleDays is the S3 lifecycle rule that transitions backup
+	// objects to Glacier after 7 days. Combined with the hardcoded 90-day
+	// expiration rule elsewhere in this file.
 	backupLifecycleDays = 7
 )
 
@@ -24,7 +29,7 @@ const (
 func createArgoCDNamespace(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) (*corev1.Namespace, error) {
 	return corev1.NewNamespace(ctx, name+"-ns-argocd", &corev1.NamespaceArgs{
 		Metadata: &metav1.ObjectMetaArgs{
-			Name: pulumi.String("argocd"),
+			Name: pulumi.String(ArgoCDNamespace),
 			Labels: pulumi.ToStringMap(map[string]string{
 				"app.kubernetes.io/managed-by": "pulumi",
 			}),
@@ -35,12 +40,12 @@ func createArgoCDNamespace(ctx *pulumi.Context, name string, cfg Config, opts ..
 // deployArgoCD deploys the ArgoCD Helm chart.
 func deployArgoCD(ctx *pulumi.Context, name string, cfg Config, deps []pulumi.Resource, opts ...pulumi.ResourceOption) (*helmv3.Release, error) {
 	return helmv3.NewRelease(ctx, name+"-argocd", &helmv3.ReleaseArgs{
-		Name:      pulumi.String("argocd"),
-		Chart:     pulumi.String("argo-cd"),
+		Name:      pulumi.String(ArgoCDNamespace),
+		Chart:     pulumi.String(ArgoCDHelmChart),
 		Version:   pulumi.String(cfg.ArgoCDChartVersion),
-		Namespace: pulumi.String("argocd"),
+		Namespace: pulumi.String(ArgoCDNamespace),
 		RepositoryOpts: &helmv3.RepositoryOptsArgs{
-			Repo: pulumi.String("https://argoproj.github.io/argo-helm"),
+			Repo: pulumi.String(ArgoCDHelmRepo),
 		},
 		CreateNamespace: pulumi.Bool(false),
 		Timeout:         pulumi.Int(argoCDHelmTimeout),
@@ -58,7 +63,7 @@ func createArgoCDRepoSecret(ctx *pulumi.Context, name string, cfg Config, deps [
 	return corev1.NewSecret(ctx, name+"-argocd-repo-apps", &corev1.SecretArgs{
 		Metadata: &metav1.ObjectMetaArgs{
 			Name:      pulumi.String("argocd-repo-apps"),
-			Namespace: pulumi.String("argocd"),
+			Namespace: pulumi.String(ArgoCDNamespace),
 			Labels: pulumi.ToStringMap(map[string]string{
 				"argocd.argoproj.io/secret-type": "repository",
 			}),
@@ -83,7 +88,7 @@ func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pu
 		Kind:       pulumi.String("Application"),
 		Metadata: &metav1.ObjectMetaArgs{
 			Name:      pulumi.String("crawbl-apps"),
-			Namespace: pulumi.String("argocd"),
+			Namespace: pulumi.String(ArgoCDNamespace),
 			Finalizers: pulumi.ToStringArray([]string{
 				"resources-finalizer.argocd.argoproj.io",
 			}),
@@ -98,7 +103,7 @@ func createArgoCDRootApp(ctx *pulumi.Context, name string, cfg Config, deps []pu
 				},
 				"destination": pulumi.Map{
 					"server":    pulumi.String("https://kubernetes.default.svc"),
-					"namespace": pulumi.String("argocd"),
+					"namespace": pulumi.String(ArgoCDNamespace),
 				},
 				"syncPolicy": pulumi.Map{
 					"automated": pulumi.Map{
@@ -221,7 +226,7 @@ func createBackupIAMUser(ctx *pulumi.Context, cfg Config, bucket *s3.BucketV2, o
 	}
 
 	// Store creds in Secrets Manager at the path ESO expects.
-	_, err = secretsmanager.NewSecret(ctx, "crawbl-backup-aws-secret", &secretsmanager.SecretArgs{
+	secret, err := secretsmanager.NewSecret(ctx, "crawbl-backup-aws-secret", &secretsmanager.SecretArgs{
 		Name: pulumi.Sprintf("crawbl/%s/backup/aws", cfg.Environment),
 	}, opts...)
 	if err != nil {
@@ -229,7 +234,7 @@ func createBackupIAMUser(ctx *pulumi.Context, cfg Config, bucket *s3.BucketV2, o
 	}
 
 	_, err = secretsmanager.NewSecretVersion(ctx, "crawbl-backup-aws-secret-value", &secretsmanager.SecretVersionArgs{
-		SecretId: pulumi.Sprintf("crawbl/%s/backup/aws", cfg.Environment),
+		SecretId: secret.ID(),
 		SecretString: pulumi.All(accessKey.ID(), accessKey.Secret).ApplyT(func(args []any) string {
 			return fmt.Sprintf(`{"access-key-id":%q,"secret-access-key":%q}`, args[0], args[1])
 		}).(pulumi.StringOutput),
