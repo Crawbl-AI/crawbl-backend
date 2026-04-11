@@ -11,6 +11,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -136,7 +137,7 @@ func (tc *testContext) blueprintAssertAgentModel(slug, expectedModel string) err
 	if _, err = tc.doRequest("GET", "/v1/agents/"+agentID+"/settings", "primary", nil); err != nil {
 		return err
 	}
-	if sErr := tc.assertStatus(statusOK); sErr != nil {
+	if sErr := tc.assertStatus(http.StatusOK); sErr != nil {
 		return sErr
 	}
 	got := gjson.GetBytes(tc.lastBody, "data.model").String()
@@ -206,7 +207,7 @@ func (tc *testContext) blueprintAssertAgentHasTool(slug, expectedTool string) er
 	if _, err = tc.doRequest("GET", "/v1/agents/"+agentID+"/tools", "primary", nil); err != nil {
 		return err
 	}
-	if sErr := tc.assertStatus(statusOK); sErr != nil {
+	if sErr := tc.assertStatus(http.StatusOK); sErr != nil {
 		return sErr
 	}
 	for _, item := range gjson.GetBytes(tc.lastBody, "data.tools").Array() {

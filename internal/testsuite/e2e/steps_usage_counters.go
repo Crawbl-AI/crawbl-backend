@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -187,7 +188,7 @@ func (tc *testContext) usageWorkspaceSummaryShowsActivity() error {
 		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/usage", "primary", nil); err != nil {
 			return err
 		}
-		if err := tc.assertStatus(statusOK); err != nil {
+		if err := tc.assertStatus(http.StatusOK); err != nil {
 			return err
 		}
 		tokensUsed := gjson.GetBytes(tc.lastBody, "data.tokens_used").Int()

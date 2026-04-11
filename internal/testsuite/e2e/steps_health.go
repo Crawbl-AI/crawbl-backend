@@ -1,6 +1,10 @@
 package e2e
 
-import "github.com/cucumber/godog"
+import (
+	"net/http"
+
+	"github.com/cucumber/godog"
+)
 
 func registerHealthSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the guest checks the service health$`, tc.guestChecksServiceHealth)
@@ -15,7 +19,7 @@ func (tc *testContext) guestChecksServiceHealth() error {
 }
 
 func (tc *testContext) serviceShouldReportOnline() error {
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.online", "true")
@@ -27,7 +31,7 @@ func (tc *testContext) guestReadsPublicLegalDocuments() error {
 }
 
 func (tc *testContext) publicLegalDocumentsShouldBeAvailable() error {
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	if err := tc.assertJSONNotEmpty("data.terms_of_service_version"); err != nil {

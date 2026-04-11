@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -132,7 +133,7 @@ func (tc *testContext) mempalaceFindByTopic(minCount int, slug string) error {
 	if reqErr != nil {
 		return reqErr
 	}
-	if assertErr := tc.assertStatus(statusOK); assertErr != nil {
+	if assertErr := tc.assertStatus(http.StatusOK); assertErr != nil {
 		return assertErr
 	}
 	count, err := tc.queryCount(`

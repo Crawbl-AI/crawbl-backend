@@ -7,6 +7,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -197,7 +198,7 @@ func (tc *testContext) quotaClearForAlias(alias string) error {
 // requires the QTA0001 code so we never confuse a generic 429 for a
 // quota breach.
 func (tc *testContext) quotaAssertRejected() error {
-	if tc.lastStatus != statusTooManyRequests && tc.lastStatus != statusBadRequest {
+	if tc.lastStatus != http.StatusTooManyRequests && tc.lastStatus != http.StatusBadRequest {
 		return fmt.Errorf("expected quota-exceeded response (429 or 400), got %d; body: %s",
 			tc.lastStatus, truncate(string(tc.lastBody), maxBodyDisplayLen))
 	}

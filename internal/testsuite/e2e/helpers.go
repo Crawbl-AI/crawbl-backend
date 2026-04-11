@@ -11,6 +11,7 @@ package e2e
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -40,16 +41,6 @@ const (
 	// the conversation's messages list while waiting for a reply.
 	// 1 second balances responsiveness against needless load.
 	assistantReplyPollInterval = 1 * time.Second
-
-	// HTTP status code constants used by assertion steps.
-	statusOK                 = 200
-	statusCreated            = 201
-	statusNoContent          = 204
-	statusBadRequest         = 400
-	statusUnauthorized       = 401
-	statusNotFound           = 404
-	statusTooManyRequests    = 429
-	statusServiceUnavailable = 503
 )
 
 type runtimeSnapshot struct {
@@ -115,7 +106,7 @@ func (tc *testContext) fetchWorkspaceList(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces", alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.captureDefaultWorkspace(alias)
@@ -129,7 +120,7 @@ func (tc *testContext) fetchAgents(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/agents", alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.captureAgents(alias)
@@ -143,7 +134,7 @@ func (tc *testContext) fetchConversations(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.captureConversations(alias)
@@ -240,7 +231,7 @@ func (tc *testContext) sendMessage(alias, text string) error {
 	}
 	// Validation or other hard errors on the send path should surface
 	// immediately; we only enter the polling phase after a create.
-	if tc.lastStatus != statusOK && tc.lastStatus != statusCreated {
+	if tc.lastStatus != http.StatusOK && tc.lastStatus != http.StatusCreated {
 		return nil
 	}
 	userMsgID := gjson.GetBytes(tc.lastBody, "data.id").String()
@@ -265,7 +256,7 @@ func (tc *testContext) pollForAssistantReply(alias, userMsgID, userMsgCreatedAt 
 		if _, err := tc.doRequest("GET", listURL, alias, nil); err != nil {
 			return fmt.Errorf("send: poll messages: %w", err)
 		}
-		if tc.lastStatus != statusOK {
+		if tc.lastStatus != http.StatusOK {
 			return fmt.Errorf("send: list messages returned %d; body: %s", tc.lastStatus, abbreviatedBody(tc.lastBody))
 		}
 		// GET /messages returns {"data": {"messages": [...]}}.
@@ -277,7 +268,7 @@ func (tc *testContext) pollForAssistantReply(alias, userMsgID, userMsgCreatedAt 
 				return fmt.Errorf("send: synthesize replies: %w", err)
 			}
 			tc.lastBody = synthesized
-			tc.lastStatus = statusOK
+			tc.lastStatus = http.StatusOK
 			return nil
 		}
 		if time.Now().After(deadline) {
