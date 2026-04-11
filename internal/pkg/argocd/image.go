@@ -1,32 +1,48 @@
 package argocd
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// ReplaceImageTag loads a YAML document and replaces every `image: <base>:...`
-// value whose base matches imageBase with `<base>:newTag`. Returns the updated
-// YAML as a string. Uses yaml.v3 structured editing rather than substring
-// replacement so it handles multi-tag manifests and quoted values correctly.
-func ReplaceImageTag(content, imageBase, newTag string) (string, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
-		return "", fmt.Errorf("argocd: parse yaml: %w", err)
+// ReplaceImageTag loads a YAML stream (one or more documents separated
+// by ---) and replaces every `image: <base>:<old>` value whose base
+// matches imageBase with `<base>:<newTag>`. Multi-document streams are
+// preserved — every document is re-emitted in original order so
+// Kubernetes manifests containing multiple resources round-trip intact.
+//
+// Returns the updated YAML as a string.
+func ReplaceImageTag(yamlContent, imageBase, newTag string) (string, error) {
+	dec := yaml.NewDecoder(strings.NewReader(yamlContent))
+	var out bytes.Buffer
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(2)
+	for {
+		var root yaml.Node
+		if err := dec.Decode(&root); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", fmt.Errorf("argocd: parse yaml: %w", err)
+		}
+		updateImageNodes(&root, imageBase, newTag)
+		if err := enc.Encode(&root); err != nil {
+			return "", fmt.Errorf("argocd: marshal yaml: %w", err)
+		}
 	}
-	updateImageNodes(&root, imageBase, newTag)
-	out, err := yaml.Marshal(&root)
-	if err != nil {
-		return "", fmt.Errorf("argocd: marshal yaml: %w", err)
+	if err := enc.Close(); err != nil {
+		return "", fmt.Errorf("argocd: close yaml encoder: %w", err)
 	}
-	return string(out), nil
+	return out.String(), nil
 }
 
-// updateImageNodes recursively walks the yaml.Node tree looking for mapping
-// keys named "image" whose value starts with imageBase + ":" and replaces
-// the tag portion with newTag.
+// updateImageNodes recursively walks the yaml.Node tree looking for
+// mapping keys named "image" whose value starts with imageBase + ":"
+// and replaces the tag portion with newTag.
 func updateImageNodes(n *yaml.Node, imageBase, newTag string) {
 	if n == nil {
 		return
@@ -45,9 +61,7 @@ func updateImageNodes(n *yaml.Node, imageBase, newTag string) {
 		}
 		return
 	}
-	if n.Kind == yaml.SequenceNode || n.Kind == yaml.DocumentNode {
-		for _, c := range n.Content {
-			updateImageNodes(c, imageBase, newTag)
-		}
+	for _, c := range n.Content {
+		updateImageNodes(c, imageBase, newTag)
 	}
 }
