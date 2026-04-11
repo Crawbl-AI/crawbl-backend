@@ -12,17 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
-// Columns converts a variadic list of string column names into a slice of interface{} values.
-// This is a utility function used to build SELECT column lists for database queries.
-func Columns(columns ...string) []any {
-	converted := make([]any, 0, len(columns))
-	for _, column := range columns {
-		converted = append(converted, column)
-	}
-
-	return converted
-}
-
 // UserRow represents a database row for the users table.
 // It maps directly to the database schema and provides conversion methods
 // to and from the domain model.
@@ -469,43 +458,4 @@ type AgentHistoryRow struct {
 	Title          string    `db:"title"`
 	Subtitle       string    `db:"subtitle"`
 	CreatedAt      time.Time `db:"created_at"`
-}
-
-// ModelRow represents a database row for the models table.
-type ModelRow struct {
-	ID          string    `db:"id"`
-	Name        string    `db:"name"`
-	Description string    `db:"description"`
-	SortOrder   int       `db:"sort_order"`
-	CreatedAt   time.Time `db:"created_at"`
-}
-
-// ToolCategoryRow represents a database row for the tool_categories table.
-type ToolCategoryRow struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	ImageURL  string    `db:"image_url"`
-	SortOrder int       `db:"sort_order"`
-	CreatedAt time.Time `db:"created_at"`
-}
-
-// IntegrationCategoryRow represents a database row for the integration_categories table.
-type IntegrationCategoryRow struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	ImageURL  string    `db:"image_url"`
-	SortOrder int       `db:"sort_order"`
-	CreatedAt time.Time `db:"created_at"`
-}
-
-// IntegrationProviderRow represents a database row for the integration_providers table.
-type IntegrationProviderRow struct {
-	Provider    string    `db:"provider"`
-	Name        string    `db:"name"`
-	Description string    `db:"description"`
-	IconURL     string    `db:"icon_url"`
-	CategoryID  string    `db:"category_id"`
-	IsEnabled   bool      `db:"is_enabled"`
-	SortOrder   int       `db:"sort_order"`
-	CreatedAt   time.Time `db:"created_at"`
 }

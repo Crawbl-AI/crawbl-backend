@@ -6,6 +6,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
+const (
+	// LabelNodePool is the K8s label key applied to crawbl-managed node pools.
+	LabelNodePool = "crawbl.io/pool"
+	// TagCrawbl marks every infrastructure resource managed by the crawbl
+	// Pulumi stack so operators can bulk-list them in the cloud console.
+	TagCrawbl = "crawbl"
+)
+
 // Config holds cluster configuration.
 type Config struct {
 	Name                          string

@@ -2,7 +2,7 @@ package agentsettingsrepo
 
 type agentSettingsRepo struct{}
 
-var settingsColumns = []string{
+var settingsColumns = []any{
 	"agent_id",
 	"model",
 	"response_length",

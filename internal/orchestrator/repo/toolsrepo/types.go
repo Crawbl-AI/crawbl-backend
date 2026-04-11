@@ -2,7 +2,7 @@ package toolsrepo
 
 type toolsRepo struct{}
 
-var toolColumns = []string{
+var toolColumns = []any{
 	"name",
 	"display_name",
 	"description",

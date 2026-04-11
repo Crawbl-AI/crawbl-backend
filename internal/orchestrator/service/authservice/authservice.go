@@ -7,6 +7,7 @@ package authservice
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -27,23 +28,24 @@ import (
 // New creates a new AuthService instance with the provided dependencies.
 // It initializes the auth service with a user repository for persistence,
 // a workspace bootstrapper for default workspace creation, and legal document configuration.
-// The function panics if required dependencies are nil, as these are essential for operation.
+// Returns an error if any required dependency is nil.
 //
 // Parameters:
 //   - userRepo: Repository for user persistence operations. Must not be nil.
 //   - workspaceBootstrapper: Handler for creating default workspaces. Must not be nil.
 //   - legalDocuments: Configuration for legal document URLs and versions. May be nil for defaults.
+//   - usageQuotaRepo: Repository for usage quota creation. Must not be nil.
 //
-// Returns an AuthService implementation ready for use.
-func New(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) orchestratorservice.AuthService {
+// Returns an AuthService implementation and nil error on success.
+func New(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) (orchestratorservice.AuthService, error) {
 	if userRepo == nil {
-		panic("auth service user repo cannot be nil")
+		return nil, errors.New("authservice: userRepo is required")
 	}
 	if workspaceBootstrapper == nil {
-		panic("auth service workspace bootstrapper cannot be nil")
+		return nil, errors.New("authservice: workspaceBootstrapper is required")
 	}
 	if usageQuotaRepo == nil {
-		panic("auth service usage quota repo cannot be nil")
+		return nil, errors.New("authservice: usageQuotaRepo is required")
 	}
 
 	return &service{
@@ -51,7 +53,17 @@ func New(userRepo userStore, workspaceBootstrapper orchestratorservice.Workspace
 		workspaceBootstrapper: workspaceBootstrapper,
 		legalDocuments:        newLegalDocumentsConfig(legalDocuments),
 		usageQuotaRepo:        usageQuotaRepo,
+	}, nil
+}
+
+// MustNew creates a new AuthService or panics if any required dependency is nil.
+// Use in main/wiring only; prefer New in code that can propagate errors.
+func MustNew(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) orchestratorservice.AuthService {
+	s, err := New(userRepo, workspaceBootstrapper, legalDocuments, usageQuotaRepo)
+	if err != nil {
+		panic(err)
 	}
+	return s
 }
 
 // SignIn authenticates a user. If the user doesn't exist, it creates one.

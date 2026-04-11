@@ -12,9 +12,6 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// cmdTimeout is used for all git/gh subprocesses.
-var cmdTimeout = context.TODO
-
 var (
 	breakingRe = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
 	featRe     = regexp.MustCompile(`^feat(\(.+\))?:`)
@@ -46,7 +43,7 @@ func gitCmd(repoPath string, args ...string) *exec.Cmd {
 	if repoPath != "" {
 		args = append([]string{"-C", repoPath}, args...)
 	}
-	return exec.CommandContext(cmdTimeout(), "git", args...) //nolint:gosec // args are constructed internally
+	return exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // args are constructed internally
 }
 
 // bumpVersion increments the major, minor, or patch component of a canonical
@@ -170,7 +167,7 @@ func CalculateForPrefix(prefix string) (Result, error) {
 // latestReleaseTag queries GitHub for the latest release tag using gh CLI.
 // Returns empty string if no release exists or gh is not available.
 func latestReleaseTag(repoPath string) string {
-	cmd := exec.CommandContext(cmdTimeout(), "gh", "release", "view", "--json", "tagName", "-q", ".tagName")
+	cmd := exec.CommandContext(context.Background(), "gh", "release", "view", "--json", "tagName", "-q", ".tagName")
 	if repoPath != "" {
 		cmd.Dir = repoPath
 	}

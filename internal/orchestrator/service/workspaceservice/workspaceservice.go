@@ -8,6 +8,7 @@ package workspaceservice
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -25,30 +26,40 @@ import (
 //
 // The service requires a non-nil workspace repository for persistence operations,
 // a non-nil runtime client for runtime status queries, and a non-nil logger
-// for diagnostic output. If any dependency is nil, this function panics.
+// for diagnostic output. Returns an error if any required dependency is nil.
 //
 // Parameters:
 //   - workspaceRepo: Repository interface for workspace CRUD operations.
 //   - runtimeClient: Client interface for managing and querying swarm runtimes.
 //   - logger: Structured logger for diagnostic and error logging.
 //
-// Returns an orchestratorservice.WorkspaceService implementation.
-func New(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+// Returns an orchestratorservice.WorkspaceService implementation and nil error on success.
+func New(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) (orchestratorservice.WorkspaceService, error) {
 	if workspaceRepo == nil {
-		panic("workspace service repo cannot be nil")
+		return nil, errors.New("workspaceservice: workspaceRepo is required")
 	}
 	if runtimeClient == nil {
-		panic("workspace service runtime client cannot be nil")
+		return nil, errors.New("workspaceservice: runtimeClient is required")
 	}
 	if logger == nil {
-		panic("workspace service logger cannot be nil")
+		return nil, errors.New("workspaceservice: logger is required")
 	}
 
 	return &service{
 		workspaceRepo: workspaceRepo,
 		runtimeClient: runtimeClient,
 		logger:        logger,
+	}, nil
+}
+
+// MustNew creates a new WorkspaceService or panics if any required dependency is nil.
+// Use in main/wiring only; prefer New in code that can propagate errors.
+func MustNew(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+	s, err := New(workspaceRepo, runtimeClient, logger)
+	if err != nil {
+		panic(err)
 	}
+	return s
 }
 
 // EnsureDefaultWorkspace ensures that a user has at least one workspace.

@@ -1,12 +1,13 @@
 package mcpservice
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	memory "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 // agentContextMaxTextLen caps the text length per message when building conversation context.
@@ -54,86 +55,36 @@ func (s *service) SearchMessages(ctx contextT, sess sessionT, userID, workspaceI
 	return briefs, nil
 }
 
+// repoNamer is a layers.AgentNamer that performs a live DB lookup via the
+// agent repo. Used by mcpservice where a pre-built agent map is not available.
+type repoNamer struct {
+	repo agentStore
+}
+
+// AgentName satisfies layers.AgentNamer with a live GetByIDGlobal call.
+func (r repoNamer) AgentName(ctx context.Context, sess database.SessionRunner, agentID string) (string, bool) {
+	agent, mErr := r.repo.GetByIDGlobal(ctx, sess, agentID)
+	if mErr != nil || agent == nil {
+		return "", false
+	}
+	return agent.Name, true
+}
+
 // buildConversationContext builds a context string for injection into agent-to-agent calls.
 // It is memory-first and token-budgeted:
 //  1. If a memoryStack is available, WakeUp (L0+L1) is prepended first.
 //  2. Recent messages fill the remaining budget up to memory.TokenBudgetTotal characters.
 //  3. A hard cap of memory.TokenBudgetTotal characters is applied to the combined output.
 func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspaceID, conversationID string, limit int) string {
-	// --- Memory layer (L0 + L1) ---
-	var memoryText string
-	if s.memoryStack != nil {
-		wakeUp, err := s.memoryStack.WakeUp(ctx, sess, workspaceID, "")
-		if err == nil {
-			memoryText = wakeUp
-		}
-	}
-
-	// --- Recent messages ---
-	messages, mErr := s.repos.Message.ListRecent(ctx, sess, conversationID, limit)
-
-	var msgSB strings.Builder
-	if mErr == nil && len(messages) > 0 {
-		msgSB.WriteString("## Conversation Context\nRecent messages (oldest first):\n\n")
-
-		for _, msg := range messages {
-			if msg.Status == orchestrator.MessageStatusSilent {
-				continue
-			}
-			text := msg.Content.Text
-			if text == "" {
-				continue
-			}
-			if len(text) > agentContextMaxTextLen {
-				text = text[:agentContextMaxTextLen] + "..."
-			}
-
-			sender := "User"
-			if msg.Role == orchestrator.MessageRoleAgent {
-				if msg.Agent != nil {
-					sender = msg.Agent.Name
-				} else if msg.AgentID != nil {
-					agent, _ := s.repos.Agent.GetByIDGlobal(ctx, sess, *msg.AgentID)
-					if agent != nil {
-						sender = agent.Name
-					}
-				}
-			}
-			fmt.Fprintf(&msgSB, "**%s**: %s\n\n", sender, text)
-		}
-	}
-	messagesText := msgSB.String()
-
-	// --- Budget assembly ---
-	if memoryText == "" && messagesText == "" {
-		return ""
-	}
-
-	var sb strings.Builder
-	if memoryText != "" {
-		sb.WriteString(memoryText)
-	}
-	if messagesText != "" {
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		// Fill remaining budget with recent messages.
-		remaining := memory.TokenBudgetTotal - sb.Len()
-		if remaining > 0 {
-			runes := []rune(messagesText)
-			if len(runes) > remaining {
-				messagesText = string(runes[:remaining])
-			}
-			sb.WriteString(messagesText)
-		}
-	}
-
-	// Hard cap on total output.
-	result := sb.String()
-	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
-		result = string(resultRunes[:memory.TokenBudgetTotal])
-	}
-	return result
+	return layers.BuildContextForConversation(
+		ctx, sess,
+		s.memoryStack,
+		s.repos.Message,
+		repoNamer{repo: s.repos.Agent},
+		workspaceID, conversationID,
+		limit,
+		layers.BuildContextOpts{},
+	)
 }
 
 // extractTextFromContent pulls the "text" field from a JSON content string.

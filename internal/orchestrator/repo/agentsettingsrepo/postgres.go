@@ -21,7 +21,7 @@ func (r *agentSettingsRepo) GetByAgentID(ctx context.Context, sess orchestratorr
 	}
 
 	var row orchestratorrepo.AgentSettingsRow
-	err := sess.Select(orchestratorrepo.Columns(settingsColumns...)...).
+	err := sess.Select(settingsColumns...).
 		From("agent_settings").
 		Where("agent_id = ?", agentID).
 		LoadOneContext(ctx, &row)

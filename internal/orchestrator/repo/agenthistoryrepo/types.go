@@ -2,7 +2,7 @@ package agenthistoryrepo
 
 type agentHistoryRepo struct{}
 
-var historyColumns = []string{
+var historyColumns = []any{
 	"id",
 	"agent_id",
 	"conversation_id",

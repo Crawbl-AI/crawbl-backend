@@ -1,30 +1,67 @@
 package argocd
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
-// ReplaceImageTag replaces any tag after imageBase (e.g. "registry.../name:") with newTag.
-// It handles references appearing both bare and inside quoted strings.
-func ReplaceImageTag(content, imageBase, newTag string) string {
-	var result strings.Builder
-	remaining := content
+// ReplaceImageTag loads a YAML stream (one or more documents separated
+// by ---) and replaces every `image: <base>:<old>` value whose base
+// matches imageBase with `<base>:<newTag>`. Multi-document streams are
+// preserved — every document is re-emitted in original order so
+// Kubernetes manifests containing multiple resources round-trip intact.
+//
+// Returns the updated YAML as a string.
+func ReplaceImageTag(yamlContent, imageBase, newTag string) (string, error) {
+	dec := yaml.NewDecoder(strings.NewReader(yamlContent))
+	var out bytes.Buffer
+	enc := yaml.NewEncoder(&out)
+	enc.SetIndent(2)
 	for {
-		idx := strings.Index(remaining, imageBase)
-		if idx == -1 {
-			result.WriteString(remaining)
-			break
+		var root yaml.Node
+		if err := dec.Decode(&root); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", fmt.Errorf("argocd: parse yaml: %w", err)
 		}
-		result.WriteString(remaining[:idx+len(imageBase)])
-		after := remaining[idx+len(imageBase):]
-		// The tag ends at whitespace, a quote, or end of string.
-		end := strings.IndexAny(after, " \t\n\r\"'")
-		if end == -1 {
-			result.WriteString(newTag)
-			break
+		updateImageNodes(&root, imageBase, newTag)
+		if err := enc.Encode(&root); err != nil {
+			return "", fmt.Errorf("argocd: marshal yaml: %w", err)
 		}
-		result.WriteString(newTag)
-		remaining = after[end:]
 	}
-	return result.String()
+	if err := enc.Close(); err != nil {
+		return "", fmt.Errorf("argocd: close yaml encoder: %w", err)
+	}
+	return out.String(), nil
+}
+
+// updateImageNodes recursively walks the yaml.Node tree looking for
+// mapping keys named "image" whose value starts with imageBase + ":"
+// and replaces the tag portion with newTag.
+func updateImageNodes(n *yaml.Node, imageBase, newTag string) {
+	if n == nil {
+		return
+	}
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			key := n.Content[i]
+			val := n.Content[i+1]
+			if key.Value == "image" && val.Kind == yaml.ScalarNode {
+				prefix := imageBase + ":"
+				if strings.HasPrefix(val.Value, prefix) {
+					val.Value = imageBase + ":" + newTag
+				}
+			}
+			updateImageNodes(val, imageBase, newTag)
+		}
+		return
+	}
+	for _, c := range n.Content {
+		updateImageNodes(c, imageBase, newTag)
+	}
 }

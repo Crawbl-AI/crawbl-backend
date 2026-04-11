@@ -160,14 +160,6 @@ func (tc *testContext) runtimeReadyTimeout() time.Duration {
 	return defaultRuntimeReadyTimeout
 }
 
-// runtimePollInterval returns the configured poll interval or the default.
-func (tc *testContext) runtimePollInterval() time.Duration {
-	if tc.cfg != nil && tc.cfg.RuntimePollInterval > 0 {
-		return tc.cfg.RuntimePollInterval
-	}
-	return defaultRuntimePollInterval
-}
-
 // --- State accessors --------------------------------------------------
 
 // userState returns (or lazily creates) the per-user journey state for

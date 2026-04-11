@@ -222,7 +222,7 @@ func runServer(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
-	pricingCache := pricing.New(db, logger)
+	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
 	// Build the single river.Config covering every background job,
@@ -313,8 +313,8 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
-	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
+	workspaceService := workspaceservice.MustNew(workspaceRepo, runtimeClient, logger)
+	authService := authservice.MustNew(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
 	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
 	defer cleanupRT()
@@ -326,7 +326,7 @@ func runServer(ctx context.Context) error {
 
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
-	chatService := chatservice.New(
+	chatService := chatservice.MustNew(
 		db,
 		chatservice.Repos{
 			Workspace:     workspaceRepo,
@@ -737,7 +737,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 
 	// 2. Models
 	for i, m := range seed.AvailableModels() {
-		var existing orchestratorrepo.ModelRow
+		var existing modelRow
 		err := tx.Select("id").From("models").Where("id = ?", m.ID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed model %q: %w", m.ID, err)
@@ -766,7 +766,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	// 3. Tool categories
 	for i, c := range agentruntimetools.ToolCategories() {
 		catID := string(c.ID)
-		var existing orchestratorrepo.ToolCategoryRow
+		var existing toolCategoryRow
 		err := tx.Select("id").From("tool_categories").Where("id = ?", catID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed tool category %q: %w", catID, err)
@@ -794,7 +794,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 
 	// 4. Integration categories
 	for i, c := range seed.IntegrationCategories() {
-		var existing orchestratorrepo.IntegrationCategoryRow
+		var existing integrationCategoryRow
 		err := tx.Select("id").From("integration_categories").Where("id = ?", c.ID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
@@ -822,7 +822,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 
 	// 5. Integration providers
 	for i, p := range seed.IntegrationProviders() {
-		var existing orchestratorrepo.IntegrationProviderRow
+		var existing integrationProviderRow
 		err := tx.Select("provider").From("integration_providers").Where("provider = ?", p.Provider).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)

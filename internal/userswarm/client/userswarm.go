@@ -23,9 +23,9 @@ import (
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // readyConditionType is the condition the UserSwarm webhook sets on a
@@ -216,7 +216,7 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 	name := userswarmName(opts.WorkspaceID)
 
 	labels := map[string]string{}
-	if principal, ok := httpserver.PrincipalFromContext(ctx); ok {
+	if principal, ok := middleware.PrincipalFromContext(ctx); ok {
 		if strings.HasPrefix(principal.Subject, "e2e-") {
 			labels["crawbl.ai/e2e"] = "true"
 		}

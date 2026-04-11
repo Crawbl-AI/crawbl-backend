@@ -48,7 +48,7 @@ func (u *Update) UpdateOrchestrator(ctx context.Context) error {
 func (u *Update) UpdatePlatform(ctx context.Context) error {
 	out.Step(style.Deploy, "Updating crawbl-platform image tag to %s", u.Tag)
 
-	imageBase := RegistryBase + "/crawbl-platform:"
+	imageBase := RegistryBase + "/crawbl-platform"
 	files := []string{
 		filepath.Join(u.RepoPath, "components", "metacontroller", "resources", "userswarm-webhook.yaml"),
 		filepath.Join(u.RepoPath, "components", "metacontroller", "resources", "e2e-reaper-cronjob.yaml"),
@@ -59,8 +59,10 @@ func (u *Update) UpdatePlatform(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("read %s: %w", f, err)
 		}
-		content := string(data)
-		updated := ReplaceImageTag(content, imageBase, u.Tag)
+		updated, err := ReplaceImageTag(string(data), imageBase, u.Tag)
+		if err != nil {
+			return fmt.Errorf("replace image tag in %s: %w", f, err)
+		}
 		if err := os.WriteFile(f, []byte(updated), fileMode); err != nil {
 			return fmt.Errorf("write %s: %w", f, err)
 		}
@@ -72,14 +74,17 @@ func (u *Update) UpdatePlatform(ctx context.Context) error {
 func (u *Update) UpdateAuthFilter(ctx context.Context) error {
 	out.Step(style.Deploy, "Updating envoy-auth-filter image tag to %s", u.Tag)
 
-	imageBase := RegistryBase + "/envoy-auth-filter:"
+	imageBase := RegistryBase + "/envoy-auth-filter"
 	f := filepath.Join(u.RepoPath, "components", "envoy-gateway", "resources", "envoy-extension-policy.yaml")
 
 	data, err := os.ReadFile(f)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", f, err)
 	}
-	updated := ReplaceImageTag(string(data), imageBase, u.Tag)
+	updated, err := ReplaceImageTag(string(data), imageBase, u.Tag)
+	if err != nil {
+		return fmt.Errorf("replace image tag in %s: %w", f, err)
+	}
 	return os.WriteFile(f, []byte(updated), fileMode)
 }
 
@@ -118,8 +123,11 @@ func (u *Update) UpdateAgentRuntime(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read userswarm-webhook.yaml: %w", err)
 	}
-	imageBase := RegistryBase + "/crawbl-agent-runtime:"
-	updated := ReplaceImageTag(string(data), imageBase, u.Tag)
+	imageBase := RegistryBase + "/crawbl-agent-runtime"
+	updated, err := ReplaceImageTag(string(data), imageBase, u.Tag)
+	if err != nil {
+		return fmt.Errorf("replace image tag in userswarm-webhook.yaml: %w", err)
+	}
 	return os.WriteFile(webhookPath, []byte(updated), fileMode)
 }
 

@@ -383,11 +383,11 @@ type CreateAgentMemoryOpts struct {
 
 // AgentMemory represents a memory entry from the agent runtime.
 type AgentMemory struct {
-	Key       string `json:"key"`
-	Content   string `json:"content"`
-	Category  string `json:"category,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
-	UpdatedAt string `json:"updated_at,omitempty"`
+	Key       string
+	Content   string
+	Category  string
+	CreatedAt string
+	UpdatedAt string
 }
 
 // WorkspaceBootstrapper defines the interface for workspace initialization.

@@ -25,7 +25,7 @@ func (r *workspaceRepo) ListByUserID(ctx context.Context, sess orchestratorrepo.
 	}
 
 	var rows []orchestratorrepo.WorkspaceRow
-	_, err := sess.Select(orchestratorrepo.Columns(workspaceColumns...)...).
+	_, err := sess.Select(workspaceColumns...).
 		From("workspaces").
 		Where("user_id = ?", userID).
 		OrderAsc("created_at").
@@ -51,7 +51,7 @@ func (r *workspaceRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessi
 	}
 
 	var row orchestratorrepo.WorkspaceRow
-	err := sess.Select(orchestratorrepo.Columns(workspaceColumns...)...).
+	err := sess.Select(workspaceColumns...).
 		From("workspaces").
 		Where("user_id = ? AND id = ?", userID, workspaceID).
 		LoadOneContext(ctx, &row)

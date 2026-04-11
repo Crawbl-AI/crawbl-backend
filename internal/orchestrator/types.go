@@ -187,6 +187,9 @@ const (
 // ActionStyle represents the visual style of an action button.
 type ActionStyle string
 
+// String implements fmt.Stringer so ActionStyle logs as its string value.
+func (s ActionStyle) String() string { return string(s) }
+
 // Action style constants define the visual presentation of action items.
 const (
 	// ActionStylePrimary indicates a primary/prominent action style.
@@ -201,6 +204,9 @@ const (
 
 // ToolState represents the execution state of a tool.
 type ToolState string
+
+// String implements fmt.Stringer so ToolState logs as its string value.
+func (s ToolState) String() string { return string(s) }
 
 // Tool state constants define the possible execution states.
 const (
@@ -480,11 +486,21 @@ const DefaultAgentModel = "auto"
 // ResponseLength represents the response verbosity preference.
 type ResponseLength string
 
+// String implements fmt.Stringer so ResponseLength logs as its string value.
+func (s ResponseLength) String() string { return string(s) }
+
 const (
-	ResponseLengthAuto   ResponseLength = "auto"
-	ResponseLengthShort  ResponseLength = "short"
+	// ResponseLengthAuto lets the model choose an appropriate response length.
+	ResponseLengthAuto ResponseLength = "auto"
+
+	// ResponseLengthShort requests a concise response.
+	ResponseLengthShort ResponseLength = "short"
+
+	// ResponseLengthMedium requests a moderately detailed response.
 	ResponseLengthMedium ResponseLength = "medium"
-	ResponseLengthLong   ResponseLength = "long"
+
+	// ResponseLengthLong requests a thorough, detailed response.
+	ResponseLengthLong ResponseLength = "long"
 )
 
 // AgentDetails is the full agent profile with stats.

@@ -3,7 +3,6 @@ package chatservice
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	memory "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -38,6 +37,19 @@ const agentSilentResponse = "[SILENT]"
 
 // taskPreviewMaxRunes caps the delegation task_preview field.
 const taskPreviewMaxRunes = 120
+
+// mapNamer is a layers.AgentNamer backed by a pre-built agent-by-ID map.
+// It never performs a DB lookup — the map is populated once per request from
+// the workspace roster, so AgentName is always O(1).
+type mapNamer map[string]*orchestrator.Agent
+
+// AgentName satisfies layers.AgentNamer using the in-memory lookup map.
+func (m mapNamer) AgentName(_ context.Context, _ database.SessionRunner, agentID string) (string, bool) {
+	if a, ok := m[agentID]; ok && a != nil {
+		return a.Name, true
+	}
+	return "", false
+}
 
 // subAgentStream tracks a placeholder message and accumulated text for a single
 // agent_id seen during a multi-agent streaming response (Phase 5).
@@ -216,21 +228,42 @@ func parseToolCallArgs(toolName, argsJSON string) toolCallArgs {
 	return toolCallArgs{Parsed: parsed, Query: query}
 }
 
+// newMessage builds a fresh *orchestrator.Message with all the fields
+// every message needs regardless of role: a new UUID, the conversation
+// pointer, a timestamped created_at/updated_at, and an empty
+// Attachments slice. Callers fill in Role, Content, and Status.
+func newMessage(convID string, role orchestrator.MessageRole, content orchestrator.MessageContent, status orchestrator.MessageStatus, agentID *string, attachments []orchestrator.Attachment) *orchestrator.Message {
+	now := time.Now().UTC()
+	if attachments == nil {
+		attachments = []orchestrator.Attachment{}
+	}
+	return &orchestrator.Message{
+		ID:             uuid.NewString(),
+		ConversationID: convID,
+		AgentID:        agentID,
+		Role:           role,
+		Content:        content,
+		Status:         status,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		Attachments:    attachments,
+	}
+}
+
 // newPlaceholder creates a pending agent message placeholder.
 func (s *service) newPlaceholder(convID string, agent *orchestrator.Agent) *orchestrator.Message {
-	now := time.Now().UTC()
 	var agentID *string
 	if agent != nil {
 		agentID = &agent.ID
 	}
-	return &orchestrator.Message{
-		ID: uuid.NewString(), ConversationID: convID,
-		Role:    orchestrator.MessageRoleAgent,
-		Content: orchestrator.MessageContent{Type: orchestrator.MessageContentTypeText},
-		Status:  orchestrator.MessageStatusPending, AgentID: agentID,
-		Attachments: []orchestrator.Attachment{},
-		CreatedAt:   now, UpdatedAt: now,
-	}
+	return newMessage(
+		convID,
+		orchestrator.MessageRoleAgent,
+		orchestrator.MessageContent{Type: orchestrator.MessageContentTypeText},
+		orchestrator.MessageStatusPending,
+		agentID,
+		nil,
+	)
 }
 
 // savePlaceholder persists a placeholder message in a transaction.
@@ -260,77 +293,19 @@ func (s *service) buildConversationContext(
 	if limit == 0 {
 		limit = 20
 	}
-
-	// --- Memory layer (L0 + L1) ---
-	var memoryText string
-	if s.memoryStack != nil {
-		wakeUp, err := s.memoryStack.WakeUp(ctx, sess, workspaceID, "")
-		if err == nil {
-			memoryText = wakeUp
-		}
-	}
-
-	// --- Recent messages ---
-	messages, mErr := s.messageRepo.ListRecent(ctx, sess, conversationID, limit)
-
-	var msgSB strings.Builder
-	if mErr == nil && len(messages) > 0 {
-		msgSB.WriteString("## Conversation Context\n")
-		msgSB.WriteString("Recent messages in this conversation (most recent last):\n\n")
-
-		for _, msg := range messages {
-			if msg.Status == orchestrator.MessageStatusSilent {
-				continue
-			}
-			text := msg.Content.Text
-			if text == "" {
-				continue
-			}
-			if len(text) > 500 {
-				text = text[:500] + "..."
-			}
-
-			sender := "User"
-			if msg.Role == orchestrator.MessageRoleAgent && msg.AgentID != nil {
-				if agent := lookups.byID[*msg.AgentID]; agent != nil {
-					sender = agent.Name
-				}
-			}
-			fmt.Fprintf(&msgSB, "**%s**: %s\n\n", sender, text)
-		}
-	}
-	messagesText := msgSB.String()
-
-	// --- Budget assembly ---
-	if memoryText == "" && messagesText == "" {
+	result := layers.BuildContextForConversation(
+		ctx, sess,
+		s.memoryStack,
+		s.messageRepo,
+		mapNamer(lookups.byID),
+		workspaceID, conversationID,
+		limit,
+		layers.BuildContextOpts{
+			Header: "## Conversation Context\nRecent messages in this conversation (most recent last):\n\n",
+		},
+	)
+	if result == "" {
 		return ""
 	}
-
-	var sb strings.Builder
-	if memoryText != "" {
-		sb.WriteString(memoryText)
-	}
-	if messagesText != "" {
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		// Remaining budget for messages after memory.
-		remaining := memory.TokenBudgetTotal - sb.Len()
-		if remaining > 0 {
-			runes := []rune(messagesText)
-			if len(runes) > remaining {
-				messagesText = string(runes[:remaining])
-			}
-			sb.WriteString(messagesText)
-		}
-	}
-
-	// Hard cap on total output.
-	result := sb.String()
-	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
-		// Truncate L1 portion to fit within budget while keeping L0 intact.
-		result = string(resultRunes[:memory.TokenBudgetTotal])
-	}
-
 	return "\n\n" + result
 }

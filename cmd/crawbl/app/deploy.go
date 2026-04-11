@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,12 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/release"
+)
+
+const (
+	RepoSlugBackend = "Crawbl-AI/crawbl-backend"
+	RepoSlugDocs    = "Crawbl-AI/crawbl-docs"
+	RepoSlugWebsite = "Crawbl-AI/crawbl-website"
 )
 
 func newDeployCommand() *cobra.Command {
@@ -89,7 +96,7 @@ func newDeployPlatformCommand() *cobra.Command {
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildPlatformImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildPlatformDockerfile),
+				dockerfile: filepath.Join(rootDir, buildPlatformDockerfile),
 				contextDir: rootDir,
 				tag:        tag,
 				platform:   platform,
@@ -118,7 +125,7 @@ func newDeployPlatformCommand() *cobra.Command {
 
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
-				RepoSlug: "Crawbl-AI/crawbl-backend",
+				RepoSlug: RepoSlugBackend,
 				Tag:      tag,
 				PrevTag:  resolved.PrevTag,
 			})
@@ -163,8 +170,8 @@ func newDeployAuthFilterCommand() *cobra.Command {
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildAuthFilterImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterDockerfile),
-				contextDir: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterContext),
+				dockerfile: filepath.Join(rootDir, buildAuthFilterDockerfile),
+				contextDir: filepath.Join(rootDir, buildAuthFilterContext),
 				tag:        tag,
 				platform:   platform,
 				push:       true,
@@ -189,7 +196,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
-				RepoSlug: "Crawbl-AI/crawbl-backend",
+				RepoSlug: RepoSlugBackend,
 				Tag:      gitTag,
 				PrevTag:  resolved.PrevTag,
 			})
@@ -245,7 +252,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 
 			if err := runDockerBuild(buildOpts{
 				imageRepo:  buildAgentRuntimeImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildAgentRuntimeDockerfile),
+				dockerfile: filepath.Join(rootDir, buildAgentRuntimeDockerfile),
 				contextDir: rootDir,
 				tag:        tag,
 				platform:   platform,
@@ -271,7 +278,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
-				RepoSlug: "Crawbl-AI/crawbl-backend",
+				RepoSlug: RepoSlugBackend,
 				Tag:      gitTag,
 				PrevTag:  resolved.PrevTag,
 			})
@@ -321,7 +328,7 @@ func newDeployDocsCommand() *cobra.Command {
 
 			return release.TagAndRelease(release.Config{
 				RepoPath: docsDir,
-				RepoSlug: "Crawbl-AI/crawbl-docs",
+				RepoSlug: RepoSlugDocs,
 				Tag:      tag,
 				PrevTag:  resolved.PrevTag,
 			})
@@ -371,7 +378,7 @@ func newDeployWebsiteCommand() *cobra.Command {
 
 			return release.TagAndRelease(release.Config{
 				RepoPath: websiteDir,
-				RepoSlug: "Crawbl-AI/crawbl-website",
+				RepoSlug: RepoSlugWebsite,
 				Tag:      tag,
 				PrevTag:  resolved.PrevTag,
 			})
