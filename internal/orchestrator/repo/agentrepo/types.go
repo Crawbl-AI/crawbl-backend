@@ -8,7 +8,7 @@ type agentRepo struct{}
 
 // agentColumns defines the column names used in SELECT queries for the agents table.
 // These columns map directly to the AgentRow struct fields.
-var agentColumns = []string{
+var agentColumns = []any{
 	"id",
 	"workspace_id",
 	"name",

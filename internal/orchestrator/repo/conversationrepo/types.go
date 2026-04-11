@@ -8,7 +8,7 @@ type conversationRepo struct{}
 
 // conversationColumns defines the column names used in SELECT queries for the conversations table.
 // These columns map directly to the ConversationRow struct fields.
-var conversationColumns = []string{
+var conversationColumns = []any{
 	"id",
 	"workspace_id",
 	"agent_id",

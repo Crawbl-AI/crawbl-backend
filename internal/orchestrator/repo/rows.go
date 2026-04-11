@@ -12,17 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
-// Columns converts a variadic list of string column names into a slice of interface{} values.
-// This is a utility function used to build SELECT column lists for database queries.
-func Columns(columns ...string) []any {
-	converted := make([]any, 0, len(columns))
-	for _, column := range columns {
-		converted = append(converted, column)
-	}
-
-	return converted
-}
-
 // UserRow represents a database row for the users table.
 // It maps directly to the database schema and provides conversion methods
 // to and from the domain model.

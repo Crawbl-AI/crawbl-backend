@@ -107,7 +107,7 @@ type WorkflowStep struct {
 	MaxRetries       int    `json:"max_retries"`
 }
 
-var definitionColumns = []string{
+var definitionColumns = []any{
 	"id",
 	"workspace_id",
 	"name",
@@ -120,7 +120,7 @@ var definitionColumns = []string{
 	"updated_at",
 }
 
-var executionColumns = []string{
+var executionColumns = []any{
 	"id",
 	"workflow_definition_id",
 	"workspace_id",
@@ -135,7 +135,7 @@ var executionColumns = []string{
 	"created_at",
 }
 
-var stepExecutionColumns = []string{
+var stepExecutionColumns = []any{
 	"id",
 	"execution_id",
 	"step_index",

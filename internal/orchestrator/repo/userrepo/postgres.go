@@ -29,7 +29,7 @@ func (r *userRepo) GetBySubject(ctx context.Context, sess orchestratorrepo.Sessi
 	}
 
 	var userRow orchestratorrepo.UserRow
-	err := sess.Select(orchestratorrepo.Columns(userColumns...)...).
+	err := sess.Select(userColumns...).
 		From("users").
 		Where("subject = ?", subject).
 		LoadOneContext(ctx, &userRow)
@@ -62,7 +62,7 @@ func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRun
 
 	// Prefer lookup by email (unique), so we can detect subject mismatches
 	if email != "" {
-		err := sess.Select(orchestratorrepo.Columns(userColumns...)...).
+		err := sess.Select(userColumns...).
 			From("users").
 			Where("email = ?", email).
 			LoadOneContext(ctx, &userRow)
@@ -83,7 +83,7 @@ func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRun
 
 	// Fallback: lookup by subject
 	if subject != "" {
-		err := sess.Select(orchestratorrepo.Columns(userColumns...)...).
+		err := sess.Select(userColumns...).
 			From("users").
 			Where("subject = ?", subject).
 			LoadOneContext(ctx, &userRow)
@@ -221,7 +221,7 @@ func (r *userRepo) CheckNicknameExists(ctx context.Context, sess orchestratorrep
 // preferences are optional; all other errors are logged as warnings.
 func (r *userRepo) loadPreferences(ctx context.Context, sess orchestratorrepo.SessionRunner, user *orchestrator.User) {
 	var preferencesRow orchestratorrepo.UserPreferencesRow
-	err := sess.Select(orchestratorrepo.Columns(userPreferencesColumns...)...).
+	err := sess.Select(userPreferencesColumns...).
 		From("user_preferences").
 		Where("user_id = ?", user.ID).
 		LoadOneContext(ctx, &preferencesRow)
@@ -329,73 +329,60 @@ ON CONFLICT (id) DO UPDATE SET
 	return nil
 }
 
-// saveUserPreferencesRow inserts or updates user preferences in the database.
-// It checks for an existing record by user_id first; if found, all preference fields
-// are updated. Otherwise a new row is inserted.
+// saveUserPreferencesRow atomically upserts user preferences in the database.
+// A single INSERT ... ON CONFLICT (user_id) DO UPDATE SET ... eliminates the
+// SELECT-then-INSERT/UPDATE race that could cause duplicate-key errors or lost
+// updates under concurrent requests. created_at is intentionally excluded from
+// the DO UPDATE clause to preserve the original creation timestamp.
+//
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *userRepo) saveUserPreferencesRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.UserPreferencesRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existing orchestratorrepo.UserPreferencesRow
-	err := sess.Select("*").From("user_preferences").Where("user_id = ?", row.UserID).LoadOneContext(ctx, &existing)
-	if err == nil {
-		// Record exists — update all preference fields.
-		_, err = sess.Update("user_preferences").
-			Where("user_id = ?", row.UserID).
-			Set("platform_theme", row.PlatformTheme).
-			Set("platform_language", row.PlatformLanguage).
-			Set("currency_code", row.CurrencyCode).
-			Set("updated_at", row.UpdatedAt).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update user preferences")
-		}
-		return nil
-	}
+	const query = `
+INSERT INTO user_preferences (user_id, platform_theme, platform_language, currency_code, updated_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (user_id) DO UPDATE SET
+	platform_theme    = EXCLUDED.platform_theme,
+	platform_language = EXCLUDED.platform_language,
+	currency_code     = EXCLUDED.currency_code,
+	updated_at        = EXCLUDED.updated_at`
 
-	// Record does not exist — insert.
-	_, err = sess.InsertInto("user_preferences").
-		Columns("user_id", "platform_theme", "platform_language", "currency_code", "updated_at").
-		Record(row).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.UserID, row.PlatformTheme, row.PlatformLanguage, row.CurrencyCode, row.UpdatedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		return merrors.WrapStdServerError(err, "insert user preferences")
+		return merrors.WrapStdServerError(err, "upsert user preferences")
 	}
 
 	return nil
 }
 
-// saveUserPushTokenRow inserts or updates a push notification token in the database.
-// It checks for an existing record by user_id first; if found, the token and timestamp
-// are updated. Otherwise a new row is inserted.
+// saveUserPushTokenRow atomically upserts a push notification token in the database.
+// A single INSERT ... ON CONFLICT (user_id) DO UPDATE SET ... eliminates the
+// SELECT-then-INSERT/UPDATE race that could produce duplicate-key errors or lost
+// updates under concurrent SavePushToken calls for the same user.
+//
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *userRepo) saveUserPushTokenRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.UserPushTokenRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existing orchestratorrepo.UserPushTokenRow
-	err := sess.Select("*").From("user_push_tokens").Where("user_id = ?", row.UserID).LoadOneContext(ctx, &existing)
-	if err == nil {
-		// Record exists — update token and timestamp.
-		_, err = sess.Update("user_push_tokens").
-			Where("user_id = ?", row.UserID).
-			Set("push_token", row.PushToken).
-			Set("updated_at", row.UpdatedAt).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update user push token")
-		}
-		return nil
-	}
+	const query = `
+INSERT INTO user_push_tokens (user_id, push_token, updated_at)
+VALUES (?, ?, ?)
+ON CONFLICT (user_id) DO UPDATE SET
+	push_token = EXCLUDED.push_token,
+	updated_at = EXCLUDED.updated_at`
 
-	// Record does not exist — insert.
-	_, err = sess.InsertInto("user_push_tokens").
-		Columns("user_id", "push_token", "updated_at").
-		Record(row).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.UserID, row.PushToken, row.UpdatedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		return merrors.WrapStdServerError(err, "insert user push token")
+		return merrors.WrapStdServerError(err, "upsert user push token")
 	}
 
 	return nil

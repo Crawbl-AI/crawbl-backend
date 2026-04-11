@@ -17,7 +17,7 @@ const terminalStatusOrdinal = 99
 
 // messageColumns defines the column names used in SELECT queries for the messages table.
 // These columns map directly to the MessageRow struct fields.
-var messageColumns = []string{
+var messageColumns = []any{
 	"id",
 	"conversation_id",
 	"role",

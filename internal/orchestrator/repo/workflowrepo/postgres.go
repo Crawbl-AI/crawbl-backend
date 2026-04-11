@@ -47,7 +47,7 @@ func (r *workflowRepo) GetDefinition(ctx context.Context, sess orchestratorrepo.
 	}
 
 	var row WorkflowDefinitionRow
-	err := sess.Select(orchestratorrepo.Columns(definitionColumns...)...).
+	err := sess.Select(definitionColumns...).
 		From("workflow_definitions").
 		Where("workspace_id = ? AND id = ?", workspaceID, definitionID).
 		LoadOneContext(ctx, &row)
@@ -67,7 +67,7 @@ func (r *workflowRepo) ListDefinitions(ctx context.Context, sess orchestratorrep
 	}
 
 	var rows []WorkflowDefinitionRow
-	_, err := sess.Select(orchestratorrepo.Columns(definitionColumns...)...).
+	_, err := sess.Select(definitionColumns...).
 		From("workflow_definitions").
 		Where("workspace_id = ?", workspaceID).
 		OrderDesc("created_at").
@@ -114,7 +114,7 @@ func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.S
 	}
 
 	var row WorkflowExecutionRow
-	err := sess.Select(orchestratorrepo.Columns(executionColumns...)...).
+	err := sess.Select(executionColumns...).
 		From("workflow_executions").
 		Where("id = ?", executionID).
 		LoadOneContext(ctx, &row)
@@ -155,7 +155,7 @@ func (r *workflowRepo) ListActiveExecutions(ctx context.Context, sess orchestrat
 	}
 
 	var rows []WorkflowExecutionRow
-	_, err := sess.Select(orchestratorrepo.Columns(executionColumns...)...).
+	_, err := sess.Select(executionColumns...).
 		From("workflow_executions").
 		Where("workspace_id = ? AND status IN ?", workspaceID, []string{"pending", "running"}).
 		OrderDesc("created_at").
@@ -224,7 +224,7 @@ func (r *workflowRepo) GetStepExecution(ctx context.Context, sess orchestratorre
 	}
 
 	var row WorkflowStepExecutionRow
-	err := sess.Select(orchestratorrepo.Columns(stepExecutionColumns...)...).
+	err := sess.Select(stepExecutionColumns...).
 		From("workflow_step_executions").
 		Where("execution_id = ? AND step_index = ?", executionID, stepIndex).
 		LoadOneContext(ctx, &row)

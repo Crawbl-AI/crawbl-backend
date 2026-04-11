@@ -19,7 +19,7 @@ func New() *artifactRepo {
 	return &artifactRepo{}
 }
 
-var artifactColumns = []string{
+var artifactColumns = []any{
 	"id",
 	"workspace_id",
 	"conversation_id",
@@ -32,7 +32,7 @@ var artifactColumns = []string{
 	"updated_at",
 }
 
-var versionColumns = []string{
+var versionColumns = []any{
 	"id",
 	"artifact_id",
 	"version",
@@ -43,7 +43,7 @@ var versionColumns = []string{
 	"created_at",
 }
 
-var reviewColumns = []string{
+var reviewColumns = []any{
 	"id",
 	"artifact_id",
 	"version",
@@ -89,7 +89,7 @@ func (r *artifactRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessio
 	}
 
 	var row ArtifactRow
-	err := sess.Select(orchestratorrepo.Columns(artifactColumns...)...).
+	err := sess.Select(artifactColumns...).
 		From("artifacts").
 		Where("workspace_id = ? AND id = ?", workspaceID, artifactID).
 		LoadOneContext(ctx, &row)
@@ -178,7 +178,7 @@ func (r *artifactRepo) GetLatestVersion(ctx context.Context, sess orchestratorre
 	}
 
 	var row ArtifactVersionRow
-	err := sess.Select(orchestratorrepo.Columns(versionColumns...)...).
+	err := sess.Select(versionColumns...).
 		From("artifact_versions").
 		Where("artifact_id = ?", artifactID).
 		OrderDesc("version").
@@ -201,7 +201,7 @@ func (r *artifactRepo) ListVersions(ctx context.Context, sess orchestratorrepo.S
 	}
 
 	var rows []ArtifactVersionRow
-	_, err := sess.Select(orchestratorrepo.Columns(versionColumns...)...).
+	_, err := sess.Select(versionColumns...).
 		From("artifact_versions").
 		Where("artifact_id = ?", artifactID).
 		OrderDesc("version").
@@ -246,7 +246,7 @@ func (r *artifactRepo) ListReviews(ctx context.Context, sess orchestratorrepo.Se
 	}
 
 	var rows []ArtifactReviewRow
-	_, err := sess.Select(orchestratorrepo.Columns(reviewColumns...)...).
+	_, err := sess.Select(reviewColumns...).
 		From("artifact_reviews").
 		Where("artifact_id = ? AND version = ?", artifactID, version).
 		OrderDesc("created_at").

@@ -25,7 +25,7 @@ func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo
 	}
 
 	var rows []orchestratorrepo.AgentRow
-	_, err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
+	_, err := sess.Select(agentColumns...).
 		From("agents").
 		Where("workspace_id = ?", workspaceID).
 		OrderAsc("sort_order").
@@ -52,7 +52,7 @@ func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRu
 	}
 
 	var row orchestratorrepo.AgentRow
-	err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
+	err := sess.Select(agentColumns...).
 		From("agents").
 		Where("workspace_id = ? AND id = ?", workspaceID, agentID).
 		LoadOneContext(ctx, &row)
@@ -112,7 +112,7 @@ func (r *agentRepo) GetByIDGlobal(ctx context.Context, sess orchestratorrepo.Ses
 	}
 
 	var row orchestratorrepo.AgentRow
-	err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
+	err := sess.Select(agentColumns...).
 		From("agents").
 		Where("id = ?", agentID).
 		LoadOneContext(ctx, &row)
@@ -135,7 +135,7 @@ func (r *agentRepo) GetBySlug(ctx context.Context, sess orchestratorrepo.Session
 	}
 
 	var row orchestratorrepo.AgentRow
-	err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
+	err := sess.Select(agentColumns...).
 		From("agents").
 		Where("workspace_id = ? AND slug = ?", workspaceID, slug).
 		LoadOneContext(ctx, &row)

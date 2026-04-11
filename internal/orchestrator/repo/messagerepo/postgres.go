@@ -37,7 +37,7 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 		limit = defaultListLimit
 	}
 
-	query := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+	query := sess.Select(messageColumns...).
 		From("messages").
 		Where("conversation_id = ?", opts.ConversationID).
 		OrderDesc("created_at").
@@ -113,7 +113,7 @@ func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orches
 	}
 
 	var row orchestratorrepo.MessageRow
-	err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+	err := sess.Select(messageColumns...).
 		From("messages").
 		Where("conversation_id = ?", conversationID).
 		OrderDesc("created_at").
@@ -164,7 +164,7 @@ func (r *messageRepo) GetLatestByConversationIDs(
 	}
 
 	var rows []orchestratorrepo.MessageRow
-	_, err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+	_, err := sess.Select(messageColumns...).
 		From("messages").
 		Where("conversation_id IN ?", args).
 		OrderDesc("created_at").
@@ -280,7 +280,7 @@ func (r *messageRepo) GetByID(ctx context.Context, sess orchestratorrepo.Session
 	}
 
 	var row orchestratorrepo.MessageRow
-	err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+	err := sess.Select(messageColumns...).
 		From("messages").
 		Where("id = ?", messageID).
 		LoadOneContext(ctx, &row)
@@ -309,7 +309,7 @@ func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.Sess
 	}
 
 	var rows []orchestratorrepo.MessageRow
-	_, err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+	_, err := sess.Select(messageColumns...).
 		From("messages").
 		Where("conversation_id = ?", conversationID).
 		OrderDesc("created_at").

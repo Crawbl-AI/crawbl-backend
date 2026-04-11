@@ -20,7 +20,7 @@ func (r *agentHistoryRepo) ListByAgentID(ctx context.Context, sess orchestratorr
 		return nil, merrors.ErrInvalidInput
 	}
 
-	query := sess.Select(orchestratorrepo.Columns(historyColumns...)...).
+	query := sess.Select(historyColumns...).
 		From("agent_history").
 		Where("agent_id = ?", agentID).
 		OrderDesc("created_at")

@@ -8,7 +8,7 @@ type workspaceRepo struct{}
 
 // workspaceColumns defines the column names used in SELECT queries for the workspaces table.
 // These columns map directly to the WorkspaceRow struct fields.
-var workspaceColumns = []string{
+var workspaceColumns = []any{
 	"id",
 	"user_id",
 	"name",

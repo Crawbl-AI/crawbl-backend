@@ -31,15 +31,10 @@ func NewPostgres() *Postgres {
 	return &Postgres{}
 }
 
-func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error {
-	count, err := r.Count(ctx, sess, d.WorkspaceID)
-	if err != nil {
-		return fmt.Errorf("drawer: check count: %w", err)
-	}
-	if count >= memory.MaxDrawersPerWorkspace {
-		return fmt.Errorf("drawer: workspace limit reached (%d)", memory.MaxDrawersPerWorkspace)
-	}
-
+// addDrawer is the shared implementation behind Add and AddIdempotent.
+// If onConflictDoNothing is true, a duplicate row is silently ignored;
+// otherwise a duplicate raises a constraint violation.
+func (r *Postgres) addDrawer(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32, onConflictDoNothing bool) error {
 	// Defensive default: the memory_drawers.state column was added
 	// with `DEFAULT 'raw'` but this INSERT explicitly supplies every
 	// column, so an empty d.State would be persisted verbatim. An
@@ -52,6 +47,17 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 
 	if len(embedding) > 0 {
 		vec := pgvector.NewVector(embedding)
+		if onConflictDoNothing {
+			_, err := sess.InsertBySql(
+				`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT DO NOTHING`,
+				d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
+				d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+				d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
+			).ExecContext(ctx)
+			return err
+		}
 		_, err := sess.InsertInto("memory_drawers").
 			Columns("id", "workspace_id", "wing", "room", "hall", "content", "embedding",
 				"importance", "memory_type", "source_file", "added_by", "added_by_agent",
@@ -63,7 +69,19 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 		return err
 	}
 
-	_, err = sess.InsertInto("memory_drawers").
+	if onConflictDoNothing {
+		_, err := sess.InsertBySql(
+			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT DO NOTHING`,
+			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
+			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
+		).ExecContext(ctx)
+		return err
+	}
+
+	_, err := sess.InsertInto("memory_drawers").
 		Columns("id", "workspace_id", "wing", "room", "hall", "content",
 			"importance", "memory_type", "source_file", "added_by", "added_by_agent",
 			"state", "pipeline_tier", "entity_count", "triple_count", "filed_at", "created_at").
@@ -72,6 +90,17 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt).
 		ExecContext(ctx)
 	return err
+}
+
+func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error {
+	count, err := r.Count(ctx, sess, d.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("drawer: check count: %w", err)
+	}
+	if count >= memory.MaxDrawersPerWorkspace {
+		return fmt.Errorf("drawer: workspace limit reached (%d)", memory.MaxDrawersPerWorkspace)
+	}
+	return r.addDrawer(ctx, sess, d, embedding, false)
 }
 
 func (r *Postgres) Delete(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error {
@@ -408,28 +437,7 @@ func (r *Postgres) GetByWingRoom(ctx context.Context, sess database.SessionRunne
 }
 
 func (r *Postgres) AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error {
-	if len(embedding) > 0 {
-		vec := pgvector.NewVector(embedding)
-		_, err := sess.InsertBySql(
-			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT DO NOTHING`,
-			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
-			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
-			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
-		).ExecContext(ctx)
-		return err
-	}
-
-	_, err := sess.InsertBySql(
-		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT DO NOTHING`,
-		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
-		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
-		d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
-	).ExecContext(ctx)
-	return err
+	return r.addDrawer(ctx, sess, d, embedding, true)
 }
 
 func (r *Postgres) ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error) {

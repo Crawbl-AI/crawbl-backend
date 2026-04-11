@@ -44,7 +44,7 @@ func (r *toolsRepo) List(ctx context.Context, sess orchestratorrepo.SessionRunne
 		return nil, merrors.ErrInvalidInput
 	}
 
-	query := sess.Select(orchestratorrepo.Columns(toolColumns...)...).
+	query := sess.Select(toolColumns...).
 		From("tools").
 		OrderAsc("sort_order").
 		OrderAsc("name")
@@ -98,7 +98,7 @@ func (r *toolsRepo) GetByNames(ctx context.Context, sess orchestratorrepo.Sessio
 	}
 
 	var rows []orchestratorrepo.ToolRow
-	_, err := sess.Select(orchestratorrepo.Columns(toolColumns...)...).
+	_, err := sess.Select(toolColumns...).
 		From("tools").
 		Where("name IN ?", names).
 		OrderAsc("sort_order").
