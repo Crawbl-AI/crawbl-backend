@@ -48,6 +48,7 @@ const (
 	statusBadRequest         = 400
 	statusUnauthorized       = 401
 	statusNotFound           = 404
+	statusTooManyRequests    = 429
 	statusServiceUnavailable = 503
 )
 
