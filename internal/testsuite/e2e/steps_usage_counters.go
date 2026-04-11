@@ -50,7 +50,10 @@ func (tc *testContext) usageTokensForAgent(alias, slug string) (int64, error) {
 		return 0, nil
 	}
 
-	subject := tc.resolveSubject(alias)
+	r, err := tc.resolveUser(alias)
+	if err != nil {
+		return 0, fmt.Errorf("usageTokensForAgent: %w", err)
+	}
 
 	var tokensUsed int64
 	row := s.QueryRowContext(context.Background(), `
@@ -58,10 +61,9 @@ func (tc *testContext) usageTokensForAgent(alias, slug string) (int64, error) {
 		FROM agent_usage_counters auc
 		JOIN agents a ON a.id = auc.agent_id
 		JOIN workspaces w ON w.id = a.workspace_id
-		JOIN users u ON u.id = w.user_id
-		WHERE u.subject = $1
+		WHERE w.user_id = $1::uuid
 		  AND a.slug = $2
-		LIMIT 1`, subject, normalizeKey(slug))
+		LIMIT 1`, r.UserID, normalizeKey(slug))
 
 	if err := row.Scan(&tokensUsed); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

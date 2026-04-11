@@ -27,41 +27,20 @@ func registerIdentitySteps(sc *godog.ScenarioContext, tc *testContext) {
 	})
 }
 
-// identityWorkspaceID resolves the default workspace UUID for the given alias
-// via the users → workspaces join in Postgres.
-func (tc *testContext) identityWorkspaceID(alias string) (string, error) {
-	subject := tc.resolveSubject(alias)
-	s := tc.sess()
-	if s == nil {
-		return "", nil
-	}
-	var wsID string
-	row := s.QueryRowContext(context.Background(), `
-		SELECT workspaces.id FROM workspaces
-		JOIN users ON users.id = workspaces.user_id
-		WHERE users.subject = $1
-		ORDER BY workspaces.created_at ASC
-		LIMIT 1`, subject)
-	if err := row.Scan(&wsID); err != nil {
-		return "", fmt.Errorf("resolving workspace for %q: %w", alias, err)
-	}
-	return wsID, nil
-}
-
 // identityAssertEmpty asserts that no personal summary exists yet for the user.
 func (tc *testContext) identityAssertEmpty(alias string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	wsID, err := tc.identityWorkspaceID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		return err
 	}
-	if wsID == "" {
+	if r.WorkspaceID == "" {
 		return nil
 	}
 	count, err := tc.queryCount(
-		`SELECT COUNT(*) FROM memory_identities WHERE workspace_id = $1`, wsID)
+		`SELECT COUNT(*) FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID)
 	if err != nil {
 		return err
 	}
@@ -76,11 +55,11 @@ func (tc *testContext) identitySet(alias, content string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	wsID, err := tc.identityWorkspaceID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		return err
 	}
-	if wsID == "" {
+	if r.WorkspaceID == "" {
 		return nil
 	}
 	s := tc.sess()
@@ -96,7 +75,7 @@ func (tc *testContext) identitySet(alias, content string) error {
 		 VALUES (?, ?, NOW())
 		 ON CONFLICT (workspace_id) DO UPDATE
 		   SET content = EXCLUDED.content, updated_at = NOW()`,
-		wsID, content,
+		r.WorkspaceID, content,
 	).ExecContext(context.Background())
 	if execErr != nil {
 		return fmt.Errorf("setting personal summary for %q: %w", alias, execErr)
@@ -109,11 +88,11 @@ func (tc *testContext) identityAssertContains(alias, phrase string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	wsID, err := tc.identityWorkspaceID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		return err
 	}
-	if wsID == "" {
+	if r.WorkspaceID == "" {
 		return nil
 	}
 	s := tc.sess()
@@ -122,7 +101,7 @@ func (tc *testContext) identityAssertContains(alias, phrase string) error {
 	}
 	var content sql.NullString
 	row := s.QueryRowContext(context.Background(),
-		`SELECT content FROM memory_identities WHERE workspace_id = $1`, wsID)
+		`SELECT content FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID)
 	if err := row.Scan(&content); err != nil {
 		return fmt.Errorf("reading personal summary for %q: %w", alias, err)
 	}
@@ -137,11 +116,11 @@ func (tc *testContext) identityAssertNotContains(alias, phrase string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	wsID, err := tc.identityWorkspaceID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		return err
 	}
-	if wsID == "" {
+	if r.WorkspaceID == "" {
 		return nil
 	}
 	s := tc.sess()
@@ -150,7 +129,7 @@ func (tc *testContext) identityAssertNotContains(alias, phrase string) error {
 	}
 	var content sql.NullString
 	row := s.QueryRowContext(context.Background(),
-		`SELECT content FROM memory_identities WHERE workspace_id = $1`, wsID)
+		`SELECT content FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID)
 	if scanErr := row.Scan(&content); scanErr != nil {
 		// Row doesn't exist — phrase cannot be present.
 		return nil
@@ -168,8 +147,8 @@ func (tc *testContext) identityTeardown() {
 		return
 	}
 	for alias := range tc.users {
-		wsID, err := tc.identityWorkspaceID(alias)
-		if err != nil || wsID == "" {
+		r, err := tc.resolveUser(alias)
+		if err != nil || r.WorkspaceID == "" {
 			continue
 		}
 		s := tc.sess()
@@ -177,7 +156,7 @@ func (tc *testContext) identityTeardown() {
 			continue
 		}
 		_, _ = s.DeleteFrom("memory_identities").
-			Where("workspace_id = ?", wsID).
+			Where("workspace_id = ?", r.WorkspaceID).
 			ExecContext(context.Background())
 	}
 }

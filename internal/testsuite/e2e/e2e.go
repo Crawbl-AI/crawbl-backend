@@ -248,6 +248,9 @@ type testContext struct {
 	users        map[string]*testUser
 	saved        map[string]string
 	state        map[string]*userJourneyState
+	// resolved caches subject→user→workspace lookups keyed by alias.
+	// Populated lazily by resolveUser; invalidated by invalidateResolvedUser.
+	resolved map[string]*resolvedUser
 	// Current response state.
 	lastStatus int
 	lastBody   []byte
@@ -283,6 +286,7 @@ func newTestContext(cfg *Config, users *suiteUsers, deps *suiteDeps) *testContex
 		users:        make(map[string]*testUser),
 		saved:        make(map[string]string),
 		state:        make(map[string]*userJourneyState),
+		resolved:     make(map[string]*resolvedUser),
 	}
 
 	// All 3 users are available in every scenario.

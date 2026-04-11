@@ -44,6 +44,8 @@ func (tc *testContext) userHasSignedUp(alias string) error {
 	if user == nil {
 		return fmt.Errorf("unknown user %q", alias)
 	}
+	// Invalidate any cached resolution so resolveUser re-reads the new row.
+	tc.invalidateResolvedUser(alias)
 	// Sign-up is idempotent — safe to call multiple times.
 	_, err := tc.doRequest("POST", "/v1/auth/sign-up", alias, nil)
 	if err != nil {
@@ -89,6 +91,7 @@ func (tc *testContext) userHasDeletedAccount(alias string) error {
 		"description": "setup for deletion test",
 	}
 	_, err := tc.doRequest("DELETE", "/v1/auth/delete", alias, body)
+	tc.invalidateResolvedUser(alias)
 	return err
 }
 

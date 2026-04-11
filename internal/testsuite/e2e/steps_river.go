@@ -84,10 +84,13 @@ func (tc *testContext) riverUsageWriteWithin(seconds int) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	userID := tc.resolveSubject("primary")
+	r, err := tc.resolveUser("primary")
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
 	defer cancel()
-	return tc.riverUsageWriteCompleted(ctx, userID)
+	return tc.riverUsageWriteCompleted(ctx, r.UserID)
 }
 
 // riverMessageCleanupWithin asserts that at least one message_cleanup job

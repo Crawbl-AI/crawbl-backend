@@ -27,18 +27,18 @@ func (tc *testContext) mempalaceSavedNoteAppearsWithin(seconds int) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	subject := tc.resolveSubject("primary")
+	r, err := tc.resolveUser("primary")
+	if err != nil {
+		return err
+	}
+	if r.WorkspaceID == "" {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
 	defer cancel()
 	return pollUntil(ctx, func() error {
-		count, err := tc.queryCount(`
-			SELECT COUNT(*) FROM memory_drawers
-			WHERE workspace_id IN (
-				SELECT id FROM workspaces
-				WHERE user_id IN (
-					SELECT id FROM users WHERE subject = $1
-				)
-			)`, subject)
+		count, err := tc.queryCount(
+			`SELECT COUNT(*) FROM memory_drawers WHERE workspace_id = $1`, r.WorkspaceID)
 		if err != nil {
 			return err
 		}
@@ -55,7 +55,13 @@ func (tc *testContext) mempalaceSavedNoteProcessedWithin(seconds int) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	subject := tc.resolveSubject("primary")
+	r, err := tc.resolveUser("primary")
+	if err != nil {
+		return err
+	}
+	if r.WorkspaceID == "" {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
 	defer cancel()
 	return pollUntil(ctx, func() error {
@@ -66,13 +72,8 @@ func (tc *testContext) mempalaceSavedNoteProcessedWithin(seconds int) error {
 		var state sql.NullString
 		row := s.QueryRowContext(context.Background(), `
 			SELECT state FROM memory_drawers
-			WHERE workspace_id IN (
-				SELECT id FROM workspaces
-				WHERE user_id IN (
-					SELECT id FROM users WHERE subject = $1
-				)
-			)
-			ORDER BY created_at DESC LIMIT 1`, subject)
+			WHERE workspace_id = $1
+			ORDER BY created_at DESC LIMIT 1`, r.WorkspaceID)
 		if err := row.Scan(&state); err != nil {
 			return fmt.Errorf("querying note state: %w", err)
 		}
@@ -90,7 +91,13 @@ func (tc *testContext) mempalaceNoteRecognized(subject string, seconds int) erro
 	if tc.dbConn == nil {
 		return nil
 	}
-	userSubject := tc.resolveSubject("primary")
+	r, err := tc.resolveUser("primary")
+	if err != nil {
+		return err
+	}
+	if r.WorkspaceID == "" {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
 	defer cancel()
 	return pollUntil(ctx, func() error {
@@ -101,13 +108,8 @@ func (tc *testContext) mempalaceNoteRecognized(subject string, seconds int) erro
 		var memType sql.NullString
 		row := s.QueryRowContext(context.Background(), `
 			SELECT memory_type FROM memory_drawers
-			WHERE workspace_id IN (
-				SELECT id FROM workspaces
-				WHERE user_id IN (
-					SELECT id FROM users WHERE subject = $1
-				)
-			)
-			ORDER BY created_at DESC LIMIT 1`, userSubject)
+			WHERE workspace_id = $1
+			ORDER BY created_at DESC LIMIT 1`, r.WorkspaceID)
 		if err := row.Scan(&memType); err != nil {
 			return fmt.Errorf("querying note classification for subject %q: %w", subject, err)
 		}
@@ -125,6 +127,10 @@ func (tc *testContext) mempalaceFindByTopic(minCount int, slug string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
+	r, err := tc.resolveUser("primary")
+	if err != nil {
+		return err
+	}
 	id, err := tc.agentIDForSlug("primary", slug)
 	if err != nil {
 		return err
@@ -136,14 +142,8 @@ func (tc *testContext) mempalaceFindByTopic(minCount int, slug string) error {
 	if assertErr := tc.assertStatus(http.StatusOK); assertErr != nil {
 		return assertErr
 	}
-	count, err := tc.queryCount(`
-		SELECT COUNT(*) FROM memory_drawers
-		WHERE workspace_id IN (
-			SELECT id FROM workspaces
-			WHERE user_id IN (
-				SELECT id FROM users WHERE subject = $1
-			)
-		)`, tc.resolveSubject("primary"))
+	count, err := tc.queryCount(
+		`SELECT COUNT(*) FROM memory_drawers WHERE workspace_id = $1`, r.WorkspaceID)
 	if err != nil {
 		return err
 	}

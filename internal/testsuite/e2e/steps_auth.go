@@ -210,6 +210,9 @@ func (tc *testContext) userDeletesTheirAccount(alias string) error {
 	if _, err := tc.doRequest("DELETE", "/v1/auth/delete", alias, body); err != nil {
 		return err
 	}
+	// Invalidate the cached resolution so subsequent resolveUser calls
+	// re-read from the DB and reflect the deleted state.
+	tc.invalidateResolvedUser(alias)
 	return tc.assertStatus(http.StatusNoContent)
 }
 

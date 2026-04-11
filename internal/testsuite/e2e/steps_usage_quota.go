@@ -90,10 +90,11 @@ func (tc *testContext) quotaSetMonthlyLimit(alias string, limit int) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	userID, err := tc.resolveUserID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		return err
 	}
+	userID := r.UserID
 
 	// Deterministic plan ID scoped to the test user so parallel runs don't collide.
 	planID := fmt.Sprintf("e2e-plan-%s", userID)
@@ -136,10 +137,11 @@ func (tc *testContext) quotaSetUsageCounter(alias string, tokensUsed int) error 
 	if tc.dbConn == nil {
 		return nil
 	}
-	userID, err := tc.resolveUserID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		return err
 	}
+	userID := r.UserID
 
 	period := time.Now().UTC().Format("2006-01")
 	s := tc.sess()
@@ -169,11 +171,12 @@ func (tc *testContext) quotaClearForAlias(alias string) error {
 	if tc.dbConn == nil {
 		return nil
 	}
-	userID, err := tc.resolveUserID(alias)
+	r, err := tc.resolveUser(alias)
 	if err != nil {
 		// User may not exist in this scenario — ignore.
 		return nil
 	}
+	userID := r.UserID
 
 	period := time.Now().UTC().Format("2006-01")
 	s := tc.sess()
@@ -214,21 +217,6 @@ func (tc *testContext) quotaAssertRejected() error {
 		return fmt.Errorf("expected quota-exceeded error code QTA0001, got %q (body: %s)", code, truncate(body, maxBodyDisplayLen))
 	}
 	return nil
-}
-
-// resolveUserID looks up the UUID of a test user from the database.
-func (tc *testContext) resolveUserID(alias string) (string, error) {
-	subject := tc.resolveSubject(alias)
-	s := tc.sess()
-	if s == nil {
-		return "", fmt.Errorf("no database connection available")
-	}
-	var id string
-	row := s.QueryRowContext(context.Background(), "SELECT id FROM users WHERE subject = $1", subject)
-	if err := row.Scan(&id); err != nil {
-		return "", fmt.Errorf("resolveUserID for %q (subject %q): %w", alias, subject, err)
-	}
-	return id, nil
 }
 
 // truncate shortens s to at most n bytes for display in error messages.
