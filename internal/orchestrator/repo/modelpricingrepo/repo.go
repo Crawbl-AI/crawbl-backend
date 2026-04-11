@@ -15,6 +15,29 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// CurrentEntry is the per-model pricing snapshot returned by
+// ListAllCurrentEntries. It mirrors pricing.Entry but is defined here
+// to avoid an import cycle between modelpricingrepo and the pricing
+// package.
+type CurrentEntry struct {
+	Provider           string
+	Model              string
+	Region             string
+	InputCostPerToken  float64
+	OutputCostPerToken float64
+	CachedCostPerToken float64
+}
+
+// currentEntryRow is the db scan target for ListAllCurrentEntries.
+type currentEntryRow struct {
+	Provider           string  `db:"provider"`
+	Model              string  `db:"model"`
+	Region             string  `db:"region"`
+	InputCostPerToken  float64 `db:"input_cost_per_token"`
+	OutputCostPerToken float64 `db:"output_cost_per_token"`
+	CachedCostPerToken float64 `db:"cached_cost_per_token"`
+}
+
 // LatestPrice is the trimmed projection we need to decide whether an
 // upstream LiteLLM entry has drifted from what we already store.
 type LatestPrice struct {
@@ -46,6 +69,12 @@ type Repo interface {
 	// historical rows stay in place so we can compute cost using the
 	// price that was in effect at the time of each event.
 	Insert(ctx context.Context, sess orchestratorrepo.SessionRunner, opts InsertPriceOpts) *merrors.Error
+
+	// ListAllCurrentEntries returns one CurrentEntry per
+	// (provider, model, region) with the most recent effective_at that
+	// is not in the future. Used by the in-memory pricing cache on
+	// refresh. DISTINCT ON is used for a single round-trip query.
+	ListAllCurrentEntries(ctx context.Context, sess orchestratorrepo.SessionRunner) ([]*CurrentEntry, *merrors.Error)
 }
 
 type repo struct{}
@@ -95,6 +124,36 @@ func (repo) Insert(ctx context.Context, sess orchestratorrepo.SessionRunner, opt
 		return merrors.NewServerError(fmt.Errorf("insert model pricing: %w", err))
 	}
 	return nil
+}
+
+func (repo) ListAllCurrentEntries(ctx context.Context, sess orchestratorrepo.SessionRunner) ([]*CurrentEntry, *merrors.Error) {
+	// DISTINCT ON is a Postgres extension that cannot be expressed via the
+	// dbr query builder, so raw SQL is used here deliberately.
+	const query = `
+		SELECT DISTINCT ON (provider, model, region)
+			provider, model, region,
+			input_cost_per_token, output_cost_per_token, cached_cost_per_token
+		FROM model_pricing
+		WHERE effective_at <= NOW()
+		ORDER BY provider, model, region, effective_at DESC`
+
+	var rows []currentEntryRow
+	if _, err := sess.SelectBySql(query).LoadContext(ctx, &rows); err != nil {
+		return nil, merrors.NewServerError(fmt.Errorf("modelpricingrepo: list current entries: %w", err))
+	}
+
+	out := make([]*CurrentEntry, len(rows))
+	for i, r := range rows {
+		out[i] = &CurrentEntry{
+			Provider:           r.Provider,
+			Model:              r.Model,
+			Region:             r.Region,
+			InputCostPerToken:  r.InputCostPerToken,
+			OutputCostPerToken: r.OutputCostPerToken,
+			CachedCostPerToken: r.CachedCostPerToken,
+		}
+	}
+	return out, nil
 }
 
 // isNotFound recognizes the "no rows" error returned by dbr. We avoid

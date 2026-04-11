@@ -1,98 +1,31 @@
+// Package httpserver provides orchestrator-agnostic HTTP helpers: success
+// and error response envelope writers, generic header constants, and shared
+// content-type values. It must not import internal/orchestrator — the
+// orchestrator-specific auth middleware lives in
+// internal/orchestrator/server/middleware/ precisely so this package can
+// be reused by other binaries without transitively depending on the
+// orchestrator domain.
 package httpserver
 
-// HTTP header constants used throughout the application.
+// Generic HTTP header and content-type constants used by the response
+// envelope helpers and by callers that need to set standard HTTP headers
+// without pulling in orchestrator-specific middleware types.
+//
+// Orchestrator-specific header constants (X-Firebase-*, X-E2E-*, X-Device-*,
+// X-Version, X-Timezone) and the authentication middleware itself live in
+// internal/orchestrator/server/middleware/, which may legally import the
+// orchestrator domain package. This package (internal/pkg/httpserver) must
+// stay orchestrator-agnostic — see internal/pkg/AGENTS.md.
 const (
 	// AuthorizationHeader is the standard Authorization header.
 	AuthorizationHeader = "Authorization"
 	// XTokenHeader is the custom X-Token header for mobile authentication.
 	XTokenHeader = "X-Token"
-	// XFirebaseUIDHeader is set by Envoy SecurityPolicy after JWT verification.
-	XFirebaseUIDHeader = "X-Firebase-UID"
-	// XFirebaseEmailHeader is set by Envoy SecurityPolicy after JWT verification.
-	XFirebaseEmailHeader = "X-Firebase-Email"
-	// XFirebaseNameHeader is set by Envoy SecurityPolicy after JWT verification.
-	XFirebaseNameHeader = "X-Firebase-Name"
-	// XDeviceInfoHeader contains device information.
-	XDeviceInfoHeader = "X-Device-Info"
-	// XDeviceIDHeader contains the unique device identifier.
-	XDeviceIDHeader = "X-Device-ID"
-	// XVersionHeader contains the client version.
-	XVersionHeader = "X-Version"
-	// XTimezoneHeader contains the client timezone.
-	XTimezoneHeader = "X-Timezone"
 	// ContentTypeJSON is the JSON content type.
 	ContentTypeJSON = "application/json"
 	// BearerPrefix is the Bearer token prefix.
 	BearerPrefix = "Bearer "
-	// EnvironmentLocal is the local development environment identifier.
-	EnvironmentLocal = "local"
 )
-
-// contextKey is the type for context keys in this package.
-type contextKey string
-
-// Context keys for storing request-scoped values.
-const (
-	// principalContextKey stores the authenticated principal.
-	principalContextKey contextKey = "principal"
-	// requestMetadataContextKey stores request metadata (device info, etc.).
-	requestMetadataContextKey contextKey = "requestMetadata"
-)
-
-// AuthTokenSource identifies where the authentication token came from.
-type AuthTokenSource string
-
-// Auth token source constants.
-const (
-	// AuthTokenSourceUnknown indicates an unknown or missing token source.
-	AuthTokenSourceUnknown AuthTokenSource = "unknown"
-	// AuthTokenSourceAuthorization indicates the token came from the Authorization header.
-	AuthTokenSourceAuthorization AuthTokenSource = "authorization"
-	// AuthTokenSourceXToken indicates the token came from the X-Token header.
-	AuthTokenSourceXToken AuthTokenSource = "x-token"
-)
-
-// String returns the string representation of the token source.
-func (s AuthTokenSource) String() string {
-	return string(s)
-}
-
-// MiddlewareConfig holds configuration for the authentication middleware.
-type MiddlewareConfig struct {
-	// Environment is the current environment (local, dev, prod, etc.).
-	Environment string
-	// E2EToken is a shared secret that enables e2e test auth bypass.
-	// When set and a request carries a matching X-E2E-Token header,
-	// the middleware reads identity from X-E2E-UID/Email/Name instead
-	// of requiring a real Firebase JWT. Empty disables the bypass.
-	E2EToken string
-}
-
-// E2E auth header constants.
-const (
-	// XE2ETokenHeader carries the shared secret for e2e test auth bypass.
-	XE2ETokenHeader = "X-E2E-Token"
-	// XE2EUIDHeader carries the test user's UID when using e2e auth.
-	XE2EUIDHeader = "X-E2E-UID"
-	// XE2EEmailHeader carries the test user's email when using e2e auth.
-	XE2EEmailHeader = "X-E2E-Email"
-	// XE2ENameHeader carries the test user's display name when using e2e auth.
-	XE2ENameHeader = "X-E2E-Name"
-)
-
-// RequestMetadata contains metadata extracted from request headers.
-type RequestMetadata struct {
-	// TokenSource indicates where the token originated.
-	TokenSource AuthTokenSource
-	// DeviceInfo contains device information from headers.
-	DeviceInfo string
-	// DeviceID is the unique device identifier.
-	DeviceID string
-	// Version is the client version.
-	Version string
-	// Timezone is the client timezone.
-	Timezone string
-}
 
 // successResponseEnvelope wraps successful responses in a data envelope.
 type successResponseEnvelope struct {

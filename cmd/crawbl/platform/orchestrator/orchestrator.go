@@ -222,7 +222,7 @@ func runServer(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
-	pricingCache := pricing.New(db, logger)
+	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
 	// Build the single river.Config covering every background job,
@@ -313,8 +313,8 @@ func runServer(ctx context.Context) error {
 	}
 	httpMiddleware := buildHTTPMiddleware()
 
-	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
-	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
+	workspaceService := workspaceservice.MustNew(workspaceRepo, runtimeClient, logger)
+	authService := authservice.MustNew(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
 	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
 	defer cleanupRT()
@@ -326,7 +326,7 @@ func runServer(ctx context.Context) error {
 
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
-	chatService := chatservice.New(
+	chatService := chatservice.MustNew(
 		db,
 		chatservice.Repos{
 			Workspace:     workspaceRepo,
