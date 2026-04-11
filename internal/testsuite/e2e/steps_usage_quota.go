@@ -203,7 +203,7 @@ func (tc *testContext) quotaClearForAlias(alias string) error {
 func (tc *testContext) quotaAssertRejected() error {
 	if tc.lastStatus != http.StatusTooManyRequests && tc.lastStatus != http.StatusBadRequest {
 		return fmt.Errorf("expected quota-exceeded response (429 or 400), got %d; body: %s",
-			tc.lastStatus, truncate(string(tc.lastBody), maxBodyDisplayLen))
+			tc.lastStatus, abbreviatedBody(tc.lastBody))
 	}
 	body := string(tc.lastBody)
 	// The business error envelope is {"message": "...", "code": "QTA0001"}
@@ -214,15 +214,7 @@ func (tc *testContext) quotaAssertRejected() error {
 		code = gjson.Get(body, "error.code").String()
 	}
 	if code != "QTA0001" {
-		return fmt.Errorf("expected quota-exceeded error code QTA0001, got %q (body: %s)", code, truncate(body, maxBodyDisplayLen))
+		return fmt.Errorf("expected quota-exceeded error code QTA0001, got %q (body: %s)", code, abbreviatedBody(tc.lastBody))
 	}
 	return nil
-}
-
-// truncate shortens s to at most n bytes for display in error messages.
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
 }
