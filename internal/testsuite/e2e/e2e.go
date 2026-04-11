@@ -142,6 +142,16 @@ func Run(cfg *Config) *Results {
 
 	allUsers := []*testUser{users.primary, users.frank, users.grace}
 
+	deps := newSuiteDeps(cfg)
+	defer deps.close()
+
+	// Hard-purge any residue from previous runs before a new suite
+	// starts. The API /v1/auth/delete only soft-deletes users, so
+	// without this every iteration leaks ~9 agents + 3 workspaces
+	// + 4 memory_* rows into the dev DB. Safe no-op when cfg has
+	// no DatabaseDSN (CI mode).
+	wipeE2EResidue(deps)
+
 	// Layer 3: use RunUntilSignal for graceful cleanup on SIGINT/SIGTERM.
 	// When CI cancels or user hits Ctrl+C, the stop function cleans up
 	// all test users before the process exits.
@@ -151,12 +161,13 @@ func Run(cfg *Config) *Results {
 		for _, u := range allUsers {
 			cleanupUser(cfg, u)
 		}
+		// Follow the API soft-delete with a DB hard-purge so a
+		// signal-interrupted run does not leak the partially
+		// completed scenario's rows into the dev DB.
+		wipeE2EResidue(deps)
 		log.Println("cleanup done")
 		return nil
 	}
-
-	deps := newSuiteDeps(cfg)
-	defer deps.close()
 
 	runErr := backendruntime.RunUntilSignal(func() error {
 		suite := godog.TestSuite{
@@ -179,6 +190,7 @@ func Run(cfg *Config) *Results {
 	for _, u := range allUsers {
 		cleanupUser(cfg, u)
 	}
+	wipeE2EResidue(deps)
 
 	return &Results{Exit: exit}
 }
