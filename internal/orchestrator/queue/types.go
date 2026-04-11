@@ -41,10 +41,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 )
 
-// -----------------------------------------------------------------------------
-// Deps — single wired struct every worker reads its dependencies from.
-// -----------------------------------------------------------------------------
-
 // Deps bundles every collaborator the River-backed workers need. It is
 // the single dependency struct the orchestrator wires once at boot and
 // passes to NewConfig; individual workers pick out the fields they use.
@@ -79,10 +75,6 @@ type Deps struct {
 	// Usage / billing — per-LLM-call ClickHouse writer.
 	LLMUsageRepo llmusagerepo.Repo
 }
-
-// -----------------------------------------------------------------------------
-// Queue names + cadence knobs — one source of truth.
-// -----------------------------------------------------------------------------
 
 // River queue names. NewConfig registers a river.QueueConfig for each
 // and every Args type's InsertOpts routes its job here.
@@ -139,10 +131,6 @@ const (
 	providerAnthropic = "anthropic"
 )
 
-// -----------------------------------------------------------------------------
-// Tag + metadata vars — rendered by riverui as badges + description.
-// -----------------------------------------------------------------------------
-
 // Tag badge sets per job kind. riverui renders these next to the job
 // row so operators can group at a glance without parsing the kind
 // string.
@@ -171,10 +159,6 @@ var (
 	pricingCacheRefreshMetadata = mustMarshalJobMetadata("reload in-memory pricing cache from Postgres model_pricing table", "orchestrator", "every 10m")
 	messageCleanupMetadata      = mustMarshalJobMetadata("mark pending messages older than 5m as failed so mobile UI never hangs on orphaned placeholders", "orchestrator", "every 1m")
 )
-
-// -----------------------------------------------------------------------------
-// Memory-domain Args + Worker declarations.
-// -----------------------------------------------------------------------------
 
 // MemoryProcessArgs triggers a single batch run of jobs.RunProcess
 // over all active workspaces. Empty struct: concurrent inserts dedupe
@@ -288,10 +272,6 @@ type MemoryCentroidRecomputeWorker struct {
 	river.WorkerDefaults[MemoryCentroidRecomputeArgs]
 	deps Deps
 }
-
-// -----------------------------------------------------------------------------
-// Orchestrator cross-cutting Args + Worker declarations.
-// -----------------------------------------------------------------------------
 
 // UsageEvent is the payload a caller fills in per LLM call. It is also
 // the River job payload — the Kind() + InsertOpts() methods below make
@@ -442,10 +422,6 @@ type MessageCleanup struct {
 	deps Deps
 }
 
-// -----------------------------------------------------------------------------
-// Event payloads — transport-layer structs shared with publishers.
-// -----------------------------------------------------------------------------
-
 // MemoryEvent is the payload published on NATS each time a new raw
 // drawer is inserted by the auto-ingest hot path. Consumers use it to
 // kick off downstream distillation, analytics, or audit pipelines.
@@ -460,10 +436,6 @@ type MemoryEvent struct {
 	AgentID     string `json:"agent_id"`
 	ContentLen  int    `json:"content_len"`
 }
-
-// -----------------------------------------------------------------------------
-// Shared package helpers.
-// -----------------------------------------------------------------------------
 
 // mustMarshalJobMetadata encodes a fixed-shape job metadata object into
 // a byte slice at package init. Panics on encode failure because the

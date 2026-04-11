@@ -16,10 +16,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 )
 
-// -----------------------------------------------------------------------------
-// UsageWriter — per-LLM-call billing row into ClickHouse.
-// -----------------------------------------------------------------------------
-
 // NewUsageWriter constructs a usage_write worker bound to the unified
 // queue.Deps. Thin adapter around LLMUsageRepo.Insert.
 func NewUsageWriter(deps Deps) *UsageWriter {
@@ -78,10 +74,6 @@ func (w *UsageWriter) Work(ctx context.Context, job *river.Job[UsageEvent]) erro
 	)
 	return nil
 }
-
-// -----------------------------------------------------------------------------
-// PricingRefresh — daily LiteLLM mirror into model_pricing.
-// -----------------------------------------------------------------------------
 
 // NewPricingRefresh constructs a pricing_refresh worker bound to the
 // unified queue.Deps.
@@ -210,10 +202,6 @@ func normalizeProvider(provider string) string {
 	}
 }
 
-// -----------------------------------------------------------------------------
-// PricingCacheRefresh — reload in-memory pricing cache from Postgres.
-// -----------------------------------------------------------------------------
-
 // NewPricingCacheRefreshWorker constructs a pricing_cache_refresh worker
 // bound to the unified queue.Deps.
 func NewPricingCacheRefreshWorker(deps Deps) *PricingCacheRefreshWorker {
@@ -241,10 +229,6 @@ func (w *PricingCacheRefreshWorker) Work(ctx context.Context, job *river.Job[Pri
 	)
 	return nil
 }
-
-// -----------------------------------------------------------------------------
-// MessageCleanup — fail stale pending messages so mobile never hangs.
-// -----------------------------------------------------------------------------
 
 // NewMessageCleanup constructs a message_cleanup worker bound to the
 // unified queue.Deps.

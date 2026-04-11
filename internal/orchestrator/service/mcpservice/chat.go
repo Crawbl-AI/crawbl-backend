@@ -60,7 +60,7 @@ func (s *service) SearchMessages(ctx contextT, sess sessionT, userID, workspaceI
 //  2. Recent messages fill the remaining budget up to memory.TokenBudgetTotal characters.
 //  3. A hard cap of memory.TokenBudgetTotal characters is applied to the combined output.
 func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspaceID, conversationID string, limit int) string {
-	// --- Memory layer (L0 + L1) ---
+	// Memory layer (L0 + L1).
 	var memoryText string
 	if s.memoryStack != nil {
 		wakeUp, err := s.memoryStack.WakeUp(ctx, sess, workspaceID, "")
@@ -69,7 +69,7 @@ func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspac
 		}
 	}
 
-	// --- Recent messages ---
+	// Recent messages.
 	messages, mErr := s.repos.Message.ListRecent(ctx, sess, conversationID, limit)
 
 	var msgSB strings.Builder
@@ -104,7 +104,7 @@ func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspac
 	}
 	messagesText := msgSB.String()
 
-	// --- Budget assembly ---
+	// Budget assembly.
 	if memoryText == "" && messagesText == "" {
 		return ""
 	}

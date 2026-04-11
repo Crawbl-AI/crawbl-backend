@@ -189,7 +189,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			// Use a fresh context for cleanup writes: the workflow context may
 			// already be cancelled (timeout or shutdown), but we still need to
 			// persist the failed status so the execution row doesn't stay "running".
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), WorkflowCleanupTimeout)
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), WorkflowCleanupTimeout)
 
 			if mErr := s.workflowRepo.UpdateExecution(cleanupCtx, sess, execution); mErr != nil {
 				slog.Warn("ExecuteWorkflow: failed to mark execution as failed", "execution_id", executionID, "error", mErr.Error())

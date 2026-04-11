@@ -355,21 +355,7 @@ func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput,
 			return nil, memorySearchOutput{}, err
 		}
 
-		briefs := make([]memorySearchResultBrief, 0, len(results))
-		for i := range results {
-			r := &results[i]
-			briefs = append(briefs, memorySearchResultBrief{
-				ID:         r.ID,
-				Wing:       r.Wing,
-				Room:       r.Room,
-				Content:    r.Content,
-				MemoryType: r.MemoryType,
-				Importance: r.Importance,
-				Similarity: r.Similarity,
-				FiledAt:    r.FiledAt.Format(time.RFC3339),
-			})
-		}
-
+		briefs := toMemorySearchResultBriefs(results)
 		return nil, memorySearchOutput{Results: briefs, Count: len(briefs)}, nil
 	})
 }
@@ -395,21 +381,7 @@ func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryChec
 			return nil, memoryCheckDuplicateOutput{}, err
 		}
 
-		briefs := make([]memorySearchResultBrief, 0, len(results))
-		for i := range results {
-			r := &results[i]
-			briefs = append(briefs, memorySearchResultBrief{
-				ID:         r.ID,
-				Wing:       r.Wing,
-				Room:       r.Room,
-				Content:    r.Content,
-				MemoryType: r.MemoryType,
-				Importance: r.Importance,
-				Similarity: r.Similarity,
-				FiledAt:    r.FiledAt.Format(time.RFC3339),
-			})
-		}
-
+		briefs := toMemorySearchResultBriefs(results)
 		return nil, memoryCheckDuplicateOutput{
 			Duplicates: briefs,
 			HasDupe:    len(briefs) > 0,
@@ -633,25 +605,7 @@ func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInpu
 			return nil, memoryKGQueryOutput{}, err
 		}
 
-		out := make([]tripleResultOut, 0, len(results))
-		for i := range results {
-			r := &results[i]
-			tr := tripleResultOut{
-				Subject:   r.SubjectName,
-				Predicate: r.Predicate,
-				Object:    r.ObjectName,
-				Direction: r.Direction,
-				Current:   r.Current,
-			}
-			if r.ValidFrom != nil {
-				tr.ValidFrom = *r.ValidFrom
-			}
-			if r.ValidTo != nil {
-				tr.ValidTo = *r.ValidTo
-			}
-			out = append(out, tr)
-		}
-
+		out := tripleResultsToWire(results)
 		return nil, memoryKGQueryOutput{Entity: input.Entity, Results: out, Count: len(out)}, nil
 	})
 }
@@ -710,25 +664,7 @@ func newMemoryKGTimelineHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGTimeli
 			return nil, memoryKGTimelineOutput{}, err
 		}
 
-		out := make([]tripleResultOut, 0, len(results))
-		for i := range results {
-			r := &results[i]
-			tr := tripleResultOut{
-				Subject:   r.SubjectName,
-				Predicate: r.Predicate,
-				Object:    r.ObjectName,
-				Direction: r.Direction,
-				Current:   r.Current,
-			}
-			if r.ValidFrom != nil {
-				tr.ValidFrom = *r.ValidFrom
-			}
-			if r.ValidTo != nil {
-				tr.ValidTo = *r.ValidTo
-			}
-			out = append(out, tr)
-		}
-
+		out := tripleResultsToWire(results)
 		return nil, memoryKGTimelineOutput{Events: out, Count: len(out)}, nil
 	})
 }
@@ -762,9 +698,7 @@ func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWri
 		}
 
 		agentName := strings.ToLower(strings.TrimSpace(input.AgentName))
-		agentName = strings.ReplaceAll(agentName, " ", "_")
-		agentName = strings.ReplaceAll(agentName, "'", "")
-		wing := fmt.Sprintf("wing_%s", agentName)
+		wing := agentWing(agentName)
 		room := "diary"
 
 		hash := sha256.Sum256([]byte(input.Entry))
@@ -820,9 +754,7 @@ func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryRead
 		}
 
 		agentName := strings.ToLower(strings.TrimSpace(input.AgentName))
-		agentName = strings.ReplaceAll(agentName, " ", "_")
-		agentName = strings.ReplaceAll(agentName, "'", "")
-		wing := fmt.Sprintf("wing_%s", agentName)
+		wing := agentWing(agentName)
 
 		drawers, err := deps.DrawerRepo.GetByWingRoom(ctx, sess, workspaceID, wing, "diary", lastN)
 		if err != nil {
@@ -944,4 +876,60 @@ func registerMemoryTools(server *sdkmcp.Server, deps *Deps) {
 		Name:        "memory_diary_read",
 		Description: "Read recent diary entries for an agent. Returns entries newest-first.",
 	}, newMemoryDiaryReadHandler(deps))
+}
+
+// toMemorySearchResultBriefs maps repo-layer DrawerSearchResult values
+// to the MCP wire shape. Used by both the memory_search and
+// memory_check_duplicate tool handlers so the field set can never drift.
+func toMemorySearchResultBriefs(results []memory.DrawerSearchResult) []memorySearchResultBrief {
+	briefs := make([]memorySearchResultBrief, 0, len(results))
+	for i := range results {
+		r := &results[i]
+		briefs = append(briefs, memorySearchResultBrief{
+			ID:         r.ID,
+			Wing:       r.Wing,
+			Room:       r.Room,
+			Content:    r.Content,
+			MemoryType: r.MemoryType,
+			Importance: r.Importance,
+			Similarity: r.Similarity,
+			FiledAt:    r.FiledAt.Format(time.RFC3339),
+		})
+	}
+	return briefs
+}
+
+// tripleResultsToWire maps repo-layer TripleResult values to the MCP
+// wire shape. Used by kg_query and kg_timeline handlers.
+func tripleResultsToWire(results []memory.TripleResult) []tripleResultOut {
+	out := make([]tripleResultOut, 0, len(results))
+	for i := range results {
+		r := &results[i]
+		tr := tripleResultOut{
+			Subject:   r.SubjectName,
+			Predicate: r.Predicate,
+			Object:    r.ObjectName,
+			Direction: r.Direction,
+			Current:   r.Current,
+		}
+		if r.ValidFrom != nil {
+			tr.ValidFrom = *r.ValidFrom
+		}
+		if r.ValidTo != nil {
+			tr.ValidTo = *r.ValidTo
+		}
+		out = append(out, tr)
+	}
+	return out
+}
+
+// agentWing returns the canonical drawer-wing name for an agent. Agent
+// names are user-supplied and may contain spaces or apostrophes; the
+// slug form is lowercase with spaces replaced by underscores and
+// apostrophes stripped.
+func agentWing(agentName string) string {
+	slug := strings.ToLower(agentName)
+	slug = strings.ReplaceAll(slug, " ", "_")
+	slug = strings.ReplaceAll(slug, "'", "")
+	return "wing_" + slug
 }

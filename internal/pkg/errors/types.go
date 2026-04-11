@@ -33,7 +33,6 @@ const (
 	ErrCodeUserNotFound            = "USR0002" // User does not exist
 	ErrCodeUserWrongFirebaseUID    = "USR0003" // Firebase UID mismatch during auth
 	ErrCodeUserFirebaseUIDMismatch = "USR0004" // Firebase UID does not match expected
-	ErrCodeUserAlreadyExists       = "USR0005" // User with this subject already exists
 	ErrCodeUserBanned              = "USR0006" // User account is banned
 	ErrCodeLegalVersionMismatch    = "USR0012" // Legal document version does not match
 
@@ -118,7 +117,6 @@ var (
 	ErrIntegrationCallbackFailed       = NewBusinessError("OAuth token exchange failed", ErrCodeIntegrationCallbackFailed)
 
 	// User errors (continued)
-	ErrUserAlreadyExists    = NewBusinessError("User already exists", ErrCodeUserAlreadyExists)
 	ErrUserBanned           = NewBusinessError("Account is banned", ErrCodeUserBanned)
 	ErrLegalVersionMismatch = NewBusinessError("Legal document version does not match current version", ErrCodeLegalVersionMismatch)
 

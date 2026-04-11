@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gocraft/dbr/v2"
-	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
@@ -207,19 +206,15 @@ func (s *service) persistUserMessage(
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
 ) (*persistedMsg, *merrors.Error) {
-	now := time.Now().UTC()
-
-	userMsg := &orchestrator.Message{
-		ID:             uuid.NewString(),
-		ConversationID: conversation.ID,
-		Role:           orchestrator.MessageRoleUser,
-		Content:        opts.Content,
-		Status:         orchestrator.MessageStatusSent,
-		LocalID:        stringPtr(opts.LocalID),
-		Attachments:    append([]orchestrator.Attachment(nil), opts.Attachments...),
-		CreatedAt:      now,
-		UpdatedAt:      now,
-	}
+	userMsg := newMessage(
+		conversation.ID,
+		orchestrator.MessageRoleUser,
+		opts.Content,
+		orchestrator.MessageStatusSent,
+		nil,
+		append([]orchestrator.Attachment(nil), opts.Attachments...),
+	)
+	userMsg.LocalID = stringPtr(opts.LocalID)
 
 	if _, mErr := database.WithTransaction(opts.Sess, "persist user message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
 		if mErr := s.messageRepo.Save(ctx, tx, userMsg); mErr != nil {

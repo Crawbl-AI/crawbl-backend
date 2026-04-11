@@ -8,11 +8,6 @@ import (
 	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
 
-// -----------------------------------------------------------------------------
-// MemoryPublisher — publishes MemoryEvent onto NATS for downstream
-// distillation / analytics consumers.
-// -----------------------------------------------------------------------------
-
 // MemoryPublisher publishes raw memory drawer events to NATS.
 // Construction is nil-safe: a nil NATS client makes Publish a no-op,
 // which lets the orchestrator boot in environments without NATS
@@ -49,11 +44,6 @@ func (p *MemoryPublisher) Publish(ctx context.Context, workspaceID string, event
 		)
 	}
 }
-
-// -----------------------------------------------------------------------------
-// UsagePublisher — enqueues UsageEvent River jobs for asynchronous
-// insertion into ClickHouse by UsageWriter.
-// -----------------------------------------------------------------------------
 
 // UsagePublisher enqueues UsageEvent jobs onto the River queue for
 // asynchronous insertion into ClickHouse by UsageWriter. Construction
