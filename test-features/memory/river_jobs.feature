@@ -21,7 +21,13 @@ Feature: Background processing cycles
     Then the assistant reply should succeed
     And the message cleanup cycle should complete within 120 seconds
 
+  @wip
   Scenario: The memory maintenance cycle runs on schedule
+    # This scenario is @wip because memory_maintain has a 1-hour dedup
+    # window (queue/types.go memoryMaintainDedupWindow), so the cycle
+    # only fires once per hour and cannot be triggered on demand
+    # during a test run. Needs a seeded river_job fixture or a
+    # shortened dedup window in test mode before it can run green.
     Given user "primary" has signed up
     And user "primary" opens their default workspace
     And user "primary" opens the swarm conversation
