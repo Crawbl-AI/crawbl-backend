@@ -13,21 +13,48 @@ import (
 )
 
 // WorkflowStatus represents the execution state of a workflow or step.
+// The typed alias prevents accidentally passing an unrelated string (e.g. a
+// message status) into a workflow status field.
 type WorkflowStatus string
 
+// String implements fmt.Stringer so typed status values log as their underlying
+// string rather than a quoted Go expression.
+func (s WorkflowStatus) String() string { return string(s) }
+
 const (
-	WorkflowStatusPending         WorkflowStatus = "pending"
-	WorkflowStatusRunning         WorkflowStatus = "running"
-	WorkflowStatusCompleted       WorkflowStatus = "completed"
-	WorkflowStatusFailed          WorkflowStatus = "failed"
+	// WorkflowStatusPending indicates the execution has been created but not yet started.
+	WorkflowStatusPending WorkflowStatus = "pending"
+
+	// WorkflowStatusRunning indicates the execution or step is actively processing.
+	WorkflowStatusRunning WorkflowStatus = "running"
+
+	// WorkflowStatusCompleted indicates the execution or step finished successfully.
+	WorkflowStatusCompleted WorkflowStatus = "completed"
+
+	// WorkflowStatusFailed indicates the execution or step encountered an error.
+	WorkflowStatusFailed WorkflowStatus = "failed"
+
+	// WorkflowStatusWaitingApproval indicates a step is paused pending human approval.
 	WorkflowStatusWaitingApproval WorkflowStatus = "waiting_approval"
-	WorkflowStatusApproved        WorkflowStatus = "approved"
+
+	// WorkflowStatusApproved indicates a step has been approved and will continue.
+	WorkflowStatusApproved WorkflowStatus = "approved"
+
+	// WorkflowStatusStopped indicates execution was halted by an on_failure=stop policy.
+	WorkflowStatusStopped WorkflowStatus = "stop"
+
+	// WorkflowStatusSkipped indicates a step was skipped by an on_failure=skip policy.
+	WorkflowStatusSkipped WorkflowStatus = "skip"
 )
 
 // WorkflowOnFailure controls step behavior on failure.
 type WorkflowOnFailure string
 
 const (
+	// WorkflowOnFailureStop halts the entire workflow when a step fails (default).
+	WorkflowOnFailureStop WorkflowOnFailure = "stop"
+
+	// WorkflowOnFailureSkip skips the failed step and continues with the next.
 	WorkflowOnFailureSkip WorkflowOnFailure = "skip"
 )
 

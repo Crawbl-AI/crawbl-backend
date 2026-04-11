@@ -157,7 +157,7 @@ func (r *workflowRepo) ListActiveExecutions(ctx context.Context, sess orchestrat
 	var rows []WorkflowExecutionRow
 	_, err := sess.Select(orchestratorrepo.Columns(executionColumns...)...).
 		From("workflow_executions").
-		Where("workspace_id = ? AND status IN ?", workspaceID, []string{"pending", "running"}).
+		Where("workspace_id = ? AND status IN ?", workspaceID, []string{string(WorkflowStatusPending), string(WorkflowStatusRunning)}).
 		OrderDesc("created_at").
 		LoadContext(ctx, &rows)
 	if err != nil {

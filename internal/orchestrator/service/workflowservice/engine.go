@@ -13,6 +13,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -29,6 +30,94 @@ var (
 	// the workflow context has already been cancelled.
 	WorkflowCleanupTimeout = defaults.ShortTimeout
 )
+
+// workflowEmitter wraps the realtime broadcaster for a single workflow
+// execution. It captures workspaceID + definition + executionID once so
+// per-call sites only need to pass the event name and optional extra
+// payload fields.
+type workflowEmitter struct {
+	broadcaster    realtime.Broadcaster
+	workspaceID    string
+	workflowID     string
+	workflowName   string
+	executionID    string
+	conversationID string
+}
+
+// newWorkflowEmitter constructs a workflowEmitter bound to one execution.
+func newWorkflowEmitter(b realtime.Broadcaster, workspaceID string, def *workflowrepo.WorkflowDefinitionRow, exec *workflowrepo.WorkflowExecutionRow) *workflowEmitter {
+	return &workflowEmitter{
+		broadcaster:    b,
+		workspaceID:    workspaceID,
+		workflowID:     def.ID,
+		workflowName:   def.Name,
+		executionID:    exec.ID,
+		conversationID: ptr.Deref(exec.ConversationID),
+	}
+}
+
+// Started emits a workflow.started event with status=running.
+func (e *workflowEmitter) Started(ctx context.Context) {
+	e.emit(ctx, realtime.EventWorkflowStarted, workflowrepo.WorkflowStatusRunning, realtime.WorkflowEventPayload{})
+}
+
+// Completed emits a workflow.completed event with status=completed.
+func (e *workflowEmitter) Completed(ctx context.Context) {
+	e.emit(ctx, realtime.EventWorkflowCompleted, workflowrepo.WorkflowStatusCompleted, realtime.WorkflowEventPayload{})
+}
+
+// Failed emits a workflow.failed event with status=failed and an error reason.
+func (e *workflowEmitter) Failed(ctx context.Context, stepIndex int, stepName, reason string) {
+	e.emit(ctx, realtime.EventWorkflowFailed, workflowrepo.WorkflowStatusFailed, realtime.WorkflowEventPayload{
+		StepIndex: stepIndex,
+		StepName:  stepName,
+		Error:     reason,
+	})
+}
+
+// StepStarted emits a workflow.step.started event with status=running.
+func (e *workflowEmitter) StepStarted(ctx context.Context, stepIndex int, stepName, agentSlug string) {
+	e.emit(ctx, realtime.EventWorkflowStepStarted, workflowrepo.WorkflowStatusRunning, realtime.WorkflowEventPayload{
+		StepIndex: stepIndex,
+		StepName:  stepName,
+		AgentSlug: agentSlug,
+	})
+}
+
+// StepCompleted emits a workflow.step.completed event with status=completed.
+func (e *workflowEmitter) StepCompleted(ctx context.Context, stepIndex int, stepName, agentSlug string) {
+	e.emit(ctx, realtime.EventWorkflowStepCompleted, workflowrepo.WorkflowStatusCompleted, realtime.WorkflowEventPayload{
+		StepIndex: stepIndex,
+		StepName:  stepName,
+		AgentSlug: agentSlug,
+	})
+}
+
+// WaitingApproval emits a workflow.step.approval_required event with status=waiting_approval.
+func (e *workflowEmitter) WaitingApproval(ctx context.Context, stepIndex int, stepName, agentSlug string) {
+	e.emit(ctx, realtime.EventWorkflowStepApproval, workflowrepo.WorkflowStatusWaitingApproval, realtime.WorkflowEventPayload{
+		StepIndex: stepIndex,
+		StepName:  stepName,
+		AgentSlug: agentSlug,
+	})
+}
+
+// emit builds the full payload by merging base fields with non-zero extra fields
+// and delegates to the broadcaster.
+func (e *workflowEmitter) emit(ctx context.Context, eventName string, status workflowrepo.WorkflowStatus, extra realtime.WorkflowEventPayload) {
+	payload := realtime.WorkflowEventPayload{
+		WorkflowID:     e.workflowID,
+		WorkflowName:   e.workflowName,
+		ExecutionID:    e.executionID,
+		ConversationID: e.conversationID,
+		Status:         string(status),
+		StepIndex:      extra.StepIndex,
+		StepName:       extra.StepName,
+		AgentSlug:      extra.AgentSlug,
+		Error:          extra.Error,
+	}
+	e.broadcaster.EmitWorkflowEvent(ctx, e.workspaceID, eventName, payload)
+}
 
 // ExecuteWorkflow runs a workflow asynchronously. Call in a goroutine.
 // It fetches the definition, iterates through steps sequentially, and calls
@@ -58,22 +147,17 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		return
 	}
 
+	emitter := newWorkflowEmitter(s.broadcaster, workspaceID, definition, execution)
+
 	// Update execution to running.
 	now := time.Now().UTC()
-	execution.Status = "running"
+	execution.Status = string(workflowrepo.WorkflowStatusRunning)
 	execution.StartedAt = &now
 	if mErr := s.workflowRepo.UpdateExecution(ctx, sess, execution); mErr != nil {
 		slog.Warn("ExecuteWorkflow: failed to mark execution as running", "execution_id", executionID, "error", mErr.Error())
 	}
 
-	// Emit workflow.started.
-	s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowStarted, realtime.WorkflowEventPayload{
-		WorkflowID:     definition.ID,
-		ExecutionID:    executionID,
-		WorkflowName:   definition.Name,
-		ConversationID: derefStr(execution.ConversationID),
-		Status:         "running",
-	})
+	emitter.Started(ctx)
 
 	// Execute steps sequentially.
 	workflowCtx := make(map[string]string) // output_key -> output_text
@@ -102,7 +186,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			StepIndex:   i,
 			StepName:    step.Name,
 			AgentSlug:   step.AgentSlug,
-			Status:      "running",
+			Status:      string(workflowrepo.WorkflowStatusRunning),
 			InputText:   prompt,
 			StartedAt:   &stepNow,
 			CreatedAt:   stepNow,
@@ -111,38 +195,19 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			slog.Warn("ExecuteWorkflow: failed to create step execution", "execution_id", executionID, "step", i, "error", mErr.Error())
 		}
 
-		// Emit workflow.step.started.
-		s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowStepStarted, realtime.WorkflowEventPayload{
-			WorkflowID:     definition.ID,
-			ExecutionID:    executionID,
-			WorkflowName:   definition.Name,
-			ConversationID: derefStr(execution.ConversationID),
-			Status:         "running",
-			StepIndex:      i,
-			StepName:       step.Name,
-			AgentSlug:      step.AgentSlug,
-		})
+		emitter.StepStarted(ctx, i, step.Name, step.AgentSlug)
 
 		// Check if step requires approval.
 		if step.RequiresApproval {
-			stepExec.Status = "waiting_approval"
+			stepExec.Status = string(workflowrepo.WorkflowStatusWaitingApproval)
 			if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
 				slog.Warn("ExecuteWorkflow: failed to set step waiting_approval", "execution_id", executionID, "step", i, "error", mErr.Error())
 			}
 
-			s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowStepApproval, realtime.WorkflowEventPayload{
-				WorkflowID:     definition.ID,
-				ExecutionID:    executionID,
-				WorkflowName:   definition.Name,
-				ConversationID: derefStr(execution.ConversationID),
-				Status:         "waiting_approval",
-				StepIndex:      i,
-				StepName:       step.Name,
-				AgentSlug:      step.AgentSlug,
-			})
+			emitter.WaitingApproval(ctx, i, step.Name, step.AgentSlug)
 
 			// TODO: Wait for approval via channel/polling. For now, auto-approve.
-			stepExec.Status = "approved"
+			stepExec.Status = string(workflowrepo.WorkflowStatusApproved)
 			if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
 				slog.Warn("ExecuteWorkflow: failed to set step approved", "execution_id", executionID, "step", i, "error", mErr.Error())
 			}
@@ -168,7 +233,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		completedAt := time.Now().UTC()
 
 		if callErr != nil {
-			stepExec.Status = "failed"
+			stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
 			errMsg := callErr.Error()
 			stepExec.OutputText = &errMsg
 			stepExec.DurationMs = &durationMs
@@ -178,11 +243,11 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			}
 
 			// Handle on_failure policy.
-			if step.OnFailure == "skip" {
+			if step.OnFailure == string(workflowrepo.WorkflowOnFailureSkip) {
 				continue
 			}
-			// "stop" (default) -- fail the whole workflow.
-			execution.Status = "failed"
+			// WorkflowOnFailureStop (default) — fail the whole workflow.
+			execution.Status = string(workflowrepo.WorkflowStatusFailed)
 			execution.ErrorMessage = &errMsg
 			execution.CompletedAt = &completedAt
 
@@ -195,16 +260,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 				slog.Warn("ExecuteWorkflow: failed to mark execution as failed", "execution_id", executionID, "error", mErr.Error())
 			}
 
-			s.broadcaster.EmitWorkflowEvent(cleanupCtx, workspaceID, realtime.EventWorkflowFailed, realtime.WorkflowEventPayload{
-				WorkflowID:     definition.ID,
-				ExecutionID:    executionID,
-				WorkflowName:   definition.Name,
-				ConversationID: derefStr(execution.ConversationID),
-				Status:         "failed",
-				StepIndex:      i,
-				StepName:       step.Name,
-				Error:          errMsg,
-			})
+			emitter.Failed(cleanupCtx, i, step.Name, errMsg)
 			cleanupCancel()
 			return
 		}
@@ -219,7 +275,7 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		response := strings.Join(responseParts, "\n")
 
 		// Step succeeded.
-		stepExec.Status = "completed"
+		stepExec.Status = string(workflowrepo.WorkflowStatusCompleted)
 		stepExec.OutputText = &response
 		stepExec.DurationMs = &durationMs
 		stepExec.CompletedAt = &completedAt
@@ -243,39 +299,16 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 			slog.Warn("ExecuteWorkflow: failed to update execution progress", "execution_id", executionID, "step", i, "error", mErr.Error())
 		}
 
-		// Emit workflow.step.completed.
-		s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowStepCompleted, realtime.WorkflowEventPayload{
-			WorkflowID:     definition.ID,
-			ExecutionID:    executionID,
-			WorkflowName:   definition.Name,
-			ConversationID: derefStr(execution.ConversationID),
-			Status:         "completed",
-			StepIndex:      i,
-			StepName:       step.Name,
-			AgentSlug:      step.AgentSlug,
-		})
+		emitter.StepCompleted(ctx, i, step.Name, step.AgentSlug)
 	}
 
 	// Workflow completed successfully.
 	completedAt := time.Now().UTC()
-	execution.Status = "completed"
+	execution.Status = string(workflowrepo.WorkflowStatusCompleted)
 	execution.CompletedAt = &completedAt
 	if mErr := s.workflowRepo.UpdateExecution(ctx, sess, execution); mErr != nil {
 		slog.Warn("ExecuteWorkflow: failed to mark execution as completed", "execution_id", executionID, "error", mErr.Error())
 	}
 
-	s.broadcaster.EmitWorkflowEvent(ctx, workspaceID, realtime.EventWorkflowCompleted, realtime.WorkflowEventPayload{
-		WorkflowID:     definition.ID,
-		ExecutionID:    executionID,
-		WorkflowName:   definition.Name,
-		ConversationID: derefStr(execution.ConversationID),
-		Status:         "completed",
-	})
-}
-
-func derefStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
+	emitter.Completed(ctx)
 }

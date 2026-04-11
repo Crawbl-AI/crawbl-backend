@@ -2,6 +2,7 @@ package messagerepo
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,6 +12,19 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+)
+
+// messageStatusOrderingCASE builds the SQL CASE expression for monotonic status ordering.
+// Higher ordinals prevent downgrades to lower-status states.
+var messageStatusOrderingCASE = fmt.Sprintf(
+	"CASE status WHEN '%s' THEN 0 WHEN '%s' THEN 1 WHEN '%s' THEN 2 WHEN '%s' THEN 3 WHEN '%s' THEN 99 WHEN '%s' THEN 99 WHEN '%s' THEN 99 ELSE -1 END",
+	orchestrator.MessageStatusPending,
+	orchestrator.MessageStatusSent,
+	orchestrator.MessageStatusDelivered,
+	orchestrator.MessageStatusRead,
+	orchestrator.MessageStatusFailed,
+	orchestrator.MessageStatusIncomplete,
+	orchestrator.MessageStatusSilent,
 )
 
 // New creates a new MessageRepo instance backed by PostgreSQL.
@@ -198,9 +212,9 @@ func (r *messageRepo) FailStalePending(ctx context.Context, sess orchestratorrep
 	}
 
 	result, err := sess.Update("messages").
-		Set("status", "failed").
+		Set("status", string(orchestrator.MessageStatusFailed)).
 		Set("updated_at", time.Now().UTC()).
-		Where("status = ? AND created_at < ?", "pending", cutoff).
+		Where("status = ? AND created_at < ?", string(orchestrator.MessageStatusPending), cutoff).
 		ExecContext(ctx)
 	if err != nil {
 		return 0, merrors.WrapStdServerError(err, "fail stale pending messages")
@@ -246,7 +260,7 @@ func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.Se
 		Set("status", string(status)).
 		Set("updated_at", time.Now().UTC()).
 		Where("id = ?", messageID).
-		Where("CASE status WHEN 'pending' THEN 0 WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'read' THEN 3 WHEN 'failed' THEN 99 WHEN 'incomplete' THEN 99 WHEN 'silent' THEN 99 ELSE -1 END < ?", newOrd).
+		Where(messageStatusOrderingCASE+" < ?", newOrd).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "update message status")
@@ -383,7 +397,7 @@ func (r *messageRepo) RecordDelegation(ctx context.Context, sess orchestratorrep
 		Pair("delegator_agent_id", delegatorAgentID).
 		Pair("delegate_agent_id", delegateAgentID).
 		Pair("task_summary", taskSummary).
-		Pair("status", "running").
+		Pair("status", string(orchestrator.MessageStatusRead)).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "insert agent delegation")
@@ -398,11 +412,11 @@ func (r *messageRepo) CompleteDelegation(ctx context.Context, sess orchestratorr
 		return merrors.ErrInvalidInput
 	}
 	_, err := sess.Update("agent_delegations").
-		Set("status", "completed").
+		Set("status", string(orchestrator.MessageStatusRead)).
 		Set("completed_at", time.Now().UTC()).
 		Set("duration_ms", dbr.Expr("EXTRACT(EPOCH FROM (NOW() - created_at))::INTEGER * 1000")).
-		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = 'running'",
-			triggerMsgID, delegateAgentID).
+		Where("trigger_message_id = ? AND delegate_agent_id = ? AND status = ?",
+			triggerMsgID, delegateAgentID, string(orchestrator.MessageStatusRead)).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "complete agent delegation")
