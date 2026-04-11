@@ -22,8 +22,8 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // NewServer creates and configures a Socket.IO server with authentication
@@ -97,7 +97,7 @@ func configureRedisAdapter(io *socket.Server, redisClient *redis.Client, logger 
 func registerAuthMiddleware(nsp socket.Namespace, logger *slog.Logger) {
 	nsp.Use(func(s *socket.Socket, next func(*socket.ExtendedError)) {
 		h := s.Handshake()
-		uid := headerFromHandshake(h, httpserver.XFirebaseUIDHeader)
+		uid := headerFromHandshake(h, middleware.XFirebaseUIDHeader)
 		if uid == "" {
 			logger.Warn("socketio auth: missing X-Firebase-UID",
 				"socket_id", string(s.Id()),
@@ -108,8 +108,8 @@ func registerAuthMiddleware(nsp socket.Namespace, logger *slog.Logger) {
 
 		principal := &orchestrator.Principal{
 			Subject: uid,
-			Email:   headerFromHandshake(h, httpserver.XFirebaseEmailHeader),
-			Name:    headerFromHandshake(h, httpserver.XFirebaseNameHeader),
+			Email:   headerFromHandshake(h, middleware.XFirebaseEmailHeader),
+			Name:    headerFromHandshake(h, middleware.XFirebaseNameHeader),
 		}
 
 		s.SetData(principal)

@@ -13,13 +13,14 @@ import (
 //
 // Registered workers:
 //
-//   - memory_process (periodic, 1m) — cold LLM classification sweep
-//   - memory_maintain (daily)       — importance decay + prune
-//   - memory_enrich (periodic, 10m) — KG backfill for fast-path drawers
-//   - memory_centroid_recompute     — weekly Sun 03:00 UTC
-//   - usage_write (ad-hoc)          — per-LLM-call ClickHouse billing row
-//   - pricing_refresh (daily)       — LiteLLM per-token price mirror
-//   - message_cleanup (periodic,1m) — fail stale pending messages
+//   - memory_process (periodic, 1m)        — cold LLM classification sweep
+//   - memory_maintain (daily)              — importance decay + prune
+//   - memory_enrich (periodic, 10m)        — KG backfill for fast-path drawers
+//   - memory_centroid_recompute            — weekly Sun 03:00 UTC
+//   - usage_write (ad-hoc)                 — per-LLM-call ClickHouse billing row
+//   - pricing_refresh (daily)              — LiteLLM per-token price mirror
+//   - pricing_cache_refresh (periodic,10m) — reload in-memory pricing cache
+//   - message_cleanup (periodic,1m)        — fail stale pending messages
 //
 // Auto-ingest is NOT a River worker — it runs in-process under
 // internal/orchestrator/memory/autoingest so the chat-turn hot path
@@ -36,6 +37,7 @@ func NewConfig(deps Deps) (*river.Config, error) {
 	// Orchestrator cross-cutting workers.
 	river.AddWorker(workers, NewUsageWriter(deps))
 	river.AddWorker(workers, NewPricingRefresh(deps))
+	river.AddWorker(workers, NewPricingCacheRefreshWorker(deps))
 	river.AddWorker(workers, NewMessageCleanup(deps))
 
 	dailyAtMidnight, err := cron.ParseStandard("@midnight")
@@ -59,13 +61,14 @@ func NewConfig(deps Deps) (*river.Config, error) {
 	return &river.Config{
 		Logger: deps.Logger,
 		Queues: map[string]river.QueueConfig{
-			QueueMemoryProcess:  {MaxWorkers: memoryProcessConcurrency},
-			QueueMemoryMaintain: {MaxWorkers: 1},
-			QueueMemoryEnrich:   {MaxWorkers: 1},
-			QueueMemoryCentroid: {MaxWorkers: 1},
-			UsageWriteQueue:     {MaxWorkers: usageWorkerConcurrency},
-			PricingRefreshQueue: {MaxWorkers: 1},
-			MessageCleanupQueue: {MaxWorkers: 1},
+			QueueMemoryProcess:       {MaxWorkers: memoryProcessConcurrency},
+			QueueMemoryMaintain:      {MaxWorkers: 1},
+			QueueMemoryEnrich:        {MaxWorkers: 1},
+			QueueMemoryCentroid:      {MaxWorkers: 1},
+			UsageWriteQueue:          {MaxWorkers: usageWorkerConcurrency},
+			PricingRefreshQueue:      {MaxWorkers: 1},
+			PricingCacheRefreshQueue: {MaxWorkers: 1},
+			MessageCleanupQueue:      {MaxWorkers: 1},
 		},
 		Workers: workers,
 		PeriodicJobs: []*river.PeriodicJob{
@@ -108,6 +111,15 @@ func NewConfig(deps Deps) (*river.Config, error) {
 					return PricingRefreshArgs{}, nil
 				},
 				&river.PeriodicJobOpts{RunOnStart: false},
+			),
+			// Pricing — 10-minute in-memory cache reload from Postgres.
+			// Replaces the former time.Ticker goroutine in pricing.Cache.
+			river.NewPeriodicJob(
+				river.PeriodicInterval(pricingCacheRefreshInterval),
+				func() (river.JobArgs, *river.InsertOpts) {
+					return PricingCacheRefreshArgs{}, nil
+				},
+				&river.PeriodicJobOpts{RunOnStart: true},
 			),
 			// Messaging — 1-minute stale cleanup sweep.
 			river.NewPeriodicJob(

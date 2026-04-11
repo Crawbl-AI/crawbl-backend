@@ -26,37 +26,48 @@ type service struct {
 	memoryStack layers.Stack
 }
 
-// New creates a new MCP service. Panics if any required dependency is nil.
-// memoryStack may be nil; when nil, context building falls back to recent messages only.
-func New(repos Repos, infra Infra, memoryStack layers.Stack) Service {
+// New creates a new MCP service, returning an error if any required dependency
+// is nil. memoryStack may be nil; when nil, context building falls back to
+// recent messages only.
+func New(repos Repos, infra Infra, memoryStack layers.Stack) (Service, error) {
 	if repos.MCP == nil {
-		panic("mcpservice: MCP repo is nil")
+		return nil, errors.New("mcpservice: MCP repo is required")
 	}
 	if repos.Workspace == nil {
-		panic("mcpservice: Workspace repo is nil")
+		return nil, errors.New("mcpservice: Workspace repo is required")
 	}
 	if repos.Conversation == nil {
-		panic("mcpservice: Conversation repo is nil")
+		return nil, errors.New("mcpservice: Conversation repo is required")
 	}
 	if repos.Agent == nil {
-		panic("mcpservice: Agent repo is nil")
+		return nil, errors.New("mcpservice: Agent repo is required")
 	}
 	if repos.AgentHistory == nil {
-		panic("mcpservice: AgentHistory repo is nil")
+		return nil, errors.New("mcpservice: AgentHistory repo is required")
 	}
 	if repos.Message == nil {
-		panic("mcpservice: Message repo is nil")
+		return nil, errors.New("mcpservice: Message repo is required")
 	}
 	if repos.Artifact == nil {
-		panic("mcpservice: Artifact repo is nil")
+		return nil, errors.New("mcpservice: Artifact repo is required")
 	}
 	if repos.Workflow == nil {
-		panic("mcpservice: Workflow repo is nil")
+		return nil, errors.New("mcpservice: Workflow repo is required")
 	}
 	if infra.Logger == nil {
-		panic("mcpservice: Logger is nil")
+		return nil, errors.New("mcpservice: Logger is required")
 	}
-	return &service{repos: repos, infra: infra, memoryStack: memoryStack}
+	return &service{repos: repos, infra: infra, memoryStack: memoryStack}, nil
+}
+
+// MustNew wraps New and panics on dependency-validation errors. Intended for
+// use from main/init paths where misconfiguration is unrecoverable.
+func MustNew(repos Repos, infra Infra, memoryStack layers.Stack) Service {
+	svc, err := New(repos, infra, memoryStack)
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }
 
 // verifyWorkspace checks that the workspace belongs to the given user.

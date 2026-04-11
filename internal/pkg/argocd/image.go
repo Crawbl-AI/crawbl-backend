@@ -1,8 +1,6 @@
 package argocd
 
 import (
-	"fmt"
-	"os"
 	"strings"
 )
 
@@ -29,17 +27,4 @@ func ReplaceImageTag(content, imageBase, newTag string) string {
 		remaining = after[end:]
 	}
 	return result.String()
-}
-
-// ReplaceInFile replaces all occurrences of old with replacement in the file at path.
-func ReplaceInFile(path, old, replacement string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-	updated := strings.ReplaceAll(string(data), old, replacement)
-	if err := os.WriteFile(path, []byte(updated), fileMode); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
 }

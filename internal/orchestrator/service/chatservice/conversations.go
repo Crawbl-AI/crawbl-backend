@@ -29,8 +29,28 @@ func (s *service) ListConversations(ctx context.Context, opts *orchestratorservi
 	s.enrichAgentStatus(ctx, workspace, agents)
 
 	agentByID := mapAgentsByID(agents)
+
+	// Batch-fetch the latest message for all conversations in one query
+	// instead of one GetLatestByConversationID call per conversation.
+	ids := make([]string, len(conversations))
+	for i, c := range conversations {
+		ids[i] = c.ID
+	}
+	latestByConvID, mErr := s.messageRepo.GetLatestByConversationIDs(ctx, opts.Sess, ids)
+	if mErr != nil {
+		return nil, mErr
+	}
+
 	for _, conversation := range conversations {
-		s.attachConversationData(ctx, opts.Sess, conversation, agentByID)
+		if conversation.AgentID != nil {
+			conversation.Agent = agentByID[*conversation.AgentID]
+		}
+		if latest, ok := latestByConvID[conversation.ID]; ok {
+			if latest.AgentID != nil {
+				latest.Agent = agentByID[*latest.AgentID]
+			}
+			conversation.LastMessage = latest
+		}
 	}
 
 	return conversations, nil

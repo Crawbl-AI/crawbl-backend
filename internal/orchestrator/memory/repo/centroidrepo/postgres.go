@@ -36,10 +36,9 @@ func (r *Postgres) GetAll(ctx context.Context, sess database.SessionRunner) ([]m
 		SourceHash  string          `db:"source_hash"`
 	}
 	var rows []row
-	_, err := sess.SelectBySql(
-		`SELECT memory_type, centroid, sample_count, computed_at, source_hash
-		 FROM memory_type_centroids`,
-	).LoadContext(ctx, &rows)
+	_, err := sess.Select("memory_type", "centroid", "sample_count", "computed_at", "source_hash").
+		From("memory_type_centroids").
+		LoadContext(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("centroid: get all: %w", err)
 	}
@@ -70,6 +69,8 @@ func (r *Postgres) Upsert(ctx context.Context, sess database.SessionRunner, rows
 			continue
 		}
 		vec := pgvector.NewVector(c.Centroid)
+		// ON CONFLICT DO UPDATE with a conditional WHERE clause (IS DISTINCT FROM)
+		// and pgvector column type require raw SQL; dbr has no builder support for either.
 		_, err := sess.InsertBySql(
 			`INSERT INTO memory_type_centroids (memory_type, centroid, sample_count, computed_at, source_hash)
 			 VALUES (?, ?, ?, NOW(), ?)
@@ -102,6 +103,8 @@ func (r *Postgres) NearestType(ctx context.Context, sess database.SessionRunner,
 		Similarity float64 `db:"similarity"`
 	}
 	vec := pgvector.NewVector(embedding)
+	// pgvector distance operator <=> in both SELECT and ORDER BY requires raw SQL;
+	// dbr has no builder support for vector distance expressions.
 	var picked row
 	err := sess.SelectBySql(
 		`SELECT memory_type, 1 - (centroid <=> $1) AS similarity

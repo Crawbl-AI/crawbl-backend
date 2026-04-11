@@ -3,6 +3,7 @@ package auditservice
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gocraft/dbr/v2"
 
@@ -21,12 +22,22 @@ type service struct {
 	repo repo
 }
 
-// New creates a new audit service. Panics if repo is nil.
-func New(r repo) Service {
+// New creates a new audit service, returning an error if the repo is nil.
+func New(r repo) (Service, error) {
 	if r == nil {
-		panic("auditservice: repo is nil")
+		return nil, errors.New("auditservice: repo is required")
 	}
-	return &service{repo: r}
+	return &service{repo: r}, nil
+}
+
+// MustNew wraps New and panics on dependency-validation errors. Intended for
+// use from main/init paths where misconfiguration is unrecoverable.
+func MustNew(r repo) Service {
+	svc, err := New(r)
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }
 
 func (s *service) WriteLog(ctx context.Context, sess *dbr.Session, entry *auditrepo.AuditLogRow) error {

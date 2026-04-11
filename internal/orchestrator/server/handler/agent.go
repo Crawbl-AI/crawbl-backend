@@ -22,73 +22,50 @@ const (
 // GetAgent retrieves a single agent by ID.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgent(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentResponse, *merrors.Error) {
 		agent, mErr := c.AgentService.GetAgent(r.Context(), &orchestratorservice.GetAgentOpts{
-			Sess:    c.NewSession(),
-			UserID:  user.ID,
+			Sess:    deps.Sess,
+			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.AgentResponse{}, mErr
 		}
-
-		WriteSuccess(w, http.StatusOK, dto.ToAgentResponse(agent))
-	}
+		return dto.ToAgentResponse(agent), nil
+	})
 }
 
 // GetAgentDetails retrieves full agent profile including stats.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgentDetails(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentDetailResponse, *merrors.Error) {
 		details, mErr := c.AgentService.GetAgentDetails(r.Context(), &orchestratorservice.GetAgentDetailsOpts{
-			Sess:    c.NewSession(),
-			UserID:  user.ID,
+			Sess:    deps.Sess,
+			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.AgentDetailResponse{}, mErr
 		}
-
-		WriteSuccess(w, http.StatusOK, dto.ToAgentDetailResponse(details))
-	}
+		return dto.ToAgentDetailResponse(details), nil
+	})
 }
 
 // GetAgentHistory retrieves paginated conversation history for an agent.
 func GetAgentHistory(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentHistoryResponse, *merrors.Error) {
 		limit := IntQueryParam(r, "limit")
 		offset := IntQueryParam(r, "offset")
 
 		items, pagination, mErr := c.AgentService.GetAgentHistory(r.Context(), &orchestratorservice.GetAgentHistoryOpts{
-			Sess:    c.NewSession(),
-			UserID:  user.ID,
+			Sess:    deps.Sess,
+			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Limit:   limit,
 			Offset:  offset,
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.AgentHistoryResponse{}, mErr
 		}
 
 		historyItems := make([]dto.AgentHistoryItemResponse, 0, len(items))
@@ -105,7 +82,7 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 			historyItems = append(historyItems, h)
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentHistoryResponse{
+		return dto.AgentHistoryResponse{
 			Items: historyItems,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   pagination.Total,
@@ -113,27 +90,20 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 				Offset:  pagination.Offset,
 				HasNext: pagination.HasNext,
 			},
-		})
-	}
+		}, nil
+	})
 }
 
 // GetAgentSettings retrieves model and prompt settings for an agent.
 func GetAgentSettings(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentSettingsResponse, *merrors.Error) {
 		settings, mErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
-			Sess:    c.NewSession(),
-			UserID:  user.ID,
+			Sess:    deps.Sess,
+			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.AgentSettingsResponse{}, mErr
 		}
 
 		prompts := make([]dto.AgentPromptResponse, 0, len(settings.Prompts))
@@ -146,23 +116,17 @@ func GetAgentSettings(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentSettingsResponse{
+		return dto.AgentSettingsResponse{
 			Model:          settings.Model.ID,
 			ResponseLength: string(settings.ResponseLength),
 			Prompts:        prompts,
-		})
-	}
+		}, nil
+	})
 }
 
 // GetAgentTools retrieves the tools assigned to an agent with offset pagination.
 func GetAgentTools(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentToolsResponse, *merrors.Error) {
 		limit := IntQueryParam(r, "limit")
 		if limit == 0 {
 			limit = 20
@@ -170,15 +134,14 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 		offset := IntQueryParam(r, "offset")
 
 		page, mErr := c.AgentService.GetAgentTools(r.Context(), &orchestratorservice.GetAgentToolsOpts{
-			Sess:    c.NewSession(),
-			UserID:  user.ID,
+			Sess:    deps.Sess,
+			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Limit:   limit,
 			Offset:  offset,
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.AgentToolsResponse{}, mErr
 		}
 
 		tools := make([]dto.AgentToolResponse, 0, len(page.Data))
@@ -186,7 +149,7 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 			tools = append(tools, dto.ToAgentToolResponse(t))
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentToolsResponse{
+		return dto.AgentToolsResponse{
 			Tools: tools,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   page.Pagination.Total,
@@ -194,8 +157,8 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 				Offset:  page.Pagination.Offset,
 				HasNext: page.Pagination.HasNext,
 			},
-		})
-	}
+		}, nil
+	})
 }
 
 // ListModels returns the list of available LLM models.
@@ -218,13 +181,7 @@ func ListModels(c *Context) http.HandlerFunc {
 
 // GetAgentMemories retrieves memories from the agent's agent runtime.
 func GetAgentMemories(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentMemoriesListResponse, *merrors.Error) {
 		category := r.URL.Query().Get("category")
 		limit := IntQueryParam(r, "limit")
 		if limit == 0 {
@@ -233,16 +190,15 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 		offset := IntQueryParam(r, "offset")
 
 		memories, mErr := c.AgentService.GetAgentMemories(r.Context(), &orchestratorservice.GetAgentMemoriesOpts{
-			Sess:     c.NewSession(),
-			UserID:   user.ID,
+			Sess:     deps.Sess,
+			UserID:   deps.User.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Category: category,
 			Limit:    limit,
 			Offset:   offset,
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.AgentMemoriesListResponse{}, mErr
 		}
 
 		// Slice pagination over the full list from the agent runtime.
@@ -268,7 +224,7 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.AgentMemoriesListResponse{
+		return dto.AgentMemoriesListResponse{
 			Memories: items,
 			Pagination: dto.OffsetPaginationResponse{
 				Total:   total,
@@ -276,75 +232,42 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 				Offset:  offset,
 				HasNext: end < total,
 			},
-		})
-	}
+		}, nil
+	})
 }
 
 // DeleteAgentMemory removes a specific memory from the agent's agent runtime.
 func DeleteAgentMemory(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		mErr = c.AgentService.DeleteAgentMemory(r.Context(), &orchestratorservice.DeleteAgentMemoryOpts{
-			Sess:    c.NewSession(),
-			UserID:  user.ID,
+	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
+		return c.AgentService.DeleteAgentMemory(r.Context(), &orchestratorservice.DeleteAgentMemoryOpts{
+			Sess:    deps.Sess,
+			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Key:     chi.URLParam(r, "key"),
 		})
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	}
+	})
 }
 
 // CreateAgentMemory stores a new memory in the agent's agent runtime.
 func CreateAgentMemory(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		var body dto.CreateAgentMemoryRequest
-		if err := DecodeJSON(r, &body); err != nil {
-			WriteError(w, merrors.ErrInvalidInput)
-			return
-		}
-
+	return AuthedJSONNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps, body *dto.CreateAgentMemoryRequest) *merrors.Error {
 		if strings.TrimSpace(body.Key) == "" || len(body.Key) > MaxAgentMemoryKeyLength {
-			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
-			return
+			return merrors.ErrAgentMemoryFieldTooLong
 		}
 		if strings.TrimSpace(body.Content) == "" || len(body.Content) > MaxAgentMemoryContentLength {
-			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
-			return
+			return merrors.ErrAgentMemoryFieldTooLong
 		}
 		if len(body.Category) > MaxAgentMemoryCategoryLength {
-			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
-			return
+			return merrors.ErrAgentMemoryFieldTooLong
 		}
 
-		mErr = c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
-			Sess:     c.NewSession(),
-			UserID:   user.ID,
+		return c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
+			Sess:     deps.Sess,
+			UserID:   deps.User.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Key:      body.Key,
 			Content:  body.Content,
 			Category: body.Category,
 		})
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	}
+	})
 }

@@ -13,8 +13,9 @@ func newStopCommand() *cobra.Command {
 		Short: "Stop the local development stack",
 		Long:  "Stop the local Docker Compose services used for Crawbl development.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			out.Step(style.Stopping, "Stopping the local development stack...")
-			return shellCmd("docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
+			return shellCmd(ctx, "docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
 		},
 	}
 }

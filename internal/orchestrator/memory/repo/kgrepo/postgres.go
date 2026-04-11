@@ -58,6 +58,7 @@ func (g *Postgres) AddEntity(ctx context.Context, sess database.SessionRunner, w
 	id := entityID(name)
 	now := time.Now().UTC()
 
+	// ON CONFLICT DO UPDATE (upsert) is not supported by the dbr builder; raw SQL required.
 	_, err := sess.InsertBySql(
 		`INSERT INTO memory_entities (id, workspace_id, name, type, properties, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
@@ -91,13 +92,12 @@ func (g *Postgres) AddTriple(ctx context.Context, sess database.SessionRunner, w
 
 	id := tripleID(subID, t.Predicate, objID)
 	now := time.Now().UTC()
-	_, err := sess.InsertBySql(
-		`INSERT INTO memory_triples
-		   (id, workspace_id, subject, predicate, object, valid_from, valid_to, confidence, source_closet, source_file, extracted_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, workspaceID, subID, t.Predicate, objID,
-		t.ValidFrom, t.ValidTo, t.Confidence, t.SourceCloset, t.SourceFile, now,
-	).ExecContext(ctx)
+	_, err := sess.InsertInto("memory_triples").
+		Columns("id", "workspace_id", "subject", "predicate", "object",
+			"valid_from", "valid_to", "confidence", "source_closet", "source_file", "extracted_at").
+		Values(id, workspaceID, subID, t.Predicate, objID,
+			t.ValidFrom, t.ValidTo, t.Confidence, t.SourceCloset, t.SourceFile, now).
+		ExecContext(ctx)
 	if err != nil {
 		return "", fmt.Errorf("kg: insert triple: %w", err)
 	}
@@ -210,6 +210,9 @@ func (g *Postgres) QueryEntity(ctx context.Context, sess database.SessionRunner,
 
 	query := tripleResultQuery + "\n" + whereClause + "\nORDER BY t.extracted_at DESC\nLIMIT 500"
 
+	// Multi-table LEFT JOIN with dynamically built WHERE clause using positional
+	// $N parameters (required when param count varies by direction/asOf); dbr
+	// builder cannot compose these without losing positional index correctness.
 	var rows []tripleRow
 	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &rows)
 	if err != nil {
@@ -243,6 +246,8 @@ LIMIT 500`
 		args = []any{workspaceID, predicate}
 	}
 
+	// Multi-table LEFT JOIN with optional temporal WHERE clause; raw SQL required
+	// for the same reason as QueryEntity — positional $N and conditional branches.
 	var rows []tripleRow
 	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &rows)
 	if err != nil {
@@ -275,6 +280,8 @@ LIMIT 100`
 		args = []any{workspaceID}
 	}
 
+	// Multi-table LEFT JOIN with optional entity filter; raw SQL required for
+	// the same positional $N and conditional WHERE reasons as QueryEntity.
 	var rows []tripleRow
 	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &rows)
 	if err != nil {

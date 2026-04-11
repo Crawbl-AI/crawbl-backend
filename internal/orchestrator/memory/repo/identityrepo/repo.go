@@ -36,6 +36,7 @@ func (r *Postgres) Get(ctx context.Context, sess database.SessionRunner, workspa
 }
 
 func (r *Postgres) Set(ctx context.Context, sess database.SessionRunner, workspaceID, content string) error {
+	// ON CONFLICT DO UPDATE (upsert) is not supported by the dbr builder; raw SQL required.
 	_, err := sess.InsertBySql(
 		`INSERT INTO memory_identities (workspace_id, content, updated_at)
 		 VALUES (?, ?, NOW())

@@ -146,9 +146,8 @@ func (r *conversationRepo) Delete(ctx context.Context, sess orchestratorrepo.Ses
 }
 
 // Save persists conversation data to the database.
-// It handles both creating new conversations and updating existing ones by checking
-// if a conversation with the same ID exists first.
 // Returns ErrInvalidInput if sess is nil or conversation is nil.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error {
 	if sess == nil || conversation == nil {
 		return merrors.ErrInvalidInput
@@ -156,55 +155,23 @@ func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.Sessi
 
 	row := orchestratorrepo.NewConversationRow(conversation)
 
-	var existingRow orchestratorrepo.ConversationRow
-	err := sess.Select(orchestratorrepo.Columns(conversationColumns...)...).
-		From("conversations").
-		Where("id = ?", row.ID).
-		LoadOneContext(ctx, &existingRow)
-	switch {
-	case err == nil:
-		_, err = sess.Update("conversations").
-			Set("agent_id", row.AgentID).
-			Set("type", row.Type).
-			Set("title", row.Title).
-			Set("unread_count", row.UnreadCount).
-			Set("updated_at", row.UpdatedAt).
-			Where("id = ?", row.ID).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update conversation")
-		}
-		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select conversation by id for save")
-	}
+	const query = `
+INSERT INTO conversations (
+	id, workspace_id, agent_id, type, title, unread_count, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+	agent_id     = EXCLUDED.agent_id,
+	type         = EXCLUDED.type,
+	title        = EXCLUDED.title,
+	unread_count = EXCLUDED.unread_count,
+	updated_at   = EXCLUDED.updated_at`
 
-	_, err = sess.InsertInto("conversations").
-		Pair("id", row.ID).
-		Pair("workspace_id", row.WorkspaceID).
-		Pair("agent_id", row.AgentID).
-		Pair("type", row.Type).
-		Pair("title", row.Title).
-		Pair("unread_count", row.UnreadCount).
-		Pair("created_at", row.CreatedAt).
-		Pair("updated_at", row.UpdatedAt).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.ID, row.WorkspaceID, row.AgentID, row.Type, row.Title,
+		row.UnreadCount, row.CreatedAt, row.UpdatedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("conversations").
-				Set("agent_id", row.AgentID).
-				Set("type", row.Type).
-				Set("title", row.Title).
-				Set("unread_count", row.UnreadCount).
-				Set("updated_at", row.UpdatedAt).
-				Where("id = ?", row.ID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update conversation after duplicate insert")
-			}
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert conversation")
+		return merrors.WrapStdServerError(err, "upsert conversation")
 	}
 
 	return nil

@@ -17,6 +17,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
+// minBoostImportance is the lower bound for the importance score applied by
+// BoostImportance / enrichment passes.
+const minBoostImportance = 3.0
+
 // Postgres is the memory_drawers repository backed by PostgreSQL with
 // pgvector for embeddings. It implements repo.DrawerRepo; callers hold it
 // through that interface.
@@ -38,23 +42,25 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 
 	if len(embedding) > 0 {
 		vec := pgvector.NewVector(embedding)
-		_, err := sess.InsertBySql(
-			`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, embedding, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
-			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
-			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
-		).ExecContext(ctx)
+		_, err := sess.InsertInto("memory_drawers").
+			Columns("id", "workspace_id", "wing", "room", "hall", "content", "embedding",
+				"importance", "memory_type", "source_file", "added_by", "added_by_agent",
+				"state", "pipeline_tier", "entity_count", "triple_count", "filed_at", "created_at").
+			Values(d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content, vec,
+				d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+				d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt).
+			ExecContext(ctx)
 		return err
 	}
 
-	_, err = sess.InsertBySql(
-		`INSERT INTO memory_drawers (id, workspace_id, wing, room, hall, content, importance, memory_type, source_file, added_by, added_by_agent, state, pipeline_tier, entity_count, triple_count, filed_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
-		d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
-		d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt,
-	).ExecContext(ctx)
+	_, err = sess.InsertInto("memory_drawers").
+		Columns("id", "workspace_id", "wing", "room", "hall", "content",
+			"importance", "memory_type", "source_file", "added_by", "added_by_agent",
+			"state", "pipeline_tier", "entity_count", "triple_count", "filed_at", "created_at").
+		Values(d.ID, d.WorkspaceID, d.Wing, d.Room, d.Hall, d.Content,
+			d.Importance, d.MemoryType, d.SourceFile, d.AddedBy, d.AddedByAgent, d.State,
+			d.PipelineTier, d.EntityCount, d.TripleCount, d.FiledAt, d.CreatedAt).
+		ExecContext(ctx)
 	return err
 }
 
@@ -91,6 +97,8 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 	}
 
 	args = append(args, limit)
+	// pgvector distance operator <=> and dynamic positional $N parameters
+	// require raw SQL; dbr has no builder support for either.
 	query := fmt.Sprintf(
 		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 		        source_file, added_by, filed_at, created_at,
@@ -217,6 +225,7 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	}
 
 	vec := pgvector.NewVector(embedding)
+	// pgvector distance operator <=> used both in WHERE and ORDER BY requires raw SQL.
 	query := `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 	                 source_file, added_by, filed_at, created_at,
 	                 state, summary, added_by_agent,
@@ -374,6 +383,8 @@ func (r *Postgres) ListByState(ctx context.Context, sess database.SessionRunner,
 		limit = 10
 	}
 	var rows []memory.Drawer
+	// FOR UPDATE SKIP LOCKED is a Postgres locking clause that dbr has no builder
+	// support for; raw SQL is required to avoid double-processing in concurrent workers.
 	_, err := sess.SelectBySql(
 		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 		        source_file, added_by, filed_at, created_at, state, retry_count
@@ -533,21 +544,22 @@ func (r *Postgres) GetByID(ctx context.Context, sess database.SessionRunner, wor
 }
 
 func (r *Postgres) BoostImportance(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, delta, maxImportance float64) error {
-	_, err := sess.InsertBySql(
-		`UPDATE memory_drawers SET importance = LEAST(importance + ?, ?) WHERE workspace_id = ? AND id = ?`,
-		delta, maxImportance, workspaceID, drawerID,
-	).ExecContext(ctx)
+	_, err := sess.Update("memory_drawers").
+		Set("importance", dbr.Expr("LEAST(importance + ?, ?)", delta, maxImportance)).
+		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		ExecContext(ctx)
 	return err
 }
 
 func (r *Postgres) ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error) {
 	var ids []string
-	_, err := sess.SelectBySql(
-		`SELECT DISTINCT workspace_id FROM memory_drawers
-		 WHERE created_at > NOW() - INTERVAL '1 hour' * ?
-		    OR last_accessed_at > NOW() - INTERVAL '1 hour' * ?`,
-		withinHours, withinHours,
-	).LoadContext(ctx, &ids)
+	_, err := sess.Select("DISTINCT workspace_id").
+		From("memory_drawers").
+		Where(dbr.Or(
+			dbr.Expr("created_at > NOW() - INTERVAL '1 hour' * ?", withinHours),
+			dbr.Expr("last_accessed_at > NOW() - INTERVAL '1 hour' * ?", withinHours),
+		)).
+		LoadContext(ctx, &ids)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: active workspaces: %w", err)
 	}
@@ -562,19 +574,17 @@ func (r *Postgres) ListEnrichCandidates(ctx context.Context, sess database.Sessi
 		limit = 100
 	}
 	var rows []memory.Drawer
-	_, err := sess.SelectBySql(
-		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
-		        source_file, added_by, added_by_agent, state, summary,
-		        pipeline_tier, entity_count, triple_count, filed_at, created_at
-		 FROM memory_drawers
-		 WHERE state = 'processed'
-		   AND pipeline_tier <> 'llm'
-		   AND entity_count = 0
-		   AND importance >= 3.0
-		 ORDER BY created_at ASC
-		 LIMIT ?`,
-		limit,
-	).LoadContext(ctx, &rows)
+	_, err := sess.Select("id", "workspace_id", "wing", "room", "hall", "content", "importance", "memory_type",
+		"source_file", "added_by", "added_by_agent", "state", "summary",
+		"pipeline_tier", "entity_count", "triple_count", "filed_at", "created_at").
+		From("memory_drawers").
+		Where("state = ?", "processed").
+		Where("pipeline_tier <> ?", "llm").
+		Where("entity_count = ?", 0).
+		Where("importance >= ?", minBoostImportance).
+		OrderBy("created_at ASC").
+		Limit(uint64(limit)).
+		LoadContext(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: list enrich candidates: %w", err)
 	}
@@ -598,6 +608,9 @@ func (r *Postgres) ListCentroidTrainingSamples(ctx context.Context, sess databas
 		MemoryType string          `db:"memory_type"`
 		Embedding  pgvector.Vector `db:"embedding"`
 	}
+	// ROW_NUMBER() window function with PARTITION BY and the interval cast
+	// ($1::int || ' days')::interval require raw SQL; dbr has no builder support
+	// for window functions or Postgres-specific interval arithmetic.
 	var rows []row
 	_, err := sess.SelectBySql(
 		`SELECT id, memory_type, embedding FROM (

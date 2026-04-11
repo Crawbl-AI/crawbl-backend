@@ -14,7 +14,10 @@
 //	err := errors.NewServerError(fmt.Errorf("database connection failed"))
 package errors
 
-import pkgerrors "github.com/pkg/errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Error implements the error interface.
 // For business errors, it returns the Message field directly.
@@ -39,14 +42,14 @@ func (e *Error) Error() string {
 // expected error conditions like validation failures, not-found errors,
 // and authorization failures.
 //
-// Both message and code must be non-empty; the function panics otherwise.
+// Returns nil if either message or code is empty.
 //
 // Example:
 //
 //	err := NewBusinessError("User not found", ErrCodeUserNotFound)
 func NewBusinessError(message, code string) *Error {
 	if message == "" || code == "" {
-		panic("business error message and code are required")
+		return nil
 	}
 
 	return &Error{
@@ -61,14 +64,14 @@ func NewBusinessError(message, code string) *Error {
 // The wrapped error may contain sensitive information like stack traces
 // or database details.
 //
-// The err parameter must not be nil; the function panics otherwise.
+// Returns nil if err is nil.
 //
 // Example:
 //
 //	err := NewServerError(fmt.Errorf("database connection failed"))
 func NewServerError(err error) *Error {
 	if err == nil {
-		panic("server error cannot be nil")
+		return nil
 	}
 
 	return &Error{
@@ -81,18 +84,18 @@ func NewServerError(err error) *Error {
 // This is a convenience function for creating server errors from a text
 // message without an existing error to wrap.
 //
-// The message parameter must not be empty; the function panics otherwise.
+// Returns nil if message is empty.
 //
 // Example:
 //
 //	err := NewServerErrorText("failed to process request")
 func NewServerErrorText(message string) *Error {
 	if message == "" {
-		panic("server error message cannot be empty")
+		return nil
 	}
 
 	return &Error{
-		Err:  pkgerrors.New(message),
+		Err:  errors.New(message),
 		Type: ServerError,
 	}
 }
@@ -102,7 +105,7 @@ func NewServerErrorText(message string) *Error {
 // business errors should not have their messages modified.
 // For server errors, the underlying error is wrapped with the message.
 //
-// Both err and message must be non-nil/non-empty; the function panics otherwise.
+// Returns nil if err is nil. Returns err unchanged if message is empty.
 //
 // Example:
 //
@@ -110,10 +113,10 @@ func NewServerErrorText(message string) *Error {
 //	wrapped := WrapServerError(err, "failed to save user")
 func WrapServerError(err *Error, message string) *Error {
 	if err == nil {
-		panic("cannot wrap nil app error")
+		return nil
 	}
 	if message == "" {
-		panic("wrap message cannot be empty")
+		return err
 	}
 
 	if err.Type == BusinessError {
@@ -121,7 +124,7 @@ func WrapServerError(err *Error, message string) *Error {
 	}
 
 	return &Error{
-		Err:  pkgerrors.Wrap(err.Err, message),
+		Err:  fmt.Errorf("%s: %w", message, err.Err),
 		Type: ServerError,
 	}
 }
@@ -130,21 +133,24 @@ func WrapServerError(err *Error, message string) *Error {
 // returning a server Error. Use this when wrapping errors from external
 // packages or standard library functions.
 //
-// Both err and message must be non-nil/non-empty; the function panics otherwise.
+// Returns nil if err is nil. If message is empty, wraps with no additional prefix.
 //
 // Example:
 //
 //	err := WrapStdServerError(dbErr, "failed to query users")
 func WrapStdServerError(err error, message string) *Error {
 	if err == nil {
-		panic("cannot wrap nil error")
+		return nil
 	}
 	if message == "" {
-		panic("wrap message cannot be empty")
+		return &Error{
+			Err:  err,
+			Type: ServerError,
+		}
 	}
 
 	return &Error{
-		Err:  pkgerrors.Wrap(err, message),
+		Err:  fmt.Errorf("%s: %w", message, err),
 		Type: ServerError,
 	}
 }

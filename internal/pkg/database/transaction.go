@@ -44,9 +44,8 @@ func WithTransaction[T any](sess *dbr.Session, operation string, fn func(tx *dbr
 }
 
 // WithTransactionNoResult executes the provided function within a database transaction
-// without returning a result. It handles transaction lifecycle management including
-// begin, commit, and rollback. If the function returns an error, the transaction
-// is rolled back automatically.
+// without returning a result. It is a convenience wrapper around WithTransaction for
+// callers that don't need a result value.
 // The operation parameter is used in error messages for debugging and logging.
 //
 // Returns:
@@ -55,23 +54,8 @@ func WithTransaction[T any](sess *dbr.Session, operation string, fn func(tx *dbr
 //   - Any error returned by the operation function.
 //   - nil on successful completion.
 func WithTransactionNoResult(sess *dbr.Session, operation string, fn func(tx *dbr.Tx) *merrors.Error) *merrors.Error {
-	if sess == nil {
-		return merrors.ErrInvalidInput
-	}
-
-	tx, err := sess.Begin()
-	if err != nil {
-		return merrors.WrapStdServerError(err, "begin "+operation+" transaction")
-	}
-	defer tx.RollbackUnlessCommitted()
-
-	if mErr := fn(tx); mErr != nil {
-		return mErr
-	}
-
-	if err := tx.Commit(); err != nil {
-		return merrors.WrapStdServerError(err, "commit "+operation+" transaction")
-	}
-
-	return nil
+	_, err := WithTransaction(sess, operation, func(tx *dbr.Tx) (struct{}, *merrors.Error) {
+		return struct{}{}, fn(tx)
+	})
+	return err
 }

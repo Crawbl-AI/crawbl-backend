@@ -13,10 +13,11 @@ func newResetCommand() *cobra.Command {
 		Short: "Stop the stack and wipe all local data",
 		Long:  "Stop the local stack, remove the Postgres data volume, and clear local state so you can start fresh.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			out.Step(style.Stopping, "Stopping the local development stack...")
-			_ = shellCmd("docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
+			_ = shellCmd(ctx, "docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
 			out.Step(style.Delete, "Removing the database volume...")
-			_ = shellCmd("docker", "volume", "rm", "-f", "crawbl-backend_db-data")
+			_ = shellCmd(ctx, "docker", "volume", "rm", "-f", "crawbl-backend_db-data")
 			out.Success("Reset complete")
 			out.Step(style.Tip, "Run 'crawbl dev start' to recreate the stack")
 			return nil

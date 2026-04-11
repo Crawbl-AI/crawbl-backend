@@ -13,6 +13,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
 )
 
@@ -22,14 +23,6 @@ func loadStackSection(env, key string, target any) error {
 		return fmt.Errorf("load %s from Pulumi.%s.yaml: %w", key, env, err)
 	}
 	return nil
-}
-
-// envOrDefault returns the environment variable value or a fallback.
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 // buildConfig creates the full infra.Config from Pulumi stack config and environment variables.
@@ -66,13 +59,13 @@ func buildConfig(env, region string) (infra.Config, error) {
 	}
 
 	// AWS backup infrastructure config
-	platformConfig.AWSRegion = envOrDefault("AWS_REGION", "eu-central-1")
+	platformConfig.AWSRegion = configenv.StringOr("AWS_REGION", "eu-central-1")
 	platformConfig.Environment = env
 
 	return infra.Config{
 		Environment:    env,
 		Region:         region,
-		ESCEnvironment: envOrDefault("CRAWBL_ESC_ENV", "crawbl/"+env),
+		ESCEnvironment: configenv.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
 		ExistingVPCID:  os.Getenv("DIGITALOCEAN_VPC_ID"),
 		ClusterConfig:  clusterConfig,
 		PlatformConfig: platformConfig,

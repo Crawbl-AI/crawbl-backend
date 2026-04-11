@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"golang.org/x/term"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
@@ -22,13 +22,12 @@ var (
 	errWriter io.Writer = os.Stderr
 )
 
-const (
-	colorReset  = "\033[0m"
-	colorBold   = "\033[1m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorCyan   = "\033[36m"
+var (
+	lgSuccess = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	lgFailure = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	lgWarning = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	lgCyan    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	lgCyanB   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 )
 
 // SetOutWriter overrides stdout output. Intended for tests.
@@ -111,17 +110,21 @@ func writeLine(w io.Writer, s style.Enum, message string) {
 }
 
 func write(w io.Writer, s style.Enum, message string, newline bool) {
-	line := formatLine(s, message, useEmoji(), useColor())
+	line := formatLine(s, message)
 	if newline && !strings.HasSuffix(line, "\n") {
 		line += "\n"
 	}
 	_, _ = io.WriteString(w, line)
 }
 
-func formatLine(s style.Enum, message string, emojiEnabled, colorEnabled bool) string {
+func formatLine(s style.Enum, message string) string {
 	opts := style.Get(s)
+
+	// Lipgloss respects NO_COLOR and terminal capability automatically.
+	// Use emoji prefix when stdout is a real terminal (lipgloss HasDarkBackground
+	// implies a capable terminal), falling back to LowPrefix otherwise.
 	prefix := opts.LowPrefix
-	if emojiEnabled && opts.Prefix != "" {
+	if opts.Prefix != "" && lipgloss.HasDarkBackground() {
 		prefix = opts.Prefix
 	}
 
@@ -130,78 +133,27 @@ func formatLine(s style.Enum, message string, emojiEnabled, colorEnabled bool) s
 		line = prefix + "  " + message
 	}
 
-	if !colorEnabled {
+	ls := lgForStyle(s)
+	if ls == nil {
 		return line
 	}
-
-	color, bold := colorForStyle(s)
-	if color == "" && !bold {
-		return line
-	}
-
-	var b strings.Builder
-	if bold {
-		b.WriteString(colorBold)
-	}
-	if color != "" {
-		b.WriteString(color)
-	}
-	b.WriteString(line)
-	b.WriteString(colorReset)
-	return b.String()
+	return ls.Render(line)
 }
 
-func colorForStyle(s style.Enum) (string, bool) {
+// lgForStyle returns the lipgloss style for a given style enum, or nil for unstyled.
+func lgForStyle(s style.Enum) *lipgloss.Style {
 	switch s {
 	case style.Success, style.Check, style.Ready, style.Celebrate:
-		return colorGreen, false
+		return &lgSuccess
 	case style.Failure, style.Destroyed:
-		return colorRed, false
+		return &lgFailure
 	case style.Warning:
-		return colorYellow, false
+		return &lgWarning
 	case style.Tip, style.Doc, style.URL, style.Infra, style.Setup, style.Deploy, style.Test, style.Lint, style.Format, style.Config:
-		return colorCyan, false
+		return &lgCyan
 	case style.Running, style.Database, style.Migrate, style.Docker, style.Backup, style.Reaper:
-		return colorCyan, true
+		return &lgCyanB
 	default:
-		return "", false
-	}
-}
-
-func useEmoji() bool {
-	if forced, ok := boolEnv("CRAWBL_IN_STYLE"); ok {
-		return forced
-	}
-	if os.Getenv("CI") != "" {
-		return false
-	}
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
-		return false
-	}
-
-	termEnv := strings.ToLower(strings.TrimSpace(os.Getenv("TERM")))
-	if strings.Contains(termEnv, "color") || os.Getenv("COLORTERM") != "" {
-		return true
-	}
-	return false
-}
-
-func useColor() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	return useEmoji()
-}
-
-func boolEnv(key string) (bool, bool) {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
-	case "":
-		return false, false
-	case "1", "true", "yes", "on":
-		return true, true
-	case "0", "false", "no", "off":
-		return false, true
-	default:
-		return false, false
+		return nil
 	}
 }

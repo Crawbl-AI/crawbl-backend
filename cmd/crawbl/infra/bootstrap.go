@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/cliexec"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
@@ -78,7 +79,7 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 
 	// Step 2: Save kubeconfig
 	out.Step(style.Infra, "[2/5] Saving kubeconfig...")
-	if err := runCommand("doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
+	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
 		return fmt.Errorf("kubeconfig save failed: %w", err)
 	}
 	out.Step(style.Check, "Kubeconfig saved")
@@ -86,14 +87,14 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 	// Step 3: Ensure DOCR registry integration (Pulumi sets registryIntegration=true
 	// on the cluster, but doctl registry add is a safety net in case of state drift).
 	out.Step(style.Infra, "[3/5] Ensuring DOCR registry integration...")
-	if err := runCommand("doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
+	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
 		out.Warning("Registry add failed and may already be integrated: %v", err)
 	}
 	out.Step(style.Check, "Registry integration verified")
 
 	// Step 4: Wait for controller to be ready
 	out.Step(style.Infra, "[4/5] Waiting for ArgoCD application-controller...")
-	if err := waitForController(timeout); err != nil {
+	if err := waitForController(ctx, timeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
 	}
 	out.Step(style.Ready, "ArgoCD application-controller is ready")
@@ -113,8 +114,8 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 }
 
 // waitForController waits for the ArgoCD application-controller StatefulSet to be ready.
-func waitForController(timeout time.Duration) error {
-	return runCommand("kubectl", "rollout", "status",
+func waitForController(ctx context.Context, timeout time.Duration) error {
+	return cliexec.Run(ctx, "kubectl", "rollout", "status",
 		"statefulset/argocd-application-controller",
 		"-n", "argocd",
 		"--timeout", timeout.String(),
@@ -192,12 +193,4 @@ func printAppStatus() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
-}
-
-// runCommand executes a command with stdout/stderr connected to the terminal.
-func runCommand(name string, args ...string) error {
-	cmd := exec.CommandContext(context.Background(), name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

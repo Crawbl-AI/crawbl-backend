@@ -44,6 +44,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagequotarepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
@@ -59,6 +60,7 @@ import (
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/clickhouse"
@@ -66,7 +68,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
@@ -214,6 +215,9 @@ func runServer(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
+	pricingCache := pricing.New(db, logger)
+	pricingCache.Start(ctx)
+
 	// Build the single river.Config covering every background job,
 	// periodic sweep, and cron the orchestrator owns. Auto-ingest is
 	// NOT on this list — it runs in-process under
@@ -229,6 +233,7 @@ func runServer(ctx context.Context) error {
 		Embedder:         embedder,
 		MessageRepo:      messageRepo,
 		ModelPricingRepo: modelpricingrepo.New(),
+		PricingCache:     pricingCache,
 		LLMUsageRepo:     llmUsageRepo,
 	})
 	if err != nil {
@@ -302,7 +307,7 @@ func runServer(ctx context.Context) error {
 	httpMiddleware := buildHTTPMiddleware()
 
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
-	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
+	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
 	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
 	defer cleanupRT()
@@ -311,9 +316,6 @@ func runServer(ctx context.Context) error {
 	agentPromptsRepo := agentpromptsrepo.New()
 	agentHistoryRepo := agenthistoryrepo.New()
 	artifactRepo := artifactrepo.New()
-
-	pricingCache := pricing.New(db, logger)
-	pricingCache.Start(ctx, 5*time.Minute)
 
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
@@ -333,7 +335,7 @@ func runServer(ctx context.Context) error {
 		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
 		ingestPool,
 	)
-	agentService := agentservice.New(
+	agentService := agentservice.MustNew(
 		agentservice.Repos{
 			Workspace:     workspaceRepo,
 			Agent:         agentRepo,
@@ -347,7 +349,7 @@ func runServer(ctx context.Context) error {
 		runtimeClient,
 	)
 	integrationConnRepo := integrationconnrepo.New()
-	integrationService := integrationservice.New(logger, integrationConnRepo)
+	integrationService := integrationservice.MustNew(logger, integrationConnRepo)
 
 	// Register Socket.IO message.send handler now that services are available.
 	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
@@ -416,9 +418,9 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-func buildHTTPMiddleware() *httpserver.MiddlewareConfig {
-	return &httpserver.MiddlewareConfig{
-		Environment: envOrDefault("CRAWBL_ENVIRONMENT", httpserver.EnvironmentLocal),
+func buildHTTPMiddleware() *middleware.MiddlewareConfig {
+	return &middleware.MiddlewareConfig{
+		Environment: envOrDefault("CRAWBL_ENVIRONMENT", middleware.EnvironmentLocal),
 		E2EToken:    os.Getenv("CRAWBL_E2E_TOKEN"),
 	}
 }
@@ -585,13 +587,13 @@ func buildMCPHandler(
 	}
 
 	wfRepo := workflowrepo.New()
-	workflowSvc := workflowservice.New(db, wfRepo, runtimeClient, broadcaster)
+	workflowSvc := workflowservice.MustNew(db, wfRepo, runtimeClient, broadcaster)
 
 	auditRepo := auditrepo.New()
-	auditSvc := auditservice.New(auditRepo)
+	auditSvc := auditservice.MustNew(auditRepo)
 
 	mcpRepo := mcprepo.New()
-	mcpSvc := mcpservice.New(
+	mcpSvc := mcpservice.MustNew(
 		mcpservice.Repos{
 			MCP:          mcpRepo,
 			Workspace:    workspaceRepo,

@@ -7,10 +7,11 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
@@ -19,10 +20,6 @@ const (
 	// DefaultServerPort is the default TCP port for the HTTP server if not specified.
 	DefaultServerPort = "7171"
 
-	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
-	// This prevents slowloris attacks by timing out slow clients.
-	DefaultReadHeaderTimeout = 5 * time.Second
-
 	// DefaultReadTimeout is the maximum duration for reading the entire request,
 	// including the body.
 	DefaultReadTimeout = 1 * time.Minute
@@ -30,6 +27,12 @@ const (
 	// DefaultWriteTimeout is the maximum duration before timing out writes of the
 	// response. Set generously to accommodate long-running agent streaming responses.
 	DefaultWriteTimeout = 5 * time.Minute
+)
+
+var (
+	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
+	// This prevents slowloris attacks by timing out slow clients.
+	DefaultReadHeaderTimeout = defaults.ShortTimeout
 )
 
 // Config holds the configuration settings for the HTTP server.
@@ -65,7 +68,7 @@ type NewServerOpts struct {
 	AgentService orchestratorservice.AgentService
 
 	// HTTPMiddleware contains authentication and request middleware configuration.
-	HTTPMiddleware *httpserver.MiddlewareConfig
+	HTTPMiddleware *middleware.MiddlewareConfig
 
 	// Broadcaster emits real-time events to connected WebSocket clients.
 	// If nil, a NopBroadcaster is used (no real-time events).
@@ -130,7 +133,7 @@ type Server struct {
 	agentService orchestratorservice.AgentService
 
 	// httpMiddleware contains authentication and request processing middleware.
-	httpMiddleware *httpserver.MiddlewareConfig
+	httpMiddleware *middleware.MiddlewareConfig
 
 	// broadcaster emits real-time events to connected WebSocket clients.
 	broadcaster realtime.Broadcaster

@@ -488,9 +488,9 @@ type WorkspaceService interface {
 	GetByID(ctx context.Context, opts *GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error)
 }
 
-// ChatReader handles read-only chat operations (conversations, messages, agents).
-// Handlers that only query data should depend on this interface, not the full ChatService.
-type ChatReader interface {
+// ChatService defines the interface for all chat operations: conversations,
+// messages, agents, and streaming. Handlers depend on this interface directly.
+type ChatService interface {
 	// ListAgents retrieves all agents available in a specific workspace.
 	// Agents represent the AI swarm members that users can interact with.
 	//
@@ -522,10 +522,7 @@ type ChatReader interface {
 	//
 	// Returns a WorkspaceSummary on success, or a merrors.Error on failure.
 	GetWorkspaceSummary(ctx context.Context, opts *GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error)
-}
 
-// ChatWriter handles write operations that mutate state, trigger streaming, or emit socket events.
-type ChatWriter interface {
 	// SendMessage creates a new message in a conversation. Uses LocalID for
 	// idempotency, allowing clients to safely retry on network failures.
 	// Returns the agent reply messages (one per agent turn) on success.
@@ -552,13 +549,6 @@ type ChatWriter interface {
 	//
 	// Returns the updated Message on success, or a merrors.Error on failure.
 	RespondToActionCard(ctx context.Context, opts *RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error)
-}
-
-// ChatService is the full interface combining read and write operations.
-// Use ChatReader or ChatWriter when only a subset is needed.
-type ChatService interface {
-	ChatReader
-	ChatWriter
 }
 
 // AgentService defines the interface for agent-specific operations.

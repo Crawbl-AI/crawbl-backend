@@ -5,14 +5,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
 )
 
-const (
-	buildPlatformImageRepo  = "registry.digitalocean.com/crawbl/crawbl-platform"
+var (
+	registryBase = configenv.StringOr("CRAWBL_REGISTRY", "registry.digitalocean.com/crawbl")
+
+	buildPlatformImageRepo  = registryBase + "/crawbl-platform"
 	buildPlatformDockerfile = "dockerfiles/platform-full.dockerfile"
 
-	buildAuthFilterImageRepo  = "registry.digitalocean.com/crawbl/envoy-auth-filter"
+	buildAuthFilterImageRepo  = registryBase + "/envoy-auth-filter"
 	buildAuthFilterDockerfile = "dockerfiles/envoy-auth-filter.dockerfile"
 	buildAuthFilterContext    = "cmd/envoy-auth-filter"
 
@@ -25,7 +28,7 @@ const (
 	// image but uses a dedicated, minimal Dockerfile (distroless nonroot,
 	// ~26 MB) so per-workspace pods pull a small image instead of the
 	// full ~200 MB platform binary.
-	buildAgentRuntimeImageRepo  = "registry.digitalocean.com/crawbl/crawbl-agent-runtime"
+	buildAgentRuntimeImageRepo  = registryBase + "/crawbl-agent-runtime"
 	buildAgentRuntimeDockerfile = "dockerfiles/agent-runtime.dockerfile"
 )
 

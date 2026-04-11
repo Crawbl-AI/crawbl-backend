@@ -12,6 +12,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -23,9 +24,11 @@ import (
 // pod's SIGTERM grace window. Tune this if workflows grow beyond ~100 steps.
 const MaxWorkflowDuration = 30 * time.Minute
 
-// WorkflowCleanupTimeout is the time budget for post-failure DB writes when
-// the workflow context has already been cancelled.
-const WorkflowCleanupTimeout = 5 * time.Second
+var (
+	// WorkflowCleanupTimeout is the time budget for post-failure DB writes when
+	// the workflow context has already been cancelled.
+	WorkflowCleanupTimeout = defaults.ShortTimeout
+)
 
 // ExecuteWorkflow runs a workflow asynchronously. Call in a goroutine.
 // It fetches the definition, iterates through steps sequentially, and calls

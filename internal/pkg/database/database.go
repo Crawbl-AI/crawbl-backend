@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,17 +24,17 @@ import (
 // If environment variables are not set, default values from types.go are used.
 func ConfigFromEnv(prefix string) Config {
 	return Config{
-		Host:               envOrDefault(prefix+"DATABASE_HOST", DefaultHost),
-		Port:               envOrDefault(prefix+"DATABASE_PORT", DefaultPort),
+		Host:               configenv.StringOr(prefix+"DATABASE_HOST", DefaultHost),
+		Port:               configenv.StringOr(prefix+"DATABASE_PORT", DefaultPort),
 		User:               configenv.SecretString(prefix+"DATABASE_USER", DefaultUser),
 		Password:           configenv.SecretString(prefix+"DATABASE_PASSWORD", DefaultPassword),
-		Name:               envOrDefault(prefix+"DATABASE_NAME", DefaultName),
-		Schema:             envOrDefault(prefix+"DATABASE_SCHEMA", DefaultSchema),
-		SSLMode:            envOrDefault(prefix+"DATABASE_SSLMODE", DefaultSSLMode),
-		MaxOpenConnections: intFromEnv(prefix+"DATABASE_MAX_OPEN_CONNECTIONS", DefaultMaxOpenConnections),
-		MaxIdleConnections: intFromEnv(prefix+"DATABASE_MAX_IDLE_CONNECTIONS", DefaultMaxIdleConnections),
-		ConnMaxLifetime:    durationFromEnv(prefix+"DATABASE_CONN_MAX_LIFETIME", DefaultConnMaxLifetime),
-		ConnMaxIdleTime:    durationFromEnv(prefix+"DATABASE_CONN_MAX_IDLE_TIME", DefaultConnMaxIdleTime),
+		Name:               configenv.StringOr(prefix+"DATABASE_NAME", DefaultName),
+		Schema:             configenv.StringOr(prefix+"DATABASE_SCHEMA", DefaultSchema),
+		SSLMode:            configenv.StringOr(prefix+"DATABASE_SSLMODE", DefaultSSLMode),
+		MaxOpenConnections: configenv.IntOr(prefix+"DATABASE_MAX_OPEN_CONNECTIONS", DefaultMaxOpenConnections),
+		MaxIdleConnections: configenv.IntOr(prefix+"DATABASE_MAX_IDLE_CONNECTIONS", DefaultMaxIdleConnections),
+		ConnMaxLifetime:    configenv.DurationOr(prefix+"DATABASE_CONN_MAX_LIFETIME", DefaultConnMaxLifetime),
+		ConnMaxIdleTime:    configenv.DurationOr(prefix+"DATABASE_CONN_MAX_IDLE_TIME", DefaultConnMaxIdleTime),
 	}
 }
 
@@ -163,6 +161,7 @@ func IsRecordNotFoundError(err error) bool {
 // Returns:
 //   - nil on successful ping.
 //   - The last error encountered if all attempts fail.
+//   - ctx.Err() if the context is cancelled during a retry delay.
 func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Duration) error {
 	var lastErr error
 
@@ -173,7 +172,11 @@ func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Dur
 			lastErr = err
 		}
 
-		time.Sleep(delay)
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	return lastErr
@@ -184,45 +187,4 @@ func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Dur
 // (spaces, @, /, etc.) are percent-encoded and cannot break the DSN parsing.
 func buildDriverDSN(config Config, includeSchema bool) string {
 	return BuildDSN(config, includeSchema)
-}
-
-// envOrDefault retrieves an environment variable value or returns the fallback
-// if the variable is not set or is empty.
-func envOrDefault(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-// intFromEnv retrieves an integer environment variable value or returns the fallback
-// if the variable is not set or cannot be parsed as an integer.
-func intFromEnv(key string, fallback int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
-}
-
-// durationFromEnv retrieves a duration environment variable value or returns the fallback
-// if the variable is not set or cannot be parsed as a duration.
-// The duration format follows time.ParseDuration conventions (e.g., "5m", "1h30m").
-func durationFromEnv(key string, fallback time.Duration) time.Duration {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
 }

@@ -14,6 +14,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -45,7 +46,7 @@ type Context struct {
 	IntegrationService orchestratorservice.IntegrationService
 
 	// HTTPMiddleware contains authentication and request middleware configuration.
-	HTTPMiddleware *httpserver.MiddlewareConfig
+	HTTPMiddleware *middleware.MiddlewareConfig
 
 	// Broadcaster emits real-time events to connected WebSocket clients.
 	Broadcaster realtime.Broadcaster
@@ -82,7 +83,7 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 
 // PrincipalFromRequest extracts the authenticated principal from request context.
 func PrincipalFromRequest(r *http.Request) (*orchestrator.Principal, error) {
-	principal, ok := httpserver.PrincipalFromContext(r.Context())
+	principal, ok := middleware.PrincipalFromContext(r.Context())
 	if !ok || principal == nil {
 		return nil, merrors.ErrUnauthorized
 	}

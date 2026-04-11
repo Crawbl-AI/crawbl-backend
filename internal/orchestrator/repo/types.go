@@ -102,6 +102,9 @@ type MessageRepo interface {
 	ListByConversationID(ctx context.Context, sess SessionRunner, opts *ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error)
 	// GetLatestByConversationID retrieves the most recent message in a conversation.
 	GetLatestByConversationID(ctx context.Context, sess SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error)
+	// GetLatestByConversationIDs returns the most-recent message per conversation
+	// using a single query. Missing conversations are omitted from the result map.
+	GetLatestByConversationIDs(ctx context.Context, sess SessionRunner, conversationIDs []string) (map[string]*orchestrator.Message, *merrors.Error)
 	// GetByID retrieves a single message by its ID.
 	GetByID(ctx context.Context, sess SessionRunner, messageID string) (*orchestrator.Message, *merrors.Error)
 	// Save persists message data, creating a new record or updating an existing one.

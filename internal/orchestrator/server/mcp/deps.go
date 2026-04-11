@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/gocraft/dbr/v2"
 
@@ -12,6 +11,7 @@ import (
 	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
@@ -21,8 +21,10 @@ const mcpServerVersion = "1.0.0"
 // mcpToolCallMethod is the MCP protocol method name for tool invocations.
 const mcpToolCallMethod = "tools/call"
 
-// auditWriteTimeout is the maximum time allowed for writing an audit log entry.
-const auditWriteTimeout = 5 * time.Second
+var (
+	// auditWriteTimeout is the maximum time allowed for writing an audit log entry.
+	auditWriteTimeout = defaults.ShortTimeout
+)
 
 // auditMaxResponseBytes caps the output stored in audit logs.
 const auditMaxResponseBytes = 4096

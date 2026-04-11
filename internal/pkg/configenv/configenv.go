@@ -5,7 +5,9 @@ package configenv
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // SecretString resolves a sensitive setting by checking, in order:
@@ -44,4 +46,42 @@ func SecretString(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+// StringOr returns the value of the environment variable key, or defaultValue
+// if the variable is unset or empty.
+func StringOr(key, defaultValue string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return defaultValue
+}
+
+// IntOr parses the environment variable key as an integer and returns it,
+// or returns defaultValue if the variable is unset, empty, or not a valid integer.
+func IntOr(key string, defaultValue int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(v)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
+}
+
+// DurationOr parses the environment variable key as a time.Duration and returns it,
+// or returns defaultValue if the variable is unset, empty, or not a valid duration.
+// The duration format follows time.ParseDuration conventions (e.g., "5m", "1h30m").
+func DurationOr(key string, defaultValue time.Duration) time.Duration {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return defaultValue
+	}
+	parsed, err := time.ParseDuration(v)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
 }

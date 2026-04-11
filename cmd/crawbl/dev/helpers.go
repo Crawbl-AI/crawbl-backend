@@ -4,22 +4,22 @@ import (
 	"context"
 	"os"
 	"os/exec"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/cliexec"
 )
 
 // envFileMode is the permission bits used when creating .env files.
 const envFileMode = 0o644
 
 // shellCmd runs a command with stdout/stderr forwarded to the terminal.
-func shellCmd(name string, args ...string) error {
-	cmd := exec.CommandContext(context.Background(), name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+// It respects ctx so Ctrl+C cancels the child process.
+func shellCmd(ctx context.Context, name string, args ...string) error {
+	return cliexec.Run(ctx, name, args...)
 }
 
 // silentCmd runs a command and discards output.
-func silentCmd(name string, args ...string) error {
-	cmd := exec.CommandContext(context.Background(), name, args...)
+func silentCmd(ctx context.Context, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
 	return cmd.Run()
 }
 
