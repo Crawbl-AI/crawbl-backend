@@ -217,34 +217,49 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	}
 
 	vec := pgvector.NewVector(embedding)
-	// NOTE: two things going on here.
-	//
-	//  1. dbr.SelectBySql uses "?" as its placeholder marker — it does
-	//     not understand Postgres-style "$N". We use "?" so dbr's
-	//     placeholder count matches the arg count; dbr rewrites to
-	//     $N under the Postgres dialect before calling the driver.
-	//
-	//  2. pgvector sends the value with an unknown OID when driven
-	//     through dbr's "?" path, so Postgres raises "operator does
-	//     not exist: vector <=> unknown" on the distance operator.
-	//     We cast the placeholder to the unqualified `vector` type so
-	//     the pgvector `<=>` operator resolves correctly — the
-	//     operator is registered on `vector`, not on `public.vector`,
-	//     even though the type lives in the public schema.
-	query := `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
-	                 source_file, added_by, filed_at, created_at,
-	                 state, summary, added_by_agent,
-	                 1 - (embedding <=> ?::vector) AS similarity
-	          FROM memory_drawers
-	          WHERE workspace_id = ? AND embedding IS NOT NULL
-	            AND 1 - (embedding <=> ?::vector) >= ?
-	          ORDER BY embedding <=> ?::vector
-	          LIMIT ?`
+	// NOTE: CheckDuplicate reuses the same $1 placeholder three times
+	// (similarity select, threshold filter, ORDER BY). dbr's
+	// SelectBySql rejects reused $N placeholders with "wrong placeholder
+	// count" because it counts occurrences, and its "?" path drops the
+	// pgvector OID so Postgres raises "vector <=> unknown". We sidestep
+	// both bugs by running the query through the underlying
+	// database/sql driver directly — lib/pq knows how to pass pgvector
+	// values and the $N placeholder reuse is native Postgres.
+	const query = `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
+	                      source_file, added_by, filed_at, created_at,
+	                      state, summary, added_by_agent,
+	                      1 - (embedding <=> $1) AS similarity
+	               FROM memory_drawers
+	               WHERE workspace_id = $2 AND embedding IS NOT NULL
+	                 AND 1 - (embedding <=> $1) >= $3
+	               ORDER BY embedding <=> $1
+	               LIMIT $4`
 
-	var results []memory.DrawerSearchResult
-	_, err := sess.SelectBySql(query, vec, workspaceID, vec, threshold, vec, limit).LoadContext(ctx, &results)
+	db, ok := sess.(*dbr.Session)
+	if !ok || db == nil || db.DB == nil {
+		return nil, fmt.Errorf("drawer: check duplicate: session is not a *dbr.Session with a live connection")
+	}
+	rows, err := db.QueryContext(ctx, query, vec, workspaceID, threshold, limit)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: check duplicate: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []memory.DrawerSearchResult
+	for rows.Next() {
+		var r memory.DrawerSearchResult
+		if scanErr := rows.Scan(
+			&r.ID, &r.WorkspaceID, &r.Wing, &r.Room, &r.Hall, &r.Content,
+			&r.Importance, &r.MemoryType, &r.SourceFile, &r.AddedBy,
+			&r.FiledAt, &r.CreatedAt, &r.State, &r.Summary, &r.AddedByAgent,
+			&r.Similarity,
+		); scanErr != nil {
+			return nil, fmt.Errorf("drawer: check duplicate scan: %w", scanErr)
+		}
+		results = append(results, r)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("drawer: check duplicate iterate: %w", rowsErr)
 	}
 	return results, nil
 }
