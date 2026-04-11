@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
@@ -59,10 +60,10 @@ func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secret
 	return corev1.PodSpec{
 		ServiceAccountName: runtimeServiceAccountName(sw),
 		SecurityContext: &corev1.PodSecurityContext{
-			RunAsNonRoot:   kube.Ptr(true),
-			RunAsUser:      kube.Ptr(runtimeUID),
-			RunAsGroup:     kube.Ptr(runtimeGID),
-			FSGroup:        kube.Ptr(runtimeGID),
+			RunAsNonRoot:   ptr.To(true),
+			RunAsUser:      ptr.To(runtimeUID),
+			RunAsGroup:     ptr.To(runtimeGID),
+			FSGroup:        ptr.To(runtimeGID),
 			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
 		Containers: []corev1.Container{buildAgentRuntimeContainer(sw, port, image, secretName, cfg)},
@@ -75,7 +76,7 @@ func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secret
 				Name: "cache",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
-						SizeLimit: kube.Ptr(resource.MustParse("512Mi")),
+						SizeLimit: ptr.To(resource.MustParse("512Mi")),
 					},
 				},
 			},
@@ -87,7 +88,7 @@ func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secret
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium:    corev1.StorageMediumMemory,
-						SizeLimit: kube.Ptr(resource.MustParse("128Mi")),
+						SizeLimit: ptr.To(resource.MustParse("128Mi")),
 					},
 				},
 			},
@@ -152,11 +153,11 @@ func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image,
 		}},
 		Resources: sw.Spec.Runtime.Resources,
 		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             kube.Ptr(true),
-			RunAsUser:                kube.Ptr(runtimeUID),
-			RunAsGroup:               kube.Ptr(runtimeGID),
-			AllowPrivilegeEscalation: kube.Ptr(false),
-			ReadOnlyRootFilesystem:   kube.Ptr(true),
+			RunAsNonRoot:             ptr.To(true),
+			RunAsUser:                ptr.To(runtimeUID),
+			RunAsGroup:               ptr.To(runtimeGID),
+			AllowPrivilegeEscalation: ptr.To(false),
+			ReadOnlyRootFilesystem:   ptr.To(true),
 			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},

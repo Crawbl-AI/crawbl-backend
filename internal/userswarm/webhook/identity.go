@@ -14,12 +14,6 @@ import (
 // to eyeball in kubectl output.
 
 const (
-	// runtimePort is the fixed gRPC listen port for every crawbl-agent-runtime
-	// pod. The legacy HTTP port 42617 is dead; the runtime always speaks gRPC
-	// on 42618. Spec.Runtime.Port can still override on a per-CR basis for
-	// local experiments.
-	runtimePort int32 = 42618
-
 	// runtimeAppName is the app.kubernetes.io/name label applied to every
 	// child resource. Used by the selector on Service and Deployment.
 	runtimeAppName = "crawbl-agent-runtime"
@@ -55,7 +49,7 @@ func runtimePortFor(sw *crawblv1alpha1.UserSwarm) int32 {
 	if sw.Spec.Runtime.Port != 0 {
 		return sw.Spec.Runtime.Port
 	}
-	return runtimePort
+	return crawblv1alpha1.DefaultGatewayPort
 }
 
 func runtimeEnvSecretName(sw *crawblv1alpha1.UserSwarm) string {

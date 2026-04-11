@@ -7,10 +7,6 @@ import "github.com/spf13/cobra"
 
 // NewUserSwarmCommand creates the "userswarm" parent command that groups
 // all UserSwarm lifecycle subcommands.
-//
-// The bootstrap and backup subcommands were removed in US-P2-008 along
-// with the rest of the legacy PVC workflow — runtime pods are stateless
-// Deployments now and do not need an init container or a backup Job.
 func NewUserSwarmCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "userswarm",

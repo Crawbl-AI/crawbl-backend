@@ -9,16 +9,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/blang/semver"
+	"golang.org/x/mod/semver"
 )
 
 // cmdTimeout is used for all git/gh subprocesses.
 var cmdTimeout = context.TODO
 
 var (
-	breakingRe  = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
-	featRe      = regexp.MustCompile(`^feat(\(.+\))?:`)
-	crawblTagRe = regexp.MustCompile(`^(v.+)-crawbl\.(\d+)$`)
+	breakingRe = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
+	featRe     = regexp.MustCompile(`^feat(\(.+\))?:`)
 	// globalSemverTagRe matches plain `vX.Y.Z` tags in the global v*
 	// namespace, excluding prefixed namespaces (e.g. `auth-filter/v0.1.0`
 	// or `agent-runtime/v2.3.4`) that belong to per-component sequences.
@@ -48,6 +47,46 @@ func gitCmd(repoPath string, args ...string) *exec.Cmd {
 		args = append([]string{"-C", repoPath}, args...)
 	}
 	return exec.CommandContext(cmdTimeout(), "git", args...) //nolint:gosec // args are constructed internally
+}
+
+// bumpVersion increments the major, minor, or patch component of a canonical
+// semver string (e.g. "v1.2.3") and returns the result. Pre-release and build
+// metadata are stripped. Returns the original string unchanged on parse error.
+func bumpVersion(ver, kind string) string {
+	if !semver.IsValid(ver) {
+		return ver
+	}
+	// Strip pre-release and build metadata.
+	canonical := semver.Canonical(ver)
+	// canonical is "vMAJOR.MINOR.PATCH".
+	trimmed := strings.TrimPrefix(canonical, "v")
+	parts := strings.SplitN(trimmed, ".", 3)
+	if len(parts) != 3 {
+		return ver
+	}
+	major, errMaj := strconv.Atoi(parts[0])
+	minor, errMin := strconv.Atoi(parts[1])
+	patch, errPatch := strconv.Atoi(parts[2])
+	if errMaj != nil || errMin != nil || errPatch != nil {
+		return ver
+	}
+	switch kind {
+	case "major":
+		major++
+		minor = 0
+		patch = 0
+	case "minor":
+		minor++
+		patch = 0
+	default:
+		patch++
+	}
+	return fmt.Sprintf("v%d.%d.%d", major, minor, patch)
+}
+
+// bumpPatch increments only the patch component of ver.
+func bumpPatch(ver string) string {
+	return bumpVersion(ver, "patch")
 }
 
 // Calculate determines the next semantic version tag based on conventional
@@ -80,36 +119,19 @@ func CalculateForRepo(repoPath string) (Result, error) {
 		lastTag = "v0.0.0"
 	}
 
-	v, err := semver.Parse(strings.TrimPrefix(lastTag, "v"))
-	if err != nil {
-		return Result{}, fmt.Errorf("invalid tag %s: %w", lastTag, err)
+	if !semver.IsValid(lastTag) {
+		return Result{}, fmt.Errorf("invalid tag %s: not a valid semver", lastTag)
 	}
 
 	// Ensure the tag exists locally for git log range.
 	ensureTagFetched(repoPath, lastTag)
 
 	bump := determineBump(repoPath, lastTag)
-
-	switch bump {
-	case "major":
-		v.Major++
-		v.Minor = 0
-		v.Patch = 0
-	case "minor":
-		v.Minor++
-		v.Patch = 0
-	default:
-		v.Patch++
-	}
-	v.Pre = nil
-	v.Build = nil
-
-	tag := "v" + v.String()
+	tag := bumpVersion(lastTag, bump)
 
 	// If the calculated tag already exists on the remote, keep bumping patch.
 	for tagExistsOnRemote(repoPath, tag) {
-		v.Patch++
-		tag = "v" + v.String()
+		tag = bumpPatch(tag)
 	}
 
 	return Result{Tag: tag, LastTag: lastTag, Bump: bump}, nil
@@ -127,67 +149,22 @@ func CalculateForPrefix(prefix string) (Result, error) {
 	}
 
 	bare := strings.TrimPrefix(lastTag, prefix)
-	v, err := semver.Parse(strings.TrimPrefix(bare, "v"))
-	if err != nil {
-		return Result{}, fmt.Errorf("invalid tag %s: %w", lastTag, err)
+	if !semver.IsValid(bare) {
+		return Result{}, fmt.Errorf("invalid tag %s: not a valid semver", lastTag)
 	}
 
 	ensureTagFetched("", lastTag)
 	bump := determineBump("", lastTag)
 
-	switch bump {
-	case "major":
-		v.Major++
-		v.Minor = 0
-		v.Patch = 0
-	case "minor":
-		v.Minor++
-		v.Patch = 0
-	default:
-		v.Patch++
-	}
-	v.Pre = nil
-	v.Build = nil
-
-	tag := prefix + "v" + v.String()
+	bumped := bumpVersion(bare, bump)
+	tag := prefix + bumped
 
 	for tagExistsOnRemote("", tag) {
-		v.Patch++
-		tag = prefix + "v" + v.String()
+		bumped = bumpPatch(bumped)
+		tag = prefix + bumped
 	}
 
 	return Result{Tag: tag, LastTag: lastTag, Bump: bump}, nil
-}
-
-// CalculateForCrawblFork calculates the next tag for the agent-runtime.
-// Tags follow the pattern v<upstream>-crawbl.<N> where N increments per release.
-func CalculateForCrawblFork(repoPath string) (Result, error) {
-	describeCmd := gitCmd(repoPath, "describe", "--tags", "--abbrev=0", "--match", "v*-crawbl*")
-	output, err := describeCmd.Output()
-	if err != nil {
-		return Result{}, fmt.Errorf("no v*-crawbl* tags found — create one manually first (e.g. v0.6.8-crawbl.1)")
-	}
-	lastTag := strings.TrimSpace(string(output))
-
-	matches := crawblTagRe.FindStringSubmatch(lastTag)
-	if matches == nil {
-		return Result{}, fmt.Errorf("tag %s does not match v*-crawbl.<N> pattern", lastTag)
-	}
-	base := matches[1]
-	n, err := strconv.Atoi(matches[2])
-	if err != nil {
-		return Result{}, fmt.Errorf("invalid crawbl suffix number in %s: %w", lastTag, err)
-	}
-
-	n++
-	tag := fmt.Sprintf("%s-crawbl.%d", base, n)
-
-	for tagExistsOnRemote(repoPath, tag) {
-		n++
-		tag = fmt.Sprintf("%s-crawbl.%d", base, n)
-	}
-
-	return Result{Tag: tag, LastTag: lastTag, Bump: "crawbl"}, nil
 }
 
 // latestReleaseTag queries GitHub for the latest release tag using gh CLI.

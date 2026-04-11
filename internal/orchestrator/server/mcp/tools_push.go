@@ -2,8 +2,8 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -18,13 +18,7 @@ type pushOutput struct {
 }
 
 func newPushHandler(deps *Deps) sdkmcp.ToolHandlerFor[pushInput, pushOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input pushInput) (*sdkmcp.CallToolResult, pushOutput, error) {
-		userID := userIDFromContext(ctx)
-		if userID == "" {
-			return nil, pushOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
-
-		sess := deps.newSession()
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, _ string, input pushInput) (*sdkmcp.CallToolResult, pushOutput, error) {
 		RecordAPICall(ctx, "DB:SELECT user_push_tokens WHERE user_id="+userID)
 
 		sent, info, err := deps.MCPService.SendPush(ctx, sess, userID, input.Title, input.Message)
@@ -33,5 +27,5 @@ func newPushHandler(deps *Deps) sdkmcp.ToolHandlerFor[pushInput, pushOutput] {
 		}
 
 		return nil, pushOutput{Sent: sent, Info: info}, nil
-	}
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
@@ -80,12 +81,7 @@ type reviewArtifactOutput struct {
 // --- Handlers ---
 
 func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactInput, createArtifactOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input createArtifactInput) (*sdkmcp.CallToolResult, createArtifactOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, createArtifactOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input createArtifactInput) (*sdkmcp.CallToolResult, createArtifactOutput, error) {
 		if input.Title == "" || input.Content == "" {
 			return nil, createArtifactOutput{Info: "title and content are required"}, nil
 		}
@@ -96,7 +92,6 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 			return nil, createArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.CreateArtifact(ctx, sess, userID, workspaceID, &mcpservice.CreateArtifactParams{
 			Title:          input.Title,
 			Content:        input.Content,
@@ -114,21 +109,15 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 			Version:    result.Version,
 			Info:       "artifact created",
 		}, nil
-	}
+	})
 }
 
 func newReadArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[readArtifactInput, readArtifactOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input readArtifactInput) (*sdkmcp.CallToolResult, readArtifactOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, readArtifactOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input readArtifactInput) (*sdkmcp.CallToolResult, readArtifactOutput, error) {
 		if input.ArtifactID == "" {
 			return nil, readArtifactOutput{}, fmt.Errorf("artifact_id is required")
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.ReadArtifact(ctx, sess, userID, workspaceID, input.ArtifactID, input.Version)
 		if err != nil {
 			return nil, readArtifactOutput{}, err
@@ -153,16 +142,11 @@ func newReadArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[readArtifactInput,
 			Status:      result.Status,
 			Reviews:     reviews,
 		}, nil
-	}
+	})
 }
 
 func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactInput, updateArtifactOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input updateArtifactInput) (*sdkmcp.CallToolResult, updateArtifactOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, updateArtifactOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input updateArtifactInput) (*sdkmcp.CallToolResult, updateArtifactOutput, error) {
 		if input.ArtifactID == "" || input.Content == "" {
 			return nil, updateArtifactOutput{Info: "artifact_id and content are required"}, nil
 		}
@@ -173,7 +157,6 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 			return nil, updateArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.UpdateArtifact(ctx, sess, userID, workspaceID, &mcpservice.UpdateArtifactParams{
 			ArtifactID:      input.ArtifactID,
 			Content:         input.Content,
@@ -187,16 +170,11 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 		}
 
 		return nil, updateArtifactOutput{Version: result.Version, Info: "artifact updated"}, nil
-	}
+	})
 }
 
 func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactInput, reviewArtifactOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input reviewArtifactInput) (*sdkmcp.CallToolResult, reviewArtifactOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, reviewArtifactOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input reviewArtifactInput) (*sdkmcp.CallToolResult, reviewArtifactOutput, error) {
 		if input.ArtifactID == "" || input.Outcome == "" || input.Comments == "" {
 			return nil, reviewArtifactOutput{Info: "artifact_id, outcome, and comments are required"}, nil
 		}
@@ -204,7 +182,6 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 			return nil, reviewArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.ReviewArtifact(ctx, sess, userID, workspaceID, &mcpservice.ReviewArtifactParams{
 			ArtifactID: input.ArtifactID,
 			Outcome:    input.Outcome,
@@ -221,7 +198,7 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 			Reviewed: result.Reviewed,
 			Info:     fmt.Sprintf("review recorded: %s", input.Outcome),
 		}, nil
-	}
+	})
 }
 
 func registerArtifactTools(server *sdkmcp.Server, deps *Deps) {

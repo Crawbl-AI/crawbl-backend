@@ -7,10 +7,10 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
@@ -19,10 +19,6 @@ const (
 	// DefaultServerPort is the default TCP port for the HTTP server if not specified.
 	DefaultServerPort = "7171"
 
-	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
-	// This prevents slowloris attacks by timing out slow clients.
-	DefaultReadHeaderTimeout = 5 * time.Second
-
 	// DefaultReadTimeout is the maximum duration for reading the entire request,
 	// including the body.
 	DefaultReadTimeout = 1 * time.Minute
@@ -30,6 +26,12 @@ const (
 	// DefaultWriteTimeout is the maximum duration before timing out writes of the
 	// response. Set generously to accommodate long-running agent streaming responses.
 	DefaultWriteTimeout = 5 * time.Minute
+)
+
+var (
+	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
+	// This prevents slowloris attacks by timing out slow clients.
+	DefaultReadHeaderTimeout = defaults.ShortTimeout
 )
 
 // Config holds the configuration settings for the HTTP server.
@@ -45,6 +47,9 @@ type Config struct {
 
 // NewServerOpts contains all dependencies required to create a new Server instance.
 // Each field is validated at server creation time to ensure proper initialization.
+//
+// Service fields use the consumer-side interfaces declared in ports.go so
+// the server package never imports producer-owned service contracts.
 type NewServerOpts struct {
 	// DB is the database connection pool for all persistence operations.
 	DB *dbr.Connection
@@ -53,19 +58,19 @@ type NewServerOpts struct {
 	Logger *slog.Logger
 
 	// AuthService handles user authentication, registration, and profile management.
-	AuthService orchestratorservice.AuthService
+	AuthService authPort
 
 	// WorkspaceService manages workspace provisioning and runtime state.
-	WorkspaceService orchestratorservice.WorkspaceService
+	WorkspaceService workspacePort
 
 	// ChatService handles conversations, messages, and agent interactions.
-	ChatService orchestratorservice.ChatService
+	ChatService chatPort
 
 	// AgentService handles agent details, settings, tools, and history retrieval.
-	AgentService orchestratorservice.AgentService
+	AgentService agentPort
 
 	// HTTPMiddleware contains authentication and request middleware configuration.
-	HTTPMiddleware *httpserver.MiddlewareConfig
+	HTTPMiddleware *middleware.MiddlewareConfig
 
 	// Broadcaster emits real-time events to connected WebSocket clients.
 	// If nil, a NopBroadcaster is used (no real-time events).
@@ -85,7 +90,7 @@ type NewServerOpts struct {
 
 	// IntegrationService manages third-party OAuth connections.
 	// If nil, integration endpoints return service-unavailable errors.
-	IntegrationService orchestratorservice.IntegrationService
+	IntegrationService integrationPort
 
 	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
 	MCPSigningKey string
@@ -118,19 +123,19 @@ type Server struct {
 	logger *slog.Logger
 
 	// authService handles authentication operations including sign-in, sign-up, and profile management.
-	authService orchestratorservice.AuthService
+	authService authPort
 
 	// workspaceService manages workspace lifecycle and runtime state queries.
-	workspaceService orchestratorservice.WorkspaceService
+	workspaceService workspacePort
 
 	// chatService handles conversations, messages, and agent interactions.
-	chatService orchestratorservice.ChatService
+	chatService chatPort
 
 	// agentService handles agent details, settings, tools, and history retrieval.
-	agentService orchestratorservice.AgentService
+	agentService agentPort
 
 	// httpMiddleware contains authentication and request processing middleware.
-	httpMiddleware *httpserver.MiddlewareConfig
+	httpMiddleware *middleware.MiddlewareConfig
 
 	// broadcaster emits real-time events to connected WebSocket clients.
 	broadcaster realtime.Broadcaster
@@ -139,7 +144,7 @@ type Server struct {
 	runtimeClient userswarmclient.Client
 
 	// integrationService manages third-party OAuth connections.
-	integrationService orchestratorservice.IntegrationService
+	integrationService integrationPort
 
 	// mcpSigningKey is the HMAC signing key for internal bearer tokens.
 	mcpSigningKey string

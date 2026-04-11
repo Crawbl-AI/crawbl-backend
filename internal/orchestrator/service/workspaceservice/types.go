@@ -3,7 +3,6 @@ package workspaceservice
 import (
 	"log/slog"
 
-	workspacerepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -17,7 +16,9 @@ import (
 type service struct {
 	// workspaceRepo provides access to workspace persistence operations
 	// including listing, retrieval, and creation of workspace records.
-	workspaceRepo workspacerepo.WorkspaceRepo
+	// Typed against the consumer-side workspaceStore interface declared in
+	// ports.go so the service does not import the producer interface.
+	workspaceRepo workspaceStore
 
 	// runtimeClient provides access to the agent runtime orchestration
 	// layer for querying and ensuring runtime status for workspaces.

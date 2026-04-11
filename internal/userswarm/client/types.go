@@ -18,6 +18,7 @@ import (
 	"context"
 	"time"
 
+	v1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
@@ -88,13 +89,14 @@ const (
 	DefaultFakeReplyPrefix = "Fake runtime reply"
 
 	// DefaultRuntimeNamespace is the shared Kubernetes namespace where
-	// every workspace pod is scheduled.
-	DefaultRuntimeNamespace = "userswarms"
+	// every workspace pod is scheduled. Canonical value is defined in
+	// api/v1alpha1.DefaultRuntimeNamespace.
+	DefaultRuntimeNamespace = v1alpha1.DefaultRuntimeNamespace
 
 	// DefaultRuntimePort is the TCP port that crawbl-agent-runtime binds
-	// its gRPC server to inside the pod. 42618 replaces the legacy
-	// 42617 used by the HTTP webhook during the pre-gRPC era.
-	DefaultRuntimePort int32 = 42618
+	// its gRPC server to inside the pod. Canonical value is defined in
+	// api/v1alpha1.DefaultGatewayPort.
+	DefaultRuntimePort int32 = v1alpha1.DefaultGatewayPort
 
 	// DefaultPollTimeout bounds how long EnsureRuntime waits for a
 	// newly created UserSwarm CR to reach Verified=true before returning

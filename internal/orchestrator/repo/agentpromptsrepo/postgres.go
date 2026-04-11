@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -31,61 +30,32 @@ func (r *agentPromptsRepo) ListByAgentID(ctx context.Context, sess orchestratorr
 	return rows, nil
 }
 
+// BulkSave upserts the provided agent prompt rows into the database.
+// Each prompt is identified by its unique id.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *agentPromptsRepo) BulkSave(ctx context.Context, sess orchestratorrepo.SessionRunner, rows []orchestratorrepo.AgentPromptRow) *merrors.Error {
 	if sess == nil {
 		return merrors.ErrInvalidInput
 	}
 
+	const query = `
+INSERT INTO agent_prompts (id, agent_id, name, description, content, sort_order, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+	name        = EXCLUDED.name,
+	description = EXCLUDED.description,
+	content     = EXCLUDED.content,
+	sort_order  = EXCLUDED.sort_order,
+	updated_at  = EXCLUDED.updated_at`
+
 	for i := range rows {
 		row := &rows[i]
-		var existing orchestratorrepo.AgentPromptRow
-		err := sess.Select(orchestratorrepo.Columns(promptColumns...)...).
-			From("agent_prompts").
-			Where("id = ?", row.ID).
-			LoadOneContext(ctx, &existing)
-		switch {
-		case err == nil:
-			_, err = sess.Update("agent_prompts").
-				Set("name", row.Name).
-				Set("description", row.Description).
-				Set("content", row.Content).
-				Set("sort_order", row.SortOrder).
-				Set("updated_at", row.UpdatedAt).
-				Where("id = ?", row.ID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update agent prompt")
-			}
-		case database.IsRecordNotFoundError(err):
-			_, err = sess.InsertInto("agent_prompts").
-				Pair("id", row.ID).
-				Pair("agent_id", row.AgentID).
-				Pair("name", row.Name).
-				Pair("description", row.Description).
-				Pair("content", row.Content).
-				Pair("sort_order", row.SortOrder).
-				Pair("created_at", row.CreatedAt).
-				Pair("updated_at", row.UpdatedAt).
-				ExecContext(ctx)
-			if err != nil {
-				if database.IsRecordExistsError(err) {
-					_, err = sess.Update("agent_prompts").
-						Set("name", row.Name).
-						Set("description", row.Description).
-						Set("content", row.Content).
-						Set("sort_order", row.SortOrder).
-						Set("updated_at", row.UpdatedAt).
-						Where("id = ?", row.ID).
-						ExecContext(ctx)
-					if err != nil {
-						return merrors.WrapStdServerError(err, "update agent prompt after duplicate insert")
-					}
-					continue
-				}
-				return merrors.WrapStdServerError(err, "insert agent prompt")
-			}
-		default:
-			return merrors.WrapStdServerError(err, "select agent prompt by id for save")
+		_, err := sess.InsertBySql(query,
+			row.ID, row.AgentID, row.Name, row.Description, row.Content,
+			row.SortOrder, row.CreatedAt, row.UpdatedAt,
+		).ExecContext(ctx)
+		if err != nil {
+			return merrors.WrapStdServerError(err, "upsert agent prompt")
 		}
 	}
 

@@ -1,6 +1,7 @@
 // Package pricing provides an in-memory cache of model pricing data
 // loaded from the Postgres model_pricing table. The cache is refreshed
-// periodically and used to compute per-request cost from token counts.
+// by the River-backed PricingCacheRefresh periodic job and used to
+// compute per-request cost from token counts.
 package pricing
 
 import (
@@ -9,13 +10,12 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gocraft/dbr/v2"
 )
 
 // Cache holds model pricing data in memory for fast cost computation.
-// Thread-safe for concurrent reads. Refresh runs in a background goroutine.
+// Thread-safe for concurrent reads. Call Refresh to reload from Postgres.
 type Cache struct {
 	mu      sync.RWMutex
 	entries map[string]Entry // key: "provider:model:region"
@@ -34,7 +34,8 @@ type Entry struct {
 	CachedCostPerToken float64
 }
 
-// New creates a new pricing cache. Call Start() to begin background refresh.
+// New creates a new pricing cache. Call Start to perform the initial
+// synchronous load, then schedule Refresh via a River periodic job.
 func New(db *dbr.Connection, logger *slog.Logger) *Cache {
 	if logger == nil {
 		logger = slog.Default()
@@ -47,22 +48,12 @@ func New(db *dbr.Connection, logger *slog.Logger) *Cache {
 	}
 }
 
-// Start loads pricing data immediately, then refreshes every interval.
-// Call this once at startup. The goroutine exits when ctx is cancelled.
-func (c *Cache) Start(ctx context.Context, interval time.Duration) {
-	c.refresh(ctx)
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				c.refresh(ctx)
-			}
-		}
-	}()
+// Start performs the initial synchronous load of pricing data from
+// Postgres. Call once at startup before serving requests. Subsequent
+// refreshes are driven by the River PricingCacheRefresh periodic job
+// via Refresh — no goroutine is spawned here.
+func (c *Cache) Start(ctx context.Context) {
+	_ = c.Refresh(ctx)
 }
 
 // Compute returns the estimated USD cost for a single LLM call.
@@ -135,7 +126,15 @@ func (c *Cache) EntryCount() int {
 	return len(c.entries)
 }
 
-func (c *Cache) refresh(ctx context.Context) {
+// Refresh reloads the in-memory pricing table from Postgres in a single
+// pass. It is safe for concurrent callers — the write lock is held only
+// for the final swap. Returns an error if the query fails; the cache
+// retains its previous contents on error.
+func (c *Cache) Refresh(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	sess := c.db.NewSession(nil)
 
 	// Load the latest pricing for each (provider, model, region) combination.
@@ -160,7 +159,7 @@ func (c *Cache) refresh(ctx context.Context) {
 
 	if err != nil {
 		c.logger.Warn("pricing cache refresh failed", "error", err.Error())
-		return
+		return fmt.Errorf("pricing cache refresh: %w", err)
 	}
 
 	entries := make(map[string]Entry, len(rows))
@@ -189,6 +188,7 @@ func (c *Cache) refresh(ctx context.Context) {
 	c.mu.Unlock()
 
 	c.logger.Debug("pricing cache refreshed", "entries", len(entries))
+	return nil
 }
 
 func cacheKey(provider, model, region string) string {

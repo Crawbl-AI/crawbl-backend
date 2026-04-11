@@ -5,12 +5,10 @@ package integrationservice
 
 import (
 	"log/slog"
-
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 )
 
 // service implements orchestratorservice.IntegrationService.
 type service struct {
 	logger   *slog.Logger
-	connRepo orchestratorrepo.IntegrationConnRepo
+	connRepo integrationConnStore
 }

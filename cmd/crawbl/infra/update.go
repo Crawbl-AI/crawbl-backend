@@ -56,7 +56,7 @@ func runUpdate(ctx context.Context, env, region string, autoApprove bool) error 
 	out.Step(style.Infra, "Applying infrastructure changes for environment %q in region %q", env, region)
 
 	if !autoApprove {
-		if !confirmUpdate() {
+		if !confirmPrompt("Do you want to perform this action? (y/N): ") {
 			out.Warning("Update cancelled")
 			return nil
 		}
@@ -92,13 +92,6 @@ func validateEnvVars() error {
 		return fmt.Errorf("missing PULUMI_ACCESS_TOKEN environment variable")
 	}
 	return nil
-}
-
-func confirmUpdate() bool {
-	out.Prompt(style.Warning, "Do you want to perform this action? (y/N): ")
-	var response string
-	_, _ = fmt.Scanln(&response)
-	return response == "y" || response == "Y"
 }
 
 func printOutputs(result *infra.UpResult) {

@@ -4,32 +4,35 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 )
 
 const (
 	// enrichBatchSize caps how many drawers are enriched per sweep so a
 	// backlog spike cannot monopolise the worker.
 	enrichBatchSize = 100
+)
+
+var (
 	// enrichPerDrawerTimeout bounds the single-drawer LLM extract call so
 	// one slow upstream response cannot stall the whole batch.
-	enrichPerDrawerTimeout = 15 * time.Second
+	enrichPerDrawerTimeout = defaults.MediumTimeout
 )
 
 // EnrichDeps holds dependencies for the memory enrichment sweep. It
 // deliberately mirrors ProcessDeps so jobs/process.go helpers can be
-// reused where practical.
+// reused where practical. Repo fields are consumer-side interfaces from
+// ports.go.
 type EnrichDeps struct {
 	DB            *dbr.Connection
-	DrawerRepo    memrepo.DrawerRepo
-	KGRepo        memrepo.KGRepo
+	DrawerRepo    drawerStore
+	KGRepo        kgStore
 	LLMClassifier extract.LLMClassifier
 	Logger        *slog.Logger
 }

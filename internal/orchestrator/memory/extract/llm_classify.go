@@ -9,18 +9,20 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 )
 
 const (
 	defaultClassifyModel = "gpt-4o-mini"
-	classifyTimeout      = 30 * time.Second
 	classifyMaxTokens    = 1024
 	classifyTemperature  = 0.1
 	maxPreviewLen        = 200
 	fallbackImportance   = 0.5
 	maxLLMResponseBytes  = 1 << 20 // 1 MB
 )
+
+var classifyTimeout = defaults.LongTimeout
 
 // LLMClassifierConfig holds configuration for the OpenAI-compatible LLM classifier.
 type LLMClassifierConfig struct {

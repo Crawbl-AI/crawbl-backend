@@ -4,6 +4,8 @@
 package workflowservice
 
 import (
+	"errors"
+
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
@@ -19,21 +21,23 @@ type service struct {
 	broadcaster   realtime.Broadcaster
 }
 
-// New creates a new workflow service with the provided dependencies.
+// New creates a new workflow service with the provided dependencies, returning
+// an error if any required dependency is nil. A nil broadcaster is replaced
+// with a no-op implementation.
 func New(
 	db *dbr.Connection,
 	workflowRepo workflowrepo.Repo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
-) *service {
+) (*service, error) {
 	if db == nil {
-		panic("workflow service db cannot be nil")
+		return nil, errors.New("workflowservice: db is required")
 	}
 	if workflowRepo == nil {
-		panic("workflow service workflow repo cannot be nil")
+		return nil, errors.New("workflowservice: workflow repo is required")
 	}
 	if runtimeClient == nil {
-		panic("workflow service runtime client cannot be nil")
+		return nil, errors.New("workflowservice: runtime client is required")
 	}
 	if broadcaster == nil {
 		broadcaster = realtime.NopBroadcaster{}
@@ -44,7 +48,22 @@ func New(
 		workflowRepo:  workflowRepo,
 		runtimeClient: runtimeClient,
 		broadcaster:   broadcaster,
+	}, nil
+}
+
+// MustNew wraps New and panics on dependency-validation errors. Intended for
+// use from main/init paths where misconfiguration is unrecoverable.
+func MustNew(
+	db *dbr.Connection,
+	workflowRepo workflowrepo.Repo,
+	runtimeClient userswarmclient.Client,
+	broadcaster realtime.Broadcaster,
+) *service {
+	svc, err := New(db, workflowRepo, runtimeClient, broadcaster)
+	if err != nil {
+		panic(err)
 	}
+	return svc
 }
 
 // Repo returns the workflow repository for direct access by MCP tool handlers.

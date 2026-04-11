@@ -12,8 +12,10 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// New creates a new UserRepo instance backed by PostgreSQL.
-// The returned repository uses the database session runner pattern for transaction support.
+// New creates a PostgreSQL-backed user persistence struct. The returned
+// value uses the SessionRunner pattern for transaction support and
+// implicitly satisfies any consumer-side interface (e.g.
+// authservice.userStore) that lists a subset of its methods.
 func New() *userRepo {
 	return &userRepo{}
 }

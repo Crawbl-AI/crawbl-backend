@@ -118,55 +118,25 @@ func (r *workspaceRepo) Save(ctx context.Context, sess orchestratorrepo.SessionR
 	return r.saveWorkspaceRow(ctx, sess, orchestratorrepo.NewWorkspaceRow(workspace))
 }
 
-// saveWorkspaceRow inserts or updates a workspace record in the database.
-// It first attempts to find an existing workspace by ID, then either updates
-// the existing record or inserts a new one.
-// Handles race conditions by retrying with an update if insert fails due to duplicate key.
+// saveWorkspaceRow atomically upserts a workspace record in the database.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *workspaceRepo) saveWorkspaceRow(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.WorkspaceRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existingRow orchestratorrepo.WorkspaceRow
-	err := sess.Select(orchestratorrepo.Columns(workspaceColumns...)...).
-		From("workspaces").
-		Where("id = ?", row.ID).
-		LoadOneContext(ctx, &existingRow)
-	switch {
-	case err == nil:
-		_, err = sess.Update("workspaces").
-			Set("name", row.Name).
-			Set("updated_at", row.UpdatedAt).
-			Where("id = ?", row.ID).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update workspace")
-		}
-		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select workspace by id for save")
-	}
+	const query = `
+INSERT INTO workspaces (id, user_id, name, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+	name       = EXCLUDED.name,
+	updated_at = EXCLUDED.updated_at`
 
-	_, err = sess.InsertInto("workspaces").
-		Pair("id", row.ID).
-		Pair("user_id", row.UserID).
-		Pair("name", row.Name).
-		Pair("created_at", row.CreatedAt).
-		Pair("updated_at", row.UpdatedAt).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.ID, row.UserID, row.Name, row.CreatedAt, row.UpdatedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("workspaces").
-				Set("name", row.Name).
-				Set("updated_at", row.UpdatedAt).
-				Where("id = ?", row.ID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update workspace after duplicate insert")
-			}
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert workspace")
+		return merrors.WrapStdServerError(err, "upsert workspace")
 	}
 
 	return nil

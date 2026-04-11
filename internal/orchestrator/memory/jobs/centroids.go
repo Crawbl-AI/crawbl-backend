@@ -12,7 +12,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 )
 
 const (
@@ -31,10 +30,12 @@ const (
 )
 
 // CentroidRecomputeDeps holds dependencies for the centroid recompute job.
+// Repo fields reference consumer-side interfaces declared in ports.go so
+// the job layer never imports producer-owned interfaces.
 type CentroidRecomputeDeps struct {
 	DB           *dbr.Connection
-	DrawerRepo   memrepo.DrawerRepo
-	CentroidRepo memrepo.CentroidRepo
+	DrawerRepo   drawerStore
+	CentroidRepo centroidStore
 	Logger       *slog.Logger
 }
 

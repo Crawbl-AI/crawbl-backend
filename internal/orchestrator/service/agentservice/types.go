@@ -5,8 +5,6 @@
 package agentservice
 
 import (
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -14,26 +12,31 @@ import (
 // Repos groups the repository dependencies used by the agent service.
 // Passing a single struct instead of 6 individual parameters keeps the
 // constructor signature clean and makes adding new repos a one-line change.
+//
+// Fields are typed against consumer-side interfaces (ports.go) so that
+// callers can satisfy the struct with any implementation providing the
+// exact method subset agentservice uses — no coupling to producer
+// packages beyond their concrete structs.
 type Repos struct {
-	Workspace     orchestratorrepo.WorkspaceRepo
-	Agent         orchestratorrepo.AgentRepo
-	Tools         orchestratorrepo.ToolsRepo
-	AgentSettings orchestratorrepo.AgentSettingsRepo
-	AgentPrompts  orchestratorrepo.AgentPromptsRepo
-	AgentHistory  orchestratorrepo.AgentHistoryRepo
+	Workspace     workspaceStore
+	Agent         agentStore
+	Tools         toolsStore
+	AgentSettings agentSettingsStore
+	AgentPrompts  agentPromptsStore
+	AgentHistory  agentHistoryStore
 	Usage         usagerepo.Repo
-	Drawer        memrepo.DrawerRepo
+	Drawer        drawerStore
 }
 
 // service implements the orchestratorservice.AgentService interface.
 type service struct {
-	workspaceRepo     orchestratorrepo.WorkspaceRepo
-	agentRepo         orchestratorrepo.AgentRepo
-	toolsRepo         orchestratorrepo.ToolsRepo
-	agentSettingsRepo orchestratorrepo.AgentSettingsRepo
-	agentPromptsRepo  orchestratorrepo.AgentPromptsRepo
-	agentHistoryRepo  orchestratorrepo.AgentHistoryRepo
+	workspaceRepo     workspaceStore
+	agentRepo         agentStore
+	toolsRepo         toolsStore
+	agentSettingsRepo agentSettingsStore
+	agentPromptsRepo  agentPromptsStore
+	agentHistoryRepo  agentHistoryStore
 	runtimeClient     userswarmclient.Client
 	usageRepo         usagerepo.Repo
-	drawerRepo        memrepo.DrawerRepo
+	drawerRepo        drawerStore
 }

@@ -35,56 +35,28 @@ func (r *agentSettingsRepo) GetByAgentID(ctx context.Context, sess orchestratorr
 	return &row, nil
 }
 
+// Save persists agent settings to the database.
+// Returns ErrInvalidInput if sess is nil or row is nil.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *agentSettingsRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentSettingsRow) *merrors.Error {
 	if sess == nil || row == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	var existing orchestratorrepo.AgentSettingsRow
-	err := sess.Select(orchestratorrepo.Columns(settingsColumns...)...).
-		From("agent_settings").
-		Where("agent_id = ?", row.AgentID).
-		LoadOneContext(ctx, &existing)
-	switch {
-	case err == nil:
-		_, err = sess.Update("agent_settings").
-			Set("model", row.Model).
-			Set("response_length", row.ResponseLength).
-			Set("allowed_tools", row.AllowedTools).
-			Set("updated_at", row.UpdatedAt).
-			Where("agent_id = ?", row.AgentID).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update agent settings")
-		}
-		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select agent settings for save")
-	}
+	const query = `
+INSERT INTO agent_settings (agent_id, model, response_length, allowed_tools, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (agent_id) DO UPDATE SET
+	model           = EXCLUDED.model,
+	response_length = EXCLUDED.response_length,
+	allowed_tools   = EXCLUDED.allowed_tools,
+	updated_at      = EXCLUDED.updated_at`
 
-	_, err = sess.InsertInto("agent_settings").
-		Pair("agent_id", row.AgentID).
-		Pair("model", row.Model).
-		Pair("response_length", row.ResponseLength).
-		Pair("allowed_tools", row.AllowedTools).
-		Pair("created_at", row.CreatedAt).
-		Pair("updated_at", row.UpdatedAt).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.AgentID, row.Model, row.ResponseLength, row.AllowedTools, row.CreatedAt, row.UpdatedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("agent_settings").
-				Set("model", row.Model).
-				Set("response_length", row.ResponseLength).
-				Set("allowed_tools", row.AllowedTools).
-				Set("updated_at", row.UpdatedAt).
-				Where("agent_id = ?", row.AgentID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update agent settings after duplicate insert")
-			}
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert agent settings")
+		return merrors.WrapStdServerError(err, "upsert agent settings")
 	}
 
 	return nil

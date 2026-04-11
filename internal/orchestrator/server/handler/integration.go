@@ -7,6 +7,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
@@ -16,21 +17,14 @@ import (
 //
 // GET /v1/integrations
 func IntegrationsList(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.IntegrationsResponse, *merrors.Error) {
 		// Fetch integrations (with connection status from DB).
 		items, mErr := c.IntegrationService.ListIntegrations(r.Context(), &orchestratorservice.ListIntegrationsOpts{
-			Sess:   c.NewSession(),
-			UserID: user.ID,
+			Sess:   deps.Sess,
+			UserID: deps.User.ID,
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.IntegrationsResponse{}, mErr
 		}
 
 		// Build categories by merging tool categories (agent runtime) and integration categories (orchestrator).
@@ -84,16 +78,19 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 			})
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.IntegrationsResponse{
+		return dto.IntegrationsResponse{
 			Categories: categories,
 			Items:      itemsList,
-		})
-	}
+		}, nil
+	})
 }
 
 // IntegrationConnect returns OAuth configuration for a provider.
 //
 // POST /v1/integrations/connect
+//
+// Kept on the plain form because the missing-field error uses a custom
+// non-enveloped 400 message via httpserver.WriteErrorMessage.
 func IntegrationConnect(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -132,6 +129,9 @@ func IntegrationConnect(c *Context) http.HandlerFunc {
 // IntegrationCallback exchanges the OAuth code for tokens.
 //
 // POST /v1/integrations/callback
+//
+// Kept on the plain form because the missing-field errors use custom
+// non-enveloped 400 messages via httpserver.WriteErrorMessage.
 func IntegrationCallback(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)

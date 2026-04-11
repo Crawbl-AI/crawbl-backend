@@ -10,79 +10,52 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // WorkspacesList retrieves all workspaces owned by the authenticated user.
 // Each workspace includes its runtime status if available, allowing the mobile client
 // to display workspace state and poll for readiness during initial provisioning.
 func WorkspacesList(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		principal, err := PrincipalFromRequest(r)
-		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
-			return
-		}
-
-		sess := c.NewSession()
-
-		user, mErr := c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
-			Sess:    sess,
-			Subject: principal.Subject,
-		})
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.WorkspaceResponse, *merrors.Error) {
 		workspaces, mErr := c.WorkspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
-			Sess:   sess,
-			UserID: user.ID,
+			Sess:   deps.Sess,
+			UserID: deps.User.ID,
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return nil, mErr
 		}
 
 		response := make([]dto.WorkspaceResponse, 0, len(workspaces))
 		for _, workspace := range workspaces {
 			resp := toWorkspaceResponse(workspace)
-			enrichWorkspaceResponse(c, r.Context(), sess, user.ID, workspace.ID, &resp)
+			enrichWorkspaceResponse(c, r.Context(), deps.Sess, deps.User.ID, workspace.ID, &resp)
 			response = append(response, resp)
 		}
 
-		WriteSuccess(w, http.StatusOK, response)
-	}
+		return response, nil
+	})
 }
 
 // WorkspaceGet retrieves a single workspace by its ID.
 // The workspace must be owned by the authenticated user.
 // Returns workspace details including runtime status and verification state.
 func WorkspaceGet(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sess := c.NewSession()
-
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.WorkspaceResponse, *merrors.Error) {
 		workspaceID := chi.URLParam(r, "id")
 		workspace, mErr := c.WorkspaceService.GetByID(r.Context(), &orchestratorservice.GetWorkspaceOpts{
-			Sess:        sess,
-			UserID:      user.ID,
+			Sess:        deps.Sess,
+			UserID:      deps.User.ID,
 			WorkspaceID: workspaceID,
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.WorkspaceResponse{}, mErr
 		}
 
 		resp := toWorkspaceResponse(workspace)
-		enrichWorkspaceResponse(c, r.Context(), sess, user.ID, workspace.ID, &resp)
-		WriteSuccess(w, http.StatusOK, resp)
-	}
+		enrichWorkspaceResponse(c, r.Context(), deps.Sess, deps.User.ID, workspace.ID, &resp)
+		return resp, nil
+	})
 }
 
 // toWorkspaceResponse converts a domain Workspace to the API response format.

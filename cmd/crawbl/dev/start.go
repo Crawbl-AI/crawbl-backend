@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -28,7 +29,7 @@ start fresh.`,
   crawbl dev start --database-only  # Start only PostgreSQL + migrations
   crawbl dev start --clean          # Wipe database and start fresh`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStart(clean, databaseOnly)
+			return runStart(cmd.Context(), clean, databaseOnly)
 		},
 	}
 
@@ -37,23 +38,23 @@ start fresh.`,
 	return cmd
 }
 
-func runStart(clean, databaseOnly bool) error {
+func runStart(ctx context.Context, clean, databaseOnly bool) error {
 	// Ensure .env exists.
 	ensureEnvFile()
 
 	// Stop any running containers first.
 	out.Step(style.Stopping, "Stopping existing containers...")
-	_ = shellCmd("docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
+	_ = shellCmd(ctx, "docker", "compose", "--profile", "default", "--profile", "database", "down", "--remove-orphans")
 
 	// If --clean, remove the Postgres volume.
 	if clean {
 		out.Step(style.Delete, "Removing the database volume...")
-		_ = shellCmd("docker", "compose", "down", "-v")
+		_ = shellCmd(ctx, "docker", "compose", "down", "-v")
 	}
 
 	// Start Postgres.
 	out.Step(style.Database, "Starting PostgreSQL...")
-	if err := shellCmd("docker", "compose", "--profile", "database", "up", "-d"); err != nil {
+	if err := shellCmd(ctx, "docker", "compose", "--profile", "database", "up", "-d"); err != nil {
 		return fmt.Errorf("failed to start Postgres: %w", err)
 	}
 
@@ -61,7 +62,7 @@ func runStart(clean, databaseOnly bool) error {
 	const postgresReadyAttempts = 30
 	out.Step(style.Waiting, "Waiting for Postgres to become ready...")
 	for i := range postgresReadyAttempts {
-		if silentCmd("docker", "compose", "exec", "-T", "postgresdb", "pg_isready", "-h", "postgresdb") == nil {
+		if silentCmd(ctx, "docker", "compose", "exec", "-T", "postgresdb", "pg_isready", "-h", "postgresdb") == nil {
 			out.Step(style.Ready, "Postgres is ready")
 			break
 		}
@@ -72,10 +73,7 @@ func runStart(clean, databaseOnly bool) error {
 
 	// Run migrations.
 	out.Step(style.Migrate, "Running database migrations...")
-	if err := shellCmd("docker", "compose", "--profile", "database", "--profile", "migration", "build", "migrations"); err != nil {
-		return fmt.Errorf("migration build failed: %w", err)
-	}
-	if err := shellCmd("docker", "compose", "--profile", "database", "--profile", "migration", "run", "--rm", "migrations"); err != nil {
+	if err := runMigrations(ctx); err != nil {
 		return fmt.Errorf("migrations failed: %w", err)
 	}
 
@@ -89,7 +87,7 @@ func runStart(clean, databaseOnly bool) error {
 
 	// Start the orchestrator.
 	out.Step(style.Running, "Starting the orchestrator...")
-	if err := shellCmd("docker", "compose", "--profile", "default", "--profile", "database", "up", "-d", "--build", "--remove-orphans"); err != nil {
+	if err := shellCmd(ctx, "docker", "compose", "--profile", "default", "--profile", "database", "up", "-d", "--build", "--remove-orphans"); err != nil {
 		return fmt.Errorf("failed to start orchestrator: %w", err)
 	}
 

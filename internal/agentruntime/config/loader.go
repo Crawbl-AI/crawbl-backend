@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
@@ -46,19 +47,19 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	fs := flag.NewFlagSet("crawbl-agent-runtime", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	fs.StringVar(&cfg.GRPCListen, "grpc-listen", envOr("CRAWBL_GRPC_LISTEN", cfg.GRPCListen), "gRPC listen address (host:port)")
+	fs.StringVar(&cfg.GRPCListen, "grpc-listen", configenv.StringOr("CRAWBL_GRPC_LISTEN", cfg.GRPCListen), "gRPC listen address (host:port)")
 	fs.StringVar(&cfg.WorkspaceID, "workspace-id", os.Getenv("CRAWBL_WORKSPACE_ID"), "Crawbl workspace ID this runtime instance serves")
 	fs.StringVar(&cfg.UserID, "user-id", os.Getenv("CRAWBL_USER_ID"), "Crawbl user ID owning the workspace")
 	fs.StringVar(&cfg.OrchestratorGRPCEndpoint, "orchestrator-endpoint", os.Getenv("CRAWBL_ORCHESTRATOR_ENDPOINT"), "Orchestrator internal gRPC endpoint (host:port)")
 	fs.StringVar(&cfg.MCPEndpoint, "mcp-endpoint", os.Getenv("CRAWBL_MCP_ENDPOINT"), "Orchestrator MCP HTTP endpoint URL")
-	fs.StringVar(&cfg.OpenAI.ModelName, "openai-model", envOr("CRAWBL_OPENAI_MODEL", cfg.OpenAI.ModelName), "OpenAI model name")
+	fs.StringVar(&cfg.OpenAI.ModelName, "openai-model", configenv.StringOr("CRAWBL_OPENAI_MODEL", cfg.OpenAI.ModelName), "OpenAI model name")
 	fs.StringVar(&cfg.OpenAI.BaseURL, "openai-base-url", os.Getenv("CRAWBL_OPENAI_BASE_URL"), "OpenAI-compatible endpoint override (Ollama, Azure, OpenRouter)")
 
 	// Redis overrides.
 	fs.StringVar(&cfg.Redis.Addr, "redis-addr", cfg.Redis.Addr, "Redis address host:port")
 	redisTTLFlag := fs.String("redis-session-ttl", "", "Redis session TTL (Go duration, e.g. 24h)")
 
-	fs.StringVar(&cfg.SearXNGEndpoint, "searxng-endpoint", envOr("CRAWBL_SEARXNG_ENDPOINT", cfg.SearXNGEndpoint), "SearXNG meta-search base URL used by the web_search_tool")
+	fs.StringVar(&cfg.SearXNGEndpoint, "searxng-endpoint", configenv.StringOr("CRAWBL_SEARXNG_ENDPOINT", cfg.SearXNGEndpoint), "SearXNG meta-search base URL used by the web_search_tool")
 
 	// DigitalOcean Spaces (file_read / file_write backend).
 	fs.StringVar(&cfg.Spaces.Endpoint, "spaces-endpoint", os.Getenv("CRAWBL_SPACES_ENDPOINT"), "DO Spaces HTTPS endpoint, e.g. https://fra1.digitaloceanspaces.com")
@@ -123,12 +124,4 @@ func (c Config) Validate() error {
 		return nil
 	}
 	return fmt.Errorf("missing required configuration: %v", missing)
-}
-
-// envOr returns the env var value when set, otherwise the fallback.
-func envOr(name, fallback string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
-	}
-	return fallback
 }

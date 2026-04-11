@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/userswarm/reaper/reaperrepo"
 )
 
 // Run is the main entry point for the reaper. It connects to Postgres and the
@@ -78,6 +79,7 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	// MaxAge window and are left alone (they may belong to a test run that is
 	// still in progress).
 	cutoff := time.Now().UTC().Add(-cfg.MaxAge)
+	repo := reaperrepo.New()
 
 	// Phase 1: list every UserSwarm CR in the cluster and drive cleanup off
 	// its own CreationTimestamp. We used to iterate the users table instead,
@@ -116,7 +118,7 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 		// decide whether this is an e2e swarm worth reaping in phase 1, and
 		// so we can log a meaningful subject. Orphans (no user row at all)
 		// are left to phase 2, which is the dedicated orphan sweep.
-		user, err := findUserByID(ctx, sess, userID)
+		userRow, err := repo.FindUserByID(ctx, sess, userID)
 		if err != nil {
 			logger.Error("failed to look up user for stale swarm",
 				"swarm", swarm.Name,
@@ -126,7 +128,7 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 			result.Errors++
 			continue
 		}
-		if user == nil {
+		if userRow == nil {
 			// No user row at all — leave it to phase 2's orphan sweep so the
 			// log output cleanly separates "stale e2e" from "orphaned".
 			continue
@@ -135,23 +137,23 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 		// Phase 1 is scoped to e2e users. Stale CRs for real users are a
 		// different class of problem (possibly a bug in the teardown path)
 		// and should not be silently deleted here.
-		if !strings.HasPrefix(user.Subject, "e2e-") {
+		if !strings.HasPrefix(userRow.Subject, "e2e-") {
 			continue
 		}
 
 		result.UsersFound++
 		logger.Info("processing stale userswarm",
 			"swarm", swarm.Name,
-			"subject", user.Subject,
-			"email", user.Email,
+			"subject", userRow.Subject,
+			"email", userRow.Email,
 			"age", age,
 			"dry_run", cfg.DryRun,
 		)
 
 		if cfg.DryRun {
 			result.SwarmsReaped++
-			if _, seen := softDeletedUsers[user.ID]; !seen {
-				softDeletedUsers[user.ID] = struct{}{}
+			if _, seen := softDeletedUsers[userRow.ID]; !seen {
+				softDeletedUsers[userRow.ID] = struct{}{}
 				result.UsersReaped++
 			}
 			continue
@@ -164,17 +166,17 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 				continue
 			}
 		}
-		logger.Info("deleted stale userswarm", "name", swarm.Name, "user", user.Subject)
+		logger.Info("deleted stale userswarm", "name", swarm.Name, "user", userRow.Subject)
 		result.SwarmsReaped++
 
 		// Soft-delete the user row once, even if multiple CRs map back to
-		// the same user. The deleted_at IS NULL guard inside softDeleteUser
+		// the same user. The deleted_at IS NULL guard inside SoftDeleteUser
 		// is a second line of defence against double-writes.
-		if _, seen := softDeletedUsers[user.ID]; seen {
+		if _, seen := softDeletedUsers[userRow.ID]; seen {
 			continue
 		}
-		softDeletedUsers[user.ID] = struct{}{}
-		if user.DeletedAt != nil {
+		softDeletedUsers[userRow.ID] = struct{}{}
+		if userRow.DeletedAt != nil {
 			// User was already soft-deleted out of band (e.g. by an earlier
 			// reaper run that failed after the DB update but before the CR
 			// delete). Count it as reaped for visibility, but skip the
@@ -182,13 +184,13 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 			result.UsersReaped++
 			continue
 		}
-		if err := softDeleteUser(ctx, sess, *user); err != nil {
-			logger.Error("failed to soft-delete user", "subject", user.Subject, "error", err)
+		if err := repo.SoftDeleteUser(ctx, sess, userRow.ID); err != nil {
+			logger.Error("failed to soft-delete user", "subject", userRow.Subject, "error", err)
 			result.Errors++
 			continue
 		}
 		result.UsersReaped++
-		logger.Info("reaped user", "subject", user.Subject)
+		logger.Info("reaped user", "subject", userRow.Subject)
 	}
 
 	// Phase 2: orphan sweep. Scan all UserSwarm CRs in the cluster and remove
@@ -197,35 +199,11 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	//     normal reaper flow (e.g. a manual admin action).
 	//   - A previous reaper run soft-deleted the user but failed to delete the
 	//     corresponding swarm CR.
-	orphaned, errs := reapOrphanedSwarms(ctx, k8sClient, sess, logger, cfg.DryRun)
+	orphaned, errs := reapOrphanedSwarms(ctx, k8sClient, sess, repo, logger, cfg.DryRun)
 	result.SwarmsReaped += orphaned
 	result.Errors += errs
 
 	return result, nil
-}
-
-// findUserByID looks up a single user row by primary key, including
-// soft-deleted users. It returns (nil, nil) when no row exists so the
-// caller can distinguish "missing" from "error". Soft-deleted users are
-// returned with DeletedAt populated so phase 1 can skip the redundant
-// UPDATE when the row was already torn down by a previous reaper run.
-func findUserByID(ctx context.Context, sess *dbr.Session, id string) (*staleUser, error) {
-	if id == "" {
-		return nil, nil
-	}
-	var users []staleUser
-	_, err := sess.Select("id", "subject", "email", "created_at", "deleted_at").
-		From("users").
-		Where("id = ?", id).
-		Limit(1).
-		LoadContext(ctx, &users)
-	if err != nil {
-		return nil, err
-	}
-	if len(users) == 0 {
-		return nil, nil
-	}
-	return &users[0], nil
 }
 
 // reapOrphanedSwarms is the second cleanup phase. It lists every UserSwarm CR
@@ -240,7 +218,7 @@ func findUserByID(ctx context.Context, sess *dbr.Session, id string) (*staleUser
 //
 // The dryRun flag mirrors the behaviour in Run(): when true, candidates are
 // logged and counted but not actually deleted.
-func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.Session, logger *slog.Logger, dryRun bool) (reaped, errors int) {
+func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.Session, repo *reaperrepo.Repo, logger *slog.Logger, dryRun bool) (reaped, errors int) {
 	// List all UserSwarm CRs cluster-wide. On a busy cluster this could return
 	// hundreds of items, but in practice the number of test swarms is small
 	// compared to the total. If the List call itself fails we return immediately
@@ -262,15 +240,10 @@ func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.
 			continue
 		}
 
-		// Check whether the user is still active. We query for a COUNT rather
-		// than a full row to keep the query lightweight. The deleted_at IS NULL
+		// Check whether the user is still active. The deleted_at IS NULL
 		// guard ensures we treat soft-deleted users the same as missing ones —
 		// both cases leave the swarm without a live owner.
-		var count int
-		err := sess.Select("COUNT(*)").
-			From("users").
-			Where("id = ? AND deleted_at IS NULL", userID).
-			LoadOneContext(ctx, &count)
+		count, err := repo.CountActiveByID(ctx, sess, userID)
 		if err != nil {
 			logger.Error("failed to check user existence", "user_id", userID, "swarm", swarm.Name, "error", err)
 			errors++
@@ -309,25 +282,6 @@ func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.
 	}
 
 	return reaped, errors
-}
-
-// softDeleteUser marks a user as deleted by setting deleted_at (and updated_at)
-// to the current UTC time. We use a soft delete rather than a hard DELETE so
-// that referential integrity is preserved for audit logs and any other tables
-// that hold a foreign key to this user.
-//
-// The WHERE clause includes "deleted_at IS NULL" as a safety guard: if the
-// user was already soft-deleted by another process (e.g. a concurrent reaper
-// run or an explicit admin action) the UPDATE is a no-op rather than
-// overwriting the original deletion timestamp.
-func softDeleteUser(ctx context.Context, sess *dbr.Session, user staleUser) error {
-	now := time.Now().UTC()
-	_, err := sess.Update("users").
-		Set("deleted_at", now).
-		Set("updated_at", now).
-		Where("id = ? AND deleted_at IS NULL", user.ID).
-		ExecContext(ctx)
-	return err
 }
 
 // buildK8sClient constructs a controller-runtime client that knows about the

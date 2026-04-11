@@ -116,9 +116,6 @@ func waitForPort(ctx context.Context, port int) error {
 func newE2ECommand() *cobra.Command {
 	var (
 		baseURL             string
-		uid                 string
-		email               string
-		name                string
 		e2eToken            string
 		verbose             bool
 		timeout             time.Duration
@@ -187,9 +184,6 @@ runs only test-features/chat/).`,
 
 			cfg := &e2e.Config{
 				BaseURL:             baseURL,
-				UID:                 uid,
-				Email:               email,
-				Name:                name,
 				E2EToken:            e2eToken,
 				Verbose:             verbose,
 				Timeout:             timeout,
@@ -220,9 +214,6 @@ runs only test-features/chat/).`,
 	}
 
 	cmd.Flags().StringVar(&baseURL, "base-url", "http://localhost:7171", "Orchestrator base URL")
-	cmd.Flags().StringVar(&uid, "uid", "e2e-test-user", "Firebase UID for the test user")
-	cmd.Flags().StringVar(&email, "email", "e2e@crawbl.test", "Email for the test user")
-	cmd.Flags().StringVar(&name, "name", "E2E Test User", "Display name for the test user")
 	cmd.Flags().StringVar(&e2eToken, "e2e-token", os.Getenv("CRAWBL_E2E_TOKEN"), "Shared secret for gateway auth bypass, or set CRAWBL_E2E_TOKEN")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print detailed test output")
 	cmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "HTTP request timeout (includes agent tool-call latency and runtime cold-start)")

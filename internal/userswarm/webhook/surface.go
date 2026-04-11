@@ -16,9 +16,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 )
 
 // Run starts the UserSwarm Metacontroller webhook.
@@ -47,7 +48,7 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 
 		<-ctx.Done()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaults.ShutdownGracePeriod)
 		defer cancel()
 
 		slog.Info("stopping userswarm webhook")
@@ -72,7 +73,7 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 // project into it.
 func runtimeConfigFromEnv() *runtimeConfig {
 	return &runtimeConfig{
-		AgentRuntimeImage:        envOrDefault("CRAWBL_AGENT_RUNTIME_IMAGE", "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"),
+		AgentRuntimeImage:        configenv.StringOr("CRAWBL_AGENT_RUNTIME_IMAGE", "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"),
 		OrchestratorGRPCEndpoint: os.Getenv("CRAWBL_ORCHESTRATOR_ENDPOINT"),
 		MCPEndpoint:              os.Getenv("CRAWBL_MCP_ENDPOINT"),
 		RedisAddr:                os.Getenv("CRAWBL_REDIS_ADDR"),
@@ -85,13 +86,6 @@ func runtimeConfigFromEnv() *runtimeConfig {
 		SpacesRegion:             os.Getenv("CRAWBL_SPACES_REGION"),
 		SpacesBucket:             os.Getenv("CRAWBL_SPACES_BUCKET"),
 	}
-}
-
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 // syncSurface returns the HTTP handler for the /sync Metacontroller webhook.

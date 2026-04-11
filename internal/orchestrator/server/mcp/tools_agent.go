@@ -2,8 +2,8 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
@@ -23,18 +23,11 @@ type createAgentHistoryOutput struct {
 }
 
 func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentHistoryInput, createAgentHistoryOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input createAgentHistoryInput) (*sdkmcp.CallToolResult, createAgentHistoryOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, createAgentHistoryOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
-
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createAgentHistoryInput) (*sdkmcp.CallToolResult, createAgentHistoryOutput, error) {
 		if input.Title == "" {
 			return nil, createAgentHistoryOutput{Info: "title is required"}, nil
 		}
 
-		sess := deps.newSession()
 		RecordAPICall(ctx, "DB:INSERT agent_history")
 
 		err := deps.MCPService.CreateAgentHistory(ctx, sess, workspaceID, &mcpservice.CreateAgentHistoryParams{
@@ -49,5 +42,5 @@ func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentH
 		}
 
 		return nil, createAgentHistoryOutput{Created: true, Info: "history entry created"}, nil
-	}
+	})
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
@@ -20,29 +19,33 @@ import (
 // Repos groups the repository dependencies used by the chat service.
 // Passing a single struct instead of 8 individual parameters keeps the
 // constructor signature clean and makes adding new repos a one-line change.
+//
+// Fields are typed against consumer-side interfaces (ports.go) so callers
+// can satisfy the struct with any backend that provides the exact method
+// subset chatservice needs — no coupling to a producer-owned interface.
 type Repos struct {
-	Workspace     orchestratorrepo.WorkspaceRepo
-	Agent         orchestratorrepo.AgentRepo
-	Conversation  orchestratorrepo.ConversationRepo
-	Message       orchestratorrepo.MessageRepo
-	Tools         orchestratorrepo.ToolsRepo
-	AgentSettings orchestratorrepo.AgentSettingsRepo
-	AgentPrompts  orchestratorrepo.AgentPromptsRepo
-	AgentHistory  orchestratorrepo.AgentHistoryRepo
+	Workspace     workspaceStore
+	Agent         agentStore
+	Conversation  conversationStore
+	Message       messageStore
+	Tools         toolsStore
+	AgentSettings agentSettingsStore
+	AgentPrompts  agentPromptsStore
+	AgentHistory  agentHistoryStore
 	Usage         usagerepo.Repo
 }
 
 // service implements the ChatService interface.
 type service struct {
 	db                *dbr.Connection
-	workspaceRepo     orchestratorrepo.WorkspaceRepo
-	agentRepo         orchestratorrepo.AgentRepo
-	conversationRepo  orchestratorrepo.ConversationRepo
-	messageRepo       orchestratorrepo.MessageRepo
-	toolsRepo         orchestratorrepo.ToolsRepo
-	agentSettingsRepo orchestratorrepo.AgentSettingsRepo
-	agentPromptsRepo  orchestratorrepo.AgentPromptsRepo
-	agentHistoryRepo  orchestratorrepo.AgentHistoryRepo
+	workspaceRepo     workspaceStore
+	agentRepo         agentStore
+	conversationRepo  conversationStore
+	messageRepo       messageStore
+	toolsRepo         toolsStore
+	agentSettingsRepo agentSettingsStore
+	agentPromptsRepo  agentPromptsStore
+	agentHistoryRepo  agentHistoryStore
 	usageRepo         usagerepo.Repo
 	runtimeClient     userswarmclient.Client
 	broadcaster       realtime.Broadcaster

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -48,13 +49,7 @@ type agentBrief struct {
 }
 
 func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, userProfileOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input userProfileInput) (*sdkmcp.CallToolResult, userProfileOutput, error) {
-		userID := userIDFromContext(ctx)
-		if userID == "" {
-			return nil, userProfileOutput{}, fmt.Errorf("unauthorized")
-		}
-
-		sess := deps.newSession()
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, _ string, input userProfileInput) (*sdkmcp.CallToolResult, userProfileOutput, error) {
 		RecordAPICall(ctx, "DB:SELECT users WHERE id="+userID)
 
 		profile, err := deps.MCPService.GetUserProfile(ctx, sess, userID, input.IncludePreferences)
@@ -81,18 +76,11 @@ func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, u
 		}
 
 		return nil, out, nil
-	}
+	})
 }
 
 func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInput, workspaceInfoOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input workspaceInfoInput) (*sdkmcp.CallToolResult, workspaceInfoOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, workspaceInfoOutput{}, fmt.Errorf("unauthorized")
-		}
-
-		sess := deps.newSession()
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input workspaceInfoInput) (*sdkmcp.CallToolResult, workspaceInfoOutput, error) {
 		RecordAPICall(ctx, "DB:SELECT workspaces WHERE id="+workspaceID)
 
 		info, err := deps.MCPService.GetWorkspaceInfo(ctx, sess, userID, workspaceID, input.IncludeAgents)
@@ -120,5 +108,5 @@ func newWorkspaceInfoHandler(deps *Deps) sdkmcp.ToolHandlerFor[workspaceInfoInpu
 		}
 
 		return nil, out, nil
-	}
+	})
 }

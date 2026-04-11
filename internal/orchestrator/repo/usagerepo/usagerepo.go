@@ -97,9 +97,9 @@ func (p *postgres) CheckQuota(ctx context.Context, sess orchestratorrepo.Session
 		TokenLimit int64 `db:"token_limit"`
 	}
 
-	// Join usage_counters with usage_quotas + usage_plans to get current usage and limit.
-	// If no counter row exists, tokens_used defaults to 0.
-	// If no quota row exists, the query returns no rows and we return 0, 0, nil (allow).
+	// Multi-table JOIN across usage_quotas, usage_plans, and usage_counters with
+	// COALESCE aggregation; dbr builder cannot express multi-table JOINs with
+	// mixed INNER/LEFT semantics, so raw SQL is required here.
 	err := sess.SelectBySql(`
 		SELECT COALESCE(uc.tokens_used, 0) AS tokens_used,
 		       COALESCE(up.monthly_token_limit, 0) AS token_limit
@@ -128,6 +128,8 @@ func (p *postgres) IncrementUsage(ctx context.Context, sess orchestratorrepo.Ses
 		return merrors.ErrInvalidInput
 	}
 
+	// ON CONFLICT DO UPDATE with self-referencing counter increments requires raw SQL;
+	// dbr builder has no support for upsert or EXCLUDED pseudo-table references.
 	_, err := sess.InsertBySql(
 		`INSERT INTO usage_counters (user_id, period, tokens_used, prompt_tokens_used, completion_tokens_used, cost_usd, request_count, last_updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, 1, NOW())
@@ -152,6 +154,8 @@ func (p *postgres) IncrementAgentUsage(ctx context.Context, sess orchestratorrep
 		return merrors.ErrInvalidInput
 	}
 
+	// ON CONFLICT DO UPDATE with self-referencing counter increments requires raw SQL;
+	// dbr builder has no support for upsert or EXCLUDED pseudo-table references.
 	_, err := sess.InsertBySql(
 		`INSERT INTO agent_usage_counters (agent_id, workspace_id, tokens_used, prompt_tokens_used, completion_tokens_used, cost_usd, request_count, last_updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, 1, NOW())
@@ -203,6 +207,9 @@ func (p *postgres) GetUserUsage(ctx context.Context, sess orchestratorrepo.Sessi
 		return nil, merrors.ErrInvalidInput
 	}
 
+	// LEFT JOIN across usage_quotas and usage_counters with COALESCE aggregation;
+	// dbr builder cannot express multi-table JOINs with mixed INNER/LEFT semantics,
+	// so raw SQL is required here.
 	var row UserUsageRow
 	err := sess.SelectBySql(`
 		SELECT COALESCE(uc.tokens_used, 0)            AS tokens_used,

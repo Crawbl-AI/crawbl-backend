@@ -211,6 +211,38 @@ func normalizeProvider(provider string) string {
 }
 
 // -----------------------------------------------------------------------------
+// PricingCacheRefresh — reload in-memory pricing cache from Postgres.
+// -----------------------------------------------------------------------------
+
+// NewPricingCacheRefreshWorker constructs a pricing_cache_refresh worker
+// bound to the unified queue.Deps.
+func NewPricingCacheRefreshWorker(deps Deps) *PricingCacheRefreshWorker {
+	return &PricingCacheRefreshWorker{deps: deps}
+}
+
+// Work reloads the in-memory pricing cache from the model_pricing table.
+// It is a no-op when PricingCache is nil so environments without a cache
+// can skip wiring it.
+func (w *PricingCacheRefreshWorker) Work(ctx context.Context, job *river.Job[PricingCacheRefreshArgs]) error {
+	w.deps.Logger.InfoContext(ctx, "pricing-cache-refresh: start",
+		slog.Int64("job_id", job.ID),
+		slog.String("kind", job.Kind),
+		slog.String("queue", job.Queue),
+		slog.Int("attempt", job.Attempt),
+	)
+	if w.deps.PricingCache == nil {
+		return nil
+	}
+	if err := w.deps.PricingCache.Refresh(ctx); err != nil {
+		return fmt.Errorf("pricing cache refresh: %w", err)
+	}
+	w.deps.Logger.InfoContext(ctx, "pricing-cache-refresh: complete",
+		slog.Int64("job_id", job.ID),
+	)
+	return nil
+}
+
+// -----------------------------------------------------------------------------
 // MessageCleanup — fail stale pending messages so mobile never hangs.
 // -----------------------------------------------------------------------------
 

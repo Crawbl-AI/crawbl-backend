@@ -104,7 +104,6 @@ func SignIn(c *Context) http.HandlerFunc {
 			Principal: principal,
 		})
 		if mErr != nil {
-			c.Logger.Error("handleAuthSignIn: sign in failed", "error", mErr.Error())
 			WriteError(w, mErr)
 			return
 		}

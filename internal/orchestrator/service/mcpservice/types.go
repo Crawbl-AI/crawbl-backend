@@ -11,7 +11,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
@@ -62,14 +61,16 @@ type WorkflowExecutor interface {
 // Deps bundles all dependencies for the MCP service.
 // ---------------------------------------------------------------------------
 
-// Repos groups the repository dependencies.
+// Repos groups the repository dependencies. Fields are typed against
+// consumer-side interfaces declared in ports.go so the package does not
+// import producer-owned interfaces for its own internal plumbing.
 type Repos struct {
 	MCP          mcprepo.Repo
-	Workspace    orchestratorrepo.WorkspaceRepo
-	Conversation orchestratorrepo.ConversationRepo
-	Agent        orchestratorrepo.AgentRepo
-	AgentHistory orchestratorrepo.AgentHistoryRepo
-	Message      orchestratorrepo.MessageRepo
+	Workspace    workspaceStore
+	Conversation conversationStore
+	Agent        agentStore
+	AgentHistory agentHistoryStore
+	Message      messageStore
 	Artifact     artifactrepo.Repo
 	Workflow     workflowrepo.Repo
 }

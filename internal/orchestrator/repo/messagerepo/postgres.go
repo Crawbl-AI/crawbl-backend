@@ -134,6 +134,61 @@ func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orches
 	return message, nil
 }
 
+// GetLatestByConversationIDs returns the most-recent message per conversation
+// using a single query rather than one round-trip per conversation. It fetches
+// all messages for the given IDs ordered newest-first, then picks the first
+// (latest) message for each conversation ID in Go — O(n) in memory, one DB
+// round-trip regardless of the number of conversations.
+//
+// DISTINCT ON (conversation_id) would express the same intent in pure SQL but
+// dbr does not expose that Postgres-specific syntax natively; the in-memory
+// grouping avoids a SelectBySql call while keeping the code readable.
+//
+// Missing conversations are simply omitted from the result map.
+func (r *messageRepo) GetLatestByConversationIDs(
+	ctx context.Context,
+	sess orchestratorrepo.SessionRunner,
+	conversationIDs []string,
+) (map[string]*orchestrator.Message, *merrors.Error) {
+	if sess == nil {
+		return nil, merrors.ErrInvalidInput
+	}
+	if len(conversationIDs) == 0 {
+		return map[string]*orchestrator.Message{}, nil
+	}
+
+	// Convert []string to []any for dbr's IN clause.
+	args := make([]any, len(conversationIDs))
+	for i, id := range conversationIDs {
+		args[i] = id
+	}
+
+	var rows []orchestratorrepo.MessageRow
+	_, err := sess.Select(orchestratorrepo.Columns(messageColumns...)...).
+		From("messages").
+		Where("conversation_id IN ?", args).
+		OrderDesc("created_at").
+		OrderDesc("id").
+		LoadContext(ctx, &rows)
+	if err != nil {
+		return nil, merrors.WrapStdServerError(err, "get latest messages by conversation ids")
+	}
+
+	// Pick the first (latest) row per conversation_id — rows are already
+	// ordered newest-first so the first occurrence wins.
+	result := make(map[string]*orchestrator.Message, len(conversationIDs))
+	for i := range rows {
+		msg, decodeErr := rows[i].ToDomain()
+		if decodeErr != nil {
+			return nil, merrors.WrapStdServerError(decodeErr, "decode latest message by conversation ids")
+		}
+		if _, seen := result[msg.ConversationID]; !seen {
+			result[msg.ConversationID] = msg
+		}
+	}
+	return result, nil
+}
+
 // FailStalePending marks all messages with status "pending" created before the
 // cutoff time as "failed". Returns the number of affected rows.
 // Returns ErrInvalidInput if sess is nil.
@@ -277,10 +332,9 @@ func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.Sess
 }
 
 // Save persists message data to the database.
-// It handles both creating new messages and updating existing ones by checking
-// if a message with the same ID exists first.
 // The content and attachments are stored as JSON in the database.
 // Returns ErrInvalidInput if sess is nil or message is nil.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *messageRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error {
 	if sess == nil || message == nil {
 		return merrors.ErrInvalidInput
@@ -291,61 +345,26 @@ func (r *messageRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRun
 		return merrors.WrapStdServerError(err, "encode message for persistence")
 	}
 
-	var existingRow orchestratorrepo.MessageRow
-	err = sess.Select(orchestratorrepo.Columns(messageColumns...)...).
-		From("messages").
-		Where("id = ?", row.ID).
-		LoadOneContext(ctx, &existingRow)
-	switch {
-	case err == nil:
-		_, err = sess.Update("messages").
-			Set("role", row.Role).
-			Set("content", string(row.Content)).
-			Set("status", row.Status).
-			Set("local_id", row.LocalID).
-			Set("agent_id", row.AgentID).
-			Set("attachments", string(row.Attachments)).
-			Set("updated_at", row.UpdatedAt).
-			Where("id = ?", row.ID).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update message")
-		}
-		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select message by id for save")
-	}
+	const query = `
+INSERT INTO messages (
+	id, conversation_id, role, content, status, local_id,
+	agent_id, attachments, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+	role        = EXCLUDED.role,
+	content     = EXCLUDED.content,
+	status      = EXCLUDED.status,
+	local_id    = EXCLUDED.local_id,
+	agent_id    = EXCLUDED.agent_id,
+	attachments = EXCLUDED.attachments,
+	updated_at  = EXCLUDED.updated_at`
 
-	_, err = sess.InsertInto("messages").
-		Pair("id", row.ID).
-		Pair("conversation_id", row.ConversationID).
-		Pair("role", row.Role).
-		Pair("content", string(row.Content)).
-		Pair("status", row.Status).
-		Pair("local_id", row.LocalID).
-		Pair("agent_id", row.AgentID).
-		Pair("attachments", string(row.Attachments)).
-		Pair("created_at", row.CreatedAt).
-		Pair("updated_at", row.UpdatedAt).
-		ExecContext(ctx)
-	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("messages").
-				Set("role", row.Role).
-				Set("content", string(row.Content)).
-				Set("status", row.Status).
-				Set("local_id", row.LocalID).
-				Set("agent_id", row.AgentID).
-				Set("attachments", string(row.Attachments)).
-				Set("updated_at", row.UpdatedAt).
-				Where("id = ?", row.ID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update message after duplicate insert")
-			}
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert message")
+	_, dbErr := sess.InsertBySql(query,
+		row.ID, row.ConversationID, row.Role, string(row.Content), row.Status, row.LocalID,
+		row.AgentID, string(row.Attachments), row.CreatedAt, row.UpdatedAt,
+	).ExecContext(ctx)
+	if dbErr != nil {
+		return merrors.WrapStdServerError(dbErr, "upsert message")
 	}
 
 	return nil

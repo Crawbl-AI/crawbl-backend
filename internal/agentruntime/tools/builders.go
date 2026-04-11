@@ -32,6 +32,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	adktool "google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
@@ -115,28 +116,40 @@ func buildFunctionTool[A, R any](toolName string, handler handlerFunc[A, R]) (ad
 	return t, nil
 }
 
+var (
+	toolDescOnce sync.Once
+	toolDescMap  map[string]string
+)
+
 // lookupToolDescription returns the Description for the named tool
-// from the seed catalog. Cached on first call — the seed is embedded
-// at compile time and never changes at runtime.
+// from the seed catalog. Cached on first call via sync.Once — the
+// seed is embedded at compile time and never changes at runtime, so
+// we build a name→description map once and serve every lookup from
+// memory.
 func lookupToolDescription(name string) (string, bool) {
-	for _, t := range DefaultCatalog() {
-		if t.Name == name {
-			return t.Description, true
+	toolDescOnce.Do(func() {
+		catalog := DefaultCatalog()
+		toolDescMap = make(map[string]string, len(catalog))
+		for _, t := range catalog {
+			toolDescMap[t.Name] = t.Description
 		}
-	}
-	return "", false
+	})
+	desc, ok := toolDescMap[name]
+	return desc, ok
 }
 
 // toolCtxOrBackground extracts a context.Context from an ADK
 // tool.Context. The vendored ADK tool.Context interface does not
 // expose the underlying invocation context via a public accessor, so
-// for now we fall back to context.Background. Tool handlers apply
-// their own timeouts (HTTP client, SQL query timeouts) so losing
-// per-turn cancellation here is a bounded liability.
+// every tool currently runs on context.Background. Tool handlers
+// apply their own timeouts (HTTP client, SQL query timeouts) so
+// losing per-turn cancellation here is a bounded liability.
 func toolCtxOrBackground(tctx adktool.Context) context.Context {
-	if tctx == nil {
-		return context.Background()
-	}
+	// TODO(agentruntime): thread per-turn ctx once the ADK exposes it
+	// on tool.Context. Until then every tool runs on background ctx,
+	// which means user disconnection does not cancel in-flight HTTP
+	// calls — tool-level timeouts are the only safety net.
+	_ = tctx
 	return context.Background()
 }
 

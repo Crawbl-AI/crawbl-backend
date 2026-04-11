@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	workspacerepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -33,7 +33,7 @@ import (
 //   - logger: Structured logger for diagnostic and error logging.
 //
 // Returns an orchestratorservice.WorkspaceService implementation.
-func New(workspaceRepo workspacerepo.WorkspaceRepo, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+func New(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
 	if workspaceRepo == nil {
 		panic("workspace service repo cannot be nil")
 	}
@@ -118,6 +118,12 @@ func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 //
 // Returns a slice of workspace pointers on success, or a merrors.Error
 // if the input is invalid or the repository operation fails.
+// workspaceRuntimeParallelism caps the number of concurrent EnsureRuntime
+// calls when listing workspaces. Each call hits the K8s API, so bounded
+// parallelism converts O(n * rtt) latency to O(n/cap * rtt) without
+// unbounded goroutine growth.
+const workspaceRuntimeParallelism = 5
+
 func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
@@ -127,9 +133,18 @@ func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.Li
 		return nil, mErr
 	}
 
-	for _, workspace := range workspaces {
-		s.attachRuntimeStatus(ctx, workspace)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(workspaceRuntimeParallelism)
+	for _, ws := range workspaces {
+		ws := ws // capture loop var (pre-Go 1.22 safety)
+		g.Go(func() error {
+			s.attachRuntimeStatus(gctx, ws)
+			return nil
+		})
 	}
+	// attachRuntimeStatus never returns an error — it logs and sets an error
+	// state on the workspace instead — so Wait() always returns nil here.
+	_ = g.Wait()
 
 	return workspaces, nil
 }

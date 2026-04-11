@@ -7,6 +7,7 @@ package kube
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // TypeMeta builds a Kubernetes TypeMeta from apiVersion and kind strings.
@@ -26,10 +27,10 @@ func TypeMeta(apiVersion, kind string) metav1.TypeMeta {
 // For distroless images, this is typically 65532 (the "nonroot" user).
 func RestrictedSecurityContext(uid, gid int64) *corev1.SecurityContext {
 	return &corev1.SecurityContext{
-		AllowPrivilegeEscalation: Ptr(false),
-		RunAsNonRoot:             Ptr(true),
-		RunAsUser:                Ptr(uid),
-		RunAsGroup:               Ptr(gid),
+		AllowPrivilegeEscalation: ptr.To(false),
+		RunAsNonRoot:             ptr.To(true),
+		RunAsUser:                ptr.To(uid),
+		RunAsGroup:               ptr.To(gid),
 		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 	}
 }

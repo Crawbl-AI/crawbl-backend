@@ -23,7 +23,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/identityrepo"
@@ -44,6 +43,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagequotarepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/userrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
@@ -59,6 +59,7 @@ import (
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/clickhouse"
@@ -66,7 +67,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
@@ -140,8 +140,13 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("auto-migration failed: %w", err)
 	}
 
-	db, userRepo, workspaceRepo, agentRepo, conversationRepo, messageRepo, cleanup := mustBuildRepos(logger)
+	db, repos, cleanup := mustBuildRepos(logger)
 	defer cleanup()
+	userRepo := repos.User
+	workspaceRepo := repos.Workspace
+	agentRepo := repos.Agent
+	conversationRepo := repos.Conversation
+	messageRepo := repos.Message
 
 	// Seed global catalogs (tools, models, tool categories, integration categories,
 	// integration providers) from embedded data on every startup (idempotent).
@@ -158,11 +163,14 @@ func runServer(ctx context.Context) error {
 	// Memory system — constructed unconditionally; embedder is optional.
 	// When CRAWBL_EMBED_BASE_URL is empty the embedder and memoryStack remain
 	// nil, and downstream services fall back to messages-only context.
-	var drawerRepo memrepo.DrawerRepo = drawerrepo.NewPostgres()
-	var kgRepo memrepo.KGRepo = kgrepo.NewPostgres()
-	var palaceGraphRepo memrepo.PalaceGraphRepo = palacegraphrepo.NewPostgres(redisClient, logger)
-	var identityRepo memrepo.IdentityRepo = identityrepo.NewPostgres()
-	var centroidRepo memrepo.CentroidRepo = centroidrepo.NewPostgres()
+	// The concrete *Postgres structs are narrowed to the wiring-layer
+	// interfaces declared in ports.go; downstream services narrow further
+	// via their own consumer-side ports.
+	var drawerRepo mcpDrawerRepoRaw = drawerrepo.NewPostgres()
+	var kgRepo mcpKGRepoRaw = kgrepo.NewPostgres()
+	var palaceGraphRepo mcpPalaceGraphRepoRaw = palacegraphrepo.NewPostgres(redisClient, logger)
+	var identityRepo mcpIdentityRepoRaw = identityrepo.NewPostgres()
+	var centroidRepo mcpCentroidRepoRaw = centroidrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
 	var memoryStack layers.Stack
@@ -214,6 +222,9 @@ func runServer(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
+	pricingCache := pricing.New(db, logger)
+	pricingCache.Start(ctx)
+
 	// Build the single river.Config covering every background job,
 	// periodic sweep, and cron the orchestrator owns. Auto-ingest is
 	// NOT on this list — it runs in-process under
@@ -229,6 +240,7 @@ func runServer(ctx context.Context) error {
 		Embedder:         embedder,
 		MessageRepo:      messageRepo,
 		ModelPricingRepo: modelpricingrepo.New(),
+		PricingCache:     pricingCache,
 		LLMUsageRepo:     llmUsageRepo,
 	})
 	if err != nil {
@@ -302,7 +314,7 @@ func runServer(ctx context.Context) error {
 	httpMiddleware := buildHTTPMiddleware()
 
 	workspaceService := workspaceservice.New(workspaceRepo, runtimeClient, logger)
-	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv())
+	authService := authservice.New(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
 	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
 	defer cleanupRT()
@@ -311,9 +323,6 @@ func runServer(ctx context.Context) error {
 	agentPromptsRepo := agentpromptsrepo.New()
 	agentHistoryRepo := agenthistoryrepo.New()
 	artifactRepo := artifactrepo.New()
-
-	pricingCache := pricing.New(db, logger)
-	pricingCache.Start(ctx, 5*time.Minute)
 
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
@@ -333,7 +342,7 @@ func runServer(ctx context.Context) error {
 		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
 		ingestPool,
 	)
-	agentService := agentservice.New(
+	agentService := agentservice.MustNew(
 		agentservice.Repos{
 			Workspace:     workspaceRepo,
 			Agent:         agentRepo,
@@ -347,7 +356,7 @@ func runServer(ctx context.Context) error {
 		runtimeClient,
 	)
 	integrationConnRepo := integrationconnrepo.New()
-	integrationService := integrationservice.New(logger, integrationConnRepo)
+	integrationService := integrationservice.MustNew(logger, integrationConnRepo)
 
 	// Register Socket.IO message.send handler now that services are available.
 	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
@@ -416,22 +425,27 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
-func buildHTTPMiddleware() *httpserver.MiddlewareConfig {
-	return &httpserver.MiddlewareConfig{
-		Environment: envOrDefault("CRAWBL_ENVIRONMENT", httpserver.EnvironmentLocal),
+func buildHTTPMiddleware() *middleware.MiddlewareConfig {
+	return &middleware.MiddlewareConfig{
+		Environment: envOrDefault("CRAWBL_ENVIRONMENT", middleware.EnvironmentLocal),
 		E2EToken:    os.Getenv("CRAWBL_E2E_TOKEN"),
 	}
 }
 
-func mustBuildRepos(logger *slog.Logger) (
-	*dbr.Connection,
-	orchestratorrepo.UserRepo,
-	orchestratorrepo.WorkspaceRepo,
-	orchestratorrepo.AgentRepo,
-	orchestratorrepo.ConversationRepo,
-	orchestratorrepo.MessageRepo,
-	func(),
-) {
+// coreRepoWiring is declared at the wiring layer (cmd) where these repos
+// are constructed. Fields are the narrow consumer-side interfaces needed
+// by the various orchestrator wiring callsites (buildRealtime,
+// buildMCPHandler, chatservice, etc.). Keeping the field types as
+// interfaces avoids cross-package exposure of concrete repo structs.
+type coreRepoWiring struct {
+	User         coreUserRepo
+	Workspace    coreWorkspaceRepo
+	Agent        coreAgentRepo
+	Conversation coreConversationRepo
+	Message      coreMessageRepo
+}
+
+func mustBuildRepos(logger *slog.Logger) (*dbr.Connection, coreRepoWiring, func()) {
 	logger.Info("configuring storage backend", slog.String("backend", "postgres"))
 	dbConfig := database.ConfigFromEnv("CRAWBL_")
 	if err := database.EnsureSchema(dbConfig); err != nil {
@@ -443,9 +457,15 @@ func mustBuildRepos(logger *slog.Logger) (
 		// panic instead of log.Fatal so that deferred cleanup (telemetry flush) runs.
 		panic(err)
 	}
-	return db, userrepo.New(), workspacerepo.New(), agentrepo.New(), conversationrepo.New(), messagerepo.New(), func() {
-		_ = db.Close()
-	}
+	return db, coreRepoWiring{
+			User:         userrepo.New(),
+			Workspace:    workspacerepo.New(),
+			Agent:        agentrepo.New(),
+			Conversation: conversationrepo.New(),
+			Message:      messagerepo.New(),
+		}, func() {
+			_ = db.Close()
+		}
 }
 
 func buildRuntimeClient(logger *slog.Logger) (userswarmclient.Client, error) {
@@ -549,18 +569,18 @@ func buildMCPHandler(
 	ctx context.Context,
 	logger *slog.Logger,
 	db *dbr.Connection,
-	workspaceRepo orchestratorrepo.WorkspaceRepo,
-	agentRepo orchestratorrepo.AgentRepo,
-	conversationRepo orchestratorrepo.ConversationRepo,
-	messageRepo orchestratorrepo.MessageRepo,
-	agentHistoryRepo orchestratorrepo.AgentHistoryRepo,
+	workspaceRepo coreWorkspaceRepo,
+	agentRepo coreAgentRepo,
+	conversationRepo coreConversationRepo,
+	messageRepo coreMessageRepo,
+	agentHistoryRepo mcpAgentHistoryCreator,
 	artifactRepo artifactrepo.Repo,
 	runtimeClient userswarmclient.Client,
 	broadcaster realtime.Broadcaster,
-	drawerRepo memrepo.DrawerRepo,
-	kgRepo memrepo.KGRepo,
-	palaceGraphRepo memrepo.PalaceGraphRepo,
-	identityRepo memrepo.IdentityRepo,
+	drawerRepo mcpDrawerRepoRaw,
+	kgRepo mcpKGRepoRaw,
+	palaceGraphRepo mcpPalaceGraphRepoRaw,
+	identityRepo mcpIdentityRepoRaw,
 	classifier extract.Classifier,
 	embedder embed.Embedder,
 	memoryStack layers.Stack,
@@ -585,13 +605,13 @@ func buildMCPHandler(
 	}
 
 	wfRepo := workflowrepo.New()
-	workflowSvc := workflowservice.New(db, wfRepo, runtimeClient, broadcaster)
+	workflowSvc := workflowservice.MustNew(db, wfRepo, runtimeClient, broadcaster)
 
 	auditRepo := auditrepo.New()
-	auditSvc := auditservice.New(auditRepo)
+	auditSvc := auditservice.MustNew(auditRepo)
 
 	mcpRepo := mcprepo.New()
-	mcpSvc := mcpservice.New(
+	mcpSvc := mcpservice.MustNew(
 		mcpservice.Repos{
 			MCP:          mcpRepo,
 			Workspace:    workspaceRepo,
@@ -657,7 +677,7 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // db, workspaceRepo, and authService are forwarded to the Socket.IO server so
 // it can verify workspace ownership before joining rooms on workspace.subscribe
 // events. authService resolves the Firebase subject to an internal user.ID.
-func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo orchestratorrepo.WorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, func() {}

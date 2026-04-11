@@ -67,10 +67,9 @@ func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRu
 }
 
 // Save persists agent data to the database with a specified sort order.
-// It handles both creating new agents and updating existing ones by checking
-// if an agent with the same ID exists first.
 // The sort order determines the display position of the agent within its workspace.
 // Returns ErrInvalidInput if sess is nil or agent is nil.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, agent *orchestrator.Agent, sortOrder int) *merrors.Error {
 	if sess == nil || agent == nil {
 		return merrors.ErrInvalidInput
@@ -78,63 +77,27 @@ func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunne
 
 	row := orchestratorrepo.NewAgentRow(agent, sortOrder)
 
-	var existingRow orchestratorrepo.AgentRow
-	err := sess.Select(orchestratorrepo.Columns(agentColumns...)...).
-		From("agents").
-		Where("id = ?", row.ID).
-		LoadOneContext(ctx, &existingRow)
-	switch {
-	case err == nil:
-		_, err = sess.Update("agents").
-			Set("name", row.Name).
-			Set("role", row.Role).
-			Set("slug", row.Slug).
-			Set("avatar_url", row.AvatarURL).
-			Set("system_prompt", row.SystemPrompt).
-			Set("description", row.Description).
-			Set("sort_order", row.SortOrder).
-			Set("updated_at", row.UpdatedAt).
-			Where("id = ?", row.ID).
-			ExecContext(ctx)
-		if err != nil {
-			return merrors.WrapStdServerError(err, "update agent")
-		}
-		return nil
-	case !database.IsRecordNotFoundError(err):
-		return merrors.WrapStdServerError(err, "select agent by id for save")
-	}
+	const query = `
+INSERT INTO agents (
+	id, workspace_id, name, role, slug, avatar_url,
+	system_prompt, description, sort_order, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+	name          = EXCLUDED.name,
+	role          = EXCLUDED.role,
+	slug          = EXCLUDED.slug,
+	avatar_url    = EXCLUDED.avatar_url,
+	system_prompt = EXCLUDED.system_prompt,
+	description   = EXCLUDED.description,
+	sort_order    = EXCLUDED.sort_order,
+	updated_at    = EXCLUDED.updated_at`
 
-	_, err = sess.InsertInto("agents").
-		Pair("id", row.ID).
-		Pair("workspace_id", row.WorkspaceID).
-		Pair("name", row.Name).
-		Pair("role", row.Role).
-		Pair("slug", row.Slug).
-		Pair("avatar_url", row.AvatarURL).
-		Pair("system_prompt", row.SystemPrompt).
-		Pair("description", row.Description).
-		Pair("sort_order", row.SortOrder).
-		Pair("created_at", row.CreatedAt).
-		Pair("updated_at", row.UpdatedAt).
-		ExecContext(ctx)
+	_, err := sess.InsertBySql(query,
+		row.ID, row.WorkspaceID, row.Name, row.Role, row.Slug, row.AvatarURL,
+		row.SystemPrompt, row.Description, row.SortOrder, row.CreatedAt, row.UpdatedAt,
+	).ExecContext(ctx)
 	if err != nil {
-		if database.IsRecordExistsError(err) {
-			_, err = sess.Update("agents").
-				Set("name", row.Name).
-				Set("role", row.Role).
-				Set("slug", row.Slug).
-				Set("avatar_url", row.AvatarURL).
-				Set("description", row.Description).
-				Set("sort_order", row.SortOrder).
-				Set("updated_at", row.UpdatedAt).
-				Where("id = ?", row.ID).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update agent after duplicate insert")
-			}
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert agent")
+		return merrors.WrapStdServerError(err, "upsert agent")
 	}
 
 	return nil

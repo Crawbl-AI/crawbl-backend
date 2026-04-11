@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/cliexec"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
@@ -47,7 +48,7 @@ This command automates the entire cluster bootstrap process:
 	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
 	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
 	cmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Skip confirmation prompts")
-	cmd.Flags().StringVar(&clusterName, "cluster", "crawbl-dev", "DOKS cluster name for kubeconfig")
+	cmd.Flags().StringVar(&clusterName, "cluster", "", "DOKS cluster name for kubeconfig (defaults to crawbl-<env>)")
 	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "Timeout while waiting for applications to sync")
 
 	return cmd
@@ -58,12 +59,17 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 		return err
 	}
 
+	// Derive the cluster name from --env when not explicitly provided.
+	if clusterName == "" {
+		clusterName = "crawbl-" + env
+	}
+
 	out.Step(style.Infra, "Crawbl Cluster Bootstrap")
 	out.Step(style.Config, "Environment: %s | Region: %s | Cluster: %s", env, region, clusterName)
 	out.Ln()
 
 	if !autoApprove {
-		if !confirmUpdate() {
+		if !confirmPrompt("Do you want to perform this action? (y/N): ") {
 			out.Warning("Bootstrap cancelled")
 			return nil
 		}
@@ -78,7 +84,7 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 
 	// Step 2: Save kubeconfig
 	out.Step(style.Infra, "[2/5] Saving kubeconfig...")
-	if err := runCommand("doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
+	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
 		return fmt.Errorf("kubeconfig save failed: %w", err)
 	}
 	out.Step(style.Check, "Kubeconfig saved")
@@ -86,14 +92,14 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 	// Step 3: Ensure DOCR registry integration (Pulumi sets registryIntegration=true
 	// on the cluster, but doctl registry add is a safety net in case of state drift).
 	out.Step(style.Infra, "[3/5] Ensuring DOCR registry integration...")
-	if err := runCommand("doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
+	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
 		out.Warning("Registry add failed and may already be integrated: %v", err)
 	}
 	out.Step(style.Check, "Registry integration verified")
 
 	// Step 4: Wait for controller to be ready
 	out.Step(style.Infra, "[4/5] Waiting for ArgoCD application-controller...")
-	if err := waitForController(timeout); err != nil {
+	if err := waitForController(ctx, timeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
 	}
 	out.Step(style.Ready, "ArgoCD application-controller is ready")
@@ -113,8 +119,8 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 }
 
 // waitForController waits for the ArgoCD application-controller StatefulSet to be ready.
-func waitForController(timeout time.Duration) error {
-	return runCommand("kubectl", "rollout", "status",
+func waitForController(ctx context.Context, timeout time.Duration) error {
+	return cliexec.Run(ctx, "kubectl", "rollout", "status",
 		"statefulset/argocd-application-controller",
 		"-n", "argocd",
 		"--timeout", timeout.String(),
@@ -123,28 +129,38 @@ func waitForController(timeout time.Duration) error {
 
 // waitForAppsSync polls ArgoCD applications until all are Synced/Healthy or timeout.
 func waitForAppsSync(timeout time.Duration) error {
-	const appSyncPollInterval = 15 * time.Second
-	deadline := time.Now().Add(timeout)
+	const (
+		appSyncPollInterval  = 15 * time.Second
+		appSyncRetryInterval = 10 * time.Second
+	)
 
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(appSyncPollInterval)
+	defer ticker.Stop()
+
+	// Check immediately before waiting for the first tick.
 	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s waiting for apps to sync", timeout)
-		}
-
 		synced, total, err := checkAppSyncStatus()
 		if err != nil {
 			out.Infof("Waiting for applications to appear... (%v)", err)
-			time.Sleep(10 * time.Second)
-			continue
+		} else {
+			out.Infof("%d/%d applications synced", synced, total)
+			if total > 0 && synced == total {
+				return nil
+			}
 		}
 
-		out.Infof("%d/%d applications synced", synced, total)
-
-		if total > 0 && synced == total {
-			return nil
+		retryTimer := time.NewTimer(appSyncRetryInterval)
+		select {
+		case <-ctx.Done():
+			retryTimer.Stop()
+			return fmt.Errorf("timed out after %s waiting for apps to sync", timeout)
+		case <-ticker.C:
+			retryTimer.Stop()
+		case <-retryTimer.C:
 		}
-
-		time.Sleep(appSyncPollInterval)
 	}
 }
 
@@ -192,12 +208,4 @@ func printAppStatus() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
-}
-
-// runCommand executes a command with stdout/stderr connected to the terminal.
-func runCommand(name string, args ...string) error {
-	cmd := exec.CommandContext(context.Background(), name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

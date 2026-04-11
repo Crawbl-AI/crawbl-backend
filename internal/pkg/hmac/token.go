@@ -1,3 +1,17 @@
+// Package hmac provides HMAC-SHA256 token generation and validation for
+// internal service-to-service authentication.
+//
+// Tokens encode a key-value payload (e.g. userID:workspaceID) signed with
+// a shared secret. This is used for:
+//   - MCP bearer tokens (agent runtime → orchestrator)
+//   - Any future internal auth that needs stateless, signed identity tokens
+//
+// Token format: base64url(payload).hmac_sha256_hex
+//
+// Usage:
+//
+//	token := hmac.GenerateToken(signingKey, "user-123", "ws-456")
+//	id1, id2, err := hmac.ValidateToken(signingKey, token)
 package hmac
 
 import (
@@ -29,8 +43,16 @@ func ValidateToken(signingKey, token string) (part1, part2 string, err error) {
 	payload, sig := parts[0], parts[1]
 
 	// Verify signature using constant-time comparison.
-	expected := computeMAC(signingKey, payload)
-	if !hmac.Equal([]byte(sig), []byte(expected)) {
+	// Decode the presented signature from hex to raw bytes.
+	sigBytes, err := hex.DecodeString(sig)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid token signature")
+	}
+	// Compute the expected MAC directly as bytes (no hex encoding).
+	mac := hmac.New(sha256.New, []byte(signingKey))
+	mac.Write([]byte(payload))
+	expectedBytes := mac.Sum(nil)
+	if !hmac.Equal(sigBytes, expectedBytes) {
 		return "", "", fmt.Errorf("invalid token signature")
 	}
 

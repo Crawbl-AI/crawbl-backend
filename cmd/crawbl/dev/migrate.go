@@ -13,12 +13,10 @@ func newMigrateCommand() *cobra.Command {
 		Short: "Run database migrations against local Postgres",
 		Long:  "Build and run the migration container against the local PostgreSQL instance used for development.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			ensureEnvFile()
 			out.Step(style.Migrate, "Running database migrations...")
-			if err := shellCmd("docker", "compose", "--profile", "database", "--profile", "migration", "build", "migrations"); err != nil {
-				return err
-			}
-			return shellCmd("docker", "compose", "--profile", "database", "--profile", "migration", "run", "--rm", "migrations")
+			return runMigrations(ctx)
 		},
 	}
 }

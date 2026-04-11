@@ -107,7 +107,7 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 		webFetchErrorBodyPreview  = 256
 	)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := toolHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("web_fetch: GET %s: %w", rawURL, err)
 	}

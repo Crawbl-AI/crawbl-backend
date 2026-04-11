@@ -225,7 +225,7 @@ func (h *converseHandler) runOneTurn(
 							"args_preview", previewMap(part.FunctionCall.Args, previewLenArgs),
 						)
 					}
-					ce := translatePart(event.Author, part, event.Partial)
+					ce := translatePart(event.Author, part)
 					if ce == nil {
 						continue
 					}
@@ -342,7 +342,7 @@ func (h *converseHandler) runOneTurn(
 // translatePart maps a single genai.Part into a ConverseEvent oneof.
 // Returns nil for parts that carry no relevant content (e.g. empty
 // text parts, system metadata we don't surface at the wire level).
-func translatePart(author string, part *genai.Part, partial bool) *runtimev1.ConverseEvent {
+func translatePart(author string, part *genai.Part) *runtimev1.ConverseEvent {
 	if part == nil {
 		return nil
 	}
@@ -386,7 +386,6 @@ func translatePart(author string, part *genai.Part, partial bool) *runtimev1.Con
 			},
 		}
 	}
-	_ = partial // reserved for future chunk/non-chunk differentiation
 	return nil
 }
 

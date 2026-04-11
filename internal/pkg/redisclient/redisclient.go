@@ -6,8 +6,6 @@ package redisclient
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -25,9 +23,9 @@ var _ Client = (*redis)(nil)
 //   - {prefix}REDIS_DB        (default: 0)
 func ConfigFromEnv(prefix string) Config {
 	return Config{
-		Addr:     envOrDefault(prefix+"REDIS_ADDR", DefaultAddr),
+		Addr:     configenv.StringOr(prefix+"REDIS_ADDR", DefaultAddr),
 		Password: configenv.SecretString(prefix+"REDIS_PASSWORD", ""),
-		DB:       intFromEnv(prefix+"REDIS_DB", DefaultDB),
+		DB:       configenv.IntOr(prefix+"REDIS_DB", DefaultDB),
 	}
 }
 
@@ -221,7 +219,11 @@ func (r *redis) Close() error {
 
 // pingWithRetry attempts to ping Redis with retry logic, matching the database
 // package pattern for resilience during container startup.
-// TODO: IS SLEEP HERE A CORRECT APPROACH ?? VERIFY THIS HIGH PRIORITY
+//
+// Returns:
+//   - nil on successful ping.
+//   - The last error encountered if all attempts fail.
+//   - ctx.Err() if the context is cancelled during a retry delay.
 func pingWithRetry(ctx context.Context, rc *goredis.Client, attempts int, delay time.Duration) error {
 	var lastErr error
 
@@ -232,30 +234,12 @@ func pingWithRetry(ctx context.Context, rc *goredis.Client, attempts int, delay 
 			lastErr = err
 		}
 
-		time.Sleep(delay)
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	return lastErr
-}
-
-// envOrDefault returns the value of the environment variable key,
-// or fallback if the variable is unset or empty.
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-// intFromEnv parses an integer environment variable, returning fallback on missing or parse error.
-func intFromEnv(key string, fallback int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return parsed
 }

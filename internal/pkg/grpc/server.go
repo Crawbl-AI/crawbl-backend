@@ -45,29 +45,6 @@ func GracefulShutdown(srv *grpc.Server, timeout time.Duration, logger *slog.Logg
 	}
 }
 
-// ShutdownContext is a variant of GracefulShutdown that watches a context
-// instead of a wall-clock timeout.
-func ShutdownContext(ctx context.Context, srv *grpc.Server, logger *slog.Logger) {
-	if srv == nil {
-		return
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	done := make(chan struct{})
-	go func() {
-		srv.GracefulStop()
-		close(done)
-	}()
-	select {
-	case <-done:
-		logger.Info("gRPC server stopped gracefully")
-	case <-ctx.Done():
-		logger.Warn("gRPC shutdown context cancelled, forcing stop", "reason", ctx.Err())
-		srv.Stop()
-	}
-}
-
 // ---------------------------------------------------------------------------
 // HMAC server-side auth interceptors
 // ---------------------------------------------------------------------------

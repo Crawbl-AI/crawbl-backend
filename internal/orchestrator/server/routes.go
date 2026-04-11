@@ -8,7 +8,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/handler"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 )
 
 // registerRoutes creates the HTTP router with all endpoints and middleware.
@@ -39,9 +39,9 @@ func registerRoutes(s *Server) http.Handler {
 	// 5. MaxBodyBytes - caps request body to 1 MiB to prevent memory exhaustion
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
-	router.Use(httpserver.PanicRecoverer(s.logger))
-	router.Use(httpserver.RequestLogger(s.logger))
-	router.Use(httpserver.MaxBodyBytes)
+	router.Use(middleware.Recoverer(s.logger))
+	router.Use(middleware.RequestLogger(s.logger))
+	router.Use(middleware.MaxBodyBytes)
 
 	router.Route("/v1", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck(h))
@@ -58,7 +58,7 @@ func registerRoutes(s *Server) http.Handler {
 		r.Get("/internal/agents", handler.GetWorkspaceBlueprint(h))
 
 		r.Group(func(r chi.Router) {
-			r.Use(httpserver.AuthMiddleware(s.httpMiddleware, s.logger))
+			r.Use(middleware.AuthMiddleware(s.httpMiddleware, s.logger))
 			r.Post("/fcm-token", handler.SaveFCMToken(h))
 			r.Post("/auth/sign-in", handler.SignIn(h))
 			r.Post("/auth/sign-up", handler.SignUp(h))

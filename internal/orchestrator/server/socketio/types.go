@@ -75,6 +75,26 @@ type workspaceOwnerChecker interface {
 	ListOwnedByUser(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string, workspaceIDs []string) (map[string]struct{}, *merrors.Error)
 }
 
+// chatSender is the subset of chat service methods socketio calls into.
+// Consumer-side narrowing: only SendMessage is ever invoked from here,
+// but holding a small interface keeps SIP compliance and shields us
+// from growing a wider producer interface.
+type chatSender interface {
+	SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error)
+}
+
+// authResolver is the subset of auth service methods socketio calls
+// into — only the subject → user lookup on message.send.
+type authResolver interface {
+	GetBySubject(ctx context.Context, opts *orchestratorservice.GetUserBySubjectOpts) (*orchestrator.User, *merrors.Error)
+}
+
+// workspaceAuthorizer is the subset of workspace service methods
+// socketio calls into — only the owner check before message dispatch.
+type workspaceAuthorizer interface {
+	GetByID(ctx context.Context, opts *orchestratorservice.GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error)
+}
+
 // Config holds the dependencies for creating a Socket.IO server.
 type Config struct {
 	// Logger provides structured logging for Socket.IO operations.
@@ -95,15 +115,15 @@ type Config struct {
 
 	// ChatService handles message sending and agent interactions.
 	// Required for message.send handling. Nil disables chat over WebSocket.
-	ChatService orchestratorservice.ChatService
+	ChatService chatSender
 
 	// AuthService resolves users from authenticated principals.
 	// Required for message.send handling. Nil disables chat over WebSocket.
-	AuthService orchestratorservice.AuthService
+	AuthService authResolver
 
 	// WorkspaceService verifies workspace ownership before message dispatch.
 	// Required for message.send handling. Nil disables chat over WebSocket.
-	WorkspaceService orchestratorservice.WorkspaceService
+	WorkspaceService workspaceAuthorizer
 
 	// ShutdownCtx is the server lifetime context. Dispatch goroutines derive
 	// their contexts from this so that in-flight DB writes are cancelled when

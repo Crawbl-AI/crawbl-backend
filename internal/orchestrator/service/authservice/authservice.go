@@ -18,6 +18,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagequotarepo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -34,18 +35,22 @@ import (
 //   - legalDocuments: Configuration for legal document URLs and versions. May be nil for defaults.
 //
 // Returns an AuthService implementation ready for use.
-func New(userRepo orchestratorrepo.UserRepo, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments) orchestratorservice.AuthService {
+func New(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) orchestratorservice.AuthService {
 	if userRepo == nil {
 		panic("auth service user repo cannot be nil")
 	}
 	if workspaceBootstrapper == nil {
 		panic("auth service workspace bootstrapper cannot be nil")
 	}
+	if usageQuotaRepo == nil {
+		panic("auth service usage quota repo cannot be nil")
+	}
 
 	return &service{
 		userRepo:              userRepo,
 		workspaceBootstrapper: workspaceBootstrapper,
 		legalDocuments:        newLegalDocumentsConfig(legalDocuments),
+		usageQuotaRepo:        usageQuotaRepo,
 	}
 }
 
@@ -438,13 +443,13 @@ func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *
 	}
 
 	// Assign the free usage plan to the new user so quota enforcement is active from day one.
-	if _, qErr := sess.InsertInto("usage_quotas").
-		Pair("user_id", user.ID).
-		Pair("plan_id", "free").
-		Pair("effective_at", now).
-		Pair("created_at", now).
-		Pair("updated_at", now).
-		ExecContext(ctx); qErr != nil {
+	if qErr := s.usageQuotaRepo.Create(ctx, sess, &usagequotarepo.Row{
+		UserID:      user.ID,
+		PlanID:      "free",
+		EffectiveAt: now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); qErr != nil {
 		slog.Warn("failed to assign free usage plan", "user_id", user.ID, "error", qErr.Error())
 		// Non-fatal: user can still use the platform, quota enforcement will be a no-op.
 	}

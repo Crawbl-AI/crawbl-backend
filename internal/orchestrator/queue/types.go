@@ -35,11 +35,10 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	memrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 )
 
 // -----------------------------------------------------------------------------
@@ -55,23 +54,27 @@ import (
 // nil → the usage_write worker no-ops silently). Workers check their
 // own fields; NewConfig does not refuse to boot when one repo is
 // missing because partial startup is often the intended mode.
+//
+// Repo fields are typed against consumer-side interfaces declared in
+// ports.go so the queue layer never holds a producer-owned interface.
 type Deps struct {
 	// Shared infrastructure.
 	DB     *dbr.Connection
 	Logger *slog.Logger
 
 	// Memory domain.
-	DrawerRepo    memrepo.DrawerRepo
-	KGRepo        memrepo.KGRepo
-	CentroidRepo  memrepo.CentroidRepo
+	DrawerRepo    drawerStore
+	KGRepo        kgStore
+	CentroidRepo  centroidStore
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 
 	// Messaging — stale pending message cleanup.
-	MessageRepo orchestratorrepo.MessageRepo
+	MessageRepo messageStore
 
-	// Pricing — daily LiteLLM mirror.
+	// Pricing — daily LiteLLM mirror + in-memory cache refresh.
 	ModelPricingRepo modelpricingrepo.Repo
+	PricingCache     *pricing.Cache
 
 	// Usage / billing — per-LLM-call ClickHouse writer.
 	LLMUsageRepo llmusagerepo.Repo
@@ -84,13 +87,14 @@ type Deps struct {
 // River queue names. NewConfig registers a river.QueueConfig for each
 // and every Args type's InsertOpts routes its job here.
 const (
-	QueueMemoryProcess  = "memory_process"
-	QueueMemoryMaintain = "memory_maintain"
-	QueueMemoryEnrich   = "memory_enrich"
-	QueueMemoryCentroid = "memory_centroid"
-	UsageWriteQueue     = "usage_write"
-	PricingRefreshQueue = "pricing_refresh"
-	MessageCleanupQueue = "message_cleanup"
+	QueueMemoryProcess       = "memory_process"
+	QueueMemoryMaintain      = "memory_maintain"
+	QueueMemoryEnrich        = "memory_enrich"
+	QueueMemoryCentroid      = "memory_centroid"
+	UsageWriteQueue          = "usage_write"
+	PricingRefreshQueue      = "pricing_refresh"
+	PricingCacheRefreshQueue = "pricing_cache_refresh"
+	MessageCleanupQueue      = "message_cleanup"
 )
 
 // Worker concurrency caps. `1` is the default for single-stream periodic
@@ -118,6 +122,9 @@ const (
 	pricingRefreshDedupeWindow = 12 * time.Hour
 	litellmFetchTimeout        = 5 * time.Minute
 	litellmResponseCap         = 50 << 20 // 50 MB cap on upstream payload
+
+	pricingCacheRefreshInterval     = 10 * time.Minute
+	pricingCacheRefreshDedupeWindow = 5 * time.Minute
 )
 
 // litellmPricingURL is the upstream JSON mirror of provider/model costs
@@ -140,13 +147,14 @@ const (
 // row so operators can group at a glance without parsing the kind
 // string.
 var (
-	tagsMemoryProcess  = []string{"memory", "classify", "periodic"}
-	tagsMemoryMaintain = []string{"memory", "maintain", "daily"}
-	tagsMemoryEnrich   = []string{"memory", "enrich", "periodic"}
-	tagsMemoryCentroid = []string{"memory", "centroid", "weekly"}
-	tagsUsageWrite     = []string{"orchestrator", "billing", "usage"}
-	tagsPricingRefresh = []string{"orchestrator", "pricing", "daily"}
-	tagsMessageCleanup = []string{"orchestrator", "messages", "cleanup"}
+	tagsMemoryProcess       = []string{"memory", "classify", "periodic"}
+	tagsMemoryMaintain      = []string{"memory", "maintain", "daily"}
+	tagsMemoryEnrich        = []string{"memory", "enrich", "periodic"}
+	tagsMemoryCentroid      = []string{"memory", "centroid", "weekly"}
+	tagsUsageWrite          = []string{"orchestrator", "billing", "usage"}
+	tagsPricingRefresh      = []string{"orchestrator", "pricing", "daily"}
+	tagsPricingCacheRefresh = []string{"orchestrator", "pricing", "cache", "periodic"}
+	tagsMessageCleanup      = []string{"orchestrator", "messages", "cleanup"}
 )
 
 // Per-job metadata JSON blobs. Attached to every InsertOpts so
@@ -154,13 +162,14 @@ var (
 // job row. Marshalled once at package init so every Insert reuses the
 // same byte slice.
 var (
-	memoryProcessMetadata  = mustMarshalJobMetadata("cold LLM reclassification of raw drawers across active workspaces", "memory", "every 1m")
-	memoryMaintainMetadata = mustMarshalJobMetadata("decay and prune low-importance drawers across active workspaces", "memory", "daily")
-	memoryEnrichMetadata   = mustMarshalJobMetadata("backfill KG entities/triples for heuristic/centroid-tier drawers", "memory", "every 10m")
-	memoryCentroidMetadata = mustMarshalJobMetadata("rebuild per-type centroid vectors from the last 90 days of LLM-labelled drawers", "memory", "weekly Sun 03:00 UTC")
-	usageWriteMetadata     = mustMarshalJobMetadata("persist one LLM usage event to ClickHouse for billing + analytics", "orchestrator", "ad-hoc per agent turn")
-	pricingRefreshMetadata = mustMarshalJobMetadata("fetch LiteLLM per-token prices and append model_pricing rows when upstream costs drift", "orchestrator", "daily")
-	messageCleanupMetadata = mustMarshalJobMetadata("mark pending messages older than 5m as failed so mobile UI never hangs on orphaned placeholders", "orchestrator", "every 1m")
+	memoryProcessMetadata       = mustMarshalJobMetadata("cold LLM reclassification of raw drawers across active workspaces", "memory", "every 1m")
+	memoryMaintainMetadata      = mustMarshalJobMetadata("decay and prune low-importance drawers across active workspaces", "memory", "daily")
+	memoryEnrichMetadata        = mustMarshalJobMetadata("backfill KG entities/triples for heuristic/centroid-tier drawers", "memory", "every 10m")
+	memoryCentroidMetadata      = mustMarshalJobMetadata("rebuild per-type centroid vectors from the last 90 days of LLM-labelled drawers", "memory", "weekly Sun 03:00 UTC")
+	usageWriteMetadata          = mustMarshalJobMetadata("persist one LLM usage event to ClickHouse for billing + analytics", "orchestrator", "ad-hoc per agent turn")
+	pricingRefreshMetadata      = mustMarshalJobMetadata("fetch LiteLLM per-token prices and append model_pricing rows when upstream costs drift", "orchestrator", "daily")
+	pricingCacheRefreshMetadata = mustMarshalJobMetadata("reload in-memory pricing cache from Postgres model_pricing table", "orchestrator", "every 10m")
+	messageCleanupMetadata      = mustMarshalJobMetadata("mark pending messages older than 5m as failed so mobile UI never hangs on orphaned placeholders", "orchestrator", "every 1m")
 )
 
 // -----------------------------------------------------------------------------
@@ -360,6 +369,36 @@ func (PricingRefreshArgs) InsertOpts() river.InsertOpts {
 // appends new rows to model_pricing when upstream values have drifted.
 type PricingRefresh struct {
 	river.WorkerDefaults[PricingRefreshArgs]
+	deps Deps
+}
+
+// PricingCacheRefreshArgs is the empty River job payload for the
+// short-interval in-memory cache refresh. No per-job arguments — the
+// worker always reloads the latest model_pricing rows from Postgres.
+type PricingCacheRefreshArgs struct{}
+
+// Kind implements river.JobArgs.
+func (PricingCacheRefreshArgs) Kind() string { return "pricing_cache_refresh" }
+
+// InsertOpts routes pricing_cache_refresh jobs and dedupes overlapping
+// enqueues inside a 5-minute window.
+func (PricingCacheRefreshArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue:    PricingCacheRefreshQueue,
+		Metadata: pricingCacheRefreshMetadata,
+		Tags:     tagsPricingCacheRefresh,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:   true,
+			ByPeriod: pricingCacheRefreshDedupeWindow,
+		},
+	}
+}
+
+// PricingCacheRefreshWorker is the River worker that reloads the
+// in-memory pricing cache from Postgres on a short interval, replacing
+// the previous time.Ticker goroutine in pricing.Cache.
+type PricingCacheRefreshWorker struct {
+	river.WorkerDefaults[PricingCacheRefreshArgs]
 	deps Deps
 }
 

@@ -161,11 +161,13 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 		interval = DefaultPollInterval
 	}
 	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return nil, merrors.WrapStdServerError(ctx.Err(), "ensure runtime canceled")
-		case <-time.After(interval):
+		case <-ticker.C:
 		}
 		status, mErr = c.getRuntimeState(ctx, desired.Name)
 		if mErr != nil {
@@ -232,7 +234,6 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 			},
 			Runtime: crawblv1alpha1.UserSwarmRuntimeSpec{
 				Image:               c.config.Image,
-				Mode:                crawblv1alpha1.DefaultRuntimeMode,
 				Port:                c.config.Port,
 				ImagePullSecretName: c.config.ImagePullSecretName,
 			},

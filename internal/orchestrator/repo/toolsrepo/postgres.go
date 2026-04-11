@@ -10,7 +10,6 @@ import (
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -116,59 +115,31 @@ func (r *toolsRepo) GetByNames(ctx context.Context, sess orchestratorrepo.Sessio
 	return tools, nil
 }
 
+// Seed upserts the provided tool definitions into the database.
+// Each tool is identified by its unique name; existing rows are updated in place.
+// Raw SQL: dbr has no ON CONFLICT builder.
 func (r *toolsRepo) Seed(ctx context.Context, sess orchestratorrepo.SessionRunner, tools []orchestratorrepo.ToolRow) *merrors.Error {
 	if sess == nil {
 		return merrors.ErrInvalidInput
 	}
 
+	const query = `
+INSERT INTO tools (name, display_name, description, category, icon_url, sort_order, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (name) DO UPDATE SET
+	display_name = EXCLUDED.display_name,
+	description  = EXCLUDED.description,
+	category     = EXCLUDED.category,
+	icon_url     = EXCLUDED.icon_url,
+	sort_order   = EXCLUDED.sort_order`
+
 	for _, tool := range tools {
-		var existing orchestratorrepo.ToolRow
-		err := sess.Select(orchestratorrepo.Columns(toolColumns...)...).
-			From("tools").
-			Where("name = ?", tool.Name).
-			LoadOneContext(ctx, &existing)
-		switch {
-		case err == nil:
-			_, err = sess.Update("tools").
-				Set("display_name", tool.DisplayName).
-				Set("description", tool.Description).
-				Set("category", tool.Category).
-				Set("icon_url", tool.IconURL).
-				Set("sort_order", tool.SortOrder).
-				Where("name = ?", tool.Name).
-				ExecContext(ctx)
-			if err != nil {
-				return merrors.WrapStdServerError(err, "update tool")
-			}
-		case database.IsRecordNotFoundError(err):
-			_, err = sess.InsertInto("tools").
-				Pair("name", tool.Name).
-				Pair("display_name", tool.DisplayName).
-				Pair("description", tool.Description).
-				Pair("category", tool.Category).
-				Pair("icon_url", tool.IconURL).
-				Pair("sort_order", tool.SortOrder).
-				Pair("created_at", tool.CreatedAt).
-				ExecContext(ctx)
-			if err != nil {
-				if database.IsRecordExistsError(err) {
-					_, err = sess.Update("tools").
-						Set("display_name", tool.DisplayName).
-						Set("description", tool.Description).
-						Set("category", tool.Category).
-						Set("icon_url", tool.IconURL).
-						Set("sort_order", tool.SortOrder).
-						Where("name = ?", tool.Name).
-						ExecContext(ctx)
-					if err != nil {
-						return merrors.WrapStdServerError(err, "update tool after duplicate insert")
-					}
-					continue
-				}
-				return merrors.WrapStdServerError(err, "insert tool")
-			}
-		default:
-			return merrors.WrapStdServerError(err, "select tool by name for seed")
+		_, err := sess.InsertBySql(query,
+			tool.Name, tool.DisplayName, tool.Description, tool.Category,
+			tool.IconURL, tool.SortOrder, tool.CreatedAt,
+		).ExecContext(ctx)
+		if err != nil {
+			return merrors.WrapStdServerError(err, "upsert tool")
 		}
 	}
 
