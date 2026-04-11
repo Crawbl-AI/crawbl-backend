@@ -226,18 +226,19 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	//
 	//  2. pgvector sends the value with an unknown OID when driven
 	//     through dbr's "?" path, so Postgres raises "operator does
-	//     not exist: public.vector <=> unknown" on the distance
-	//     operator. Explicitly casting the placeholder to
-	//     public.vector at each of the three usage sites tells
-	//     Postgres how to interpret the parameter.
+	//     not exist: vector <=> unknown" on the distance operator.
+	//     We cast the placeholder to the unqualified `vector` type so
+	//     the pgvector `<=>` operator resolves correctly — the
+	//     operator is registered on `vector`, not on `public.vector`,
+	//     even though the type lives in the public schema.
 	query := `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 	                 source_file, added_by, filed_at, created_at,
 	                 state, summary, added_by_agent,
-	                 1 - (embedding <=> ?::public.vector) AS similarity
+	                 1 - (embedding <=> ?::vector) AS similarity
 	          FROM memory_drawers
 	          WHERE workspace_id = ? AND embedding IS NOT NULL
-	            AND 1 - (embedding <=> ?::public.vector) >= ?
-	          ORDER BY embedding <=> ?::public.vector
+	            AND 1 - (embedding <=> ?::vector) >= ?
+	          ORDER BY embedding <=> ?::vector
 	          LIMIT ?`
 
 	var results []memory.DrawerSearchResult
