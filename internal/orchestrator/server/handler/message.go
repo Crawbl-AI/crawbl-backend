@@ -12,6 +12,10 @@ import (
 
 // ActionCardResponse handles a user's response to an action card.
 // POST /v1/workspaces/{workspaceId}/messages/{id}/action
+//
+// Kept on the plain http.HandlerFunc form because the missing-field error
+// path uses httpserver.WriteErrorMessage for a specific non-enveloped 400,
+// which the AuthedHandler decorator would not reproduce.
 func ActionCardResponse(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)

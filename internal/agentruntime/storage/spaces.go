@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // Config carries the knobs NewSpacesClient consumes. Populate from
@@ -210,16 +211,18 @@ func buildObjectKey(workspaceID, userKey string) string {
 	return path.Join("workspaces", workspaceID, "files", cleaned)
 }
 
-// isNotFound detects the Spaces 404 error shape without importing the
-// heavy-weight types package. The S3 SDK wraps NoSuchKey in a smithy
-// API error whose Code() is "NoSuchKey"; we match on the substring
-// to stay forward-compatible across SDK versions.
+// isNotFound detects the Spaces 404 error shape via typed S3 errors.
+// errors.As walks the chain so this works for any wrapper (smithy API
+// error, operation error, etc.) without substring-matching the error
+// message. Both NoSuchKey (GetObject) and NotFound (HeadObject) are
+// checked because Spaces can return either depending on the op.
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "NoSuchKey") || strings.Contains(msg, "NotFound") || strings.Contains(msg, "status code: 404")
+	var nsk *s3types.NoSuchKey
+	var nf *s3types.NotFound
+	return errors.As(err, &nsk) || errors.As(err, &nf)
 }
 
 // maxSpacesObjectBytes caps both Get reads and Put writes so a

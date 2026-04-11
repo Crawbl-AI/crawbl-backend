@@ -102,7 +102,7 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 		webSearchErrorBodyPreview  = 256
 	)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := toolHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("web_search_tool: GET %s: %w", u.String(), err)
 	}

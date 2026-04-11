@@ -72,6 +72,9 @@ const (
 	// Artifact error codes (ARTxxxx)
 	ErrCodeArtifactNotFound        = "ART0001" // Artifact not found
 	ErrCodeArtifactVersionNotFound = "ART0002" // Artifact version not found
+
+	// Generic request error codes (REQxxxx)
+	ErrCodeBadRequest = "REQ0001" // Request payload is malformed or fails validation
 )
 
 // Predefined business errors for common error conditions.

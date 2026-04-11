@@ -73,10 +73,7 @@ func runStart(ctx context.Context, clean, databaseOnly bool) error {
 
 	// Run migrations.
 	out.Step(style.Migrate, "Running database migrations...")
-	if err := shellCmd(ctx, "docker", "compose", "--profile", "database", "--profile", "migration", "build", "migrations"); err != nil {
-		return fmt.Errorf("migration build failed: %w", err)
-	}
-	if err := shellCmd(ctx, "docker", "compose", "--profile", "database", "--profile", "migration", "run", "--rm", "migrations"); err != nil {
+	if err := runMigrations(ctx); err != nil {
 		return fmt.Errorf("migrations failed: %w", err)
 	}
 

@@ -2,9 +2,9 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
@@ -30,14 +30,7 @@ type conversationBrief struct {
 }
 
 func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversationsInput, listConversationsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ listConversationsInput) (*sdkmcp.CallToolResult, listConversationsOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, listConversationsOutput{}, fmt.Errorf("unauthorized")
-		}
-
-		sess := deps.newSession()
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listConversationsInput) (*sdkmcp.CallToolResult, listConversationsOutput, error) {
 		conversations, err := deps.MCPService.ListConversations(ctx, sess, userID, workspaceID)
 		if err != nil {
 			return nil, listConversationsOutput{}, err
@@ -56,7 +49,7 @@ func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversat
 		}
 
 		return nil, listConversationsOutput{Conversations: briefs}, nil
-	}
+	})
 }
 
 // --- search_past_messages ---
@@ -80,13 +73,7 @@ type messageBrief struct {
 }
 
 func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesInput, searchMessagesOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input searchMessagesInput) (*sdkmcp.CallToolResult, searchMessagesOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, searchMessagesOutput{}, fmt.Errorf("unauthorized")
-		}
-
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input searchMessagesInput) (*sdkmcp.CallToolResult, searchMessagesOutput, error) {
 		limit := input.Limit
 		if limit <= 0 {
 			limit = defaultSearchLimit
@@ -95,7 +82,6 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 			limit = maxSearchLimit
 		}
 
-		sess := deps.newSession()
 		results, err := deps.MCPService.SearchMessages(ctx, sess, userID, workspaceID, input.ConversationID, input.Query, limit)
 		if err != nil {
 			return nil, searchMessagesOutput{}, err
@@ -112,7 +98,7 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 		}
 
 		return nil, searchMessagesOutput{Messages: briefs, Count: len(briefs)}, nil
-	}
+	})
 }
 
 // --- send_message_to_agent ---
@@ -132,14 +118,7 @@ type sendMessageOutput struct {
 }
 
 func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, sendMessageOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input sendMessageInput) (*sdkmcp.CallToolResult, sendMessageOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, sendMessageOutput{}, fmt.Errorf("unauthorized: missing user or workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input sendMessageInput) (*sdkmcp.CallToolResult, sendMessageOutput, error) {
 		RecordAPICall(ctx, "RUNTIME:GRPC Converse")
 
 		result, err := deps.MCPService.SendMessageToAgent(ctx, sess, &mcpservice.SendAgentMessageParams{
@@ -161,5 +140,5 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 			MessageID: result.MessageID,
 			Error:     result.Error,
 		}, nil
-	}
+	})
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
@@ -16,100 +17,70 @@ import (
 // Agents represent individual swarm members that users can interact with
 // through conversations.
 func WorkspaceAgentsList(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.AgentResponse, *merrors.Error) {
 		agents, mErr := c.ChatService.ListAgents(r.Context(), &orchestratorservice.ListAgentsOpts{
-			Sess:        c.NewSession(),
-			UserID:      user.ID,
+			Sess:        deps.Sess,
+			UserID:      deps.User.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return nil, mErr
 		}
 
 		response := make([]dto.AgentResponse, 0, len(agents))
 		for _, agent := range agents {
 			response = append(response, dto.ToAgentResponse(agent))
 		}
-
-		WriteSuccess(w, http.StatusOK, response)
-	}
+		return response, nil
+	})
 }
 
 // ConversationsList retrieves all conversations for a workspace.
 // Each conversation includes its associated agent and last message for preview.
 func ConversationsList(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.ConversationResponse, *merrors.Error) {
 		conversations, mErr := c.ChatService.ListConversations(r.Context(), &orchestratorservice.ListConversationsOpts{
-			Sess:        c.NewSession(),
-			UserID:      user.ID,
+			Sess:        deps.Sess,
+			UserID:      deps.User.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return nil, mErr
 		}
 
 		response := make([]dto.ConversationResponse, 0, len(conversations))
 		for _, conversation := range conversations {
 			response = append(response, dto.ToConversationResponse(conversation))
 		}
-
-		WriteSuccess(w, http.StatusOK, response)
-	}
+		return response, nil
+	})
 }
 
 // ConversationGet retrieves a single conversation by ID within a workspace.
 // The conversation must belong to a workspace owned by the authenticated user.
 func ConversationGet(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.ConversationResponse, *merrors.Error) {
 		conversation, mErr := c.ChatService.GetConversation(r.Context(), &orchestratorservice.GetConversationOpts{
-			Sess:           c.NewSession(),
-			UserID:         user.ID,
+			Sess:           deps.Sess,
+			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.ConversationResponse{}, mErr
 		}
-
-		WriteSuccess(w, http.StatusOK, dto.ToConversationResponse(conversation))
-	}
+		return dto.ToConversationResponse(conversation), nil
+	})
 }
 
 // MessagesList retrieves messages for a conversation with cursor-based pagination.
 // Supports bidirectional scrolling via scrollId and direction parameters.
 // The limit parameter controls the page size for responses.
 func MessagesList(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.MessagesListResponse, *merrors.Error) {
 		page, mErr := c.ChatService.ListMessages(r.Context(), &orchestratorservice.ListMessagesOpts{
-			Sess:           c.NewSession(),
-			UserID:         user.ID,
+			Sess:           deps.Sess,
+			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
 			ScrollID:       strings.TrimSpace(r.URL.Query().Get("scrollId")),
@@ -117,8 +88,7 @@ func MessagesList(c *Context) http.HandlerFunc {
 			Direction:      strings.TrimSpace(r.URL.Query().Get("direction")),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.MessagesListResponse{}, mErr
 		}
 
 		response := make([]dto.MessageResponse, 0, len(page.Data))
@@ -126,7 +96,7 @@ func MessagesList(c *Context) http.HandlerFunc {
 			response = append(response, dto.ToMessageResponse(message))
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.MessagesListResponse{
+		return dto.MessagesListResponse{
 			Messages: response,
 			Pagination: dto.MessagesPaginationResponse{
 				NextScrollID: page.Pagination.NextScrollID,
@@ -134,13 +104,16 @@ func MessagesList(c *Context) http.HandlerFunc {
 				HasNext:      page.Pagination.HasNext,
 				HasPrev:      page.Pagination.HasPrev,
 			},
-		})
-	}
+		}, nil
+	})
 }
 
 // ConversationCreate creates a new conversation within a workspace.
 // The request body must specify the conversation type ("swarm" or "agent").
 // For agent conversations, agent_id must be provided.
+//
+// Returns 201 Created — stays on the plain http.HandlerFunc form because
+// AuthedHandler locks responses to 200 OK.
 func ConversationCreate(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -184,26 +157,14 @@ func ConversationCreate(c *Context) http.HandlerFunc {
 // ConversationDelete removes a conversation from a workspace.
 // Returns 204 No Content on success.
 func ConversationDelete(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		mErr = c.ChatService.DeleteConversation(r.Context(), &orchestratorservice.DeleteConversationOpts{
-			Sess:           c.NewSession(),
-			UserID:         user.ID,
+	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
+		return c.ChatService.DeleteConversation(r.Context(), &orchestratorservice.DeleteConversationOpts{
+			Sess:           deps.Sess,
+			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
 		})
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		httpserver.WriteNoContent(w)
-	}
+	})
 }
 
 // SearchMessages searches conversation messages by text.
@@ -219,30 +180,22 @@ func SearchMessages(c *Context) http.HandlerFunc {
 // The conversation must belong to a workspace owned by the authenticated user.
 // Returns 204 No Content on success.
 func ConversationMarkRead(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		if mErr := c.ChatService.MarkConversationRead(r.Context(), &orchestratorservice.MarkConversationReadOpts{
-			Sess:           c.NewSession(),
-			UserID:         user.ID,
+	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
+		return c.ChatService.MarkConversationRead(r.Context(), &orchestratorservice.MarkConversationReadOpts{
+			Sess:           deps.Sess,
+			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
-		}); mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		httpserver.WriteNoContent(w)
-	}
+		})
+	})
 }
 
 // MessagesSend creates a new message in a conversation.
 // The message is sent to the agent runtime for processing.
 // Supports text content and file attachments via the request body.
+//
+// Returns 201 Created, needs OnPersisted callback, and logs error context —
+// stays on the plain http.HandlerFunc form.
 func MessagesSend(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)

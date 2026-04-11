@@ -54,7 +54,7 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 	out.Warning("This will permanently delete all resources")
 
 	if !autoApprove {
-		if !confirmDestroy() {
+		if !confirmPrompt("Do you want to destroy all resources? This cannot be undone. (y/N): ") {
 			out.Warning("Destroy cancelled")
 			return nil
 		}
@@ -96,23 +96,59 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 	return nil
 }
 
-// deleteLoadBalancerServices finds and deletes all LoadBalancer-type Services
-// across all namespaces, then waits for the DO cloud controller to deprovision
-// the associated load balancers before returning.
-func deleteLoadBalancerServices(ctx context.Context) error {
-	// Build a K8s client from the default kubeconfig (~/.kube/config or KUBECONFIG).
+// buildK8sClient builds a Kubernetes clientset from the default kubeconfig
+// (~/.kube/config or KUBECONFIG env var).
+func buildK8sClient() (*kubernetes.Clientset, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	configOverrides := &clientcmd.ConfigOverrides{}
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 
 	restConfig, err := kubeConfig.ClientConfig()
 	if err != nil {
-		return fmt.Errorf("load kubeconfig: %w", err)
+		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return fmt.Errorf("create k8s client: %w", err)
+		return nil, fmt.Errorf("create k8s client: %w", err)
+	}
+	return clientset, nil
+}
+
+// waitForResourceDeletion polls countFn until it returns 0 or the timeout expires.
+// label is used only for log messages (e.g. "LoadBalancer(s)", "PVC(s)").
+func waitForResourceDeletion(ctx context.Context, label string, countFn func(context.Context) (int, error), timeout, interval time.Duration) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		n, err := countFn(ctx)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+		out.Infof("waiting for %d %s to be removed", n, label)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("timed out waiting for %s", label)
+		case <-ticker.C:
+		}
+	}
+}
+
+// deleteLoadBalancerServices finds and deletes all LoadBalancer-type Services
+// across all namespaces, then waits for the DO cloud controller to deprovision
+// the associated load balancers before returning.
+func deleteLoadBalancerServices(ctx context.Context) error {
+	clientset, err := buildK8sClient()
+	if err != nil {
+		return err
 	}
 
 	// List all Services across all namespaces.
@@ -141,66 +177,33 @@ func deleteLoadBalancerServices(ctx context.Context) error {
 		return nil
 	}
 
-	// Wait for LoadBalancers to be fully deleted (DO cloud controller deprovisions them).
 	out.Step(style.Waiting, "Waiting for %d LoadBalancer(s) to terminate...", lbCount)
-	return waitForLoadBalancerDeletion(ctx, clientset)
-}
-
-// waitForLoadBalancerDeletion polls until all LoadBalancer Services are deleted.
-func waitForLoadBalancerDeletion(ctx context.Context, clientset *kubernetes.Clientset) error {
-	const (
-		pollInterval = 5 * time.Second
-		timeout      = 5 * time.Minute
-	)
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			return fmt.Errorf("timeout waiting for LoadBalancers to terminate after %v", timeout)
-		case <-ticker.C:
-			svcs, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return fmt.Errorf("list services: %w", err)
-			}
-			lbCount := 0
-			for i := range svcs.Items {
-				if svcs.Items[i].Spec.Type == corev1.ServiceTypeLoadBalancer {
-					lbCount++
-				}
-			}
-			if lbCount == 0 {
-				out.Success("All LoadBalancers terminated")
-				return nil
-			}
-			out.Infof("Waiting... %d LoadBalancer(s) still terminating", lbCount)
+	err = waitForResourceDeletion(ctx, "LoadBalancer(s)", func(c context.Context) (int, error) {
+		list, listErr := clientset.CoreV1().Services("").List(c, metav1.ListOptions{})
+		if listErr != nil {
+			return 0, fmt.Errorf("list services: %w", listErr)
 		}
+		count := 0
+		for i := range list.Items {
+			if list.Items[i].Spec.Type == corev1.ServiceTypeLoadBalancer {
+				count++
+			}
+		}
+		return count, nil
+	}, 5*time.Minute, 5*time.Second)
+	if err != nil {
+		return err
 	}
+	out.Success("All LoadBalancers terminated")
+	return nil
 }
 
 // deletePersistentVolumeClaims finds and deletes all PVCs across all namespaces,
 // then waits for the DO cloud controller to deprovision the associated volumes.
 func deletePersistentVolumeClaims(ctx context.Context) error {
-	// Build a K8s client from the default kubeconfig.
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-
-	restConfig, err := kubeConfig.ClientConfig()
+	clientset, err := buildK8sClient()
 	if err != nil {
-		return fmt.Errorf("load kubeconfig: %w", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("create k8s client: %w", err)
+		return err
 	}
 
 	// List all PVCs across all namespaces.
@@ -225,47 +228,17 @@ func deletePersistentVolumeClaims(ctx context.Context) error {
 		return nil
 	}
 
-	// Wait for PVCs to be fully deleted (DO cloud controller deprovisions volumes).
 	out.Step(style.Waiting, "Waiting for %d PVC(s) to terminate...", pvcCount)
-	return waitForPVCDeletion(ctx, clientset)
-}
-
-// waitForPVCDeletion polls until all PVCs are deleted or times out.
-func waitForPVCDeletion(ctx context.Context, clientset *kubernetes.Clientset) error {
-	const (
-		pollInterval = 5 * time.Second
-		timeout      = 5 * time.Minute
-	)
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			return fmt.Errorf("timeout waiting for PVCs to terminate after %v", timeout)
-		case <-ticker.C:
-			pvcs, err := clientset.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return fmt.Errorf("list PVCs: %w", err)
-			}
-			if len(pvcs.Items) == 0 {
-				out.Success("All PVCs terminated")
-				return nil
-			}
-			out.Infof("Waiting... %d PVC(s) still terminating", len(pvcs.Items))
+	err = waitForResourceDeletion(ctx, "PVC(s)", func(c context.Context) (int, error) {
+		list, listErr := clientset.CoreV1().PersistentVolumeClaims("").List(c, metav1.ListOptions{})
+		if listErr != nil {
+			return 0, fmt.Errorf("list PVCs: %w", listErr)
 		}
+		return len(list.Items), nil
+	}, 5*time.Minute, 5*time.Second)
+	if err != nil {
+		return err
 	}
-}
-
-func confirmDestroy() bool {
-	out.Prompt(style.Warning, "Do you want to destroy all resources? This cannot be undone. (y/N): ")
-	var response string
-	_, _ = fmt.Scanln(&response)
-	return response == "y" || response == "Y"
+	out.Success("All PVCs terminated")
+	return nil
 }

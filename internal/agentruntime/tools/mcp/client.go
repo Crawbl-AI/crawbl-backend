@@ -85,7 +85,11 @@ type Closer interface {
 	Close() error
 }
 
-// nopCloser is the Phase 1 no-op Closer returned by Toolset.
+// nopCloser is the Phase 1 no-op Closer returned by Toolset. This is
+// NOT interchangeable with io.NopCloser — io.NopCloser wraps an
+// io.Reader and returns an io.ReadCloser; our Closer interface is a
+// local one whose Close returns an error and takes no reader, so we
+// need a dedicated zero-value type here.
 type nopCloser struct{}
 
 // Close is a no-op.

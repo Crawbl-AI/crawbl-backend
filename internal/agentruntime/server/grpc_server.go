@@ -37,6 +37,13 @@ type Server struct {
 	health   *HealthServer
 	memStore memory.Store
 	runner   *runner.Runner
+
+	// lifecycleCtx bounds the listener bring-up to the Server's own
+	// lifetime. Cancelled on Shutdown so an in-progress net.Listen call
+	// (e.g. on a slow DNS resolution) unblocks cleanly instead of
+	// hanging on context.Background.
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 }
 
 // Deps bundles the dependencies main.go constructs before calling New.
@@ -94,13 +101,16 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 	// beyond what is already registered.
 	reflection.Register(grpcSrv)
 
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	return &Server{
-		cfg:      cfg,
-		logger:   logger,
-		grpcSrv:  grpcSrv,
-		health:   healthSrv,
-		memStore: deps.MemStore,
-		runner:   deps.Runner,
+		cfg:             cfg,
+		logger:          logger,
+		grpcSrv:         grpcSrv,
+		health:          healthSrv,
+		memStore:        deps.MemStore,
+		runner:          deps.Runner,
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
 	}, nil
 }
 
@@ -108,7 +118,7 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 // server exits. main.go calls Start() in its own goroutine.
 func (s *Server) Start() error {
 	lc := &net.ListenConfig{}
-	l, err := lc.Listen(context.Background(), "tcp", s.cfg.GRPCListen)
+	l, err := lc.Listen(s.lifecycleCtx, "tcp", s.cfg.GRPCListen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", s.cfg.GRPCListen, err)
 	}
@@ -134,6 +144,9 @@ func (s *Server) Health() *HealthServer {
 func (s *Server) Shutdown() {
 	if s == nil || s.grpcSrv == nil {
 		return
+	}
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
 	}
 	s.health.SetNotServing()
 	crawblgrpc.GracefulShutdown(s.grpcSrv, s.cfg.Startup.GracefulShutdownTimeout, s.logger)

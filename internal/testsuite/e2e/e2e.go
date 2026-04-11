@@ -45,9 +45,6 @@ import (
 // which infrastructure dependencies a particular scenario touches.
 type Config struct {
 	BaseURL             string
-	UID                 string
-	Email               string
-	Name                string
 	E2EToken            string
 	Verbose             bool
 	Timeout             time.Duration

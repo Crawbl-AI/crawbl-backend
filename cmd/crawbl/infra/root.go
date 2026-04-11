@@ -13,6 +13,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
 )
@@ -34,7 +35,11 @@ func buildConfig(env, region string) (infra.Config, error) {
 	}
 
 	clusterConfig := cluster.ConfigFromStack(env, region, clusterCfg)
-	helmValuesDir := filepath.Join(must(os.Getwd()), "config", "helm")
+	cwd, err := os.Getwd()
+	if err != nil {
+		return infra.Config{}, fmt.Errorf("get working directory: %w", err)
+	}
+	helmValuesDir := filepath.Join(cwd, "config", "helm")
 	platformConfig := platform.DefaultPlatformConfig(helmValuesDir)
 
 	// Environment variable overrides (secrets and runtime values not stored in YAML)
@@ -72,11 +77,12 @@ func buildConfig(env, region string) (infra.Config, error) {
 	}, nil
 }
 
-func must(s string, err error) string {
-	if err != nil {
-		return "."
-	}
-	return s
+// confirmPrompt prints prompt and returns true only when the user types "y" or "Y".
+func confirmPrompt(prompt string) bool {
+	out.Prompt(style.Warning, "%s", prompt)
+	var response string
+	_, _ = fmt.Scanln(&response)
+	return response == "y" || response == "Y"
 }
 
 // NewInfraCommand creates the infra subcommand.

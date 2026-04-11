@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
@@ -260,14 +261,7 @@ type diaryEntryBrief struct {
 // --- Handlers ---
 
 func newMemoryStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryStatusInput, memoryStatusOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ memoryStatusInput) (*sdkmcp.CallToolResult, memoryStatusOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryStatusOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
-
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryStatusInput) (*sdkmcp.CallToolResult, memoryStatusOutput, error) {
 		count, err := deps.DrawerRepo.Count(ctx, sess, workspaceID)
 		if err != nil {
 			return nil, memoryStatusOutput{}, err
@@ -288,51 +282,33 @@ func newMemoryStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryStatusInput,
 			Wings:        wings,
 			Rooms:        rooms,
 		}, nil
-	}
+	})
 }
 
 func newMemoryListWingsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryListWingsInput, memoryListWingsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ memoryListWingsInput) (*sdkmcp.CallToolResult, memoryListWingsOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryListWingsOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryListWingsInput) (*sdkmcp.CallToolResult, memoryListWingsOutput, error) {
 		wings, err := deps.DrawerRepo.ListWings(ctx, sess, workspaceID)
 		if err != nil {
 			return nil, memoryListWingsOutput{}, err
 		}
 
 		return nil, memoryListWingsOutput{Wings: wings}, nil
-	}
+	})
 }
 
 func newMemoryListRoomsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryListRoomsInput, memoryListRoomsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryListRoomsInput) (*sdkmcp.CallToolResult, memoryListRoomsOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryListRoomsOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryListRoomsInput) (*sdkmcp.CallToolResult, memoryListRoomsOutput, error) {
 		rooms, err := deps.DrawerRepo.ListRooms(ctx, sess, workspaceID, input.Wing)
 		if err != nil {
 			return nil, memoryListRoomsOutput{}, err
 		}
 
 		return nil, memoryListRoomsOutput{Rooms: rooms}, nil
-	}
+	})
 }
 
 func newMemoryGetTaxonomyHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGetTaxonomyInput, memoryGetTaxonomyOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ memoryGetTaxonomyInput) (*sdkmcp.CallToolResult, memoryGetTaxonomyOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryGetTaxonomyOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryGetTaxonomyInput) (*sdkmcp.CallToolResult, memoryGetTaxonomyOutput, error) {
 		wings, err := deps.DrawerRepo.ListWings(ctx, sess, workspaceID)
 		if err != nil {
 			return nil, memoryGetTaxonomyOutput{}, err
@@ -352,15 +328,11 @@ func newMemoryGetTaxonomyHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGetTaxo
 		}
 
 		return nil, memoryGetTaxonomyOutput{Taxonomy: taxonomy}, nil
-	}
+	})
 }
 
 func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput, memorySearchOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memorySearchInput) (*sdkmcp.CallToolResult, memorySearchOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memorySearchOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memorySearchInput) (*sdkmcp.CallToolResult, memorySearchOutput, error) {
 		if input.Query == "" {
 			return nil, memorySearchOutput{}, fmt.Errorf("query is required")
 		}
@@ -378,7 +350,6 @@ func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput,
 			return nil, memorySearchOutput{}, fmt.Errorf("embedding failed: %w", err)
 		}
 
-		sess := deps.newSession()
 		results, err := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, input.Wing, input.Room, limit)
 		if err != nil {
 			return nil, memorySearchOutput{}, err
@@ -400,15 +371,11 @@ func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput,
 		}
 
 		return nil, memorySearchOutput{Results: briefs, Count: len(briefs)}, nil
-	}
+	})
 }
 
 func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryCheckDuplicateInput, memoryCheckDuplicateOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryCheckDuplicateInput) (*sdkmcp.CallToolResult, memoryCheckDuplicateOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryCheckDuplicateOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryCheckDuplicateInput) (*sdkmcp.CallToolResult, memoryCheckDuplicateOutput, error) {
 		if input.Content == "" {
 			return nil, memoryCheckDuplicateOutput{}, fmt.Errorf("content is required")
 		}
@@ -423,7 +390,6 @@ func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryChec
 			return nil, memoryCheckDuplicateOutput{}, fmt.Errorf("embedding failed: %w", err)
 		}
 
-		sess := deps.newSession()
 		results, err := deps.DrawerRepo.CheckDuplicate(ctx, sess, workspaceID, embedding, threshold, 5)
 		if err != nil {
 			return nil, memoryCheckDuplicateOutput{}, err
@@ -448,15 +414,11 @@ func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryChec
 			Duplicates: briefs,
 			HasDupe:    len(briefs) > 0,
 		}, nil
-	}
+	})
 }
 
 func newMemoryTraverseHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryTraverseInput, memoryTraverseOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryTraverseInput) (*sdkmcp.CallToolResult, memoryTraverseOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryTraverseOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryTraverseInput) (*sdkmcp.CallToolResult, memoryTraverseOutput, error) {
 		if input.StartRoom == "" {
 			return nil, memoryTraverseOutput{}, fmt.Errorf("start_room is required")
 		}
@@ -469,7 +431,6 @@ func newMemoryTraverseHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryTraverseIn
 			maxHops = 5
 		}
 
-		sess := deps.newSession()
 		results, err := deps.PalaceGraph.Traverse(ctx, sess, workspaceID, input.StartRoom, maxHops)
 		if err != nil {
 			return nil, memoryTraverseOutput{}, err
@@ -488,17 +449,11 @@ func newMemoryTraverseHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryTraverseIn
 		}
 
 		return nil, memoryTraverseOutput{Rooms: briefs, Count: len(briefs)}, nil
-	}
+	})
 }
 
 func newMemoryFindTunnelsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryFindTunnelsInput, memoryFindTunnelsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryFindTunnelsInput) (*sdkmcp.CallToolResult, memoryFindTunnelsOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryFindTunnelsOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryFindTunnelsInput) (*sdkmcp.CallToolResult, memoryFindTunnelsOutput, error) {
 		tunnels, err := deps.PalaceGraph.FindTunnels(ctx, sess, workspaceID, input.WingA, input.WingB)
 		if err != nil {
 			return nil, memoryFindTunnelsOutput{}, err
@@ -515,17 +470,11 @@ func newMemoryFindTunnelsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryFindTun
 		}
 
 		return nil, memoryFindTunnelsOutput{Tunnels: briefs, Count: len(briefs)}, nil
-	}
+	})
 }
 
 func newMemoryGraphStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGraphStatsInput, memoryGraphStatsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ memoryGraphStatsInput) (*sdkmcp.CallToolResult, memoryGraphStatsOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryGraphStatsOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryGraphStatsInput) (*sdkmcp.CallToolResult, memoryGraphStatsOutput, error) {
 		stats, err := deps.PalaceGraph.GraphStats(ctx, sess, workspaceID)
 		if err != nil {
 			return nil, memoryGraphStatsOutput{}, err
@@ -548,17 +497,13 @@ func newMemoryGraphStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGraphSta
 			RoomsPerWing: stats.RoomsPerWing,
 			TopTunnels:   topTunnels,
 		}, nil
-	}
+	})
 }
 
 // --- Write tool handlers ---
 
 func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawerInput, memoryAddDrawerOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryAddDrawerInput) (*sdkmcp.CallToolResult, memoryAddDrawerOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryAddDrawerOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryAddDrawerInput) (*sdkmcp.CallToolResult, memoryAddDrawerOutput, error) {
 		if input.Wing == "" || input.Room == "" || input.Content == "" {
 			return nil, memoryAddDrawerOutput{Info: "wing, room, and content are required"}, nil
 		}
@@ -611,7 +556,6 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		sess := deps.newSession()
 		if err := deps.DrawerRepo.Add(ctx, sess, d, embedding); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to store drawer", "error", err)
 			return nil, memoryAddDrawerOutput{Info: "failed to store memory"}, nil
@@ -632,35 +576,26 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			MemoryType: memoryType,
 			Info:       "drawer added",
 		}, nil
-	}
+	})
 }
 
 func newMemoryDeleteDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDeleteDrawerInput, memoryDeleteDrawerOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryDeleteDrawerInput) (*sdkmcp.CallToolResult, memoryDeleteDrawerOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryDeleteDrawerOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDeleteDrawerInput) (*sdkmcp.CallToolResult, memoryDeleteDrawerOutput, error) {
 		if input.DrawerID == "" {
 			return nil, memoryDeleteDrawerOutput{Info: "drawer_id is required"}, nil
 		}
 
-		sess := deps.newSession()
 		if err := deps.DrawerRepo.Delete(ctx, sess, workspaceID, input.DrawerID); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to delete drawer", "error", err)
 			return nil, memoryDeleteDrawerOutput{Info: "failed to delete drawer"}, nil
 		}
 
 		return nil, memoryDeleteDrawerOutput{Deleted: true, Info: "drawer deleted"}, nil
-	}
+	})
 }
 
 func newMemorySetIdentityHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySetIdentityInput, memorySetIdentityOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memorySetIdentityInput) (*sdkmcp.CallToolResult, memorySetIdentityOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memorySetIdentityOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memorySetIdentityInput) (*sdkmcp.CallToolResult, memorySetIdentityOutput, error) {
 		if input.Content == "" {
 			return nil, memorySetIdentityOutput{Info: "content is required"}, nil
 		}
@@ -671,24 +606,19 @@ func newMemorySetIdentityHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySetIden
 		if deps.IdentityRepo == nil {
 			return nil, memorySetIdentityOutput{Info: "identity repo unavailable"}, nil
 		}
-		sess := deps.newSession()
 		if err := deps.IdentityRepo.Set(ctx, sess, workspaceID, input.Content); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to set identity", "error", err)
 			return nil, memorySetIdentityOutput{Info: "failed to update identity"}, nil
 		}
 
 		return nil, memorySetIdentityOutput{Info: "identity set"}, nil
-	}
+	})
 }
 
 // --- Knowledge Graph handlers ---
 
 func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInput, memoryKGQueryOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryKGQueryInput) (*sdkmcp.CallToolResult, memoryKGQueryOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryKGQueryOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGQueryInput) (*sdkmcp.CallToolResult, memoryKGQueryOutput, error) {
 		if input.Entity == "" {
 			return nil, memoryKGQueryOutput{}, fmt.Errorf("entity is required")
 		}
@@ -698,7 +628,6 @@ func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInpu
 			direction = "both"
 		}
 
-		sess := deps.newSession()
 		results, err := deps.KG.QueryEntity(ctx, sess, workspaceID, input.Entity, input.AsOf, direction)
 		if err != nil {
 			return nil, memoryKGQueryOutput{}, err
@@ -724,15 +653,11 @@ func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInpu
 		}
 
 		return nil, memoryKGQueryOutput{Entity: input.Entity, Results: out, Count: len(out)}, nil
-	}
+	})
 }
 
 func newMemoryKGAddHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGAddInput, memoryKGAddOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryKGAddInput) (*sdkmcp.CallToolResult, memoryKGAddOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryKGAddOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGAddInput) (*sdkmcp.CallToolResult, memoryKGAddOutput, error) {
 		if input.Subject == "" || input.Predicate == "" || input.Object == "" {
 			return nil, memoryKGAddOutput{Info: "subject, predicate, and object are required"}, nil
 		}
@@ -748,7 +673,6 @@ func newMemoryKGAddHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGAddInput, m
 			t.ValidFrom = &input.ValidFrom
 		}
 
-		sess := deps.newSession()
 		tripleID, err := deps.KG.AddTriple(ctx, sess, workspaceID, t)
 		if err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to add triple", "error", err)
@@ -756,15 +680,11 @@ func newMemoryKGAddHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGAddInput, m
 		}
 
 		return nil, memoryKGAddOutput{TripleID: tripleID, Info: "triple added"}, nil
-	}
+	})
 }
 
 func newMemoryKGInvalidateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGInvalidateInput, memoryKGInvalidateOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryKGInvalidateInput) (*sdkmcp.CallToolResult, memoryKGInvalidateOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryKGInvalidateOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGInvalidateInput) (*sdkmcp.CallToolResult, memoryKGInvalidateOutput, error) {
 		if input.Subject == "" || input.Predicate == "" || input.Object == "" {
 			return nil, memoryKGInvalidateOutput{Info: "subject, predicate, and object are required"}, nil
 		}
@@ -774,24 +694,17 @@ func newMemoryKGInvalidateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGInva
 			ended = time.Now().Format("2006-01-02")
 		}
 
-		sess := deps.newSession()
 		if err := deps.KG.Invalidate(ctx, sess, workspaceID, input.Subject, input.Predicate, input.Object, ended); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to invalidate triple", "error", err)
 			return nil, memoryKGInvalidateOutput{Info: "failed to update knowledge graph"}, nil
 		}
 
 		return nil, memoryKGInvalidateOutput{Info: "triple invalidated"}, nil
-	}
+	})
 }
 
 func newMemoryKGTimelineHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGTimelineInput, memoryKGTimelineOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryKGTimelineInput) (*sdkmcp.CallToolResult, memoryKGTimelineOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryKGTimelineOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGTimelineInput) (*sdkmcp.CallToolResult, memoryKGTimelineOutput, error) {
 		results, err := deps.KG.Timeline(ctx, sess, workspaceID, input.Entity)
 		if err != nil {
 			return nil, memoryKGTimelineOutput{}, err
@@ -817,17 +730,11 @@ func newMemoryKGTimelineHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGTimeli
 		}
 
 		return nil, memoryKGTimelineOutput{Events: out, Count: len(out)}, nil
-	}
+	})
 }
 
 func newMemoryKGStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGStatsInput, memoryKGStatsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ memoryKGStatsInput) (*sdkmcp.CallToolResult, memoryKGStatsOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryKGStatsOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
-
-		sess := deps.newSession()
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryKGStatsInput) (*sdkmcp.CallToolResult, memoryKGStatsOutput, error) {
 		stats, err := deps.KG.Stats(ctx, sess, workspaceID)
 		if err != nil {
 			return nil, memoryKGStatsOutput{}, err
@@ -840,17 +747,13 @@ func newMemoryKGStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGStatsInpu
 			ExpiredFacts:      stats.ExpiredFacts,
 			RelationshipTypes: stats.RelationshipTypes,
 		}, nil
-	}
+	})
 }
 
 // --- Diary handlers ---
 
 func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWriteInput, memoryDiaryWriteOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryDiaryWriteInput) (*sdkmcp.CallToolResult, memoryDiaryWriteOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryDiaryWriteOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDiaryWriteInput) (*sdkmcp.CallToolResult, memoryDiaryWriteOutput, error) {
 		if input.AgentName == "" || input.Entry == "" {
 			return nil, memoryDiaryWriteOutput{Info: "agent_name and entry are required"}, nil
 		}
@@ -893,22 +796,17 @@ func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWri
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		sess := deps.newSession()
 		if err := deps.DrawerRepo.Add(ctx, sess, d, embedding); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to write diary entry", "error", err)
 			return nil, memoryDiaryWriteOutput{Info: "failed to write diary entry"}, nil
 		}
 
 		return nil, memoryDiaryWriteOutput{DrawerID: drawerID, Info: "diary entry written"}, nil
-	}
+	})
 }
 
 func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryReadInput, memoryDiaryReadOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input memoryDiaryReadInput) (*sdkmcp.CallToolResult, memoryDiaryReadOutput, error) {
-		workspaceID := workspaceIDFromContext(ctx)
-		if workspaceID == "" {
-			return nil, memoryDiaryReadOutput{}, fmt.Errorf("unauthorized: no workspace identity")
-		}
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDiaryReadInput) (*sdkmcp.CallToolResult, memoryDiaryReadOutput, error) {
 		if input.AgentName == "" {
 			return nil, memoryDiaryReadOutput{}, fmt.Errorf("agent_name is required")
 		}
@@ -926,7 +824,6 @@ func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryRead
 		agentName = strings.ReplaceAll(agentName, "'", "")
 		wing := fmt.Sprintf("wing_%s", agentName)
 
-		sess := deps.newSession()
 		drawers, err := deps.DrawerRepo.GetByWingRoom(ctx, sess, workspaceID, wing, "diary", lastN)
 		if err != nil {
 			return nil, memoryDiaryReadOutput{}, err
@@ -944,7 +841,7 @@ func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryRead
 		}
 
 		return nil, memoryDiaryReadOutput{Entries: entries, Count: len(entries)}, nil
-	}
+	})
 }
 
 // registerMemoryTools adds all memory palace tools to the MCP server.

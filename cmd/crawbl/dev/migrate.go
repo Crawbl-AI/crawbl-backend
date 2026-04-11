@@ -16,10 +16,7 @@ func newMigrateCommand() *cobra.Command {
 			ctx := cmd.Context()
 			ensureEnvFile()
 			out.Step(style.Migrate, "Running database migrations...")
-			if err := shellCmd(ctx, "docker", "compose", "--profile", "database", "--profile", "migration", "build", "migrations"); err != nil {
-				return err
-			}
-			return shellCmd(ctx, "docker", "compose", "--profile", "database", "--profile", "migration", "run", "--rm", "migrations")
+			return runMigrations(ctx)
 		},
 	}
 }

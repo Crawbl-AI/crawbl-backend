@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
@@ -76,12 +77,7 @@ type workflowBrief struct {
 // --- Handlers ---
 
 func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowInput, createWorkflowOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input createWorkflowInput) (*sdkmcp.CallToolResult, createWorkflowOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, createWorkflowOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createWorkflowInput) (*sdkmcp.CallToolResult, createWorkflowOutput, error) {
 		if input.Name == "" || input.Steps == "" {
 			return nil, createWorkflowOutput{Info: "name and steps are required"}, nil
 		}
@@ -89,7 +85,6 @@ func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowIn
 			return nil, createWorkflowOutput{Info: "steps exceeds maximum allowed size"}, nil
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.CreateWorkflow(ctx, sess, workspaceID, &mcpservice.CreateWorkflowParams{
 			Name:        input.Name,
 			Description: input.Description,
@@ -103,21 +98,15 @@ func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowIn
 			WorkflowID: result.WorkflowID,
 			Info:       fmt.Sprintf("workflow %q created with %d steps", input.Name, result.StepCount),
 		}, nil
-	}
+	})
 }
 
 func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflowInput, triggerWorkflowOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input triggerWorkflowInput) (*sdkmcp.CallToolResult, triggerWorkflowOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, triggerWorkflowOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input triggerWorkflowInput) (*sdkmcp.CallToolResult, triggerWorkflowOutput, error) {
 		if input.WorkflowID == "" {
 			return nil, triggerWorkflowOutput{Info: "workflow_id is required"}, nil
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.TriggerWorkflow(ctx, sess, userID, workspaceID, &mcpservice.TriggerWorkflowParams{
 			WorkflowID:     input.WorkflowID,
 			ConversationID: input.ConversationID,
@@ -131,21 +120,15 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 			ExecutionID: result.ExecutionID,
 			Info:        fmt.Sprintf("workflow %q triggered, execution %s started", result.WorkflowName, result.ExecutionID),
 		}, nil
-	}
+	})
 }
 
 func newCheckWorkflowStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[checkWorkflowStatusInput, checkWorkflowStatusOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, input checkWorkflowStatusInput) (*sdkmcp.CallToolResult, checkWorkflowStatusOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, checkWorkflowStatusOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input checkWorkflowStatusInput) (*sdkmcp.CallToolResult, checkWorkflowStatusOutput, error) {
 		if input.ExecutionID == "" {
 			return nil, checkWorkflowStatusOutput{Info: "execution_id is required"}, nil
 		}
 
-		sess := deps.newSession()
 		result, err := deps.MCPService.CheckWorkflowStatus(ctx, sess, workspaceID, input.ExecutionID)
 		if err != nil {
 			return nil, checkWorkflowStatusOutput{Info: err.Error()}, nil
@@ -169,18 +152,11 @@ func newCheckWorkflowStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[checkWorkfl
 			Error:       result.Error,
 			Steps:       steps,
 		}, nil
-	}
+	})
 }
 
 func newListWorkflowsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listWorkflowsInput, listWorkflowsOutput] {
-	return func(ctx context.Context, _ *sdkmcp.CallToolRequest, _ listWorkflowsInput) (*sdkmcp.CallToolResult, listWorkflowsOutput, error) {
-		userID := userIDFromContext(ctx)
-		workspaceID := workspaceIDFromContext(ctx)
-		if userID == "" || workspaceID == "" {
-			return nil, listWorkflowsOutput{}, fmt.Errorf("unauthorized: no user identity")
-		}
-
-		sess := deps.newSession()
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listWorkflowsInput) (*sdkmcp.CallToolResult, listWorkflowsOutput, error) {
 		results, err := deps.MCPService.ListWorkflows(ctx, sess, userID, workspaceID)
 		if err != nil {
 			return nil, listWorkflowsOutput{Info: err.Error()}, nil
@@ -199,7 +175,7 @@ func newListWorkflowsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listWorkflowsInpu
 		}
 
 		return nil, listWorkflowsOutput{Workflows: briefs}, nil
-	}
+	})
 }
 
 func registerWorkflowTools(server *sdkmcp.Server, deps *Deps) {

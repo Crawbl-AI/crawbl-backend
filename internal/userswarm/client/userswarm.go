@@ -234,7 +234,6 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 			},
 			Runtime: crawblv1alpha1.UserSwarmRuntimeSpec{
 				Image:               c.config.Image,
-				Mode:                crawblv1alpha1.DefaultRuntimeMode,
 				Port:                c.config.Port,
 				ImagePullSecretName: c.config.ImagePullSecretName,
 			},

@@ -48,7 +48,7 @@ This command automates the entire cluster bootstrap process:
 	cmd.Flags().StringVarP(&env, "env", "e", "dev", "Environment name, for example dev, staging, or prod")
 	cmd.Flags().StringVarP(&region, "region", "r", "fra1", "Cloud region, for example fra1, nyc1, or sfo2")
 	cmd.Flags().BoolVarP(&autoApprove, "auto-approve", "y", false, "Skip confirmation prompts")
-	cmd.Flags().StringVar(&clusterName, "cluster", "crawbl-dev", "DOKS cluster name for kubeconfig")
+	cmd.Flags().StringVar(&clusterName, "cluster", "", "DOKS cluster name for kubeconfig (defaults to crawbl-<env>)")
 	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "Timeout while waiting for applications to sync")
 
 	return cmd
@@ -59,12 +59,17 @@ func runBootstrap(ctx context.Context, env, region string, autoApprove bool, clu
 		return err
 	}
 
+	// Derive the cluster name from --env when not explicitly provided.
+	if clusterName == "" {
+		clusterName = "crawbl-" + env
+	}
+
 	out.Step(style.Infra, "Crawbl Cluster Bootstrap")
 	out.Step(style.Config, "Environment: %s | Region: %s | Cluster: %s", env, region, clusterName)
 	out.Ln()
 
 	if !autoApprove {
-		if !confirmUpdate() {
+		if !confirmPrompt("Do you want to perform this action? (y/N): ") {
 			out.Warning("Bootstrap cancelled")
 			return nil
 		}
@@ -124,28 +129,38 @@ func waitForController(ctx context.Context, timeout time.Duration) error {
 
 // waitForAppsSync polls ArgoCD applications until all are Synced/Healthy or timeout.
 func waitForAppsSync(timeout time.Duration) error {
-	const appSyncPollInterval = 15 * time.Second
-	deadline := time.Now().Add(timeout)
+	const (
+		appSyncPollInterval  = 15 * time.Second
+		appSyncRetryInterval = 10 * time.Second
+	)
 
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(appSyncPollInterval)
+	defer ticker.Stop()
+
+	// Check immediately before waiting for the first tick.
 	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s waiting for apps to sync", timeout)
-		}
-
 		synced, total, err := checkAppSyncStatus()
 		if err != nil {
 			out.Infof("Waiting for applications to appear... (%v)", err)
-			time.Sleep(10 * time.Second)
-			continue
+		} else {
+			out.Infof("%d/%d applications synced", synced, total)
+			if total > 0 && synced == total {
+				return nil
+			}
 		}
 
-		out.Infof("%d/%d applications synced", synced, total)
-
-		if total > 0 && synced == total {
-			return nil
+		retryTimer := time.NewTimer(appSyncRetryInterval)
+		select {
+		case <-ctx.Done():
+			retryTimer.Stop()
+			return fmt.Errorf("timed out after %s waiting for apps to sync", timeout)
+		case <-ticker.C:
+			retryTimer.Stop()
+		case <-retryTimer.C:
 		}
-
-		time.Sleep(appSyncPollInterval)
 	}
 }
 

@@ -3,7 +3,6 @@ package infra
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -42,14 +41,8 @@ This command:
 }
 
 func runInit(ctx context.Context, env, region string) error {
-	// Only PULUMI_ACCESS_TOKEN is required as an env var.
-	// Provider tokens (DO, Cloudflare) are injected by Pulumi ESC.
-	if os.Getenv("PULUMI_ACCESS_TOKEN") == "" {
-		out.Fail("Missing required environment variable")
-		out.Infof("- PULUMI_ACCESS_TOKEN")
-		out.Warning("Set it before running init")
-		out.Infof("export PULUMI_ACCESS_TOKEN=...")
-		return fmt.Errorf("missing PULUMI_ACCESS_TOKEN")
+	if err := validateEnvVars(); err != nil {
+		return err
 	}
 
 	out.Step(style.Infra, "Initializing the Pulumi stack for environment %q in region %q", env, region)

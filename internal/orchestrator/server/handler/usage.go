@@ -8,34 +8,26 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // UserUsageSummary returns the authenticated user's monthly token usage summary.
 // GET /v1/users/usage/summary
 func UserUsageSummary(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.UserUsageSummaryResponse, *merrors.Error) {
 		period := time.Now().UTC().Format("2006-01")
-		sess := c.NewSession()
 
-		tokensUsed, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), sess, user.ID, period)
+		tokensUsed, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), deps.Sess, deps.User.ID, period)
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.UserUsageSummaryResponse{}, mErr
 		}
 
-		counters, mErr := c.UsageRepo.GetUserUsage(r.Context(), sess, user.ID, period)
+		counters, mErr := c.UsageRepo.GetUserUsage(r.Context(), deps.Sess, deps.User.ID, period)
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.UserUsageSummaryResponse{}, mErr
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.UserUsageSummaryResponse{
+		return dto.UserUsageSummaryResponse{
 			CurrentPeriod:        period,
 			TokensUsed:           tokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
@@ -43,54 +35,43 @@ func UserUsageSummary(c *Context) http.HandlerFunc {
 			RequestCount:         counters.RequestCount,
 			TokenLimit:           tokenLimit,
 			PlanID:               counters.PlanID,
-		})
-	}
+		}, nil
+	})
 }
 
 // WorkspaceUsage returns token usage for a specific workspace for the current billing period.
 // GET /v1/workspaces/{id}/usage
 func WorkspaceUsage(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.WorkspaceUsageResponse, *merrors.Error) {
 		workspaceID := chi.URLParam(r, "id")
 		period := time.Now().UTC().Format("2006-01")
-		sess := c.NewSession()
 
 		// Verify the workspace belongs to this user.
-		_, mErr = c.WorkspaceService.GetByID(r.Context(), &orchestratorservice.GetWorkspaceOpts{
-			Sess:        sess,
-			UserID:      user.ID,
+		if _, mErr := c.WorkspaceService.GetByID(r.Context(), &orchestratorservice.GetWorkspaceOpts{
+			Sess:        deps.Sess,
+			UserID:      deps.User.ID,
 			WorkspaceID: workspaceID,
-		})
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
+		}); mErr != nil {
+			return dto.WorkspaceUsageResponse{}, mErr
 		}
 
-		_, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), sess, user.ID, period)
+		_, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), deps.Sess, deps.User.ID, period)
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.WorkspaceUsageResponse{}, mErr
 		}
 
-		counters, mErr := c.UsageRepo.GetWorkspaceUsage(r.Context(), sess, workspaceID)
+		counters, mErr := c.UsageRepo.GetWorkspaceUsage(r.Context(), deps.Sess, workspaceID)
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.WorkspaceUsageResponse{}, mErr
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.WorkspaceUsageResponse{
+		return dto.WorkspaceUsageResponse{
 			Period:               period,
 			TokensUsed:           counters.TokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
 			CompletionTokensUsed: counters.CompletionTokensUsed,
 			RequestCount:         counters.RequestCount,
 			TokenLimit:           tokenLimit,
-		})
-	}
+		}, nil
+	})
 }
