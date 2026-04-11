@@ -8,6 +8,7 @@ Feature: Agent token usage tracking
     And user "primary" opens their default workspace
 
   Scenario: A fresh user starts with zero recorded token usage
+    Given user "primary" has no recorded usage for agent "manager"
     Then the assistant's recorded usage should be zero for agent "manager"
 
   @llm-flaky

@@ -21,10 +21,31 @@ import (
 // registerUsageCountersSteps binds all Gherkin phrases for usage counter assertions.
 func registerUsageCountersSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the assistant's recorded usage should be zero for agent "([^"]*)"$`, tc.usageAssertZeroForAgent)
+	sc.Step(`^user "([^"]*)" has no recorded usage for agent "([^"]*)"$`, tc.usageResetForAgent)
 	sc.Step(`^the assistant's usage counter for agent "([^"]*)" should be captured as the baseline$`, tc.usageCaptureBaselineForAgent)
 	sc.Step(`^the assistant should have consumed at least 1 token more than before within (\d+) seconds?$`, tc.usageAssertIncreasedFromBaseline)
 	sc.Step(`^the workspace usage summary should show recent activity$`, tc.usageWorkspaceSummaryShowsActivity)
 	sc.Step(`^user "([^"]*)" opens their monthly usage summary$`, tc.usageOpenUserSummary)
+}
+
+// usageResetForAgent clears any agent_usage_counters rows for the alias's
+// agent identified by slug. Suite-level test users are reused across
+// scenarios, so prior chat activity leaves residual counters behind; this
+// step gives a scenario a deterministic "zero-tokens" starting point
+// without requiring dynamic user creation.
+func (tc *testContext) usageResetForAgent(alias, slug string) error {
+	return tc.withDB(func(s *dbr.Session) error {
+		agentID, err := tc.agentIDForSlug(alias, slug)
+		if err != nil {
+			return fmt.Errorf("resolving agent %q for %q: %w", slug, alias, err)
+		}
+		if _, execErr := s.DeleteFrom("agent_usage_counters").
+			Where("agent_id = ?", agentID).
+			ExecContext(context.Background()); execErr != nil {
+			return fmt.Errorf("clearing usage counters for agent %q: %w", slug, execErr)
+		}
+		return nil
+	})
 }
 
 // usageOpenUserSummary hits GET /v1/users/usage/summary for the given
