@@ -44,11 +44,8 @@ func (tc *testContext) fileShouldExistInWorkspace(fileName string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-
-	return pollUntil(ctx, func() error {
-		_, err := tc.spacesClient.HeadObject(ctx, &s3.HeadObjectInput{
+	return tc.pollDefault(func() error {
+		_, err := tc.spacesClient.HeadObject(context.Background(), &s3.HeadObjectInput{
 			Bucket: &tc.cfg.SpacesBucket,
 			Key:    &key,
 		})
@@ -68,11 +65,8 @@ func (tc *testContext) savedFileShouldContain(fileName, substring string) error 
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), asyncAssertTimeout)
-	defer cancel()
-
-	return pollUntil(ctx, func() error {
-		resp, err := tc.spacesClient.GetObject(ctx, &s3.GetObjectInput{
+	return tc.pollDefault(func() error {
+		resp, err := tc.spacesClient.GetObject(context.Background(), &s3.GetObjectInput{
 			Bucket: &tc.cfg.SpacesBucket,
 			Key:    &key,
 		})

@@ -3,7 +3,6 @@ package config
 import (
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
@@ -44,26 +43,13 @@ const (
 
 // DefaultConfig returns a Config populated with safe defaults for
 // every field that has one. Required fields (WorkspaceID, UserID,
-// MCPSigningKey, OpenAI.APIKey, orchestrator endpoints, Postgres
-// password) are left empty and must be supplied by the caller or
-// validated by Load().
+// MCPSigningKey, OpenAI.APIKey, orchestrator endpoints) are left
+// empty and must be supplied by the caller or validated by Load().
 func DefaultConfig() Config {
 	return Config{
 		GRPCListen: DefaultGRPCListen,
 		OpenAI: OpenAIConfig{
 			ModelName: DefaultOpenAIModel,
-		},
-		Postgres: database.Config{
-			Host:               database.DefaultHost,
-			Port:               database.DefaultPort,
-			User:               database.DefaultUser,
-			Password:           database.DefaultPassword,
-			Name:               database.DefaultName,
-			Schema:             database.DefaultSchema,
-			SSLMode:            database.DefaultSSLMode,
-			MaxOpenConnections: database.DefaultMaxOpenConnections,
-			MaxIdleConnections: database.DefaultMaxIdleConnections,
-			ConnMaxLifetime:    database.DefaultConnMaxLifetime,
 		},
 		Redis: redisclient.Config{
 			Addr: redisclient.DefaultAddr,

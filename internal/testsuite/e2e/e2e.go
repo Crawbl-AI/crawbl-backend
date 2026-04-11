@@ -23,14 +23,10 @@ import (
 
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
 	"github.com/gocraft/dbr/v2"
-	"github.com/gocraft/dbr/v2/dialect"
-	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -72,6 +68,18 @@ type Config struct {
 	// test-features/ (e.g. "chat", "tools", "auth"). When empty,
 	// all subfolders are included.
 	Category string
+
+	// Tags is a godog tag filter expression passed straight through to
+	// godog.Options.Tags. Use it to skip flaky scenarios during gating
+	// runs (e.g. "~@llm-flaky") or to include only specific tags
+	// ("@smoke"). When empty, every scenario runs regardless of tags.
+	//
+	// Syntax is the standard Cucumber tag expression grammar:
+	//   "@foo"              – only scenarios tagged @foo
+	//   "~@bar"             – exclude scenarios tagged @bar
+	//   "@foo && ~@bar"     – tagged @foo AND not @bar
+	//   "@foo || @baz"      – tagged @foo OR @baz
+	Tags string
 }
 
 // Results holds the aggregate outcome of a test run.
@@ -125,6 +133,7 @@ func Run(cfg *Config) *Results {
 		Output:    colors.Colored(os.Stdout),
 		Strict:    true,
 		Randomize: 0,
+		Tags:      cfg.Tags,
 	}
 
 	if !cfg.Verbose {
@@ -146,11 +155,14 @@ func Run(cfg *Config) *Results {
 		return nil
 	}
 
+	deps := newSuiteDeps(cfg)
+	defer deps.close()
+
 	runErr := backendruntime.RunUntilSignal(func() error {
 		suite := godog.TestSuite{
 			Name: "crawbl-e2e",
 			ScenarioInitializer: func(sc *godog.ScenarioContext) {
-				initScenario(sc, cfg, users)
+				initScenario(sc, cfg, users, deps)
 			},
 			Options: &opts,
 		}
@@ -233,6 +245,9 @@ type testContext struct {
 	users        map[string]*testUser
 	saved        map[string]string
 	state        map[string]*userJourneyState
+	// resolved caches subject→user→workspace lookups keyed by alias.
+	// Populated lazily by resolveUser; invalidated by invalidateResolvedUser.
+	resolved map[string]*resolvedUser
 	// Current response state.
 	lastStatus int
 	lastBody   []byte
@@ -258,13 +273,17 @@ type userJourneyState struct {
 	pushToken            string
 }
 
-func newTestContext(cfg *Config, users *suiteUsers) *testContext {
+func newTestContext(cfg *Config, users *suiteUsers, deps *suiteDeps) *testContext {
 	tc := &testContext{
-		cfg:   cfg,
-		http:  &http.Client{Timeout: cfg.Timeout},
-		users: make(map[string]*testUser),
-		saved: make(map[string]string),
-		state: make(map[string]*userJourneyState),
+		cfg:          cfg,
+		http:         deps.http,
+		dbConn:       deps.db,
+		redisClient:  deps.redis,
+		spacesClient: deps.spaces,
+		users:        make(map[string]*testUser),
+		saved:        make(map[string]string),
+		state:        make(map[string]*userJourneyState),
+		resolved:     make(map[string]*resolvedUser),
 	}
 
 	// All 3 users are available in every scenario.
@@ -274,69 +293,11 @@ func newTestContext(cfg *Config, users *suiteUsers) *testContext {
 	// Also register "zach" as an alias for "frank" for cleanup scenarios.
 	tc.users["zach"] = users.frank
 
-	if cfg.DatabaseDSN != "" {
-		conn, err := dbr.Open("postgres", cfg.DatabaseDSN, nil)
-		if err == nil {
-			conn.Dialect = dialect.PostgreSQL
-			conn.SetMaxOpenConns(2)
-			conn.SetMaxIdleConns(1)
-			tc.dbConn = conn
-		}
-	}
-
-	if cfg.RedisAddr != "" {
-		tc.redisClient = redis.NewClient(&redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-			DB:       cfg.RedisDB,
-		})
-		// Fail-safe: ping once so misconfigured runs fall back to
-		// "skip Redis steps" instead of crashing in the middle of
-		// a scenario. Three-second bound keeps suite startup snappy.
-		pingCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		if err := tc.redisClient.Ping(pingCtx).Err(); err != nil {
-			_ = tc.redisClient.Close()
-			tc.redisClient = nil
-		}
-		cancel()
-	}
-
-	if cfg.SpacesEndpoint != "" && cfg.SpacesBucket != "" && cfg.SpacesAccessKey != "" && cfg.SpacesSecretKey != "" {
-		region := cfg.SpacesRegion
-		if region == "" {
-			region = "us-east-1" // S3 wire protocol requires a region header even for DO Spaces.
-		}
-		// Construct the S3 client directly (no aws-sdk-go-v2/config
-		// dependency) to mirror internal/agentruntime/storage/spaces.go
-		// — Spaces is only a wire-protocol S3 target here.
-		tc.spacesClient = s3.New(s3.Options{
-			Region:       region,
-			Credentials:  credentials.NewStaticCredentialsProvider(cfg.SpacesAccessKey, cfg.SpacesSecretKey, ""),
-			BaseEndpoint: aws.String(cfg.SpacesEndpoint),
-			UsePathStyle: false,
-		})
-	}
-
 	return tc
 }
 
-func (tc *testContext) cleanup() {
-	if tc.dbConn != nil {
-		_ = tc.dbConn.Close()
-	}
-	if tc.redisClient != nil {
-		_ = tc.redisClient.Close()
-	}
-	// s3.Client has no Close method; HTTP client pools drain on GC.
-}
-
-func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
-	tc := newTestContext(cfg, users)
-
-	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
-		tc.cleanup()
-		return ctx, nil
-	})
+func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers, deps *suiteDeps) {
+	tc := newTestContext(cfg, users, deps)
 
 	registerHTTPSteps(sc, tc)
 	registerDBSteps(sc, tc)
@@ -352,4 +313,12 @@ func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers) {
 	registerIntegrationSteps(sc, tc)
 	registerRedisSteps(sc, tc)
 	registerSpacesSteps(sc, tc)
+	registerMempalaceSteps(sc, tc)
+	registerIdentitySteps(sc, tc)
+	registerAuditSteps(sc, tc)
+	registerRiverSteps(sc, tc)
+	registerQuotaSteps(sc, tc)
+	registerUsageCountersSteps(sc, tc)
+	registerBlueprintSteps(sc, tc)
+	registerStreamSteps(sc, tc)
 }

@@ -125,21 +125,6 @@ func (f *fakeClient) SendText(_ context.Context, opts *SendTextOpts) ([]AgentTur
 	}, nil
 }
 
-// ListMemories returns an empty slice for the fake client.
-func (f *fakeClient) ListMemories(_ context.Context, _ *ListMemoriesOpts) ([]MemoryEntry, *merrors.Error) {
-	return []MemoryEntry{}, nil
-}
-
-// DeleteMemory is a no-op for the fake client.
-func (f *fakeClient) DeleteMemory(_ context.Context, _ *DeleteMemoryOpts) *merrors.Error {
-	return nil
-}
-
-// CreateMemory is a no-op for the fake client.
-func (f *fakeClient) CreateMemory(_ context.Context, _ *CreateMemoryOpts) *merrors.Error {
-	return nil
-}
-
 // Close is a no-op for the fake client — it holds no resources.
 func (f *fakeClient) Close() error {
 	return nil

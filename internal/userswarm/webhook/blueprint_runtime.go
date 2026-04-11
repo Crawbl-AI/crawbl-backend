@@ -186,36 +186,18 @@ func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image,
 }
 
 // runtimeBackendEnv produces the list of literal env vars the runtime
-// container needs to reach the orchestrator-shared Postgres + Redis
-// backends. Values are sourced from the webhook process env (see
-// runtimeConfigFromEnv) so cluster operators change backends by
-// rolling the webhook, not by editing every per-workspace Secret.
+// container needs to reach the orchestrator-shared Redis backend and
+// observability pipeline. Values are sourced from the webhook process
+// env (see runtimeConfigFromEnv) so cluster operators change backends
+// by rolling the webhook, not by editing every per-workspace Secret.
 func runtimeBackendEnv(cfg *runtimeConfig) []corev1.EnvVar {
 	if cfg == nil {
 		return nil
 	}
 	// runtimeEnvVarCap is the initial capacity for the env var slice; covers
-	// Postgres host/port/user/name/schema/sslmode + Redis addr + OTel fields.
+	// Redis addr + OTel fields + Spaces non-secret settings.
 	const runtimeEnvVarCap = 8
 	out := make([]corev1.EnvVar, 0, runtimeEnvVarCap)
-	if cfg.PostgresHost != "" {
-		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_HOST", Value: cfg.PostgresHost})
-	}
-	if cfg.PostgresPort != "" {
-		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_PORT", Value: cfg.PostgresPort})
-	}
-	if cfg.PostgresUser != "" {
-		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_USER", Value: cfg.PostgresUser})
-	}
-	if cfg.PostgresName != "" {
-		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_NAME", Value: cfg.PostgresName})
-	}
-	if cfg.PostgresSchema != "" {
-		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_SCHEMA", Value: cfg.PostgresSchema})
-	}
-	if cfg.PostgresSSLMode != "" {
-		out = append(out, corev1.EnvVar{Name: "CRAWBL_DATABASE_SSLMODE", Value: cfg.PostgresSSLMode})
-	}
 	if cfg.RedisAddr != "" {
 		out = append(out, corev1.EnvVar{Name: "CRAWBL_REDIS_ADDR", Value: cfg.RedisAddr})
 	}

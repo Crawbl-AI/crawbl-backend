@@ -3,6 +3,7 @@ Feature: Mobile first-launch journey
   I want the first launch to move from public checks to a working first chat
   So the product feels ready from the first session
 
+  @llm-flaky
   Scenario: A new user completes first launch and starts chatting
     When the guest checks the service health
     Then the service should report online
@@ -19,6 +20,8 @@ Feature: Mobile first-launch journey
     And user "primary" sends the message "Say hello in one short sentence." in the current conversation
     Then the assistant reply should succeed
     And the assistant reply should contain text
+    And the assistant reply should mention "hello"
+    And the assistant reply should come from an agent
 
   Scenario: A returning user can get back to their workspace quickly
     Given user "primary" has signed up

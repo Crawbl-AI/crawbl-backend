@@ -9,8 +9,10 @@ Feature: Web search capability
     And user "primary" opens the swarm conversation
     And user "primary" waits until their assistant is ready
 
+  @llm-flaky
   Scenario: The assistant can search the web for current information
-    When user "primary" mentions the "wally" agent in the swarm conversation saying "Please use your web search tool to find information about the Go programming language ADK framework by Google."
+    When user "primary" mentions the "wally" agent in the swarm conversation saying "Please use your web search tool to find information about the Go programming language ADK framework by Google, then include the word 'Google' in your reply."
     Then the assistant reply should succeed
     And the assistant reply should contain text
     And the assistant reply should come from the "wally" agent
+    And the assistant reply should mention "google"

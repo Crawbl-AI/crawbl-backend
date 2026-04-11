@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -47,14 +48,14 @@ func (tc *testContext) userSignsUp(alias string) error {
 	if err := tc.userHasSignedUp(alias); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusNoContent)
+	return tc.assertStatus(http.StatusNoContent)
 }
 
 func (tc *testContext) userSignsIn(alias string) error {
 	if _, err := tc.doRequest("POST", "/v1/auth/sign-in", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusNoContent)
+	return tc.assertStatus(http.StatusNoContent)
 }
 
 func (tc *testContext) userShouldExistInDatabase(alias string) error {
@@ -68,10 +69,12 @@ func (tc *testContext) userShouldHaveOneWorkspaceInDatabase(alias string) error 
 // --- Profile ---------------------------------------------------------
 
 func (tc *testContext) userOpensProfile(alias string) error {
-	if _, err := tc.doRequest("GET", "/v1/users/profile", alias, nil); err != nil {
-		return err
-	}
-	return tc.assertStatus(statusOK)
+	// Does not assert status — callers use an explicit
+	// `Then the response status should be ...` step so this helper
+	// can serve both success and failure paths (e.g. verifying a
+	// deleted account is rejected with 403).
+	_, err := tc.doRequest("GET", "/v1/users/profile", alias, nil)
+	return err
 }
 
 func (tc *testContext) userShouldSeeDefaultProfileDetails(alias string) error {
@@ -109,7 +112,7 @@ func (tc *testContext) userUpdatesProfileDetails(alias string) error {
 	if _, err := tc.doRequest("PATCH", "/v1/users", alias, body); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusNoContent)
+	return tc.assertStatus(http.StatusNoContent)
 }
 
 func (tc *testContext) userShouldSeeUpdatedProfileDetails(alias string) error {
@@ -142,7 +145,7 @@ func (tc *testContext) userRegistersPushToken(alias string) error {
 	if _, err := tc.doRequest("POST", "/v1/fcm-token", alias, body); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.success", "true")
@@ -162,7 +165,7 @@ func (tc *testContext) userOpensLegalStatus(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/users/legal", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusOK)
+	return tc.assertStatus(http.StatusOK)
 }
 
 func (tc *testContext) userShouldSeeCurrentLegalVersions(alias string) error {
@@ -186,7 +189,7 @@ func (tc *testContext) userAcceptsCurrentLegalDocuments(alias string) error {
 	if _, err := tc.doRequest("POST", "/v1/users/legal/accept", alias, body); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusNoContent)
+	return tc.assertStatus(http.StatusNoContent)
 }
 
 func (tc *testContext) userShouldShowAcceptedLegalDocuments(alias string) error {
@@ -209,7 +212,10 @@ func (tc *testContext) userDeletesTheirAccount(alias string) error {
 	if _, err := tc.doRequest("DELETE", "/v1/auth/delete", alias, body); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusNoContent)
+	// Invalidate the cached resolution so subsequent resolveUser calls
+	// re-read from the DB and reflect the deleted state.
+	tc.invalidateResolvedUser(alias)
+	return tc.assertStatus(http.StatusNoContent)
 }
 
 func (tc *testContext) userShouldBeMarkedAsDeletedInDatabase(alias string) error {
@@ -220,7 +226,7 @@ func (tc *testContext) userShouldBeMarkedAsDeletedInDatabase(alias string) error
 }
 
 func (tc *testContext) deletedAccountShouldNoLongerBehaveLikeActiveUser() error {
-	return tc.assertStatus(statusUnauthorized)
+	return tc.assertStatus(http.StatusUnauthorized)
 }
 
 // --- Edge cases ------------------------------------------------------
@@ -231,11 +237,11 @@ func (tc *testContext) guestRequestsProfile() error {
 }
 
 func (tc *testContext) requestShouldBeUnauthorized() error {
-	return tc.assertStatus(statusUnauthorized)
+	return tc.assertStatus(http.StatusUnauthorized)
 }
 func (tc *testContext) requestShouldBeRejectedAsInvalid() error {
-	return tc.assertStatus(statusBadRequest)
+	return tc.assertStatus(http.StatusBadRequest)
 }
 func (tc *testContext) requestShouldBeRejectedAsNotFound() error {
-	return tc.assertStatus(statusNotFound)
+	return tc.assertStatus(http.StatusNotFound)
 }

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
@@ -32,7 +31,6 @@ const envPrefix = "CRAWBL_"
 //	--openai-model          > CRAWBL_OPENAI_MODEL          > DefaultOpenAIModel
 //	--openai-base-url       > CRAWBL_OPENAI_BASE_URL       (optional)
 //	                          OPENAI_API_KEY               (required, env only)
-//	                          CRAWBL_DATABASE_*            (required, via internal/pkg/database.ConfigFromEnv)
 //	                          CRAWBL_REDIS_*               (required, via internal/pkg/redisclient.ConfigFromEnv)
 //	--redis-session-ttl     > CRAWBL_REDIS_SESSION_TTL     > DefaultRedisSessionTTL
 //
@@ -42,9 +40,8 @@ const envPrefix = "CRAWBL_"
 func Load(args []string, stderr io.Writer) (Config, error) {
 	cfg := DefaultConfig()
 
-	// Let the shared packages populate Postgres and Redis from env
-	// vars first so CLI flags can override specific fields afterwards.
-	cfg.Postgres = database.ConfigFromEnv(envPrefix)
+	// Let the shared packages populate Redis from env vars first so
+	// CLI flags can override specific fields afterwards.
 	cfg.Redis = redisclient.ConfigFromEnv(envPrefix)
 
 	fs := flag.NewFlagSet("crawbl-agent-runtime", flag.ContinueOnError)
@@ -57,12 +54,6 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	fs.StringVar(&cfg.MCPEndpoint, "mcp-endpoint", os.Getenv("CRAWBL_MCP_ENDPOINT"), "Orchestrator MCP HTTP endpoint URL")
 	fs.StringVar(&cfg.OpenAI.ModelName, "openai-model", configenv.StringOr("CRAWBL_OPENAI_MODEL", cfg.OpenAI.ModelName), "OpenAI model name")
 	fs.StringVar(&cfg.OpenAI.BaseURL, "openai-base-url", os.Getenv("CRAWBL_OPENAI_BASE_URL"), "OpenAI-compatible endpoint override (Ollama, Azure, OpenRouter)")
-
-	// Postgres overrides — CLI takes precedence over env when set.
-	fs.StringVar(&cfg.Postgres.Host, "postgres-host", cfg.Postgres.Host, "Postgres host")
-	fs.StringVar(&cfg.Postgres.Port, "postgres-port", cfg.Postgres.Port, "Postgres port")
-	fs.StringVar(&cfg.Postgres.Name, "postgres-name", cfg.Postgres.Name, "Postgres database name")
-	fs.StringVar(&cfg.Postgres.Schema, "postgres-schema", cfg.Postgres.Schema, "Postgres schema for agent_memories")
 
 	// Redis overrides.
 	fs.StringVar(&cfg.Redis.Addr, "redis-addr", cfg.Redis.Addr, "Redis address host:port")
@@ -125,15 +116,6 @@ func (c Config) Validate() error {
 	}
 	if c.OpenAI.APIKey == "" {
 		missing = append(missing, "OPENAI_API_KEY")
-	}
-	if c.Postgres.Host == "" {
-		missing = append(missing, "CRAWBL_DATABASE_HOST")
-	}
-	if c.Postgres.Name == "" {
-		missing = append(missing, "CRAWBL_DATABASE_NAME")
-	}
-	if c.Postgres.Password == "" {
-		missing = append(missing, "CRAWBL_DATABASE_PASSWORD")
 	}
 	if c.Redis.Addr == "" {
 		missing = append(missing, "CRAWBL_REDIS_ADDR")

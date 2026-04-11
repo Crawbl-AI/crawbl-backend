@@ -2,6 +2,8 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
@@ -29,6 +31,8 @@ func registerChatSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the assistant reply should contain text$`, tc.assistantReplyShouldContainText)
 	sc.Step(`^the assistant reply should come from an agent$`, tc.assistantReplyShouldComeFromAgent)
 	sc.Step(`^the assistant reply should come from the "([^"]*)" agent$`, tc.assistantReplyShouldComeFromSpecificAgent)
+	sc.Step(`^the assistant reply should mention "([^"]*)"$`, tc.assistantReplyShouldMention)
+	sc.Step(`^the assistant reply should mention one of "([^"]*)"$`, tc.assistantReplyShouldMentionOneOf)
 
 	// Conversation CRUD
 	sc.Step(`^user "([^"]*)" creates a conversation named "([^"]*)" in their default workspace$`, tc.userCreatesConversation)
@@ -94,7 +98,7 @@ func (tc *testContext) userOpensSwarmConversation(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.type", "swarm")
@@ -114,7 +118,7 @@ func (tc *testContext) userOpensDirectConversation(alias, role string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil); err != nil {
 		return err
 	}
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	return tc.assertJSONEquals("data.type", "agent")
@@ -134,11 +138,11 @@ func (tc *testContext) userOpensMessagesInCurrentConversation(alias string) erro
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusOK)
+	return tc.assertStatus(http.StatusOK)
 }
 
 func (tc *testContext) currentConversationShouldExposePaginationMetadata() error {
-	if err := tc.assertStatus(statusOK); err != nil {
+	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
 	for _, field := range []string{"data.pagination.has_next", "data.pagination.has_prev"} {
@@ -184,7 +188,7 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 
 // --- Reply assertions ------------------------------------------------
 
-func (tc *testContext) assistantReplyShouldSucceed() error { return tc.assertStatus(statusOK) }
+func (tc *testContext) assistantReplyShouldSucceed() error { return tc.assertStatus(http.StatusOK) }
 
 func (tc *testContext) assistantReplyShouldContainText() error {
 	return tc.assertJSONNotEmpty("data.0.content.text")
@@ -196,6 +200,56 @@ func (tc *testContext) assistantReplyShouldComeFromAgent() error {
 
 func (tc *testContext) assistantReplyShouldComeFromSpecificAgent(role string) error {
 	return tc.assertJSONEquals("data.0.agent.slug", normalizeKey(role))
+}
+
+// assistantReplyShouldMention verifies the assistant's reply contains
+// the given keyword (case-insensitive substring match). Looks across
+// the whole `data` array so it still works when the reply came from a
+// swarm scenario that yields multiple agent turns — the expected
+// keyword must appear in at least one turn's text.
+func (tc *testContext) assistantReplyShouldMention(keyword string) error {
+	combined := collectReplyText(tc.lastBody)
+	if combined == "" {
+		return fmt.Errorf("assistant reply is empty, expected mention of %q", keyword)
+	}
+	if !strings.Contains(strings.ToLower(combined), strings.ToLower(keyword)) {
+		return fmt.Errorf("assistant reply does not mention %q: %q", keyword, combined)
+	}
+	return nil
+}
+
+// assistantReplyShouldMentionOneOf verifies the reply contains at least
+// one of the pipe-separated keywords. Use when the expected wording is
+// flexible (e.g., "three thousand" vs "3000" vs "3,000 euros").
+func (tc *testContext) assistantReplyShouldMentionOneOf(csv string) error {
+	combined := strings.ToLower(collectReplyText(tc.lastBody))
+	if combined == "" {
+		return fmt.Errorf("assistant reply is empty, expected one of %q", csv)
+	}
+	for _, kw := range strings.Split(csv, "|") {
+		kw = strings.TrimSpace(strings.ToLower(kw))
+		if kw == "" {
+			continue
+		}
+		if strings.Contains(combined, kw) {
+			return nil
+		}
+	}
+	return fmt.Errorf("assistant reply mentions none of %q: %q", csv, combined)
+}
+
+// collectReplyText concatenates every turn's content.text from a
+// SendMessage response body. Returning them joined means a single
+// substring check can span a swarm reply that split across multiple
+// agent turns.
+func collectReplyText(body []byte) string {
+	var parts []string
+	for _, turn := range gjson.GetBytes(body, "data").Array() {
+		if t := turn.Get("content.text").String(); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 // --- Conversation CRUD -----------------------------------------------

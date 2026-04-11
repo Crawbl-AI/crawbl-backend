@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -35,7 +36,7 @@ func (tc *testContext) userOpensDefaultWorkspace(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusOK)
+	return tc.assertStatus(http.StatusOK)
 }
 
 func (tc *testContext) userShouldSeeRuntimeDetails(alias string) error {
@@ -64,18 +65,28 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
 			return err
 		}
-		if err := tc.assertStatus(statusOK); err != nil {
+		if err := tc.assertStatus(http.StatusOK); err != nil {
 			return err
 		}
 		snapshot := runtimeSnapshotFromBody(tc.lastBody)
 		if snapshot.ready() {
 			if err := tc.sendWarmupMessage(alias); err != nil {
-				return err
+				// Cold-start can exceed the per-request HTTP client
+				// timeout; treat any transport-level error as "retry
+				// and keep polling the runtime" rather than a hard
+				// failure. The outer deadline still bounds the loop.
+				time.Sleep(tc.runtimePollInterval())
+				continue
 			}
 			switch tc.lastStatus {
-			case statusOK:
+			case http.StatusOK, http.StatusCreated:
+				// 201 Created is the current contract for POST
+				// /v1/workspaces/{id}/conversations/{id}/messages —
+				// the handler persists the user message and returns
+				// immediately, leaving the assistant reply to stream
+				// over Socket.IO.
 				return nil
-			case 0, 500, statusServiceUnavailable:
+			case 0, 500, http.StatusServiceUnavailable:
 				// Runtime reports ready but still warming up internally.
 			default:
 				return fmt.Errorf("assistant warmup failed with unexpected status %d; body: %s", tc.lastStatus, abbreviatedBody(tc.lastBody))

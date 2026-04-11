@@ -79,32 +79,24 @@ services:
   # Run the full local pipeline with:
   #
   #   set -a && source .env && set +a
-  #   docker compose --profile default --profile database --profile agent-runtime up
+  #   docker compose --profile default --profile agent-runtime up
   #
-  # Depends on postgresdb (durable agent_memories store) and redis (ADK
-  # session service). Both health-gated so the runtime boots only after
-  # its backends are ready. The orchestrator must also be reachable at
-  # CRAWBL_MCP_ENDPOINT before startup — the workspace blueprint is
-  # fetched at boot and a failure is fatal.
+  # Depends on redis for the ADK session service. Health-gated so the
+  # runtime boots only after Redis is ready. The orchestrator must also
+  # be reachable at CRAWBL_MCP_ENDPOINT before startup — the workspace
+  # blueprint is fetched at boot and a failure is fatal.
   #
   # CRAWBL_WORKSPACE_ID / CRAWBL_USER_ID / CRAWBL_ORCHESTRATOR_ENDPOINT /
   # CRAWBL_MCP_ENDPOINT / CRAWBL_MCP_SIGNING_KEY / OPENAI_API_KEY /
-  # CRAWBL_DATABASE_* / CRAWBL_REDIS_ADDR are REQUIRED and must be set
-  # in .env before bringing the service up — config.Validate fails
-  # fast on missing values.
+  # CRAWBL_REDIS_ADDR are REQUIRED and must be set in .env before
+  # bringing the service up — config.Validate fails fast on missing
+  # values.
   agent-runtime:
     build:
       context: .
       dockerfile: dockerfiles/agent-runtime.dockerfile
     env_file: ${ENV_FILE}
     environment:
-      - CRAWBL_DATABASE_HOST=postgresdb
-      - CRAWBL_DATABASE_PORT=5432
-      - CRAWBL_DATABASE_USER=${POSTGRES_USER}
-      - CRAWBL_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
-      - CRAWBL_DATABASE_NAME=${POSTGRES_DB}
-      - CRAWBL_DATABASE_SCHEMA=orchestrator
-      - CRAWBL_DATABASE_SSLMODE=disable
       - CRAWBL_REDIS_ADDR=redis:6379
     command:
       - "--grpc-listen=:42618"
@@ -115,8 +107,6 @@ services:
     ports:
       - "42618:42618"
     depends_on:
-      postgresdb:
-        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped

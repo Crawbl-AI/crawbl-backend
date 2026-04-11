@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
@@ -18,7 +19,7 @@ func (tc *testContext) userOpensIntegrationsCatalog(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/integrations", alias, nil); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusOK)
+	return tc.assertStatus(http.StatusOK)
 }
 
 func (tc *testContext) userShouldSeeToolCategories(alias string) error {

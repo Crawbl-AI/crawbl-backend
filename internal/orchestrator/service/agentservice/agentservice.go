@@ -31,6 +31,9 @@ func New(
 	if repos.AgentHistory == nil {
 		return nil, errors.New("agentservice: agent history repo is required")
 	}
+	if repos.Drawer == nil {
+		panic("agent service drawer repo cannot be nil")
+	}
 	if runtimeClient == nil {
 		return nil, errors.New("agentservice: runtime client is required")
 	}

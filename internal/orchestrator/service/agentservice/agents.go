@@ -257,10 +257,9 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 	}, nil
 }
 
-// GetAgentMemories retrieves memories for the agent's workspace.
-// It reads from memory_drawers (where memory_add_drawer tool writes) instead of
-// agent_memories (which is unused/empty). Falls back to the runtime gRPC path
-// if no drawer repo is configured.
+// GetAgentMemories retrieves memories for the agent's workspace. Reads
+// from memory_drawers — the table populated by the memory_add_drawer
+// tool and by CreateAgentMemory below.
 func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
 	if opts == nil || opts.Sess == nil {
 		return nil, merrors.ErrInvalidInput
@@ -281,56 +280,20 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 		limit = 50
 	}
 
-	// Read from memory_drawers (where memory_add_drawer tool writes)
-	// instead of agent_memories (which is unused/empty).
-	if s.drawerRepo != nil {
-		drawers, err := s.drawerRepo.ListByWorkspace(ctx, opts.Sess, agent.WorkspaceID, limit, opts.Offset)
-		if err != nil {
-			return nil, merrors.WrapStdServerError(err, "list drawer memories")
-		}
-
-		memories := make([]orchestratorservice.AgentMemory, 0, len(drawers))
-		for i := range drawers {
-			d := &drawers[i]
-			memories = append(memories, orchestratorservice.AgentMemory{
-				Key:       d.ID,
-				Content:   d.Content,
-				Category:  d.Wing + "/" + d.Room,
-				CreatedAt: d.CreatedAt.Format(time.RFC3339),
-				UpdatedAt: d.FiledAt.Format(time.RFC3339),
-			})
-		}
-		return memories, nil
+	drawers, err := s.drawerRepo.ListByWorkspace(ctx, opts.Sess, agent.WorkspaceID, limit, opts.Offset)
+	if err != nil {
+		return nil, merrors.WrapStdServerError(err, "list drawer memories")
 	}
 
-	// Fallback to runtime gRPC if drawer repo not configured.
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
-		UserID:          opts.UserID,
-		WorkspaceID:     agent.WorkspaceID,
-		WaitForVerified: false,
-	})
-	if mErr != nil {
-		return nil, mErr
-	}
-
-	entries, mErr := s.runtimeClient.ListMemories(ctx, &userswarmclient.ListMemoriesOpts{
-		Runtime:  runtimeState,
-		Category: opts.Category,
-		Limit:    opts.Limit,
-		Offset:   opts.Offset,
-	})
-	if mErr != nil {
-		return nil, mErr
-	}
-
-	memories := make([]orchestratorservice.AgentMemory, 0, len(entries))
-	for _, e := range entries {
+	memories := make([]orchestratorservice.AgentMemory, 0, len(drawers))
+	for i := range drawers {
+		d := &drawers[i]
 		memories = append(memories, orchestratorservice.AgentMemory{
-			Key:       e.Key,
-			Content:   e.Content,
-			Category:  e.Category,
-			CreatedAt: e.CreatedAt,
-			UpdatedAt: e.UpdatedAt,
+			Key:       d.ID,
+			Content:   d.Content,
+			Category:  d.Wing + "/" + d.Room,
+			CreatedAt: d.CreatedAt.Format(time.RFC3339),
+			UpdatedAt: d.FiledAt.Format(time.RFC3339),
 		})
 	}
 	return memories, nil
@@ -352,28 +315,10 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
-	// Delete from memory_drawers (where memory_add_drawer tool writes).
-	if s.drawerRepo != nil {
-		if err := s.drawerRepo.Delete(ctx, opts.Sess, agent.WorkspaceID, opts.Key); err != nil {
-			return merrors.WrapStdServerError(err, "delete drawer memory")
-		}
-		return nil
+	if err := s.drawerRepo.Delete(ctx, opts.Sess, agent.WorkspaceID, opts.Key); err != nil {
+		return merrors.WrapStdServerError(err, "delete drawer memory")
 	}
-
-	// Fallback to runtime gRPC if drawer repo not configured.
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
-		UserID:          opts.UserID,
-		WorkspaceID:     agent.WorkspaceID,
-		WaitForVerified: false,
-	})
-	if mErr != nil {
-		return mErr
-	}
-
-	return s.runtimeClient.DeleteMemory(ctx, &userswarmclient.DeleteMemoryOpts{
-		Runtime: runtimeState,
-		Key:     opts.Key,
-	})
+	return nil
 }
 
 // CreateAgentMemory stores a memory as a drawer in the memory palace.
@@ -392,54 +337,41 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		return mErr
 	}
 
-	// Write to memory_drawers (where memory_add_drawer tool writes).
-	if s.drawerRepo != nil {
-		now := time.Now().UTC()
-		wing := memory.DefaultWing
-		room := memory.DefaultRoom
-		if opts.Category != "" {
-			parts := strings.SplitN(opts.Category, "/", 2)
-			wing = parts[0]
-			if len(parts) > 1 {
-				room = parts[1]
-			}
+	now := time.Now().UTC()
+	wing := memory.DefaultWing
+	room := memory.DefaultRoom
+	if opts.Category != "" {
+		parts := strings.SplitN(opts.Category, "/", 2)
+		wing = parts[0]
+		if len(parts) > 1 {
+			room = parts[1]
 		}
-
-		drawer := &memory.Drawer{
-			ID:           opts.Key,
-			WorkspaceID:  agent.WorkspaceID,
-			Wing:         wing,
-			Room:         room,
-			Content:      opts.Content,
-			Importance:   memory.DefaultImportance,
-			MemoryType:   string(memory.MemoryTypePreference),
-			AddedBy:      memory.DefaultAddedBy,
-			PipelineTier: memory.PipelineTierLLM,
-			FiledAt:      now,
-			CreatedAt:    now,
-		}
-		if err := s.drawerRepo.Add(ctx, opts.Sess, drawer, nil); err != nil {
-			return merrors.WrapStdServerError(err, "create drawer memory")
-		}
-		return nil
 	}
 
-	// Fallback to runtime gRPC if drawer repo not configured.
-	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
-		UserID:          opts.UserID,
-		WorkspaceID:     agent.WorkspaceID,
-		WaitForVerified: false,
-	})
-	if mErr != nil {
-		return mErr
+	drawer := &memory.Drawer{
+		ID:           opts.Key,
+		WorkspaceID:  agent.WorkspaceID,
+		Wing:         wing,
+		Room:         room,
+		Content:      opts.Content,
+		Importance:   memory.DefaultImportance,
+		MemoryType:   string(memory.MemoryTypePreference),
+		AddedBy:      memory.DefaultAddedBy,
+		PipelineTier: memory.PipelineTierLLM,
+		// State must be 'raw' so the cold-pipeline memory_process
+		// worker picks this drawer up via the state='raw' index.
+		// Without this, the drawer lands with an empty state and is
+		// invisible to every downstream pipeline step (memory_process,
+		// memory_enrich, etc.), so the mobile API "save a note" path
+		// silently drops notes out of the palace workflow.
+		State:     string(memory.DrawerStateRaw),
+		FiledAt:   now,
+		CreatedAt: now,
 	}
-
-	return s.runtimeClient.CreateMemory(ctx, &userswarmclient.CreateMemoryOpts{
-		Runtime:  runtimeState,
-		Key:      opts.Key,
-		Content:  opts.Content,
-		Category: opts.Category,
-	})
+	if err := s.drawerRepo.Add(ctx, opts.Sess, drawer, nil); err != nil {
+		return merrors.WrapStdServerError(err, "create drawer memory")
+	}
+	return nil
 }
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.

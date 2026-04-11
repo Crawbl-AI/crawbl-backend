@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/cucumber/godog"
 )
@@ -63,5 +64,5 @@ func (tc *testContext) deletingUserShouldNotAffectUser(deletedAlias, survivorAli
 	if err := tc.userOpensProfile(survivorAlias); err != nil {
 		return err
 	}
-	return tc.assertStatus(statusOK)
+	return tc.assertStatus(http.StatusOK)
 }

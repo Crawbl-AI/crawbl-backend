@@ -123,15 +123,7 @@ func extractToolCallParams(req sdkmcp.Request) (toolName string, argsJSON string
 	if !ok || params == nil {
 		return "unknown", "{}"
 	}
-	input := "{}"
-	if len(params.Arguments) > 0 {
-		s := strings.ToValidUTF8(string(params.Arguments), "")
-		if len(s) > auditMaxResponseBytes {
-			s = s[:auditMaxResponseBytes] + "..."
-		}
-		input = s
-	}
-	return params.Name, input
+	return params.Name, safeTruncatedJSON(string(params.Arguments))
 }
 
 func extractResultJSON(result sdkmcp.Result) string {
@@ -142,10 +134,42 @@ func extractResultJSON(result sdkmcp.Result) string {
 	if err != nil {
 		return "{}"
 	}
-	// Ensure valid UTF-8 for jsonb storage.
-	s := strings.ToValidUTF8(string(data), "")
+	return safeTruncatedJSON(string(data))
+}
+
+// safeTruncatedJSON sanitises a raw JSON payload for storage in the
+// mcp_audit_logs.input / output jsonb columns. It returns a valid JSON
+// document even when the input was oversized, malformed, or empty —
+// otherwise the Postgres jsonb column rejects the insert with
+// "invalid input syntax for type json" and the whole audit write
+// silently fails.
+//
+// Rules:
+//  1. Empty or all-whitespace payload -> "{}" (the NOT NULL default).
+//  2. Invalid UTF-8 sequences are stripped first.
+//  3. If the payload exceeds auditMaxResponseBytes, replace it with a
+//     structured placeholder rather than slicing mid-token and
+//     appending "..." — string slicing corrupts JSON and is the
+//     original source of the bug.
+//  4. If the payload is not valid JSON for any other reason, wrap it
+//     in a {"_raw": "<escaped>"} envelope so the row still lands.
+func safeTruncatedJSON(raw string) string {
+	s := strings.ToValidUTF8(raw, "")
+	if strings.TrimSpace(s) == "" {
+		return "{}"
+	}
 	if len(s) > auditMaxResponseBytes {
-		s = s[:auditMaxResponseBytes] + "..."
+		placeholder := map[string]any{
+			"_truncated":     true,
+			"_original_size": len(s),
+			"_limit":         auditMaxResponseBytes,
+		}
+		b, _ := json.Marshal(placeholder)
+		return string(b)
+	}
+	if !json.Valid([]byte(s)) {
+		b, _ := json.Marshal(map[string]string{"_raw": s})
+		return string(b)
 	}
 	return s
 }
