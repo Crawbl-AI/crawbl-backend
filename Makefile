@@ -101,8 +101,7 @@ generate:
 		--go_out=. --go_opt=module=github.com/Crawbl-AI/crawbl-backend \
 		--go-grpc_out=. --go-grpc_opt=module=github.com/Crawbl-AI/crawbl-backend \
 		--proto_path=proto \
-		proto/agentruntime/v1/runtime.proto \
-		proto/agentruntime/v1/memory.proto
+		proto/agentruntime/v1/runtime.proto
 	@echo "generated: internal/agentruntime/proto/v1/*.pb.go"
 
 generate-tools-install:
