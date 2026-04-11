@@ -226,20 +226,29 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	// database/sql driver directly — lib/pq knows how to pass pgvector
 	// values and the $N placeholder reuse is native Postgres.
 	//
-	// The explicit `::vector` casts on each $1 usage are required
-	// because pgvector.Vector.Value() emits a text-shaped literal that
-	// Postgres types as "unknown" when reused in multiple operator
-	// sites. Without the cast, Postgres raises
-	// "operator does not exist: vector <=> unknown" on the first
-	// operator site.
+	// Three pgvector type headaches to be aware of:
+	//
+	//  1. pgvector.Vector.Value() emits a text literal that Postgres
+	//     types as "unknown" unless we cast — so every $1 usage needs
+	//     an explicit cast.
+	//  2. The `vector` type lives in the `public` schema and our
+	//     connection's search_path is `orchestrator`, so we MUST
+	//     qualify as `public.vector` or Postgres raises
+	//     "type vector does not exist".
+	//  3. pgvector registers the `<=>` operator on the unqualified
+	//     `vector` type family; with `search_path=orchestrator`
+	//     Postgres cannot resolve it implicitly and raises
+	//     "operator does not exist: public.vector <=> public.vector".
+	//     We fix this by writing `OPERATOR(public.<=>)` so the
+	//     operator is fully qualified at each call site.
 	const query = `SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 	                      source_file, added_by, filed_at, created_at,
 	                      state, summary, added_by_agent,
-	                      1 - (embedding <=> $1::vector) AS similarity
+	                      1 - (embedding OPERATOR(public.<=>) $1::public.vector) AS similarity
 	               FROM memory_drawers
 	               WHERE workspace_id = $2 AND embedding IS NOT NULL
-	                 AND 1 - (embedding <=> $1::vector) >= $3
-	               ORDER BY embedding <=> $1::vector
+	                 AND 1 - (embedding OPERATOR(public.<=>) $1::public.vector) >= $3
+	               ORDER BY embedding OPERATOR(public.<=>) $1::public.vector
 	               LIMIT $4`
 
 	db, ok := sess.(*dbr.Session)
