@@ -36,6 +36,16 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 		return fmt.Errorf("drawer: workspace limit reached (%d)", memory.MaxDrawersPerWorkspace)
 	}
 
+	// Defensive default: the memory_drawers.state column was added
+	// with `DEFAULT 'raw'` but this INSERT explicitly supplies every
+	// column, so an empty d.State would be persisted verbatim. An
+	// empty state leaves the drawer invisible to memory_process
+	// (indexed on state='raw'), silently dropping the note from the
+	// cold pipeline. Any caller that forgot to set it lands in 'raw'.
+	if d.State == "" {
+		d.State = string(memory.DrawerStateRaw)
+	}
+
 	if len(embedding) > 0 {
 		vec := pgvector.NewVector(embedding)
 		_, err := sess.InsertBySql(
