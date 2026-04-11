@@ -91,24 +91,25 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 // dialTimeout is the per-attempt TCP dial timeout used by waitForPort.
 const dialTimeout = 500 * time.Millisecond
 
-// portPollInterval is how long waitForPort sleeps between dial attempts.
+// portPollInterval is how often waitForPort retries between dial attempts.
 const portPollInterval = 300 * time.Millisecond
 
 // waitForPort polls a TCP port until it accepts connections or ctx expires.
 func waitForPort(ctx context.Context, port int) error {
 	addr := fmt.Sprintf("localhost:%d", port)
 	dialer := &net.Dialer{Timeout: dialTimeout}
+	ticker := time.NewTicker(portPollInterval)
+	defer ticker.Stop()
 	for {
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-			conn, err := dialer.DialContext(ctx, "tcp", addr)
-			if err == nil {
-				_ = conn.Close()
-				return nil
-			}
-			time.Sleep(portPollInterval)
+		case <-ticker.C:
 		}
 	}
 }

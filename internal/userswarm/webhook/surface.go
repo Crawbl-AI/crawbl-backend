@@ -73,7 +73,7 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 // project into it.
 func runtimeConfigFromEnv() *runtimeConfig {
 	return &runtimeConfig{
-		AgentRuntimeImage:        configenv.StringOr("CRAWBL_AGENT_RUNTIME_IMAGE", "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"),
+		AgentRuntimeImage:        configenv.StringOr("CRAWBL_AGENT_RUNTIME_IMAGE", defaultAgentRuntimeImage),
 		OrchestratorGRPCEndpoint: os.Getenv("CRAWBL_ORCHESTRATOR_ENDPOINT"),
 		MCPEndpoint:              os.Getenv("CRAWBL_MCP_ENDPOINT"),
 		RedisAddr:                os.Getenv("CRAWBL_REDIS_ADDR"),

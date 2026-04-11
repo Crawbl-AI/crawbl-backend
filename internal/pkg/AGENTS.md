@@ -13,7 +13,7 @@ Shared infrastructure utilities and thin wrappers for the orchestrator and runti
 - `embed/` — embedded file helpers (migrations, static assets)
 
 **Infrastructure & Runtime**
-- `httpserver/` — HTTP server bootstrap, auth middleware, request/response envelope helpers, typed header constants
+- `httpserver/` — HTTP server bootstrap, request/response envelope helpers, generic header/content-type constants. Orchestrator-specific auth middleware lives in `internal/orchestrator/server/middleware/` so this package stays domain-agnostic.
 - `grpc/` — gRPC server/client construction helpers
 - `kube/` — Kubernetes client construction (used by runtime and operator paths)
 - `argocd/` — ArgoCD API client wrapper
@@ -63,8 +63,7 @@ Shared infrastructure utilities and thin wrappers for the orchestrator and runti
 - `database/types.go` — `SessionRunner` interface and `Config` struct; the repo-layer abstraction every repository depends on
 - `errors/types.go` — `Error` struct, `ErrorType` enum, all domain error codes (`AUTH*`, `USR*`, `WSP*`, …) and predefined sentinel errors
 - `errors/errors.go` — `NewBusinessError`, `NewServerErrorText`, `Wrap`, `IsCode` constructors and helpers
-- `httpserver/types.go` — typed HTTP header constants, `RequestMetadata`, auth token source enum, response envelope shapes
-- `httpserver/middleware.go` — Firebase JWT + X-Token auth middleware; sets principal and metadata on request context
-- `httpserver/response.go` — `WriteSuccessResponse` / `WriteErrorResponse` — enforces the `{"data":…}` envelope contract
+- `httpserver/types.go` — generic HTTP header constants (`AuthorizationHeader`, `XTokenHeader`, `BearerPrefix`, `ContentTypeJSON`) and the response envelope shapes
+- `httpserver/response.go` — `WriteSuccessResponse` / `WriteErrorResponse` / `WriteErrorMessage` — enforces the `{"data":…}` envelope contract
 - `river/client.go` — `New(db, cfg)` constructor that wires the `database/sql` River driver; exposes `Client` and `Config` type aliases
 - `river/migrate.go` — River schema migration runner (called at orchestrator startup alongside golang-migrate)

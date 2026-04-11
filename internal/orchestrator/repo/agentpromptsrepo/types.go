@@ -4,7 +4,7 @@ package agentpromptsrepo
 
 type agentPromptsRepo struct{}
 
-var promptColumns = []string{
+var promptColumns = []any{
 	"id",
 	"agent_id",
 	"name",

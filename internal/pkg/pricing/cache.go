@@ -12,6 +12,8 @@ import (
 	"sync"
 
 	"github.com/gocraft/dbr/v2"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 )
 
 // Cache holds model pricing data in memory for fast cost computation.
@@ -21,6 +23,7 @@ type Cache struct {
 	entries map[string]Entry // key: "provider:model:region"
 	byModel map[string]Entry // key: model name, first match — used as O(1) fallback
 	db      *dbr.Connection
+	repo    modelpricingrepo.Repo
 	logger  *slog.Logger
 }
 
@@ -36,7 +39,7 @@ type Entry struct {
 
 // New creates a new pricing cache. Call Start to perform the initial
 // synchronous load, then schedule Refresh via a River periodic job.
-func New(db *dbr.Connection, logger *slog.Logger) *Cache {
+func New(db *dbr.Connection, repo modelpricingrepo.Repo, logger *slog.Logger) *Cache {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -44,6 +47,7 @@ func New(db *dbr.Connection, logger *slog.Logger) *Cache {
 		entries: make(map[string]Entry),
 		byModel: make(map[string]Entry),
 		db:      db,
+		repo:    repo,
 		logger:  logger,
 	}
 }
@@ -137,34 +141,15 @@ func (c *Cache) Refresh(ctx context.Context) error {
 
 	sess := c.db.NewSession(nil)
 
-	// Load the latest pricing for each (provider, model, region) combination.
-	// DISTINCT ON picks the row with the most recent effective_at.
-	var rows []struct {
-		Provider           string  `db:"provider"`
-		Model              string  `db:"model"`
-		Region             string  `db:"region"`
-		InputCostPerToken  float64 `db:"input_cost_per_token"`
-		OutputCostPerToken float64 `db:"output_cost_per_token"`
-		CachedCostPerToken float64 `db:"cached_cost_per_token"`
+	repoEntries, repoErr := c.repo.ListAllCurrentEntries(ctx, sess)
+	if repoErr != nil {
+		c.logger.Warn("pricing cache refresh failed", "error", repoErr.Error())
+		return fmt.Errorf("pricing cache refresh: %w", repoErr)
 	}
 
-	_, err := sess.SelectBySql(`
-		SELECT DISTINCT ON (provider, model, region)
-			provider, model, region,
-			input_cost_per_token, output_cost_per_token, cached_cost_per_token
-		FROM model_pricing
-		WHERE effective_at <= NOW()
-		ORDER BY provider, model, region, effective_at DESC
-	`).LoadContext(ctx, &rows)
-
-	if err != nil {
-		c.logger.Warn("pricing cache refresh failed", "error", err.Error())
-		return fmt.Errorf("pricing cache refresh: %w", err)
-	}
-
-	entries := make(map[string]Entry, len(rows))
-	byModel := make(map[string]Entry, len(rows))
-	for _, r := range rows {
+	entries := make(map[string]Entry, len(repoEntries))
+	byModel := make(map[string]Entry, len(repoEntries))
+	for _, r := range repoEntries {
 		key := cacheKey(r.Provider, r.Model, r.Region)
 		e := Entry{
 			Provider:           r.Provider,

@@ -1,0 +1,135 @@
+package layers
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	memory "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+)
+
+// messageReader is the narrow message-repo contract BuildContextForConversation
+// requires. Defined at the consumer per project convention.
+type messageReader interface {
+	ListRecent(ctx context.Context, sess database.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
+}
+
+// AgentNamer resolves a display name for an agent ID. Implementations may
+// use a pre-built in-memory map (chatservice) or a live repo lookup
+// (mcpservice). Return ("", false) when the agent is unknown.
+type AgentNamer interface {
+	AgentName(ctx context.Context, sess database.SessionRunner, agentID string) (name string, ok bool)
+}
+
+// BuildContextOpts controls optional behaviour of BuildContextForConversation.
+type BuildContextOpts struct {
+	// MaxTextLen caps the per-message text length before truncation (default 500).
+	MaxTextLen int
+	// Header is prepended to the recent-messages block. When empty the default
+	// "## Conversation Context\nRecent messages (oldest first):\n\n" is used.
+	Header string
+}
+
+// BuildContextForConversation returns the formatted context block that both
+// ChatService and MCPService prepend to LLM prompts. It performs the
+// memory-layer wake-up (L0+L1), appends recent messages, and caps the result
+// at memory.TokenBudgetTotal characters.
+//
+// The returned string does NOT include a leading "\n\n" separator — callers
+// that need one must prepend it themselves.
+func BuildContextForConversation(
+	ctx context.Context,
+	sess database.SessionRunner,
+	stack Stack,
+	messages messageReader,
+	namer AgentNamer,
+	workspaceID, conversationID string,
+	limit int,
+	opts BuildContextOpts,
+) string {
+	maxTextLen := opts.MaxTextLen
+	if maxTextLen <= 0 {
+		maxTextLen = 500
+	}
+	header := opts.Header
+	if header == "" {
+		header = "## Conversation Context\nRecent messages (oldest first):\n\n"
+	}
+
+	// --- Memory layer (L0 + L1) ---
+	var memoryText string
+	if stack != nil {
+		wakeUp, err := stack.WakeUp(ctx, sess, workspaceID, "")
+		if err == nil {
+			memoryText = wakeUp
+		}
+	}
+
+	// --- Recent messages ---
+	msgs, listErr := messages.ListRecent(ctx, sess, conversationID, limit)
+
+	var msgSB strings.Builder
+	if listErr == nil && len(msgs) > 0 {
+		msgSB.WriteString(header)
+
+		for _, msg := range msgs {
+			if msg.Status == orchestrator.MessageStatusSilent {
+				continue
+			}
+			text := msg.Content.Text
+			if text == "" {
+				continue
+			}
+			if len(text) > maxTextLen {
+				text = text[:maxTextLen] + "..."
+			}
+
+			sender := "User"
+			if msg.Role == orchestrator.MessageRoleAgent {
+				if msg.Agent != nil {
+					sender = msg.Agent.Name
+				} else if msg.AgentID != nil && namer != nil {
+					if name, ok := namer.AgentName(ctx, sess, *msg.AgentID); ok {
+						sender = name
+					}
+				}
+			}
+			fmt.Fprintf(&msgSB, "**%s**: %s\n\n", sender, text)
+		}
+	}
+	messagesText := msgSB.String()
+
+	// --- Budget assembly ---
+	if memoryText == "" && messagesText == "" {
+		return ""
+	}
+
+	var sb strings.Builder
+	if memoryText != "" {
+		sb.WriteString(memoryText)
+	}
+	if messagesText != "" {
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		// Fill remaining budget with recent messages.
+		remaining := memory.TokenBudgetTotal - sb.Len()
+		if remaining > 0 {
+			runes := []rune(messagesText)
+			if len(runes) > remaining {
+				messagesText = string(runes[:remaining])
+			}
+			sb.WriteString(messagesText)
+		}
+	}
+
+	// Hard cap on total output.
+	result := sb.String()
+	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
+		result = string(resultRunes[:memory.TokenBudgetTotal])
+	}
+	return result
+}

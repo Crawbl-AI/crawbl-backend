@@ -18,7 +18,7 @@ func (r *agentPromptsRepo) ListByAgentID(ctx context.Context, sess orchestratorr
 	}
 
 	var rows []orchestratorrepo.AgentPromptRow
-	_, err := sess.Select(orchestratorrepo.Columns(promptColumns...)...).
+	_, err := sess.Select(promptColumns...).
 		From("agent_prompts").
 		Where("agent_id = ?", agentID).
 		OrderAsc("sort_order").

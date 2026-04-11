@@ -3,6 +3,15 @@ package platform
 
 import "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 
+const (
+	// ArgoCDNamespace is the Kubernetes namespace ArgoCD is installed into.
+	ArgoCDNamespace = "argocd"
+	// ArgoCDHelmChart is the Helm chart name for the ArgoCD release.
+	ArgoCDHelmChart = "argo-cd"
+	// ArgoCDHelmRepo is the Helm repository URL for the ArgoCD chart.
+	ArgoCDHelmRepo = "https://argoproj.github.io/argo-helm"
+)
+
 // Config holds platform configuration.
 type Config struct {
 	Provider      *kubernetes.Provider

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -396,14 +397,14 @@ func concatPartText(content *genai.Content) string {
 	if content == nil {
 		return ""
 	}
-	var out []byte
+	var sb strings.Builder
 	for _, p := range content.Parts {
 		if p == nil || p.Text == "" || p.Thought {
 			continue
 		}
-		out = append(out, []byte(p.Text)...)
+		sb.WriteString(p.Text)
 	}
-	return string(out)
+	return sb.String()
 }
 
 // marshalArgs converts a map[string]any into a JSON string for the
@@ -463,6 +464,7 @@ func authorsSlice(m map[string]int) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+	sort.Strings(out)
 	return out
 }
 

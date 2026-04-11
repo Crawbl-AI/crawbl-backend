@@ -27,7 +27,7 @@ func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestra
 	}
 
 	var rows []orchestratorrepo.ConversationRow
-	_, err := sess.Select(orchestratorrepo.Columns(conversationColumns...)...).
+	_, err := sess.Select(conversationColumns...).
 		From("conversations").
 		Where("workspace_id = ?", workspaceID).
 		OrderDesc("updated_at").
@@ -55,7 +55,7 @@ func (r *conversationRepo) GetByID(ctx context.Context, sess orchestratorrepo.Se
 	}
 
 	var row orchestratorrepo.ConversationRow
-	err := sess.Select(orchestratorrepo.Columns(conversationColumns...)...).
+	err := sess.Select(conversationColumns...).
 		From("conversations").
 		Where("workspace_id = ? AND id = ?", workspaceID, conversationID).
 		LoadOneContext(ctx, &row)
@@ -80,7 +80,7 @@ func (r *conversationRepo) FindDefaultSwarm(ctx context.Context, sess orchestrat
 	}
 
 	var row orchestratorrepo.ConversationRow
-	err := sess.Select(orchestratorrepo.Columns(conversationColumns...)...).
+	err := sess.Select(conversationColumns...).
 		From("conversations").
 		Where("workspace_id = ? AND type = ?", workspaceID, orchestrator.ConversationTypeSwarm).
 		OrderAsc("created_at").

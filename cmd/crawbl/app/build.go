@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -76,7 +77,7 @@ func newBuildPlatformCommand() *cobra.Command {
 			}
 			return runDockerBuild(buildOpts{
 				imageRepo:  buildPlatformImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildPlatformDockerfile),
+				dockerfile: filepath.Join(rootDir, buildPlatformDockerfile),
 				contextDir: rootDir,
 				tag:        tag,
 				platform:   platform,
@@ -112,8 +113,8 @@ func newBuildAuthFilterCommand() *cobra.Command {
 			}
 			return runDockerBuild(buildOpts{
 				imageRepo:  buildAuthFilterImageRepo,
-				dockerfile: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterDockerfile),
-				contextDir: fmt.Sprintf("%s/%s", rootDir, buildAuthFilterContext),
+				dockerfile: filepath.Join(rootDir, buildAuthFilterDockerfile),
+				contextDir: filepath.Join(rootDir, buildAuthFilterContext),
 				tag:        tag,
 				platform:   platform,
 				push:       push,

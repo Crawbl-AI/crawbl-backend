@@ -44,11 +44,11 @@ func getKubernetesVersion(ctx *pulumi.Context, cfg Config) (pulumi.StringInput, 
 
 // createCluster creates the Kubernetes cluster.
 func createCluster(ctx *pulumi.Context, name string, cfg Config, version pulumi.StringInput, vpcID pulumi.StringInput, result *Cluster, opts ...pulumi.ResourceOption) error {
-	cfg.Tags = append(cfg.Tags, "crawbl")
+	cfg.Tags = append(cfg.Tags, TagCrawbl)
 	tags := cfg.Tags
 
 	labels := map[string]string{
-		"crawbl.io/pool": cfg.DefaultNodePoolName,
+		LabelNodePool: cfg.DefaultNodePoolName,
 	}
 	for k, v := range cfg.DefaultNodeLabels {
 		labels[k] = v

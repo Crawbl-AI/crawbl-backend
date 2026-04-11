@@ -9,7 +9,7 @@ type userRepo struct{}
 
 // userColumns defines the column names used in SELECT queries for the users table.
 // These columns map directly to the UserRow struct fields.
-var userColumns = []string{
+var userColumns = []any{
 	"id",
 	"subject",
 	"email",
@@ -29,7 +29,7 @@ var userColumns = []string{
 
 // userPreferencesColumns defines the column names used in SELECT queries for the user_preferences table.
 // These columns map directly to the UserPreferencesRow struct fields.
-var userPreferencesColumns = []string{
+var userPreferencesColumns = []any{
 	"user_id",
 	"platform_theme",
 	"platform_language",

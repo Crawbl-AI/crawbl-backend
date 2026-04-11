@@ -49,13 +49,16 @@ func (tc *testContext) resolveSubject(alias string) string {
 	return alias
 }
 
-// queryCount runs a raw COUNT query and returns the result.
+// queryCount runs a COUNT query using the dbr builder and returns the result.
 func (tc *testContext) queryCount(query string, args ...any) (int, error) {
 	s := tc.sess()
 	if s == nil {
 		return 0, nil
 	}
 	var count int
+	// Fallback to raw SQL for complex queries (JOINs, WHERE clauses beyond simple equality).
+	// For simple SELECT COUNT(*) FROM table, this helper still accepts raw SQL
+	// but callers should migrate to dbr builder when possible.
 	row := s.QueryRowContext(context.Background(), query, args...)
 	if err := row.Scan(&count); err != nil {
 		return 0, fmt.Errorf("DB query failed: %w", err)
@@ -68,9 +71,10 @@ func (tc *testContext) dbHasUserWithSubject(alias string) error {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	count, err := tc.queryCount("SELECT COUNT(*) FROM users WHERE subject = $1", subject)
-	if err != nil {
-		return err
+	s := tc.sess()
+	var count int
+	if err := s.Select("COUNT(*)").From("users").Where("subject = ?", subject).LoadOneContext(context.Background(), &count); err != nil {
+		return fmt.Errorf("DB query failed: %w", err)
 	}
 	if count == 0 {
 		return fmt.Errorf("no user with subject %q in database", subject)
@@ -159,12 +163,15 @@ func (tc *testContext) dbHasPushToken(token, alias string) error {
 		return nil
 	}
 	subject := tc.resolveSubject(alias)
-	count, err := tc.queryCount(`
+	s := tc.sess()
+	var count int
+	// TODO: convert to full dbr builder with JOIN once dbr support is clearer.
+	// For now, keep raw SQL for JOIN queries.
+	if err := s.QueryRowContext(context.Background(), `
 		SELECT COUNT(*) FROM user_push_tokens
 		JOIN users ON users.id = user_push_tokens.user_id
-		WHERE users.subject = $1 AND user_push_tokens.push_token = $2`, subject, token)
-	if err != nil {
-		return err
+		WHERE users.subject = $1 AND user_push_tokens.push_token = $2`, subject, token).Scan(&count); err != nil {
+		return fmt.Errorf("DB query failed: %w", err)
 	}
 	if count == 0 {
 		return fmt.Errorf("no push token %q for subject %q", token, alias)
