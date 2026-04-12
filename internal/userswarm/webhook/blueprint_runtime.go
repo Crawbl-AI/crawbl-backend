@@ -97,7 +97,7 @@ func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secret
 }
 
 // buildAgentRuntimeContainer is the single container in the runtime pod.
-// It runs /crawbl-agent-runtime with CLI flags for identity and endpoints,
+// It runs /ko-app/crawbl-agent-runtime with CLI flags for identity and endpoints,
 // pulls secrets (OPENAI_API_KEY, CRAWBL_MCP_SIGNING_KEY, ...) from the
 // envSecretRef Secret, and reports health via the gRPC Health service.
 func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image, secretName string, cfg *runtimeConfig) corev1.Container {
@@ -144,7 +144,7 @@ func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image,
 		Name:            "agent-runtime",
 		Image:           image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"/crawbl-agent-runtime"},
+		Command:         []string{"/ko-app/crawbl-agent-runtime"},
 		Args:            args,
 		Ports: []corev1.ContainerPort{{
 			Name:          "grpc",
