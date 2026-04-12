@@ -8,6 +8,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/integration"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
@@ -38,14 +39,15 @@ func MustNew(logger *slog.Logger, connRepo integrationConnStore) orchestratorser
 // ListIntegrations returns all available integrations, merging the static catalog
 // with the user's actual connection status from the database.
 func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservice.ListIntegrationsOpts) ([]*orchestrator.IntegrationItem, *merrors.Error) {
-	if opts == nil || opts.Sess == nil || opts.UserID == "" {
+	if opts == nil || opts.UserID == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
+	sess := database.SessionFromContext(ctx)
 	// Query the user's active connections via the repo layer.
 	// If the table doesn't exist yet (migration not run), treat as no connections.
 	connectedProviders := make(map[string]bool)
-	activeProviders, mErr := s.connRepo.ListActiveProviders(ctx, opts.Sess, opts.UserID, integration.StatusActive)
+	activeProviders, mErr := s.connRepo.ListActiveProviders(ctx, sess, opts.UserID, integration.StatusActive)
 	if mErr != nil {
 		s.logger.Warn("failed to query integration connections, assuming none connected",
 			slog.String("error", mErr.Error()),

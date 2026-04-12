@@ -11,17 +11,19 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // ListConversations retrieves all conversations for a workspace, enriched
 // with agent info and the latest message.
 func (s *service) ListConversations(ctx context.Context, opts *orchestratorservice.ListConversationsOpts) ([]*orchestrator.Conversation, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	workspace, agents, conversations, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, conversations, mErr := s.ensureWorkspaceBootstrap(ctx, sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -36,7 +38,7 @@ func (s *service) ListConversations(ctx context.Context, opts *orchestratorservi
 	for i, c := range conversations {
 		ids[i] = c.ID
 	}
-	latestByConvID, mErr := s.messageRepo.GetLatestByConversationIDs(ctx, opts.Sess, ids)
+	latestByConvID, mErr := s.messageRepo.GetLatestByConversationIDs(ctx, sess, ids)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -58,44 +60,46 @@ func (s *service) ListConversations(ctx context.Context, opts *orchestratorservi
 
 // GetConversation retrieves a single conversation enriched with agent and message data.
 func (s *service) GetConversation(ctx context.Context, opts *orchestratorservice.GetConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
 	s.enrichAgentStatus(ctx, workspace, agents)
 
-	conversation, mErr := s.conversationRepo.GetByID(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
+	conversation, mErr := s.conversationRepo.GetByID(ctx, sess, opts.WorkspaceID, opts.ConversationID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	s.attachConversationData(ctx, opts.Sess, conversation, mapAgentsByID(agents))
+	s.attachConversationData(ctx, sess, conversation, mapAgentsByID(agents))
 	return conversation, nil
 }
 
 // ListMessages retrieves paginated messages for a conversation.
 func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
 	s.enrichAgentStatus(ctx, workspace, agents)
 
-	if _, mErr := s.conversationRepo.GetByID(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID); mErr != nil {
+	if _, mErr := s.conversationRepo.GetByID(ctx, sess, opts.WorkspaceID, opts.ConversationID); mErr != nil {
 		return nil, mErr
 	}
 
-	page, mErr := s.messageRepo.ListByConversationID(ctx, opts.Sess, &orchestratorrepo.ListMessagesOpts{
+	page, mErr := s.messageRepo.ListByConversationID(ctx, sess, &orchestratorrepo.ListMessagesOpts{
 		ConversationID: opts.ConversationID,
 		ScrollID:       opts.ScrollID,
 		Limit:          opts.Limit,
@@ -117,7 +121,7 @@ func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.Li
 // CreateConversation creates a new conversation within a workspace.
 // For agent-type conversations, the specified agent must exist in the workspace.
 func (s *service) CreateConversation(ctx context.Context, opts *orchestratorservice.CreateConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
 	if strings.TrimSpace(opts.UserID) == "" || strings.TrimSpace(opts.WorkspaceID) == "" {
@@ -126,9 +130,10 @@ func (s *service) CreateConversation(ctx context.Context, opts *orchestratorserv
 	if opts.Type != orchestrator.ConversationTypeSwarm && opts.Type != orchestrator.ConversationTypeAgent {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
 	// Verify workspace ownership.
-	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+	if _, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, opts.WorkspaceID); mErr != nil {
 		return nil, mErr
 	}
 
@@ -137,7 +142,7 @@ func (s *service) CreateConversation(ctx context.Context, opts *orchestratorserv
 		if strings.TrimSpace(opts.AgentID) == "" {
 			return nil, merrors.ErrInvalidInput
 		}
-		agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+		agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 		if mErr != nil {
 			return nil, mErr
 		}
@@ -157,7 +162,7 @@ func (s *service) CreateConversation(ctx context.Context, opts *orchestratorserv
 		UpdatedAt:   now,
 	}
 
-	if mErr := s.conversationRepo.Create(ctx, opts.Sess, conversation); mErr != nil {
+	if mErr := s.conversationRepo.Create(ctx, sess, conversation); mErr != nil {
 		return nil, mErr
 	}
 
@@ -167,33 +172,35 @@ func (s *service) CreateConversation(ctx context.Context, opts *orchestratorserv
 // DeleteConversation removes a conversation from a workspace.
 // Verifies workspace ownership before performing the deletion.
 func (s *service) DeleteConversation(ctx context.Context, opts *orchestratorservice.DeleteConversationOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
 	if strings.TrimSpace(opts.UserID) == "" || strings.TrimSpace(opts.WorkspaceID) == "" || strings.TrimSpace(opts.ConversationID) == "" {
 		return merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
 	// Verify workspace ownership.
-	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+	if _, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, opts.WorkspaceID); mErr != nil {
 		return mErr
 	}
 
-	return s.conversationRepo.Delete(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
+	return s.conversationRepo.Delete(ctx, sess, opts.WorkspaceID, opts.ConversationID)
 }
 
 // MarkConversationRead resets the unread count for a conversation to zero.
 // Verifies workspace ownership before updating.
 func (s *service) MarkConversationRead(ctx context.Context, opts *orchestratorservice.MarkConversationReadOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID); mErr != nil {
+	if _, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, opts.WorkspaceID); mErr != nil {
 		return mErr
 	}
 
-	return s.conversationRepo.MarkAsRead(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
+	return s.conversationRepo.MarkAsRead(ctx, sess, opts.WorkspaceID, opts.ConversationID)
 }
 
 // attachConversationData enriches a conversation with agent info and last message.

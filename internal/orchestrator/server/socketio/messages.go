@@ -10,6 +10,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 // messageHandler holds the dependencies for handling message.send events.
@@ -90,10 +91,10 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 
 	localID := strings.TrimSpace(payload.LocalID)
 	sess := h.db.NewSession(nil)
+	ctx = database.ContextWithSession(ctx, sess)
 
 	// Resolve the user from the principal subject.
 	user, mErr := h.authService.GetBySubject(ctx, &orchestratorservice.GetUserBySubjectOpts{
-		Sess:    sess,
 		Subject: principal.Subject,
 	})
 	if mErr != nil {
@@ -109,7 +110,6 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 	// Defense-in-depth: the client-supplied workspace_id must not route messages
 	// to a workspace owned by another user.
 	if _, mErr := h.workspaceService.GetByID(ctx, &orchestratorservice.GetWorkspaceOpts{
-		Sess:        sess,
 		UserID:      user.ID,
 		WorkspaceID: payload.WorkspaceID,
 	}); mErr != nil {
@@ -153,7 +153,6 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 	// OnPersisted fires the ack immediately when the user message is saved to DB,
 	// so the client gets "sent" status without waiting for agent processing.
 	msgs, mErr := h.chatService.SendMessage(ctx, &orchestratorservice.SendMessageOpts{
-		Sess:           sess,
 		UserID:         user.ID,
 		WorkspaceID:    payload.WorkspaceID,
 		ConversationID: payload.ConversationID,

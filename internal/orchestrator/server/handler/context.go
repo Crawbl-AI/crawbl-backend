@@ -65,11 +65,6 @@ type Context struct {
 	UsageRepo usagerepo.Repo
 }
 
-// NewSession creates a new database session.
-func (c *Context) NewSession() *dbr.Session {
-	return c.DB.NewSession(nil)
-}
-
 // WriteError writes a structured error response with the correct HTTP status.
 func WriteError(w http.ResponseWriter, mErr *merrors.Error) {
 	httpserver.WriteErrorResponse(w, HTTPStatusForError(mErr), mErr)
@@ -103,7 +98,6 @@ func (c *Context) CurrentUser(r *http.Request) (*orchestrator.User, *merrors.Err
 		return nil, merrors.ErrUnauthorized
 	}
 	user, mErr := c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
-		Sess:    c.NewSession(),
 		Subject: principal.Subject,
 	})
 	if mErr != nil {

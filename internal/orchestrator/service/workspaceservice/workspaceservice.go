@@ -18,6 +18,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -75,11 +76,12 @@ func MustNew(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client,
 // Returns a merrors.Error if the input is invalid or if the repository
 // operation fails. Returns nil on success or if a workspace already exists.
 func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestratorservice.EnsureDefaultWorkspaceOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil || strings.TrimSpace(opts.UserID) == "" {
+	if opts == nil || strings.TrimSpace(opts.UserID) == "" {
 		return merrors.ErrInvalidInput
 	}
 
-	workspaces, mErr := s.workspaceRepo.ListByUserID(ctx, opts.Sess, opts.UserID)
+	sess := database.SessionFromContext(ctx)
+	workspaces, mErr := s.workspaceRepo.ListByUserID(ctx, sess, opts.UserID)
 	if mErr != nil {
 		return mErr
 	}
@@ -95,7 +97,7 @@ func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if mErr := s.workspaceRepo.Save(ctx, opts.Sess, workspace); mErr != nil {
+	if mErr := s.workspaceRepo.Save(ctx, sess, workspace); mErr != nil {
 		return mErr
 	}
 
@@ -139,7 +141,8 @@ func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.Li
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
-	workspaces, mErr := s.workspaceRepo.ListByUserID(ctx, opts.Sess, opts.UserID)
+	sess := database.SessionFromContext(ctx)
+	workspaces, mErr := s.workspaceRepo.ListByUserID(ctx, sess, opts.UserID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -176,7 +179,8 @@ func (s *service) GetByID(ctx context.Context, opts *orchestratorservice.GetWork
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
-	workspace, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	sess := database.SessionFromContext(ctx)
+	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}

@@ -24,7 +24,6 @@ const (
 func GetAgent(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentResponse, *merrors.Error) {
 		agent, mErr := c.AgentService.GetAgent(r.Context(), &orchestratorservice.GetAgentOpts{
-			Sess:    deps.Sess,
 			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
@@ -40,7 +39,6 @@ func GetAgent(c *Context) http.HandlerFunc {
 func GetAgentDetails(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentDetailResponse, *merrors.Error) {
 		details, mErr := c.AgentService.GetAgentDetails(r.Context(), &orchestratorservice.GetAgentDetailsOpts{
-			Sess:    deps.Sess,
 			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
@@ -57,7 +55,6 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 		limit, offset := Pagination(r)
 
 		items, pagination, mErr := c.AgentService.GetAgentHistory(r.Context(), &orchestratorservice.GetAgentHistoryOpts{
-			Sess:    deps.Sess,
 			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Limit:   limit,
@@ -92,7 +89,6 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 func GetAgentSettings(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentSettingsResponse, *merrors.Error) {
 		settings, mErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
-			Sess:    deps.Sess,
 			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
@@ -124,7 +120,6 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 		limit, offset := Pagination(r)
 
 		page, mErr := c.AgentService.GetAgentTools(r.Context(), &orchestratorservice.GetAgentToolsOpts{
-			Sess:    deps.Sess,
 			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Limit:   limit,
@@ -171,7 +166,6 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 		limit, offset := Pagination(r)
 
 		memories, mErr := c.AgentService.GetAgentMemories(r.Context(), &orchestratorservice.GetAgentMemoriesOpts{
-			Sess:     deps.Sess,
 			UserID:   deps.User.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Category: category,
@@ -221,7 +215,6 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 func DeleteAgentMemory(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
 		return c.AgentService.DeleteAgentMemory(r.Context(), &orchestratorservice.DeleteAgentMemoryOpts{
-			Sess:    deps.Sess,
 			UserID:  deps.User.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Key:     chi.URLParam(r, "key"),
@@ -243,7 +236,6 @@ func CreateAgentMemory(c *Context) http.HandlerFunc {
 		}
 
 		return c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
-			Sess:     deps.Sess,
 			UserID:   deps.User.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Key:      body.Key,

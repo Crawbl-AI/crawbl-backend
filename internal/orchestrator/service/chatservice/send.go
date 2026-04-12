@@ -34,19 +34,20 @@ type persistedMsg struct {
 // Dispatches to sendDirectMessage (per-agent conversations) or
 // sendSwarmMessage (swarm group chat with parallel agent calls).
 func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
 	if opts.Content.Type != orchestrator.MessageContentTypeText || strings.TrimSpace(opts.Content.Text) == "" {
 		return nil, merrors.ErrUnsupportedMessage
 	}
+	sess := database.SessionFromContext(ctx)
 
-	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	conversation, mErr := s.conversationRepo.GetByID(ctx, opts.Sess, opts.WorkspaceID, opts.ConversationID)
+	conversation, mErr := s.conversationRepo.GetByID(ctx, sess, opts.WorkspaceID, opts.ConversationID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -67,7 +68,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 	// Pre-flight quota check: reject if user exceeded monthly token limit.
 	if s.usageRepo != nil {
 		period := time.Now().UTC().Format("2006-01")
-		tokensUsed, tokenLimit, qErr := s.usageRepo.CheckQuota(ctx, opts.Sess, opts.UserID, period)
+		tokensUsed, tokenLimit, qErr := s.usageRepo.CheckQuota(ctx, sess, opts.UserID, period)
 		if qErr != nil {
 			slog.Warn("quota check failed, allowing request", "user_id", opts.UserID, "error", qErr.Error())
 		} else if tokenLimit > 0 && tokensUsed >= tokenLimit {
@@ -144,7 +145,8 @@ func (s *service) sendSwarmMessage(
 	}
 
 	// Build conversation context so Manager sees recent chat history.
-	conversationContext := s.buildConversationContext(ctx, opts.Sess, opts.WorkspaceID, conversation.ID, lookups, 20)
+	sess := database.SessionFromContext(ctx)
+	conversationContext := s.buildConversationContext(ctx, sess, opts.WorkspaceID, conversation.ID, lookups, 20)
 
 	return s.callAgentStreaming(ctx, opts, pm, conversation, runtimeState, lookups.manager, lookups, conversationContext)
 }
@@ -169,10 +171,10 @@ func (s *service) executeParallel(
 		go func(idx int, ag *orchestrator.Agent) {
 			defer wg.Done()
 			// Create a per-goroutine session — dbr.Session is not goroutine-safe.
+			// The session travels on a derived context so opts stays read-only.
 			agentSess := s.db.NewSession(nil)
-			agentOpts := *opts
-			agentOpts.Sess = agentSess
-			replies, err := s.callAgentStreaming(ctx, &agentOpts, pm, conversation, runtimeState, ag, lookups, "")
+			agentCtx := database.ContextWithSession(ctx, agentSess)
+			replies, err := s.callAgentStreaming(agentCtx, opts, pm, conversation, runtimeState, ag, lookups, "")
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}
@@ -218,7 +220,8 @@ func (s *service) persistUserMessage(
 	)
 	userMsg.LocalID = stringPtr(opts.LocalID)
 
-	if _, mErr := database.WithTransaction(opts.Sess, "persist user message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
+	sess := database.SessionFromContext(ctx)
+	if _, mErr := database.WithTransaction(sess, "persist user message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
 		if mErr := s.messageRepo.Save(ctx, tx, userMsg); mErr != nil {
 			return nil, mErr
 		}

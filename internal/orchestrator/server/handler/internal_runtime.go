@@ -55,9 +55,7 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 		}
 		_ = chi.URLParam // chi import kept for parity with other handlers; no URL params here
 
-		sess := c.NewSession()
 		agents, mErr := c.ChatService.ListAgents(r.Context(), &orchestratorservice.ListAgentsOpts{
-			Sess:        sess,
 			UserID:      userID,
 			WorkspaceID: workspaceID,
 		})
@@ -79,7 +77,6 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 				Description:  agent.Description,
 			}
 			settings, settingsErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
-				Sess:    c.NewSession(),
 				UserID:  userID,
 				AgentID: agent.ID,
 			})

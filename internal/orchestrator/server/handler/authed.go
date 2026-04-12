@@ -3,24 +3,20 @@ package handler
 import (
 	"net/http"
 
-	"github.com/gocraft/dbr/v2"
-
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // AuthedHandlerDeps bundles the per-request dependencies that every authed
-// handler needs: the handler context, the authenticated user, and an open
-// database session. Handlers receive this struct so they have everything
-// required to talk to services without re-plumbing boilerplate.
+// handler needs: the handler context and the authenticated user. Handlers
+// receive this struct so they have everything required to talk to services
+// without re-plumbing boilerplate. The database session is carried on the
+// request context via the session middleware.
 type AuthedHandlerDeps struct {
 	// Ctx is the shared handler context (services, logger, broadcaster, ...).
 	Ctx *Context
 	// User is the authenticated, non-banned, non-deleted caller.
 	User *orchestrator.User
-	// Sess is a freshly-opened dbr session scoped to this request.
-	// Callers pass it into service opts; they must not store it.
-	Sess *dbr.Session
 }
 
 // AuthedJSONFunc is the business logic signature for handlers that read a
@@ -45,11 +41,10 @@ type AuthedFunc[Resp any] func(
 //
 // It centralises the boilerplate that every handler otherwise duplicates:
 //  1. Load the current user via Context.CurrentUser (rejects banned/deleted).
-//  2. Open a fresh *dbr.Session for the request.
-//  3. Decode the JSON body into *Req (ErrInvalidInput on failure).
-//  4. Invoke the business closure with the decoded body and deps.
-//  5. Map any *merrors.Error to the correct HTTP status via WriteError.
-//  6. Write the response through the {"data": ...} success envelope on 200.
+//  2. Decode the JSON body into *Req (ErrInvalidInput on failure).
+//  3. Invoke the business closure with the decoded body and deps.
+//  4. Map any *merrors.Error to the correct HTTP status via WriteError.
+//  5. Write the response through the {"data": ...} success envelope on 200.
 //
 // Handlers should prefer this decorator when they match the JSON-in /
 // envelope-out shape. Complex flows (streaming, custom status codes,
@@ -75,7 +70,6 @@ func AuthedHandler[Req any, Resp any](
 		deps := &AuthedHandlerDeps{
 			Ctx:  c,
 			User: user,
-			Sess: c.NewSession(),
 		}
 
 		resp, mErr := fn(r, deps, &req)
@@ -106,7 +100,6 @@ func AuthedHandlerNoBody[Resp any](
 		deps := &AuthedHandlerDeps{
 			Ctx:  c,
 			User: user,
-			Sess: c.NewSession(),
 		}
 
 		resp, mErr := fn(r, deps)
@@ -139,7 +132,6 @@ func AuthedHandlerNoContent(
 		deps := &AuthedHandlerDeps{
 			Ctx:  c,
 			User: user,
-			Sess: c.NewSession(),
 		}
 
 		if mErr := fn(r, deps); mErr != nil {
@@ -176,7 +168,6 @@ func AuthedHandlerCreated[Req any, Resp any](
 		deps := &AuthedHandlerDeps{
 			Ctx:  c,
 			User: user,
-			Sess: c.NewSession(),
 		}
 
 		resp, mErr := fn(r, deps, &req)
@@ -212,7 +203,6 @@ func AuthedJSONNoContent[Req any](
 		deps := &AuthedHandlerDeps{
 			Ctx:  c,
 			User: user,
-			Sess: c.NewSession(),
 		}
 
 		if mErr := fn(r, deps, &req); mErr != nil {
