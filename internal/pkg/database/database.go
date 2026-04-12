@@ -50,7 +50,7 @@ func ConfigFromEnv(prefix string) Config {
 //   - A dbr.Connection ready for use with the PostgreSQL dialect.
 //   - An error if the connection cannot be established or pinged.
 func New(config Config) (*dbr.Connection, error) {
-	db, err := sql.Open("pgx", buildDriverDSN(config, true))
+	db, err := sql.Open("pgx", BuildDSN(config, true))
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +81,14 @@ func New(config Config) (*dbr.Connection, error) {
 //   - An error if the connection fails or the schema creation fails.
 //   - nil if the schema already exists or was created successfully.
 func EnsureSchema(config Config) error {
-	if strings.TrimSpace(config.Schema) == "" {
+	schema := strings.TrimSpace(config.Schema)
+	if schema == "" {
 		return nil
+	}
+	// pgx.Identifier.Sanitize panics if the identifier contains a NUL byte;
+	// reject up front so bad configuration surfaces as an error, not a panic.
+	if strings.ContainsRune(schema, 0) {
+		return fmt.Errorf("invalid schema name: contains NUL byte")
 	}
 
 	db, err := sql.Open("pgx", BuildDSN(config, false))
@@ -96,7 +102,7 @@ func EnsureSchema(config Config) error {
 	}
 
 	_, err = db.ExecContext(context.Background(),
-		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{config.Schema}.Sanitize())
+		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{schema}.Sanitize())
 	return err
 }
 
@@ -105,8 +111,9 @@ func EnsureSchema(config Config) error {
 // When includeSchema is true and a schema is configured, it adds search_path
 // to set the default schema for the connection.
 //
-// This format is suitable for logging and debugging, but use buildDriverDSN
-// for actual driver connections as some drivers prefer the space-separated format.
+// Both database/sql drivers (lib/pq historically, pgx/v5/stdlib now) accept
+// the URL form, and url.UserPassword percent-encodes credentials so special
+// characters in the password do not break parsing.
 func BuildDSN(config Config, includeSchema bool) string {
 	dsnURL := &url.URL{
 		Scheme: "postgres",
@@ -182,11 +189,4 @@ func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Dur
 	}
 
 	return lastErr
-}
-
-// buildDriverDSN constructs a PostgreSQL connection string in URL format accepted
-// by pgx/v5. Using url.UserPassword ensures special characters in the password
-// (spaces, @, /, etc.) are percent-encoded and cannot break the DSN parsing.
-func buildDriverDSN(config Config, includeSchema bool) string {
-	return BuildDSN(config, includeSchema)
 }
