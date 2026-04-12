@@ -73,6 +73,7 @@ import (
 	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
+	clickhousemigrations "github.com/Crawbl-AI/crawbl-backend/migrations/clickhouse"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
@@ -204,6 +205,9 @@ func runServer(ctx context.Context) error {
 			_ = clickhouseDB.Close()
 		}
 	}()
+	if err := clickhouse.Migrate(ctx, clickhouseDB, clickhousemigrations.FS, logger); err != nil {
+		return fmt.Errorf("clickhouse migrate: %w", err)
+	}
 	llmUsageRepo := llmusagerepo.New(clickhouseDB)
 
 	// NATS client for memory fan-out events. Connected early so the

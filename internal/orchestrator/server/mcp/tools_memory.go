@@ -528,7 +528,7 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			CreatedAt:    time.Now().UTC(),
 		}
 
-		if err := deps.DrawerRepo.Add(ctx, sess, d, embedding); err != nil {
+		if err := deps.DrawerRepo.AddIdempotent(ctx, sess, d, embedding); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to store drawer", "error", err)
 			return nil, memoryAddDrawerOutput{Info: "failed to store memory"}, nil
 		}
