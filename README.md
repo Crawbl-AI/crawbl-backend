@@ -166,20 +166,6 @@ api/                            # 📐 Kubernetes CRD types
 
 See [`config/README.md`](config/README.md) for the complete reference of every env var and hardcoded default.
 
-## 🐳 Manual Agent Runtime Build
-
-CI is slow — use this to build and push the agent runtime image directly.
-
-```bash
-# From / — build only:
-crawbl app build agent-runtime --tag <tag>
-
-# Build, push, and update ArgoCD in one step:
-crawbl app deploy agent-runtime --tag <tag>
-```
-
-> If you build manually without deploy, update the image tag in `crawbl-argocd-apps` yourself — `deploy` does this automatically.
-
 ## 🚢 Deploy
 
 `crawbl app deploy <component>` is the full local-first deploy workflow. Each call:
@@ -204,17 +190,7 @@ crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
 
 > 💡 **Migrations are automatic.** The orchestrator runs pending database migrations on startup — no separate migration step needed after deploy.
 
-For agent-runtime, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
-
-CLI deploy commands (auto-semver, no manual tag needed):
-
-```bash
-crawbl app deploy platform        # Deploy platform (ko)
-crawbl app deploy agent-runtime   # Deploy agent-runtime (ko)
-crawbl app deploy auth-filter     # Deploy auth-filter (Docker)
-crawbl app deploy docs            # Deploy docs (Cloudflare Pages)
-crawbl app deploy website         # Deploy website (Cloudflare Pages)
-```
+For agent-runtime and auth-filter, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
 
 ## 📊 Observability
 
