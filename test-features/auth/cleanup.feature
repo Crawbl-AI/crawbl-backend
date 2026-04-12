@@ -4,15 +4,15 @@ Feature: Account deletion
   So cleanup is deliberate and visible
 
   Scenario: A user can delete their account
-    Given an extra test user "frank"
-    And user "frank" has signed up
-    When user "frank" deletes their account
-    Then user "frank" should be marked as deleted in the database
+    Given an extra test user "zach"
+    And user "zach" has signed up
+    When user "zach" deletes their account
+    Then user "zach" should be marked as deleted in the database
 
   Scenario: A deleted account can no longer access its profile
-    Given an extra test user "frank"
-    And user "frank" has signed up
-    And user "frank" has deleted their account
-    When user "frank" opens their profile
+    Given an extra test user "zach"
+    And user "zach" has signed up
+    And user "zach" has deleted their account
+    When user "zach" opens their profile
     Then the response status should be 403
     And the response JSON at "code" should equal "USR0001"

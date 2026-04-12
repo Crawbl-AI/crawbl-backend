@@ -438,16 +438,13 @@ func derefString(s *string) string {
 }
 
 // resolveModelDef looks up a model ID in the available models registry.
-// Falls back to the first available model if the ID is not found.
+// Falls back to the stored model ID as-is if the ID is not found in the registry.
 func resolveModelDef(modelID string) orchestrator.AgentModelDef {
 	models := orchestrator.GetAvailableModels()
 	for _, m := range models {
 		if m.ID == modelID {
 			return m
 		}
-	}
-	if len(models) > 0 {
-		return models[0]
 	}
 	return orchestrator.AgentModelDef{ID: modelID, Name: modelID}
 }
