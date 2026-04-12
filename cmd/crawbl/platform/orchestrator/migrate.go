@@ -3,14 +3,14 @@ package orchestrator
 import (
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	orchestratormigrations "github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator"
 )
 
 const defaultServiceName = "orchestrator"
@@ -28,10 +28,12 @@ func newMigrateCommand() *cobra.Command {
 				return err
 			}
 
-			migrationRunner, err := migrate.New(
-				"file://./migrations/"+serviceName,
-				database.BuildDSN(dbConfig, true),
-			)
+			srcDriver, err := iofs.New(orchestratormigrations.FS, ".")
+			if err != nil {
+				return fmt.Errorf("create migration source: %w", err)
+			}
+
+			migrationRunner, err := migrate.NewWithSourceInstance("iofs", srcDriver, database.BuildDSN(dbConfig, true))
 			if err != nil {
 				return err
 			}
@@ -49,33 +51,20 @@ func newMigrateCommand() *cobra.Command {
 }
 
 // autoMigrate runs pending database migrations on server startup.
-// Uses golang-migrate with the file source pointing to the migrations directory.
-// In containers, migrations are at /migrations/orchestrator.
-// Locally, they're at ./migrations/orchestrator.
-//
-// When CRAWBL_MIGRATE_FRESH=true (dev environments), migrations are dropped and
-// re-applied from scratch on every deploy. This ensures schema changes in existing
-// migration files are always picked up without manual intervention.
+// Migrations are embedded into the binary via go:embed in the
+// migrations/orchestrator package.
 func autoMigrate(logger *slog.Logger) error {
 	dbConfig := database.ConfigFromEnv("CRAWBL_")
 	if err := database.EnsureSchema(dbConfig); err != nil {
 		return fmt.Errorf("ensure schema: %w", err)
 	}
 
-	// Try container path first, then local path.
-	migrationPath := "/migrations/orchestrator"
-	if _, err := os.Stat(migrationPath); os.IsNotExist(err) {
-		migrationPath = "./migrations/orchestrator"
-	}
-	if _, err := os.Stat(migrationPath); os.IsNotExist(err) {
-		logger.Warn("migrations directory not found, skipping auto-migrate")
-		return nil
+	srcDriver, err := iofs.New(orchestratormigrations.FS, ".")
+	if err != nil {
+		return fmt.Errorf("create migration source: %w", err)
 	}
 
-	m, err := migrate.New(
-		"file://"+migrationPath,
-		database.BuildDSN(dbConfig, true),
-	)
+	m, err := migrate.NewWithSourceInstance("iofs", srcDriver, database.BuildDSN(dbConfig, true))
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
