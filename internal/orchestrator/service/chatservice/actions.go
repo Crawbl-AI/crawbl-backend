@@ -13,7 +13,7 @@ import (
 // RespondToActionCard records the user's selection for an action card message.
 // It fetches the message by ID, sets the selected_action_id in its content,
 // updates the timestamp, and persists the change.
-func (s *service) RespondToActionCard(ctx context.Context, opts *orchestratorservice.RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error) {
+func (s *Service) RespondToActionCard(ctx context.Context, opts *orchestratorservice.RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}

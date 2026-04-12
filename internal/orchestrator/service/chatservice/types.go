@@ -35,8 +35,10 @@ type Repos struct {
 	Usage         usagerepo.Repo
 }
 
-// service implements the ChatService interface.
-type service struct {
+// Service implements chat operations (conversations, messages, agents, streaming).
+// Consumers depend on their own consumer-side interfaces (e.g. handler.chatPort)
+// per the project's "interfaces at consumer" convention.
+type Service struct {
 	db                *dbr.Connection
 	workspaceRepo     workspaceStore
 	agentRepo         agentStore

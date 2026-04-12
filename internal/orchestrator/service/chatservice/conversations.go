@@ -17,7 +17,7 @@ import (
 
 // ListConversations retrieves all conversations for a workspace, enriched
 // with agent info and the latest message.
-func (s *service) ListConversations(ctx context.Context, opts *orchestratorservice.ListConversationsOpts) ([]*orchestrator.Conversation, *merrors.Error) {
+func (s *Service) ListConversations(ctx context.Context, opts *orchestratorservice.ListConversationsOpts) ([]*orchestrator.Conversation, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -59,7 +59,7 @@ func (s *service) ListConversations(ctx context.Context, opts *orchestratorservi
 }
 
 // GetConversation retrieves a single conversation enriched with agent and message data.
-func (s *service) GetConversation(ctx context.Context, opts *orchestratorservice.GetConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
+func (s *Service) GetConversation(ctx context.Context, opts *orchestratorservice.GetConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -82,7 +82,7 @@ func (s *service) GetConversation(ctx context.Context, opts *orchestratorservice
 }
 
 // ListMessages retrieves paginated messages for a conversation.
-func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
+func (s *Service) ListMessages(ctx context.Context, opts *orchestratorservice.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -120,7 +120,7 @@ func (s *service) ListMessages(ctx context.Context, opts *orchestratorservice.Li
 
 // CreateConversation creates a new conversation within a workspace.
 // For agent-type conversations, the specified agent must exist in the workspace.
-func (s *service) CreateConversation(ctx context.Context, opts *orchestratorservice.CreateConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
+func (s *Service) CreateConversation(ctx context.Context, opts *orchestratorservice.CreateConversationOpts) (*orchestrator.Conversation, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -171,7 +171,7 @@ func (s *service) CreateConversation(ctx context.Context, opts *orchestratorserv
 
 // DeleteConversation removes a conversation from a workspace.
 // Verifies workspace ownership before performing the deletion.
-func (s *service) DeleteConversation(ctx context.Context, opts *orchestratorservice.DeleteConversationOpts) *merrors.Error {
+func (s *Service) DeleteConversation(ctx context.Context, opts *orchestratorservice.DeleteConversationOpts) *merrors.Error {
 	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
@@ -190,7 +190,7 @@ func (s *service) DeleteConversation(ctx context.Context, opts *orchestratorserv
 
 // MarkConversationRead resets the unread count for a conversation to zero.
 // Verifies workspace ownership before updating.
-func (s *service) MarkConversationRead(ctx context.Context, opts *orchestratorservice.MarkConversationReadOpts) *merrors.Error {
+func (s *Service) MarkConversationRead(ctx context.Context, opts *orchestratorservice.MarkConversationReadOpts) *merrors.Error {
 	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
@@ -204,7 +204,7 @@ func (s *service) MarkConversationRead(ctx context.Context, opts *orchestratorse
 }
 
 // attachConversationData enriches a conversation with agent info and last message.
-func (s *service) attachConversationData(ctx context.Context, sess *dbr.Session, conversation *orchestrator.Conversation, agentByID map[string]*orchestrator.Agent) {
+func (s *Service) attachConversationData(ctx context.Context, sess *dbr.Session, conversation *orchestrator.Conversation, agentByID map[string]*orchestrator.Agent) {
 	if conversation == nil {
 		return
 	}

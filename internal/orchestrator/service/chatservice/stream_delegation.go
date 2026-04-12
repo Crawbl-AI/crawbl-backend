@@ -44,7 +44,7 @@ func (ss *streamSession) createSubAgentStream(sub *orchestrator.Agent) *subAgent
 	return st
 }
 
-func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
+func (s *Service) updateDelegationSummary(triggerMsgID, summary string) {
 	if summary == "" {
 		return
 	}
@@ -59,7 +59,7 @@ func (s *service) updateDelegationSummary(triggerMsgID, summary string) {
 	}
 }
 
-func (s *service) completeDelegation(_, _, triggerMsgID, delegateAgentID string) {
+func (s *Service) completeDelegation(_, _, triggerMsgID, delegateAgentID string) {
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sess := s.db.NewSession(nil)

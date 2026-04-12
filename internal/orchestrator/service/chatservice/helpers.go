@@ -251,7 +251,7 @@ func newMessage(convID string, role orchestrator.MessageRole, content orchestrat
 }
 
 // newPlaceholder creates a pending agent message placeholder.
-func (s *service) newPlaceholder(convID string, agent *orchestrator.Agent) *orchestrator.Message {
+func (s *Service) newPlaceholder(convID string, agent *orchestrator.Agent) *orchestrator.Message {
 	var agentID *string
 	if agent != nil {
 		agentID = &agent.ID
@@ -267,7 +267,7 @@ func (s *service) newPlaceholder(convID string, agent *orchestrator.Agent) *orch
 }
 
 // savePlaceholder persists a placeholder message in a transaction.
-func (s *service) savePlaceholder(ctx context.Context, sess *dbr.Session, msg *orchestrator.Message) *merrors.Error {
+func (s *Service) savePlaceholder(ctx context.Context, sess *dbr.Session, msg *orchestrator.Message) *merrors.Error {
 	_, mErr := database.WithTransaction(sess, "create placeholder", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
 		if mErr := s.messageRepo.Save(ctx, tx, msg); mErr != nil {
 			return nil, mErr
@@ -282,7 +282,7 @@ func (s *service) savePlaceholder(ctx context.Context, sess *dbr.Session, msg *o
 //  1. If a memoryStack is available, WakeUp (L0+L1) is prepended first.
 //  2. Recent messages fill the remaining budget up to memory.TokenBudgetTotal characters.
 //  3. L1 is truncated if the combined output would exceed the hard cap.
-func (s *service) buildConversationContext(
+func (s *Service) buildConversationContext(
 	ctx context.Context,
 	sess *dbr.Session,
 	workspaceID string,

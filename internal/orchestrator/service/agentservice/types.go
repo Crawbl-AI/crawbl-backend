@@ -28,8 +28,11 @@ type Repos struct {
 	Drawer        drawerStore
 }
 
-// service implements the orchestratorservice.AgentService interface.
-type service struct {
+// Service implements agent-specific operations: agent details, settings,
+// tools, and history retrieval. Consumers depend on their own
+// consumer-side interfaces (e.g. handler.agentPort) per the project's
+// "interfaces at consumer" convention.
+type Service struct {
 	workspaceRepo     workspaceStore
 	agentRepo         agentStore
 	toolsRepo         toolsStore

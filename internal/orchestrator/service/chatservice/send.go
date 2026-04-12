@@ -33,7 +33,7 @@ type persistedMsg struct {
 // SendMessage sends a user message and returns the agent replies.
 // Dispatches to sendDirectMessage (per-agent conversations) or
 // sendSwarmMessage (swarm group chat with parallel agent calls).
-func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error) {
+func (s *Service) SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -84,7 +84,7 @@ func (s *service) SendMessage(ctx context.Context, opts *orchestratorservice.Sen
 
 // sendDirectMessage handles per-agent conversations: persist the user message,
 // then stream the agent response via callAgentStreaming.
-func (s *service) sendDirectMessage(
+func (s *Service) sendDirectMessage(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
@@ -114,7 +114,7 @@ func (s *service) sendDirectMessage(
 
 // sendSwarmMessage handles swarm group chat: persist user message first,
 // resolve target agents via mentions or Manager, then execute.
-func (s *service) sendSwarmMessage(
+func (s *Service) sendSwarmMessage(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
@@ -154,7 +154,7 @@ func (s *service) sendSwarmMessage(
 // executeParallel fires all agent calls concurrently. Each agent responds
 // independently without seeing other agents' current responses.
 // Each goroutine owns its own dbr.Session so concurrent repo calls are safe.
-func (s *service) executeParallel(
+func (s *Service) executeParallel(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	pm *persistedMsg,
@@ -205,7 +205,7 @@ func (s *service) executeParallel(
 // broadcasts message.new, and returns the mutable tracking state as a
 // persistedMsg. SendMessageOpts is not mutated — it remains read-only
 // after construction.
-func (s *service) persistUserMessage(
+func (s *Service) persistUserMessage(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,

@@ -9,7 +9,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
-	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -29,7 +28,7 @@ func New(
 	pricingCache *pricing.Cache,
 	usagePublisher *queue.UsagePublisher,
 	ingestPool autoingest.Service,
-) (orchestratorservice.ChatService, error) {
+) (*Service, error) {
 	if db == nil {
 		return nil, errors.New("chatservice: db is required")
 	}
@@ -67,7 +66,7 @@ func New(
 		broadcaster = realtime.NopBroadcaster{}
 	}
 
-	return &service{
+	return &Service{
 		db:                db,
 		workspaceRepo:     repos.Workspace,
 		agentRepo:         repos.Agent,
@@ -99,7 +98,7 @@ func MustNew(
 	pricingCache *pricing.Cache,
 	usagePublisher *queue.UsagePublisher,
 	ingestPool autoingest.Service,
-) orchestratorservice.ChatService {
+) *Service {
 	s, err := New(db, repos, runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher, ingestPool)
 	if err != nil {
 		panic(err)

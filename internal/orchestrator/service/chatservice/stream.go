@@ -23,7 +23,7 @@ import (
 // the 7-8 parameter functions that previously threaded context through the pipeline.
 type streamSession struct {
 	ctx          context.Context
-	svc          *service
+	svc          *Service
 	sess         *dbr.Session
 	wsID         string
 	userID       string
@@ -52,7 +52,7 @@ type streamSession struct {
 
 func newStreamSession(
 	ctx context.Context,
-	svc *service,
+	svc *Service,
 	opts *orchestratorservice.SendMessageOpts,
 	pm *persistedMsg,
 	conv *orchestrator.Conversation,
@@ -90,7 +90,7 @@ func newStreamSession(
 // Creates a placeholder, reads chunks from the runtime, emits Socket.IO
 // events, and persists the final message(s). Multi-agent: distinct agent_id
 // values in chunks get separate placeholder messages.
-func (s *service) callAgentStreaming(
+func (s *Service) callAgentStreaming(
 	ctx context.Context,
 	opts *orchestratorservice.SendMessageOpts,
 	pm *persistedMsg,

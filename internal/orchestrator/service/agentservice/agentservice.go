@@ -3,7 +3,6 @@ package agentservice
 import (
 	"errors"
 
-	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -12,7 +11,7 @@ import (
 func New(
 	repos Repos,
 	runtimeClient userswarmclient.Client,
-) (orchestratorservice.AgentService, error) {
+) (*Service, error) {
 	if repos.Workspace == nil {
 		return nil, errors.New("agentservice: workspace repo is required")
 	}
@@ -38,7 +37,7 @@ func New(
 		return nil, errors.New("agentservice: runtime client is required")
 	}
 
-	return &service{
+	return &Service{
 		workspaceRepo:     repos.Workspace,
 		agentRepo:         repos.Agent,
 		toolsRepo:         repos.Tools,
@@ -56,7 +55,7 @@ func New(
 func MustNew(
 	repos Repos,
 	runtimeClient userswarmclient.Client,
-) orchestratorservice.AgentService {
+) *Service {
 	svc, err := New(repos, runtimeClient)
 	if err != nil {
 		panic(err)
