@@ -42,8 +42,6 @@ func registerAuthSteps(sc *godog.ScenarioContext, tc *testContext) {
 	sc.Step(`^the request should be rejected as not found$`, tc.requestShouldBeRejectedAsNotFound)
 }
 
-// --- Sign-up / sign-in -----------------------------------------------
-
 func (tc *testContext) userSignsUp(alias string) error {
 	if err := tc.userHasSignedUp(alias); err != nil {
 		return err
@@ -65,8 +63,6 @@ func (tc *testContext) userShouldExistInDatabase(alias string) error {
 func (tc *testContext) userShouldHaveOneWorkspaceInDatabase(alias string) error {
 	return tc.dbWorkspaceCountForSubject(1, alias)
 }
-
-// --- Profile ---------------------------------------------------------
 
 func (tc *testContext) userOpensProfile(alias string) error {
 	// Does not assert status — callers use an explicit
@@ -159,8 +155,6 @@ func (tc *testContext) pushTokenShouldBeStored(alias string) error {
 	return tc.dbHasPushToken(token, alias)
 }
 
-// --- Legal acceptance ------------------------------------------------
-
 func (tc *testContext) userOpensLegalStatus(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/users/legal", alias, nil); err != nil {
 		return err
@@ -202,8 +196,6 @@ func (tc *testContext) userShouldShowAcceptedLegalDocuments(alias string) error 
 	return tc.assertJSONEquals("data.has_agreed_with_privacy_policy", "true")
 }
 
-// --- Account deletion ------------------------------------------------
-
 func (tc *testContext) userDeletesTheirAccount(alias string) error {
 	body := map[string]any{
 		"reason":      "e2e-account-deletion",
@@ -228,8 +220,6 @@ func (tc *testContext) userShouldBeMarkedAsDeletedInDatabase(alias string) error
 func (tc *testContext) deletedAccountShouldNoLongerBehaveLikeActiveUser() error {
 	return tc.assertStatus(http.StatusUnauthorized)
 }
-
-// --- Edge cases ------------------------------------------------------
 
 func (tc *testContext) guestRequestsProfile() error {
 	_, err := tc.doRequest("GET", "/v1/users/profile", "", nil)

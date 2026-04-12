@@ -56,8 +56,6 @@ func Unwrap(c Client) *goredis.Client {
 	return r.rc
 }
 
-// --- String operations ---
-
 func (r *redis) Get(ctx context.Context, key string) (string, error) {
 	val, err := r.rc.Get(ctx, key).Result()
 	if err == goredis.Nil {
@@ -109,8 +107,6 @@ func (r *redis) Expire(ctx context.Context, key string, ttl time.Duration) error
 	return nil
 }
 
-// --- Counter operations ---
-
 func (r *redis) Incr(ctx context.Context, key string) (int64, error) {
 	val, err := r.rc.Incr(ctx, key).Result()
 	if err != nil {
@@ -126,8 +122,6 @@ func (r *redis) IncrBy(ctx context.Context, key string, value int64) (int64, err
 	}
 	return val, nil
 }
-
-// --- Hash operations ---
 
 func (r *redis) HSet(ctx context.Context, key, field string, value any) error {
 	if err := r.rc.HSet(ctx, key, field, value).Err(); err != nil {
@@ -161,8 +155,6 @@ func (r *redis) HDel(ctx context.Context, key string, fields ...string) error {
 	}
 	return nil
 }
-
-// --- Set operations ---
 
 func (r *redis) SAdd(ctx context.Context, key string, members ...string) error {
 	args := make([]any, len(members))
@@ -202,8 +194,6 @@ func (r *redis) SRem(ctx context.Context, key string, members ...string) error {
 	return nil
 }
 
-// --- Lifecycle ---
-
 func (r *redis) Ping(ctx context.Context) error {
 	if err := r.rc.Ping(ctx).Err(); err != nil {
 		return fmt.Errorf("redis ping: %w", err)
@@ -214,8 +204,6 @@ func (r *redis) Ping(ctx context.Context) error {
 func (r *redis) Close() error {
 	return r.rc.Close()
 }
-
-// --- Internal helpers ---
 
 // pingWithRetry attempts to ping Redis with retry logic, matching the database
 // package pattern for resilience during container startup.

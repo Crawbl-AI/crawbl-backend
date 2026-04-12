@@ -15,7 +15,7 @@ func New() *workflowRepo {
 }
 
 func (r *workflowRepo) CreateDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowDefinitionRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -42,7 +42,7 @@ func (r *workflowRepo) CreateDefinition(ctx context.Context, sess orchestratorre
 }
 
 func (r *workflowRepo) GetDefinition(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, definitionID string) (*WorkflowDefinitionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(definitionID) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(definitionID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -62,7 +62,7 @@ func (r *workflowRepo) GetDefinition(ctx context.Context, sess orchestratorrepo.
 }
 
 func (r *workflowRepo) ListDefinitions(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]WorkflowDefinitionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" {
+	if strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -80,7 +80,7 @@ func (r *workflowRepo) ListDefinitions(ctx context.Context, sess orchestratorrep
 }
 
 func (r *workflowRepo) CreateExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowExecutionRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -109,7 +109,7 @@ func (r *workflowRepo) CreateExecution(ctx context.Context, sess orchestratorrep
 }
 
 func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string) (*WorkflowExecutionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(executionID) == "" {
+	if strings.TrimSpace(executionID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -129,7 +129,7 @@ func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.S
 }
 
 func (r *workflowRepo) UpdateExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowExecutionRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -150,7 +150,7 @@ func (r *workflowRepo) UpdateExecution(ctx context.Context, sess orchestratorrep
 }
 
 func (r *workflowRepo) ListActiveExecutions(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]WorkflowExecutionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" {
+	if strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -168,7 +168,7 @@ func (r *workflowRepo) ListActiveExecutions(ctx context.Context, sess orchestrat
 }
 
 func (r *workflowRepo) CreateStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowStepExecutionRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -198,7 +198,7 @@ func (r *workflowRepo) CreateStepExecution(ctx context.Context, sess orchestrato
 }
 
 func (r *workflowRepo) UpdateStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowStepExecutionRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -219,7 +219,7 @@ func (r *workflowRepo) UpdateStepExecution(ctx context.Context, sess orchestrato
 }
 
 func (r *workflowRepo) GetStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string, stepIndex int) (*WorkflowStepExecutionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(executionID) == "" {
+	if strings.TrimSpace(executionID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 

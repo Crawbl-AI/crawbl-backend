@@ -10,8 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-// --- list_conversations ---
-
 type listConversationsInput struct {
 	IncludeArchived bool `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
 }
@@ -51,8 +49,6 @@ func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversat
 		return nil, listConversationsOutput{Conversations: briefs}, nil
 	})
 }
-
-// --- search_past_messages ---
 
 type searchMessagesInput struct {
 	ConversationID string `json:"conversation_id" jsonschema:"ID of the conversation to search in"`
@@ -100,8 +96,6 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 		return nil, searchMessagesOutput{Messages: briefs, Count: len(briefs)}, nil
 	})
 }
-
-// --- send_message_to_agent ---
 
 type sendMessageInput struct {
 	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the target agent (e.g. 'wally', 'eve')"`

@@ -40,10 +40,6 @@ func New() *toolsRepo {
 }
 
 func (r *toolsRepo) List(ctx context.Context, sess orchestratorrepo.SessionRunner, limit, offset int, category string) ([]orchestrator.AgentTool, *merrors.Error) {
-	if sess == nil {
-		return nil, merrors.ErrInvalidInput
-	}
-
 	query := sess.Select(toolColumns...).
 		From("tools").
 		OrderAsc("sort_order").
@@ -74,10 +70,6 @@ func (r *toolsRepo) List(ctx context.Context, sess orchestratorrepo.SessionRunne
 }
 
 func (r *toolsRepo) Count(ctx context.Context, sess orchestratorrepo.SessionRunner, category string) (int, *merrors.Error) {
-	if sess == nil {
-		return 0, merrors.ErrInvalidInput
-	}
-
 	query := sess.Select("COUNT(*)").From("tools")
 	if cat := strings.TrimSpace(category); cat != "" {
 		query = query.Where("category = ?", cat)
@@ -93,7 +85,7 @@ func (r *toolsRepo) Count(ctx context.Context, sess orchestratorrepo.SessionRunn
 }
 
 func (r *toolsRepo) GetByNames(ctx context.Context, sess orchestratorrepo.SessionRunner, names []string) ([]orchestrator.AgentTool, *merrors.Error) {
-	if sess == nil || len(names) == 0 {
+	if len(names) == 0 {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -119,10 +111,6 @@ func (r *toolsRepo) GetByNames(ctx context.Context, sess orchestratorrepo.Sessio
 // Each tool is identified by its unique name; existing rows are updated in place.
 // Raw SQL: dbr has no ON CONFLICT builder.
 func (r *toolsRepo) Seed(ctx context.Context, sess orchestratorrepo.SessionRunner, tools []orchestratorrepo.ToolRow) *merrors.Error {
-	if sess == nil {
-		return merrors.ErrInvalidInput
-	}
-
 	const query = `
 INSERT INTO tools (name, display_name, description, category, icon_url, sort_order, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)

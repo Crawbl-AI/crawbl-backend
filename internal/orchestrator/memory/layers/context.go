@@ -59,7 +59,6 @@ func BuildContextForConversation(
 		header = "## Conversation Context\nRecent messages (oldest first):\n\n"
 	}
 
-	// --- Memory layer (L0 + L1) ---
 	var memoryText string
 	if stack != nil {
 		wakeUp, err := stack.WakeUp(ctx, sess, workspaceID, "")
@@ -68,7 +67,6 @@ func BuildContextForConversation(
 		}
 	}
 
-	// --- Recent messages ---
 	msgs, listErr := messages.ListRecent(ctx, sess, conversationID, limit)
 
 	var msgSB strings.Builder
@@ -102,7 +100,6 @@ func BuildContextForConversation(
 	}
 	messagesText := msgSB.String()
 
-	// --- Budget assembly ---
 	if memoryText == "" && messagesText == "" {
 		return ""
 	}

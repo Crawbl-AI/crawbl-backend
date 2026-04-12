@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	grpcauth "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
@@ -70,27 +70,26 @@ type HMACServerAuthOptions struct {
 func NewHMACServerAuth(signingKey string, opts *HMACServerAuthOptions) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
 	exempt := buildExemptSet(opts)
 
-	unary := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if _, bypass := exempt[info.FullMethod]; bypass {
-			return handler(ctx, req)
+	authFn := func(ctx context.Context) (context.Context, error) {
+		method, _ := grpc.Method(ctx)
+		if _, bypass := exempt[method]; bypass {
+			return ctx, nil
 		}
-		newCtx, err := authorizeContext(ctx, signingKey)
+		token, err := grpcauth.AuthFromMD(ctx, "bearer")
 		if err != nil {
 			return nil, err
 		}
-		return handler(newCtx, req)
-	}
-	stream := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if _, bypass := exempt[info.FullMethod]; bypass {
-			return handler(srv, ss)
+		if token == "" {
+			return nil, status.Error(codes.Unauthenticated, "empty bearer token")
 		}
-		newCtx, err := authorizeContext(ss.Context(), signingKey)
-		if err != nil {
-			return err
+		subject, object, verr := crawblhmac.ValidateToken(signingKey, token)
+		if verr != nil {
+			return nil, status.Error(codes.Unauthenticated, "invalid bearer token")
 		}
-		return handler(srv, &wrappedStream{ServerStream: ss, ctx: newCtx})
+		return WithIdentity(ctx, Identity{Subject: subject, Object: object}), nil
 	}
-	return unary, stream
+
+	return grpcauth.UnaryServerInterceptor(authFn), grpcauth.StreamServerInterceptor(authFn)
 }
 
 func buildExemptSet(opts *HMACServerAuthOptions) map[string]struct{} {
@@ -109,37 +108,3 @@ func buildExemptSet(opts *HMACServerAuthOptions) map[string]struct{} {
 	}
 	return set
 }
-
-func authorizeContext(ctx context.Context, signingKey string) (context.Context, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing metadata")
-	}
-	vals := md.Get("authorization")
-	if len(vals) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "missing authorization header")
-	}
-	token := strings.TrimSpace(vals[0])
-	if idx := strings.IndexByte(token, ' '); idx >= 0 {
-		scheme := strings.ToLower(strings.TrimSpace(token[:idx]))
-		if scheme != "bearer" {
-			return nil, status.Error(codes.Unauthenticated, "unsupported authorization scheme")
-		}
-		token = strings.TrimSpace(token[idx+1:])
-	}
-	if token == "" {
-		return nil, status.Error(codes.Unauthenticated, "empty bearer token")
-	}
-	subject, object, err := crawblhmac.ValidateToken(signingKey, token)
-	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "invalid bearer token")
-	}
-	return WithIdentity(ctx, Identity{Subject: subject, Object: object}), nil
-}
-
-type wrappedStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (w *wrappedStream) Context() context.Context { return w.ctx }

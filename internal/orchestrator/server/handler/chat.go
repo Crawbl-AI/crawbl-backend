@@ -111,47 +111,30 @@ func MessagesList(c *Context) http.HandlerFunc {
 // ConversationCreate creates a new conversation within a workspace.
 // The request body must specify the conversation type ("swarm" or "agent").
 // For agent conversations, agent_id must be provided.
-//
-// Returns 201 Created — stays on the plain http.HandlerFunc form because
-// AuthedHandler locks responses to 200 OK.
+// Returns 201 Created.
 func ConversationCreate(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		var reqBody dto.CreateConversationRequest
-		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
-			return
-		}
-
+	return AuthedHandlerCreated(c, func(r *http.Request, deps *AuthedHandlerDeps, reqBody *dto.CreateConversationRequest) (dto.ConversationResponse, *merrors.Error) {
 		convType := orchestrator.ConversationType(strings.TrimSpace(reqBody.Type))
 		if convType != orchestrator.ConversationTypeSwarm && convType != orchestrator.ConversationTypeAgent {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid value for field 'type'")
-			return
+			return dto.ConversationResponse{}, merrors.ErrInvalidInput
 		}
 		if convType == orchestrator.ConversationTypeAgent && strings.TrimSpace(reqBody.AgentID) == "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "agent_id is required for agent conversations")
-			return
+			return dto.ConversationResponse{}, merrors.ErrInvalidInput
 		}
 
 		conversation, mErr := c.ChatService.CreateConversation(r.Context(), &orchestratorservice.CreateConversationOpts{
-			Sess:        c.NewSession(),
-			UserID:      user.ID,
+			Sess:        deps.Sess,
+			UserID:      deps.User.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 			Type:        convType,
 			AgentID:     strings.TrimSpace(reqBody.AgentID),
 		})
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return dto.ConversationResponse{}, mErr
 		}
 
-		WriteSuccess(w, http.StatusCreated, dto.ToConversationResponse(conversation))
-	}
+		return dto.ToConversationResponse(conversation), nil
+	})
 }
 
 // ConversationDelete removes a conversation from a workspace.

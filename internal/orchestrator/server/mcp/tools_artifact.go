@@ -11,8 +11,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-// --- Input/output types ---
-
 type createArtifactInput struct {
 	Title          string `json:"title" jsonschema:"the title of the artifact"`
 	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
@@ -78,8 +76,7 @@ type reviewArtifactOutput struct {
 	Info     string `json:"info"`
 }
 
-// --- Handlers ---
-
+// newCreateArtifactHandler returns the MCP tool handler for the create_artifact tool.
 func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactInput, createArtifactOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input createArtifactInput) (*sdkmcp.CallToolResult, createArtifactOutput, error) {
 		if input.Title == "" || input.Content == "" {

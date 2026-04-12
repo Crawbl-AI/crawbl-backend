@@ -216,15 +216,9 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 // UserProfile retrieves the authenticated user's profile information.
 // Returns user details including preferences, subscription status, and account state.
 func UserProfile(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		WriteSuccess(w, http.StatusOK, toUserProfileResponse(user))
-	}
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (*dto.UserProfileResponse, *merrors.Error) {
+		return toUserProfileResponse(deps.User), nil
+	})
 }
 
 // UpdateUser modifies the authenticated user's profile information.
@@ -302,28 +296,21 @@ func UpdateUser(c *Context) http.HandlerFunc {
 // Returns terms of service and privacy policy content and versions, plus whether
 // the user has agreed to each document.
 func UserLegal(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (*dto.UserLegalResponse, *merrors.Error) {
 		legalDocuments, mErr := c.AuthService.GetLegalDocuments(r.Context())
 		if mErr != nil {
-			WriteError(w, mErr)
-			return
+			return nil, mErr
 		}
 
-		WriteSuccess(w, http.StatusOK, &dto.UserLegalResponse{
+		return &dto.UserLegalResponse{
 			TermsOfService:             legalDocuments.TermsOfService,
 			PrivacyPolicy:              legalDocuments.PrivacyPolicy,
 			TermsOfServiceVersion:      legalDocuments.TermsOfServiceVersion,
 			PrivacyPolicyVersion:       legalDocuments.PrivacyPolicyVersion,
-			HasAgreedWithTerms:         user.HasAgreedWithTerms,
-			HasAgreedWithPrivacyPolicy: user.HasAgreedWithPrivacyPolicy,
-		})
-	}
+			HasAgreedWithTerms:         deps.User.HasAgreedWithTerms,
+			HasAgreedWithPrivacyPolicy: deps.User.HasAgreedWithPrivacyPolicy,
+		}, nil
+	})
 }
 
 // AcceptLegal records the user's acceptance of the specified legal document versions.
@@ -362,21 +349,14 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 // The Firebase session remains valid (stateless auth); only the push token is cleared.
 // Returns 204 No Content on success.
 func Logout(c *Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
+	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
 		// Best-effort: clear push tokens so the device stops receiving notifications.
 		_ = c.AuthService.ClearPushToken(r.Context(), &orchestratorservice.ClearPushTokenOpts{
-			Sess:   c.NewSession(),
-			UserID: user.ID,
+			Sess:   deps.Sess,
+			UserID: deps.User.ID,
 		})
-
-		httpserver.WriteNoContent(w)
-	}
+		return nil
+	})
 }
 
 // toUserProfileResponse converts a domain User to the API response format.

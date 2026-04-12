@@ -24,7 +24,7 @@ func New() *userRepo {
 // Returns ErrUserNotFound if no user exists with the given subject.
 // Returns ErrInvalidInput if sess is nil or subject is empty.
 func (r *userRepo) GetBySubject(ctx context.Context, sess orchestratorrepo.SessionRunner, subject string) (*orchestrator.User, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(subject) == "" {
+	if strings.TrimSpace(subject) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -54,7 +54,7 @@ func (r *userRepo) GetBySubject(ctx context.Context, sess orchestratorrepo.Sessi
 //
 
 func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRunner, subject, email string) (*orchestrator.User, *merrors.Error) {
-	if sess == nil || (strings.TrimSpace(subject) == "" && strings.TrimSpace(email) == "") {
+	if strings.TrimSpace(subject) == "" && strings.TrimSpace(email) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -112,7 +112,7 @@ func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRun
 //
 // Returns ErrInvalidInput if opts, opts.Sess, or opts.User is nil.
 func (r *userRepo) CreateUser(ctx context.Context, opts *orchestratorrepo.CreateUserOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil || opts.User == nil {
+	if opts == nil || opts.User == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -180,7 +180,7 @@ ON CONFLICT (user_id) DO NOTHING`
 // This is used to prevent re-registration of previously deleted accounts.
 // Returns ErrInvalidInput if sess is nil and both subject and email are empty.
 func (r *userRepo) IsUserDeleted(ctx context.Context, sess orchestratorrepo.SessionRunner, subject, email string) (bool, *merrors.Error) {
-	if sess == nil || (strings.TrimSpace(subject) == "" && strings.TrimSpace(email) == "") {
+	if strings.TrimSpace(subject) == "" && strings.TrimSpace(email) == "" {
 		return false, merrors.ErrInvalidInput
 	}
 
@@ -200,7 +200,7 @@ func (r *userRepo) IsUserDeleted(ctx context.Context, sess orchestratorrepo.Sess
 // This is used during registration to ensure unique nicknames.
 // Returns ErrInvalidInput if sess is nil or nickname is empty.
 func (r *userRepo) CheckNicknameExists(ctx context.Context, sess orchestratorrepo.SessionRunner, nickname string) (bool, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(nickname) == "" {
+	if strings.TrimSpace(nickname) == "" {
 		return false, merrors.ErrInvalidInput
 	}
 
@@ -240,7 +240,7 @@ func (r *userRepo) loadPreferences(ctx context.Context, sess orchestratorrepo.Se
 // The operation is idempotent and handles concurrent creation attempts.
 // Returns ErrInvalidInput if sess is nil or user is nil.
 func (r *userRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, user *orchestrator.User) *merrors.Error {
-	if sess == nil || user == nil {
+	if user == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -255,7 +255,7 @@ func (r *userRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner
 // This is used to register mobile devices for push notifications.
 // Returns ErrInvalidInput if sess is nil, userID is empty, or pushToken is empty.
 func (r *userRepo) SavePushToken(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, pushToken string) *merrors.Error {
-	if sess == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(pushToken) == "" {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(pushToken) == "" {
 		return merrors.ErrInvalidInput
 	}
 
@@ -265,7 +265,7 @@ func (r *userRepo) SavePushToken(ctx context.Context, sess orchestratorrepo.Sess
 // ClearPushTokens removes all push notification tokens for a user.
 // Returns ErrInvalidInput if sess is nil or userID is empty.
 func (r *userRepo) ClearPushTokens(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) *merrors.Error {
-	if sess == nil || strings.TrimSpace(userID) == "" {
+	if strings.TrimSpace(userID) == "" {
 		return merrors.ErrInvalidInput
 	}
 

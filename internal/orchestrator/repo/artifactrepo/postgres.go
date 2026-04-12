@@ -56,7 +56,7 @@ var reviewColumns = []any{
 
 // Create inserts a new artifact row into the artifacts table.
 func (r *artifactRepo) Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -84,7 +84,7 @@ func (r *artifactRepo) Create(ctx context.Context, sess orchestratorrepo.Session
 
 // GetByID retrieves an artifact by workspace ID and artifact ID.
 func (r *artifactRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, artifactID string) (*ArtifactRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(artifactID) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(artifactID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -105,7 +105,7 @@ func (r *artifactRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessio
 
 // UpdateVersion updates the current_version and updated_at fields of an artifact.
 func (r *artifactRepo) UpdateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, newVersion int) *merrors.Error {
-	if sess == nil || strings.TrimSpace(artifactID) == "" {
+	if strings.TrimSpace(artifactID) == "" {
 		return merrors.ErrInvalidInput
 	}
 
@@ -125,7 +125,7 @@ func (r *artifactRepo) UpdateVersion(ctx context.Context, sess orchestratorrepo.
 // Callers should run it inside a transaction that also writes to artifact_versions
 // so the bump and the version row commit together.
 func (r *artifactRepo) IncrementVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (int, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(artifactID) == "" {
+	if strings.TrimSpace(artifactID) == "" {
 		return 0, merrors.ErrInvalidInput
 	}
 
@@ -147,7 +147,7 @@ func (r *artifactRepo) IncrementVersion(ctx context.Context, sess orchestratorre
 
 // CreateVersion inserts a new version row into artifact_versions.
 func (r *artifactRepo) CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactVersionRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -173,7 +173,7 @@ func (r *artifactRepo) CreateVersion(ctx context.Context, sess orchestratorrepo.
 
 // GetLatestVersion retrieves the latest version of an artifact.
 func (r *artifactRepo) GetLatestVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) (*ArtifactVersionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(artifactID) == "" {
+	if strings.TrimSpace(artifactID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -196,7 +196,7 @@ func (r *artifactRepo) GetLatestVersion(ctx context.Context, sess orchestratorre
 
 // ListVersions retrieves all versions of an artifact, ordered by version descending.
 func (r *artifactRepo) ListVersions(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string) ([]ArtifactVersionRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(artifactID) == "" {
+	if strings.TrimSpace(artifactID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -215,7 +215,7 @@ func (r *artifactRepo) ListVersions(ctx context.Context, sess orchestratorrepo.S
 
 // CreateReview inserts a new review row into artifact_reviews.
 func (r *artifactRepo) CreateReview(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactReviewRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -241,7 +241,7 @@ func (r *artifactRepo) CreateReview(ctx context.Context, sess orchestratorrepo.S
 
 // ListReviews retrieves all reviews for a specific artifact version.
 func (r *artifactRepo) ListReviews(ctx context.Context, sess orchestratorrepo.SessionRunner, artifactID string, version int) ([]ArtifactReviewRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(artifactID) == "" {
+	if strings.TrimSpace(artifactID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 

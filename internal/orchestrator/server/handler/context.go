@@ -5,9 +5,9 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gocraft/dbr/v2"
@@ -135,12 +135,29 @@ func IntQueryParam(r *http.Request, key string) int {
 	if raw == "" {
 		return 0
 	}
-	var parsed int
-	_, _ = fmt.Sscanf(raw, "%d", &parsed)
-	if parsed < 0 {
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed < 0 {
 		return 0
 	}
 	return parsed
+}
+
+// Pagination extracts limit and offset query parameters from the request,
+// applying sensible defaults (limit=20, offset=0) and clamping limit to
+// a maximum of 100 so clients cannot request unbounded result sets.
+func Pagination(r *http.Request) (limit, offset int) {
+	limit = IntQueryParam(r, "limit")
+	offset = IntQueryParam(r, "offset")
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 // StringOrEmpty safely dereferences a string pointer, returning an empty string
@@ -169,6 +186,8 @@ func HTTPStatusForError(err *merrors.Error) int {
 		merrors.IsCode(err, merrors.ErrCodeConversationNotFound),
 		merrors.IsCode(err, merrors.ErrCodeMessageNotFound):
 		return http.StatusNotFound
+	case merrors.IsCode(err, merrors.ErrCodeNotImplemented):
+		return http.StatusNotImplemented
 	case merrors.IsCode(err, merrors.ErrCodeRuntimeNotReady):
 		return http.StatusServiceUnavailable
 	case merrors.IsCode(err, merrors.ErrCodeQuotaExceeded):

@@ -20,7 +20,7 @@ func New() *agentRepo {
 // Results are ordered by sort order first, then by creation date for agents with the same sort order.
 // Returns ErrInvalidInput if sess is nil or workspaceID is empty.
 func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" {
+	if strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -47,7 +47,7 @@ func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo
 // Returns ErrAgentNotFound if the agent does not exist or does not belong to the specified workspace.
 // Returns ErrInvalidInput if sess is nil, workspaceID is empty, or agentID is empty.
 func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, agentID string) (*orchestrator.Agent, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -71,7 +71,7 @@ func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRu
 // Returns ErrInvalidInput if sess is nil or agent is nil.
 // Raw SQL: dbr has no ON CONFLICT builder.
 func (r *agentRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, agent *orchestrator.Agent, sortOrder int) *merrors.Error {
-	if sess == nil || agent == nil {
+	if agent == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -107,7 +107,7 @@ ON CONFLICT (id) DO UPDATE SET
 // Returns ErrAgentNotFound if the agent does not exist.
 // Returns ErrInvalidInput if sess is nil or agentID is empty.
 func (r *agentRepo) GetByIDGlobal(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -130,7 +130,7 @@ func (r *agentRepo) GetByIDGlobal(ctx context.Context, sess orchestratorrepo.Ses
 // Returns ErrAgentNotFound if no agent with that slug exists in the workspace.
 // Returns ErrInvalidInput if sess is nil, workspaceID is empty, or slug is empty.
 func (r *agentRepo) GetBySlug(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, slug string) (*orchestrator.Agent, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(slug) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(slug) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -152,7 +152,7 @@ func (r *agentRepo) GetBySlug(ctx context.Context, sess orchestratorrepo.Session
 // CountMessagesByAgentID counts the total number of messages attributed to an agent.
 // Returns ErrInvalidInput if sess is nil or agentID is empty.
 func (r *agentRepo) CountMessagesByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(agentID) == "" {
 		return 0, merrors.ErrInvalidInput
 	}
 

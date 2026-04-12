@@ -22,7 +22,7 @@ func New() *conversationRepo {
 // then by created_at descending as a secondary sort.
 // Returns ErrInvalidInput if sess is nil or workspaceID is empty.
 func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" {
+	if strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -50,7 +50,7 @@ func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestra
 // to the specified workspace.
 // Returns ErrInvalidInput if sess is nil, workspaceID is empty, or conversationID is empty.
 func (r *conversationRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) (*orchestrator.Conversation, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -75,7 +75,7 @@ func (r *conversationRepo) GetByID(ctx context.Context, sess orchestratorrepo.Se
 // Returns ErrConversationNotFound if no swarm conversation exists for the workspace.
 // Returns ErrInvalidInput if sess is nil or workspaceID is empty.
 func (r *conversationRepo) FindDefaultSwarm(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) (*orchestrator.Conversation, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" {
+	if strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -99,7 +99,7 @@ func (r *conversationRepo) FindDefaultSwarm(ctx context.Context, sess orchestrat
 // Returns ErrInvalidInput if sess is nil or conversation is nil.
 // Returns a server error if the insert fails.
 func (r *conversationRepo) Create(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error {
-	if sess == nil || conversation == nil {
+	if conversation == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -126,7 +126,7 @@ func (r *conversationRepo) Create(ctx context.Context, sess orchestratorrepo.Ses
 // Returns ErrInvalidInput if sess is nil, workspaceID is empty, or conversationID is empty.
 // Returns ErrConversationNotFound if no matching row exists.
 func (r *conversationRepo) Delete(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
 		return merrors.ErrInvalidInput
 	}
 
@@ -149,7 +149,7 @@ func (r *conversationRepo) Delete(ctx context.Context, sess orchestratorrepo.Ses
 // Returns ErrInvalidInput if sess is nil or conversation is nil.
 // Raw SQL: dbr has no ON CONFLICT builder.
 func (r *conversationRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, conversation *orchestrator.Conversation) *merrors.Error {
-	if sess == nil || conversation == nil {
+	if conversation == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -181,7 +181,7 @@ ON CONFLICT (id) DO UPDATE SET
 // Returns ErrInvalidInput if sess is nil or either ID is empty.
 // Returns ErrConversationNotFound if no matching row exists.
 func (r *conversationRepo) MarkAsRead(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) *merrors.Error {
-	if sess == nil || strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(conversationID) == "" {
 		return merrors.ErrInvalidInput
 	}
 

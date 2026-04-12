@@ -13,7 +13,7 @@ func New() *agentPromptsRepo {
 }
 
 func (r *agentPromptsRepo) ListByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) ([]orchestratorrepo.AgentPromptRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -34,10 +34,6 @@ func (r *agentPromptsRepo) ListByAgentID(ctx context.Context, sess orchestratorr
 // Each prompt is identified by its unique id.
 // Raw SQL: dbr has no ON CONFLICT builder.
 func (r *agentPromptsRepo) BulkSave(ctx context.Context, sess orchestratorrepo.SessionRunner, rows []orchestratorrepo.AgentPromptRow) *merrors.Error {
-	if sess == nil {
-		return merrors.ErrInvalidInput
-	}
-
 	const query = `
 INSERT INTO agent_prompts (id, agent_id, name, description, content, sort_order, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)

@@ -20,7 +20,7 @@ func New() *workspaceRepo {
 // Results are ordered by creation date in ascending order.
 // Returns ErrInvalidInput if sess is nil or userID is empty.
 func (r *workspaceRepo) ListByUserID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string) ([]*orchestrator.Workspace, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(userID) == "" {
+	if strings.TrimSpace(userID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -46,7 +46,7 @@ func (r *workspaceRepo) ListByUserID(ctx context.Context, sess orchestratorrepo.
 // Returns ErrWorkspaceNotFound if the workspace does not exist or does not belong to the user.
 // Returns ErrInvalidInput if sess is nil, userID is empty, or workspaceID is empty.
 func (r *workspaceRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(workspaceID) == "" {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(workspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -71,7 +71,7 @@ func (r *workspaceRepo) GetByID(ctx context.Context, sess orchestratorrepo.Sessi
 // to the user. Returns ErrInvalidInput if sess is nil, userID is empty, or
 // workspaceIDs is empty.
 func (r *workspaceRepo) ListOwnedByUser(ctx context.Context, sess orchestratorrepo.SessionRunner, userID string, workspaceIDs []string) (map[string]struct{}, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(userID) == "" || len(workspaceIDs) == 0 {
+	if strings.TrimSpace(userID) == "" || len(workspaceIDs) == 0 {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -111,7 +111,7 @@ func (r *workspaceRepo) ListOwnedByUser(ctx context.Context, sess orchestratorre
 // The operation is idempotent and handles concurrent creation attempts.
 // Returns ErrInvalidInput if sess is nil or workspace is nil.
 func (r *workspaceRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, workspace *orchestrator.Workspace) *merrors.Error {
-	if sess == nil || workspace == nil {
+	if workspace == nil {
 		return merrors.ErrInvalidInput
 	}
 

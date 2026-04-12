@@ -12,6 +12,7 @@ import (
 	"time"
 
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -156,13 +157,7 @@ func (repo) ListAllCurrentEntries(ctx context.Context, sess orchestratorrepo.Ses
 	return out, nil
 }
 
-// isNotFound recognizes the "no rows" error returned by dbr. We avoid
-// importing dbr's concrete error sentinel here because the repo
-// interface should not leak driver details; a simple string match is
-// enough for the single call site that needs it.
+// isNotFound recognizes the "no rows" error returned by dbr or database/sql.
 func isNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-	return err.Error() == "dbr: not found"
+	return database.IsRecordNotFoundError(err)
 }

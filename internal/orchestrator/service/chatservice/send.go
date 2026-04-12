@@ -20,6 +20,8 @@ import (
 // persistedMsg carries the mutable state produced by persistUserMessage.
 // It lives on streamSession rather than on SendMessageOpts so that opts
 // remains read-only after construction.
+// NOTE: onPersisted is a deprecated escape hatch — see the TODO in
+// persistUserMessage for the planned refactor to return userMsg directly.
 type persistedMsg struct {
 	userMessageID string
 	localID       string
@@ -227,7 +229,9 @@ func (s *service) persistUserMessage(
 
 	s.broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, userMsg)
 
-	// Notify transport layer (e.g. Socket.IO ack) that user message is persisted.
+	// TODO(abbasaghababayev): remove OnPersisted callback — SendMessage should
+	// return the persisted userMsg directly so the handler can ack without a
+	// closure that mutates transport state from the service layer (RULE-13).
 	if opts.OnPersisted != nil {
 		opts.OnPersisted(userMsg)
 	}

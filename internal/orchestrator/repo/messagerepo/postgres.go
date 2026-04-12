@@ -42,7 +42,7 @@ func New() *messageRepo {
 //
 
 func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, opts *orchestratorrepo.ListMessagesOpts) (*orchestrator.MessagePage, *merrors.Error) {
-	if sess == nil || opts == nil || strings.TrimSpace(opts.ConversationID) == "" {
+	if opts == nil || strings.TrimSpace(opts.ConversationID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -122,7 +122,7 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 // Returns ErrMessageNotFound if no messages exist in the conversation.
 // Returns ErrInvalidInput if sess is nil or conversationID is empty.
 func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string) (*orchestrator.Message, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(conversationID) == "" {
+	if strings.TrimSpace(conversationID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -164,9 +164,6 @@ func (r *messageRepo) GetLatestByConversationIDs(
 	sess orchestratorrepo.SessionRunner,
 	conversationIDs []string,
 ) (map[string]*orchestrator.Message, *merrors.Error) {
-	if sess == nil {
-		return nil, merrors.ErrInvalidInput
-	}
 	if len(conversationIDs) == 0 {
 		return map[string]*orchestrator.Message{}, nil
 	}
@@ -207,10 +204,6 @@ func (r *messageRepo) GetLatestByConversationIDs(
 // cutoff time as "failed". Returns the number of affected rows.
 // Returns ErrInvalidInput if sess is nil.
 func (r *messageRepo) FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error) {
-	if sess == nil {
-		return 0, merrors.ErrInvalidInput
-	}
-
 	result, err := sess.Update("messages").
 		Set("status", string(orchestrator.MessageStatusFailed)).
 		Set("updated_at", time.Now().UTC()).
@@ -250,7 +243,7 @@ func statusOrdinal(status orchestrator.MessageStatus) int {
 // A monotonic guard prevents status downgrades using an atomic SQL-side CASE
 // expression, eliminating the TOCTOU race of a separate SELECT + UPDATE.
 func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error {
-	if sess == nil || messageID == "" {
+	if messageID == "" {
 		return merrors.ErrInvalidInput
 	}
 
@@ -273,7 +266,7 @@ func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.Se
 
 // DeleteByID removes a message by its ID.
 func (r *messageRepo) DeleteByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) *merrors.Error {
-	if sess == nil || messageID == "" {
+	if messageID == "" {
 		return merrors.ErrInvalidInput
 	}
 	_, err := sess.DeleteFrom("messages").
@@ -289,7 +282,7 @@ func (r *messageRepo) DeleteByID(ctx context.Context, sess orchestratorrepo.Sess
 // Returns ErrMessageNotFound if the message does not exist.
 // Returns ErrInvalidInput if sess is nil or messageID is empty.
 func (r *messageRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) (*orchestrator.Message, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(messageID) == "" {
+	if strings.TrimSpace(messageID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -315,7 +308,7 @@ func (r *messageRepo) GetByID(ctx context.Context, sess orchestratorrepo.Session
 
 // ListRecent retrieves the N most recent messages for a conversation, ordered oldest-first.
 func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(conversationID) == "" {
+	if strings.TrimSpace(conversationID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 	if limit <= 0 {
@@ -350,7 +343,7 @@ func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.Sess
 // Returns ErrInvalidInput if sess is nil or message is nil.
 // Raw SQL: dbr has no ON CONFLICT builder.
 func (r *messageRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error {
-	if sess == nil || message == nil {
+	if message == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -387,9 +380,6 @@ ON CONFLICT (id) DO UPDATE SET
 // RecordDelegation inserts an agent_delegations row to track when one agent
 // delegates a task to another. This is called asynchronously and is best-effort.
 func (r *messageRepo) RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) *merrors.Error {
-	if sess == nil {
-		return merrors.ErrInvalidInput
-	}
 	_, err := sess.InsertInto("agent_delegations").
 		Pair("workspace_id", workspaceID).
 		Pair("conversation_id", conversationID).
@@ -408,9 +398,6 @@ func (r *messageRepo) RecordDelegation(ctx context.Context, sess orchestratorrep
 // CompleteDelegation marks a running delegation as completed, recording the
 // completion timestamp and elapsed duration in milliseconds.
 func (r *messageRepo) CompleteDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error {
-	if sess == nil {
-		return merrors.ErrInvalidInput
-	}
 	_, err := sess.Update("agent_delegations").
 		Set("status", string(orchestrator.MessageStatusRead)).
 		Set("completed_at", time.Now().UTC()).
@@ -426,7 +413,7 @@ func (r *messageRepo) CompleteDelegation(ctx context.Context, sess orchestratorr
 
 // UpdateToolState updates the state field inside a tool_status message's JSONB content.
 func (r *messageRepo) UpdateToolState(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, state string) *merrors.Error {
-	if sess == nil || messageID == "" {
+	if messageID == "" {
 		return nil
 	}
 	_, err := sess.Update("messages").
@@ -443,7 +430,7 @@ func (r *messageRepo) UpdateToolState(ctx context.Context, sess orchestratorrepo
 // UpdateDelegationSummary backfills the task_summary on delegation
 // rows for a given trigger message.
 func (r *messageRepo) UpdateDelegationSummary(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, summary string) *merrors.Error {
-	if sess == nil || summary == "" {
+	if summary == "" {
 		return nil
 	}
 	_, err := sess.Update("agent_delegations").

@@ -57,10 +57,6 @@ type WorkflowExecutor interface {
 	ExecuteWorkflow(ctx context.Context, executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
 }
 
-// ---------------------------------------------------------------------------
-// Deps bundles all dependencies for the MCP service.
-// ---------------------------------------------------------------------------
-
 // Repos groups the repository dependencies. Fields are typed against
 // consumer-side interfaces declared in ports.go so the package does not
 // import producer-owned interfaces for its own internal plumbing.
@@ -97,10 +93,6 @@ type logger interface {
 	InfoContext(ctx context.Context, msg string, args ...any)
 	ErrorContext(ctx context.Context, msg string, args ...any)
 }
-
-// ---------------------------------------------------------------------------
-// Params & result types
-// ---------------------------------------------------------------------------
 
 // UserProfileResult is returned by GetUserProfile.
 type UserProfileResult struct {

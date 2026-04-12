@@ -117,8 +117,6 @@ func (tc *testContext) pollDefault(fn func() error) error {
 	return tc.pollFor(asyncAssertTimeout, fn)
 }
 
-// --- Runtime constants and snapshot ------------------------------------
-
 const (
 	defaultRuntimeReadyTimeout = 3 * time.Minute
 	defaultRuntimePollInterval = 2 * time.Second
@@ -160,8 +158,6 @@ func (tc *testContext) runtimeReadyTimeout() time.Duration {
 	return defaultRuntimeReadyTimeout
 }
 
-// --- State accessors --------------------------------------------------
-
 // userState returns (or lazily creates) the per-user journey state for
 // the given alias.
 func (tc *testContext) userState(alias string) *userJourneyState {
@@ -177,8 +173,6 @@ func (tc *testContext) userState(alias string) *userJourneyState {
 	tc.state[alias] = state
 	return state
 }
-
-// --- Lazy-init bootstrappers ------------------------------------------
 
 // ensureDefaultWorkspace fetches the workspace list for alias if not
 // already cached in state.
@@ -209,8 +203,6 @@ func (tc *testContext) ensureConversationCatalog(alias string) error {
 	}
 	return tc.fetchConversations(alias)
 }
-
-// --- Data fetchers (call API + capture into state) --------------------
 
 func (tc *testContext) fetchWorkspaceList(alias string) error {
 	if _, err := tc.doRequest("GET", "/v1/workspaces", alias, nil); err != nil {
@@ -249,8 +241,6 @@ func (tc *testContext) fetchConversations(alias string) error {
 	}
 	return tc.captureConversations(alias)
 }
-
-// --- Capture helpers --------------------------------------------------
 
 func (tc *testContext) captureDefaultWorkspace(alias string) error {
 	state := tc.userState(alias)
@@ -307,8 +297,6 @@ func (tc *testContext) captureConversations(alias string) error {
 	}
 	return nil
 }
-
-// --- Utility functions ------------------------------------------------
 
 // nextLocalID generates a unique local ID for a message or attachment
 // scoped to the given alias and kind.

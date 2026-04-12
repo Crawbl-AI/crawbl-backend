@@ -57,6 +57,9 @@ func New(
 	if repos.AgentHistory == nil {
 		return nil, errors.New("chatservice: AgentHistory repo is required")
 	}
+	if repos.Usage == nil {
+		return nil, errors.New("chatservice: Usage repo is required")
+	}
 	if runtimeClient == nil {
 		return nil, errors.New("chatservice: runtimeClient is required")
 	}
