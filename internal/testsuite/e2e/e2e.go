@@ -135,13 +135,25 @@ func Run(cfg *Config) *Results {
 		},
 	}
 
+	// Auto-exclude @db scenarios when no database connection is available.
+	// DB-dependent scenarios (blueprint reload, usage quota) write directly
+	// to Postgres and cannot run in gateway-only mode.
+	tags := cfg.Tags
+	if cfg.DatabaseDSN == "" {
+		if tags == "" {
+			tags = "~@db"
+		} else {
+			tags += " && ~@db"
+		}
+	}
+
 	opts := godog.Options{
 		Format:    "pretty",
 		Paths:     []string{featuresDir},
 		Output:    colors.Colored(os.Stdout),
 		Strict:    true,
 		Randomize: 0,
-		Tags:      cfg.Tags,
+		Tags:      tags,
 	}
 
 	if !cfg.Verbose {
