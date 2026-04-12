@@ -15,10 +15,6 @@ import (
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
 
-// ---------------------------------------------------------------------------
-// Defaults
-// ---------------------------------------------------------------------------
-
 const (
 	// DefaultDialTimeout caps the time a single gRPC dial attempt will
 	// block before returning an error.
@@ -42,19 +38,11 @@ var DefaultClientKeepalive = keepalive.ClientParameters{
 	PermitWithoutStream: true,
 }
 
-// ---------------------------------------------------------------------------
-// Target helpers
-// ---------------------------------------------------------------------------
-
 // ClusterTarget builds a Kubernetes in-cluster DNS target for gRPC dialing.
 // Format: "<service>.<namespace>.svc.cluster.local:<port>"
 func ClusterTarget(service, namespace string, port int32) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", service, namespace, port)
 }
-
-// ---------------------------------------------------------------------------
-// Pool factory
-// ---------------------------------------------------------------------------
 
 // NewInsecureHMACPool creates a connection pool with insecure transport,
 // HMAC per-RPC credentials, and default keepalive. This is the standard
@@ -73,10 +61,6 @@ func NewInsecureHMACPool(signingKey string) *Pool {
 
 	return NewPool(dial)
 }
-
-// ---------------------------------------------------------------------------
-// Identity context
-// ---------------------------------------------------------------------------
 
 // Identity is the two-part (subject, object) pair carried on every
 // authenticated gRPC RPC between crawbl-backend components. Subject is
@@ -101,10 +85,6 @@ func IdentityFromContext(ctx context.Context) (Identity, bool) {
 	v, ok := ctx.Value(identityKey{}).(Identity)
 	return v, ok
 }
-
-// ---------------------------------------------------------------------------
-// HMAC per-RPC credentials
-// ---------------------------------------------------------------------------
 
 // HMACCredentials is a grpc/credentials.PerRPCCredentials that signs every
 // outbound RPC with an HMAC bearer token via internal/pkg/hmac.
@@ -150,10 +130,6 @@ func (c *HMACCredentials) RequireTransportSecurity() bool {
 }
 
 var _ credentials.PerRPCCredentials = (*HMACCredentials)(nil)
-
-// ---------------------------------------------------------------------------
-// Proto helpers
-// ---------------------------------------------------------------------------
 
 // FormatProtoTimestamp renders a google.protobuf.Timestamp to an RFC3339
 // UTC string. Returns "" for nil or zero timestamps.

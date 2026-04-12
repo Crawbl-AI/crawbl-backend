@@ -16,7 +16,7 @@ func New() *agentHistoryRepo {
 }
 
 func (r *agentHistoryRepo) ListByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string, limit, offset int) ([]orchestratorrepo.AgentHistoryRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -42,7 +42,7 @@ func (r *agentHistoryRepo) ListByAgentID(ctx context.Context, sess orchestratorr
 }
 
 func (r *agentHistoryRepo) CountByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(agentID) == "" {
 		return 0, merrors.ErrInvalidInput
 	}
 
@@ -59,7 +59,7 @@ func (r *agentHistoryRepo) CountByAgentID(ctx context.Context, sess orchestrator
 }
 
 func (r *agentHistoryRepo) Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentHistoryRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 

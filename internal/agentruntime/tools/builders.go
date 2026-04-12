@@ -41,19 +41,14 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/local"
 )
 
-// --- Argument + result types (LLM-facing schemas) -------------------
+// webFetchArgs is the LLM-facing input schema for the web_fetch tool. Field tags
+// carry both the JSON wire name and the jsonschema description that functiontool
+// turns into the tool's argument documentation.
 //
-// Every builder advertises its input/output shape to the LLM through
-// these typed structs. Field tags carry both the JSON wire name and
-// the jsonschema description functiontool turns into the tool's
-// argument documentation.
-//
-// Deliberately kept close to the local.*Options shapes so the
-// builders stay one-line adapters; the only reason these types exist
-// instead of reusing local.*Options directly is the jsonschema tag
-// layer, which would otherwise leak LLM-ergonomics concerns into the
-// storage/memory packages.
-
+// Deliberately kept close to the local.WebFetchOptions shape so the builder stays
+// a one-line adapter; the only reason this type exists instead of reusing
+// local.WebFetchOptions directly is the jsonschema tag layer, which would otherwise
+// leak LLM-ergonomics concerns into the storage/memory packages.
 type webFetchArgs struct {
 	URL            string `json:"url" jsonschema:"HTTP(S) URL to fetch; required"`
 	MaxBytes       int64  `json:"max_bytes,omitempty" jsonschema:"optional cap on response body bytes (default 2 MiB)"`
@@ -84,8 +79,6 @@ type fileWriteArgs struct {
 	Content     string `json:"content" jsonschema:"file body; required"`
 	ContentType string `json:"content_type,omitempty" jsonschema:"optional MIME type (default text/plain)"`
 }
-
-// --- Generic builder ------------------------------------------------
 
 // handlerFunc is the shape every local-tool adapter implements: take
 // a context + typed args, return typed result + error. Each builder
@@ -151,13 +144,9 @@ func toolCtxOrBackground(tctx adktool.Context) context.Context {
 	return context.Background()
 }
 
-// --- Per-tool handlers ----------------------------------------------
-//
-// Each handler is a three-line adapter: call the local package's
-// implementation with workspaceID / store / endpoint captured from
-// the closure, reshape the return into the LLM-facing result struct.
-// Any new local tool follows the same pattern.
-
+// webFetchHandler calls local.WebFetch and reshapes the result into the
+// LLM-facing webFetchResult struct. workspaceID / store / endpoint are
+// captured from the closure; any new local tool follows the same pattern.
 func webFetchHandler(ctx context.Context, args webFetchArgs) (webFetchResult, error) {
 	body, err := local.WebFetch(ctx, local.WebFetchOptions{
 		URL:            args.URL,
@@ -198,8 +187,6 @@ func fileWriteHandler(spaces *storage.SpacesClient, workspaceID string) handlerF
 		})
 	}
 }
-
-// --- BuildCommonTools -----------------------------------------------
 
 // CommonToolDeps carries the backend handles every local tool needs.
 // main.go builds this once per pod from config + constructed stores

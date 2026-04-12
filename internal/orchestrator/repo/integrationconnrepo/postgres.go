@@ -23,7 +23,7 @@ type providerRow struct {
 }
 
 func (r *integrationConnRepo) ListActiveProviders(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, activeStatus string) ([]string, *merrors.Error) {
-	if sess == nil || userID == "" {
+	if userID == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 

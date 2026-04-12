@@ -39,12 +39,6 @@ const (
 
 	// WorkflowStatusApproved indicates a step has been approved and will continue.
 	WorkflowStatusApproved WorkflowStatus = "approved"
-
-	// WorkflowStatusStopped indicates execution was halted by an on_failure=stop policy.
-	WorkflowStatusStopped WorkflowStatus = "stop"
-
-	// WorkflowStatusSkipped indicates a step was skipped by an on_failure=skip policy.
-	WorkflowStatusSkipped WorkflowStatus = "skip"
 )
 
 // WorkflowOnFailure controls step behavior on failure.

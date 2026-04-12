@@ -140,6 +140,17 @@ type OffsetPaginationResponse struct {
 	HasNext bool `json:"has_next"`
 }
 
+// NewOffsetPaginationResponse builds the wire-format pagination metadata
+// from the domain-layer OffsetPagination struct.
+func NewOffsetPaginationResponse(p orchestrator.OffsetPagination) OffsetPaginationResponse {
+	return OffsetPaginationResponse{
+		Total:   p.Total,
+		Limit:   p.Limit,
+		Offset:  p.Offset,
+		HasNext: p.HasNext,
+	}
+}
+
 // ToAgentDetailResponse converts a domain AgentDetails to the API response format.
 func ToAgentDetailResponse(d *orchestrator.AgentDetails) AgentDetailResponse {
 	resp := AgentDetailResponse{

@@ -16,7 +16,7 @@ func New() *agentSettingsRepo {
 }
 
 func (r *agentSettingsRepo) GetByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestratorrepo.AgentSettingsRow, *merrors.Error) {
-	if sess == nil || strings.TrimSpace(agentID) == "" {
+	if strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -39,7 +39,7 @@ func (r *agentSettingsRepo) GetByAgentID(ctx context.Context, sess orchestratorr
 // Returns ErrInvalidInput if sess is nil or row is nil.
 // Raw SQL: dbr has no ON CONFLICT builder.
 func (r *agentSettingsRepo) Save(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentSettingsRow) *merrors.Error {
-	if sess == nil || row == nil {
+	if row == nil {
 		return merrors.ErrInvalidInput
 	}
 

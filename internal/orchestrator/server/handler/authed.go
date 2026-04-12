@@ -151,6 +151,44 @@ func AuthedHandlerNoContent(
 	}
 }
 
+// AuthedHandlerCreated wires a JSON-bodied business function into an
+// http.HandlerFunc that responds with 201 Created instead of 200 OK.
+// This is appropriate for POST endpoints that create resources (e.g.
+// ConversationCreate). Body decoding and error handling are identical
+// to AuthedHandler.
+func AuthedHandlerCreated[Req any, Resp any](
+	c *Context,
+	fn AuthedJSONFunc[Req, Resp],
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		var req Req
+		if err := DecodeJSON(r, &req); err != nil {
+			WriteError(w, merrors.ErrInvalidInput)
+			return
+		}
+
+		deps := &AuthedHandlerDeps{
+			Ctx:  c,
+			User: user,
+			Sess: c.NewSession(),
+		}
+
+		resp, mErr := fn(r, deps, &req)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		WriteSuccess(w, http.StatusCreated, resp)
+	}
+}
+
 // AuthedJSONNoContent wires a JSON-bodied, no-response business function
 // into an http.HandlerFunc. It decodes the request body like AuthedHandler
 // but writes a 204 on success (e.g. CreateAgentMemory).

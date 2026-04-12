@@ -11,8 +11,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-// --- Input/output types ---
-
 type createWorkflowInput struct {
 	Name        string `json:"name" jsonschema:"name for the workflow"`
 	Description string `json:"description,omitempty" jsonschema:"optional description of the workflow"`
@@ -74,8 +72,7 @@ type workflowBrief struct {
 	CreatedAt   string `json:"created_at"`
 }
 
-// --- Handlers ---
-
+// newCreateWorkflowHandler returns the MCP tool handler for the create_workflow tool.
 func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowInput, createWorkflowOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createWorkflowInput) (*sdkmcp.CallToolResult, createWorkflowOutput, error) {
 		if input.Name == "" || input.Steps == "" {

@@ -74,6 +74,9 @@ const (
 
 	// Generic request error codes (REQxxxx)
 	ErrCodeBadRequest = "REQ0001" // Request payload is malformed or fails validation
+
+	// System error codes (SYSxxxx)
+	ErrCodeNotImplemented = "SYS0001" // Endpoint is not yet implemented
 )
 
 // Predefined business errors for common error conditions.
@@ -128,6 +131,9 @@ var (
 	// Artifact errors
 	ErrArtifactNotFound        = NewBusinessError("Artifact not found", ErrCodeArtifactNotFound)
 	ErrArtifactVersionNotFound = NewBusinessError("Artifact version not found", ErrCodeArtifactVersionNotFound)
+
+	// System errors
+	ErrNotImplemented = NewBusinessError("This feature is not yet implemented", ErrCodeNotImplemented)
 
 	// Validation errors (server-side, not exposed to clients)
 	ErrInvalidInput             = NewServerErrorText("invalid input provided")

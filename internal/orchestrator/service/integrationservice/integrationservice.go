@@ -81,13 +81,13 @@ func (s *service) GetOAuthConfig(ctx context.Context, opts *orchestratorservice.
 	}
 
 	// TODO: Load OAuth client credentials from config/secrets per provider.
-	// For now, return not-configured error until OAuth clients are set up.
-	s.logger.Info("OAuth connect requested (not yet configured)",
+	// For now, return not-implemented until OAuth clients are set up.
+	s.logger.Info("OAuth connect requested (not yet implemented)",
 		slog.String("provider", opts.Provider),
 		slog.String("user_id", opts.UserID),
 	)
 
-	return nil, merrors.ErrIntegrationProviderNotSupported
+	return nil, merrors.ErrNotImplemented
 }
 
 // HandleOAuthCallback exchanges the authorization code for access/refresh tokens
@@ -104,5 +104,5 @@ func (s *service) HandleOAuthCallback(ctx context.Context, opts *orchestratorser
 		slog.String("user_id", opts.UserID),
 	)
 
-	return merrors.ErrIntegrationCallbackFailed
+	return merrors.ErrNotImplemented
 }

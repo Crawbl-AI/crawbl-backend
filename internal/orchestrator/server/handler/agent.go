@@ -54,8 +54,7 @@ func GetAgentDetails(c *Context) http.HandlerFunc {
 // GetAgentHistory retrieves paginated conversation history for an agent.
 func GetAgentHistory(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentHistoryResponse, *merrors.Error) {
-		limit := IntQueryParam(r, "limit")
-		offset := IntQueryParam(r, "offset")
+		limit, offset := Pagination(r)
 
 		items, pagination, mErr := c.AgentService.GetAgentHistory(r.Context(), &orchestratorservice.GetAgentHistoryOpts{
 			Sess:    deps.Sess,
@@ -83,13 +82,8 @@ func GetAgentHistory(c *Context) http.HandlerFunc {
 		}
 
 		return dto.AgentHistoryResponse{
-			Items: historyItems,
-			Pagination: dto.OffsetPaginationResponse{
-				Total:   pagination.Total,
-				Limit:   pagination.Limit,
-				Offset:  pagination.Offset,
-				HasNext: pagination.HasNext,
-			},
+			Items:      historyItems,
+			Pagination: dto.NewOffsetPaginationResponse(*pagination),
 		}, nil
 	})
 }
@@ -127,11 +121,7 @@ func GetAgentSettings(c *Context) http.HandlerFunc {
 // GetAgentTools retrieves the tools assigned to an agent with offset pagination.
 func GetAgentTools(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentToolsResponse, *merrors.Error) {
-		limit := IntQueryParam(r, "limit")
-		if limit == 0 {
-			limit = 20
-		}
-		offset := IntQueryParam(r, "offset")
+		limit, offset := Pagination(r)
 
 		page, mErr := c.AgentService.GetAgentTools(r.Context(), &orchestratorservice.GetAgentToolsOpts{
 			Sess:    deps.Sess,
@@ -150,13 +140,8 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 		}
 
 		return dto.AgentToolsResponse{
-			Tools: tools,
-			Pagination: dto.OffsetPaginationResponse{
-				Total:   page.Pagination.Total,
-				Limit:   page.Pagination.Limit,
-				Offset:  page.Pagination.Offset,
-				HasNext: page.Pagination.HasNext,
-			},
+			Tools:      tools,
+			Pagination: dto.NewOffsetPaginationResponse(page.Pagination),
 		}, nil
 	})
 }
@@ -183,11 +168,7 @@ func ListModels(c *Context) http.HandlerFunc {
 func GetAgentMemories(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentMemoriesListResponse, *merrors.Error) {
 		category := r.URL.Query().Get("category")
-		limit := IntQueryParam(r, "limit")
-		if limit == 0 {
-			limit = 20
-		}
-		offset := IntQueryParam(r, "offset")
+		limit, offset := Pagination(r)
 
 		memories, mErr := c.AgentService.GetAgentMemories(r.Context(), &orchestratorservice.GetAgentMemoriesOpts{
 			Sess:     deps.Sess,
