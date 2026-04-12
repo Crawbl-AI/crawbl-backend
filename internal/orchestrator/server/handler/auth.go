@@ -74,7 +74,6 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 		}
 
 		if mErr := c.AuthService.SavePushToken(r.Context(), &orchestratorservice.SavePushTokenOpts{
-			Sess:      c.NewSession(),
 			Principal: principal,
 			PushToken: reqBody.PushToken,
 		}); mErr != nil {
@@ -100,7 +99,6 @@ func SignIn(c *Context) http.HandlerFunc {
 		c.Logger.Info("handleAuthSignIn: starting sign in", "subject", principal.Subject)
 
 		user, mErr := c.AuthService.SignIn(r.Context(), &orchestratorservice.SignInOpts{
-			Sess:      c.NewSession(),
 			Principal: principal,
 		})
 		if mErr != nil {
@@ -127,7 +125,6 @@ func SignUp(c *Context) http.HandlerFunc {
 		}
 
 		user, mErr := c.AuthService.SignUp(r.Context(), &orchestratorservice.SignUpOpts{
-			Sess:      c.NewSession(),
 			Principal: principal,
 		})
 		if mErr != nil {
@@ -166,9 +163,7 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 		}
 
 		// Look up the user to get their internal UUID for workspace lookup.
-		sess := c.NewSession()
 		user, userErr := c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
-			Sess:    sess,
 			Subject: principal.Subject,
 		})
 
@@ -176,13 +171,11 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 		var workspaces []*orchestrator.Workspace
 		if userErr == nil && user != nil {
 			workspaces, _ = c.WorkspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
-				Sess:   sess,
 				UserID: user.ID,
 			})
 		}
 
 		if mErr := c.AuthService.Delete(r.Context(), &orchestratorservice.DeleteOpts{
-			Sess:        sess,
 			Principal:   principal,
 			Reason:      reqBody.Reason,
 			Description: reqBody.Description,
@@ -275,7 +268,6 @@ func UpdateUser(c *Context) http.HandlerFunc {
 		}
 
 		if _, mErr := c.AuthService.UpdateProfile(r.Context(), &orchestratorservice.UpdateProfileOpts{
-			Sess:        c.NewSession(),
 			Principal:   principal,
 			Nickname:    reqBody.Nickname,
 			Name:        reqBody.Name,
@@ -331,7 +323,6 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 		}
 
 		if _, mErr := c.AuthService.AcceptLegal(r.Context(), &orchestratorservice.AcceptLegalOpts{
-			Sess:                  c.NewSession(),
 			Principal:             principal,
 			TermsOfServiceVersion: reqBody.TermsOfServiceVersion,
 			PrivacyPolicyVersion:  reqBody.PrivacyPolicyVersion,
@@ -352,7 +343,6 @@ func Logout(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
 		// Best-effort: clear push tokens so the device stops receiving notifications.
 		_ = c.AuthService.ClearPushToken(r.Context(), &orchestratorservice.ClearPushTokenOpts{
-			Sess:   deps.Sess,
 			UserID: deps.User.ID,
 		})
 		return nil
@@ -403,9 +393,7 @@ func toUserProfileResponse(user *orchestrator.User) *dto.UserProfileResponse {
 // workspace runtime is initialized. This is called after sign-in and sign-up
 // to warm up the workspace state for the user session.
 func seedWorkspaceRuntime(c *Context, ctx context.Context, userID, trigger string) {
-	sess := c.NewSession()
 	workspaces, mErr := c.WorkspaceService.ListByUserID(ctx, &orchestratorservice.ListWorkspacesOpts{
-		Sess:   sess,
 		UserID: userID,
 	})
 	if mErr != nil {
@@ -421,7 +409,6 @@ func seedWorkspaceRuntime(c *Context, ctx context.Context, userID, trigger strin
 	// so the mobile app sees correct agent counts immediately.
 	for _, ws := range workspaces {
 		if _, mErr := c.ChatService.ListAgents(ctx, &orchestratorservice.ListAgentsOpts{
-			Sess:        c.NewSession(),
 			UserID:      userID,
 			WorkspaceID: ws.ID,
 		}); mErr != nil {

@@ -34,7 +34,6 @@ func ActionCardResponse(c *Context) http.HandlerFunc {
 		}
 
 		msg, mErr := c.ChatService.RespondToActionCard(r.Context(), &orchestratorservice.RespondToActionCardOpts{
-			Sess:        c.NewSession(),
 			UserID:      user.ID,
 			WorkspaceID: workspaceID,
 			MessageID:   messageID,

@@ -20,7 +20,6 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.IntegrationsResponse, *merrors.Error) {
 		// Fetch integrations (with connection status from DB).
 		items, mErr := c.IntegrationService.ListIntegrations(r.Context(), &orchestratorservice.ListIntegrationsOpts{
-			Sess:   deps.Sess,
 			UserID: deps.User.ID,
 		})
 		if mErr != nil {
@@ -106,7 +105,6 @@ func IntegrationConnect(c *Context) http.HandlerFunc {
 		}
 
 		config, mErr := c.IntegrationService.GetOAuthConfig(r.Context(), &orchestratorservice.GetOAuthConfigOpts{
-			Sess:     c.NewSession(),
 			UserID:   user.ID,
 			Provider: req.Provider,
 		})
@@ -151,7 +149,6 @@ func IntegrationCallback(c *Context) http.HandlerFunc {
 		}
 
 		if mErr := c.IntegrationService.HandleOAuthCallback(r.Context(), &orchestratorservice.OAuthCallbackOpts{
-			Sess:              c.NewSession(),
 			UserID:            user.ID,
 			Provider:          req.Provider,
 			AuthorizationCode: req.AuthorizationCode,

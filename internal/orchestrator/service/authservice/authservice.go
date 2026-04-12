@@ -82,10 +82,11 @@ func MustNew(userRepo userStore, workspaceBootstrapper orchestratorservice.Works
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID mismatch detected
 func (s *service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOpts) (*orchestrator.User, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
-	return s.signInOrUp(ctx, opts.Sess, opts.Principal, false)
+	sess := database.SessionFromContext(ctx)
+	return s.signInOrUp(ctx, sess, opts.Principal, false)
 }
 
 // SignUp registers a new user. If the user already exists, returns the existing user.
@@ -104,10 +105,11 @@ func (s *service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOp
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID mismatch detected
 func (s *service) SignUp(ctx context.Context, opts *orchestratorservice.SignUpOpts) (*orchestrator.User, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
-	return s.signInOrUp(ctx, opts.Sess, opts.Principal, true)
+	sess := database.SessionFromContext(ctx)
+	return s.signInOrUp(ctx, sess, opts.Principal, true)
 }
 
 // signInOrUp implements the shared authentication flow for both SignIn and SignUp.
@@ -185,7 +187,7 @@ func (s *service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipa
 //   - ErrEmptyEmail: empty email in principal
 //   - Errors from user repository if lookup fails
 func (s *service) Delete(ctx context.Context, opts *orchestratorservice.DeleteOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -194,7 +196,8 @@ func (s *service) Delete(ctx context.Context, opts *orchestratorservice.DeleteOp
 		return mErr
 	}
 
-	user, mErr := s.userRepo.GetBySubject(ctx, opts.Sess, principal.Subject)
+	sess := database.SessionFromContext(ctx)
+	user, mErr := s.userRepo.GetBySubject(ctx, sess, principal.Subject)
 	if mErr != nil {
 		return mErr
 	}
@@ -203,7 +206,7 @@ func (s *service) Delete(ctx context.Context, opts *orchestratorservice.DeleteOp
 	user.DeletedAt = &now
 	user.UpdatedAt = now
 
-	return database.WithTransactionNoResult(opts.Sess, "auth delete", func(tx *dbr.Tx) *merrors.Error {
+	return database.WithTransactionNoResult(sess, "auth delete", func(tx *dbr.Tx) *merrors.Error {
 		return s.userRepo.Save(ctx, tx, user)
 	})
 }
@@ -220,7 +223,8 @@ func (s *service) GetBySubject(ctx context.Context, opts *orchestratorservice.Ge
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
-	return s.userRepo.GetBySubject(ctx, opts.Sess, opts.Subject)
+	sess := database.SessionFromContext(ctx)
+	return s.userRepo.GetBySubject(ctx, sess, opts.Subject)
 }
 
 // UpdateProfile updates a user's profile information.
@@ -237,7 +241,7 @@ func (s *service) GetBySubject(ctx context.Context, opts *orchestratorservice.Ge
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
 func (s *service) UpdateProfile(ctx context.Context, opts *orchestratorservice.UpdateProfileOpts) (*orchestrator.User, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -246,7 +250,8 @@ func (s *service) UpdateProfile(ctx context.Context, opts *orchestratorservice.U
 		return nil, mErr
 	}
 
-	user, mErr := s.userRepo.GetBySubject(ctx, opts.Sess, principal.Subject)
+	sess := database.SessionFromContext(ctx)
+	user, mErr := s.userRepo.GetBySubject(ctx, sess, principal.Subject)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -282,7 +287,7 @@ func (s *service) UpdateProfile(ctx context.Context, opts *orchestratorservice.U
 	}
 	user.UpdatedAt = time.Now().UTC()
 
-	return database.WithTransaction(opts.Sess, "users update profile", func(tx *dbr.Tx) (*orchestrator.User, *merrors.Error) {
+	return database.WithTransaction(sess, "users update profile", func(tx *dbr.Tx) (*orchestrator.User, *merrors.Error) {
 		if mErr := s.userRepo.Save(ctx, tx, user); mErr != nil {
 			return nil, mErr
 		}
@@ -321,7 +326,7 @@ func (s *service) GetLegalDocuments(_ context.Context) (*orchestrator.LegalDocum
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - Business error if version doesn't match current version
 func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.AcceptLegalOpts) (*orchestrator.User, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
 
@@ -330,7 +335,8 @@ func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.Acc
 		return nil, mErr
 	}
 
-	user, mErr := s.userRepo.GetBySubject(ctx, opts.Sess, principal.Subject)
+	sess := database.SessionFromContext(ctx)
+	user, mErr := s.userRepo.GetBySubject(ctx, sess, principal.Subject)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -352,7 +358,7 @@ func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.Acc
 	}
 	user.UpdatedAt = time.Now().UTC()
 
-	return database.WithTransaction(opts.Sess, "users accept legal", func(tx *dbr.Tx) (*orchestrator.User, *merrors.Error) {
+	return database.WithTransaction(sess, "users accept legal", func(tx *dbr.Tx) (*orchestrator.User, *merrors.Error) {
 		if mErr := s.userRepo.Save(ctx, tx, user); mErr != nil {
 			return nil, mErr
 		}
@@ -373,7 +379,7 @@ func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.Acc
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
 func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.SavePushTokenOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
 
@@ -382,7 +388,8 @@ func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.S
 		return mErr
 	}
 
-	user, mErr := s.userRepo.GetBySubject(ctx, opts.Sess, principal.Subject)
+	sess := database.SessionFromContext(ctx)
+	user, mErr := s.userRepo.GetBySubject(ctx, sess, principal.Subject)
 	if mErr != nil {
 		return mErr
 	}
@@ -390,7 +397,7 @@ func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.S
 		return merrors.ErrUserDeleted
 	}
 
-	return database.WithTransactionNoResult(opts.Sess, "users save push token", func(tx *dbr.Tx) *merrors.Error {
+	return database.WithTransactionNoResult(sess, "users save push token", func(tx *dbr.Tx) *merrors.Error {
 		return s.userRepo.SavePushToken(ctx, tx, user.ID, strings.TrimSpace(opts.PushToken))
 	})
 }
@@ -406,11 +413,12 @@ func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.S
 // Returns an error if the operation fails. Possible errors include:
 //   - ErrInvalidInput: nil options or session
 func (s *service) ClearPushToken(ctx context.Context, opts *orchestratorservice.ClearPushTokenOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
 
-	return s.userRepo.ClearPushTokens(ctx, opts.Sess, opts.UserID)
+	sess := database.SessionFromContext(ctx)
+	return s.userRepo.ClearPushTokens(ctx, sess, opts.UserID)
 }
 
 // createUser creates a new user with an auto-generated unique nickname.
@@ -468,7 +476,6 @@ func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *
 
 	// Ensure default workspace exists
 	if mErr := s.workspaceBootstrapper.EnsureDefaultWorkspace(ctx, &orchestratorservice.EnsureDefaultWorkspaceOpts{
-		Sess:   sess,
 		UserID: user.ID,
 	}); mErr != nil {
 		return nil, mErr

@@ -42,6 +42,7 @@ func registerRoutes(s *Server) http.Handler {
 	router.Use(middleware.Recoverer(s.logger))
 	router.Use(middleware.RequestLogger(s.logger))
 	router.Use(middleware.MaxBodyBytes)
+	router.Use(middleware.SessionMiddleware(s.db))
 
 	router.Route("/v1", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck(h))

@@ -12,6 +12,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -62,7 +63,7 @@ func newStreamSession(
 	return &streamSession{
 		ctx:          ctx,
 		svc:          svc,
-		sess:         opts.Sess,
+		sess:         database.SessionFromContext(ctx),
 		wsID:         opts.WorkspaceID,
 		userID:       opts.UserID,
 		convID:       conv.ID,
@@ -105,13 +106,14 @@ func (s *service) callAgentStreaming(
 
 	wsID := opts.WorkspaceID
 	convID := conversation.ID
+	sess := database.SessionFromContext(ctx)
 
 	// 1. Emit thinking + create placeholder.
 	log := slog.With("agent", agent.Slug, "conv", convID)
 	s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusThinking), convID)
 
 	placeholder := s.newPlaceholder(conversation.ID, agent)
-	if mErr := s.savePlaceholder(ctx, opts.Sess, placeholder); mErr != nil {
+	if mErr := s.savePlaceholder(ctx, sess, placeholder); mErr != nil {
 		s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusError))
 		return nil, mErr
 	}
@@ -125,7 +127,7 @@ func (s *service) callAgentStreaming(
 	})
 	if mErr != nil {
 		log.Warn("stream open failed, removing placeholder", "error", mErr.Error())
-		if delErr := s.messageRepo.DeleteByID(ctx, opts.Sess, placeholder.ID); delErr != nil {
+		if delErr := s.messageRepo.DeleteByID(ctx, sess, placeholder.ID); delErr != nil {
 			log.Warn("failed to delete placeholder", "error", delErr.Error())
 		}
 		s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusError), convID)

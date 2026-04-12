@@ -5,6 +5,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -17,11 +18,12 @@ type agentLookups struct {
 
 // ListAgents retrieves all agents for a workspace with current runtime status.
 func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, opts.Sess, opts.UserID, opts.WorkspaceID)
+	workspace, agents, _, mErr := s.ensureWorkspaceBootstrap(ctx, sess, opts.UserID, opts.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}

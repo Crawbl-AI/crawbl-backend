@@ -19,7 +19,6 @@ import (
 func WorkspaceAgentsList(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.AgentResponse, *merrors.Error) {
 		agents, mErr := c.ChatService.ListAgents(r.Context(), &orchestratorservice.ListAgentsOpts{
-			Sess:        deps.Sess,
 			UserID:      deps.User.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 		})
@@ -40,7 +39,6 @@ func WorkspaceAgentsList(c *Context) http.HandlerFunc {
 func ConversationsList(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.ConversationResponse, *merrors.Error) {
 		conversations, mErr := c.ChatService.ListConversations(r.Context(), &orchestratorservice.ListConversationsOpts{
-			Sess:        deps.Sess,
 			UserID:      deps.User.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 		})
@@ -61,7 +59,6 @@ func ConversationsList(c *Context) http.HandlerFunc {
 func ConversationGet(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.ConversationResponse, *merrors.Error) {
 		conversation, mErr := c.ChatService.GetConversation(r.Context(), &orchestratorservice.GetConversationOpts{
-			Sess:           deps.Sess,
 			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
@@ -79,7 +76,6 @@ func ConversationGet(c *Context) http.HandlerFunc {
 func MessagesList(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.MessagesListResponse, *merrors.Error) {
 		page, mErr := c.ChatService.ListMessages(r.Context(), &orchestratorservice.ListMessagesOpts{
-			Sess:           deps.Sess,
 			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
@@ -123,7 +119,6 @@ func ConversationCreate(c *Context) http.HandlerFunc {
 		}
 
 		conversation, mErr := c.ChatService.CreateConversation(r.Context(), &orchestratorservice.CreateConversationOpts{
-			Sess:        deps.Sess,
 			UserID:      deps.User.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 			Type:        convType,
@@ -142,7 +137,6 @@ func ConversationCreate(c *Context) http.HandlerFunc {
 func ConversationDelete(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
 		return c.ChatService.DeleteConversation(r.Context(), &orchestratorservice.DeleteConversationOpts{
-			Sess:           deps.Sess,
 			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
@@ -165,7 +159,6 @@ func SearchMessages(c *Context) http.HandlerFunc {
 func ConversationMarkRead(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps) *merrors.Error {
 		return c.ChatService.MarkConversationRead(r.Context(), &orchestratorservice.MarkConversationReadOpts{
-			Sess:           deps.Sess,
 			UserID:         deps.User.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
@@ -201,7 +194,6 @@ func MessagesSend(c *Context) http.HandlerFunc {
 
 		var userMsg *orchestrator.Message
 		_, mErr = c.ChatService.SendMessage(r.Context(), &orchestratorservice.SendMessageOpts{
-			Sess:           c.NewSession(),
 			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),

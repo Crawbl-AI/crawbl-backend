@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
@@ -19,7 +18,6 @@ import (
 func WorkspacesList(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.WorkspaceResponse, *merrors.Error) {
 		workspaces, mErr := c.WorkspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
-			Sess:   deps.Sess,
 			UserID: deps.User.ID,
 		})
 		if mErr != nil {
@@ -29,7 +27,7 @@ func WorkspacesList(c *Context) http.HandlerFunc {
 		response := make([]dto.WorkspaceResponse, 0, len(workspaces))
 		for _, workspace := range workspaces {
 			resp := toWorkspaceResponse(workspace)
-			enrichWorkspaceResponse(c, r.Context(), deps.Sess, deps.User.ID, workspace.ID, &resp)
+			enrichWorkspaceResponse(c, r.Context(), deps.User.ID, workspace.ID, &resp)
 			response = append(response, resp)
 		}
 
@@ -44,7 +42,6 @@ func WorkspaceGet(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.WorkspaceResponse, *merrors.Error) {
 		workspaceID := chi.URLParam(r, "id")
 		workspace, mErr := c.WorkspaceService.GetByID(r.Context(), &orchestratorservice.GetWorkspaceOpts{
-			Sess:        deps.Sess,
 			UserID:      deps.User.ID,
 			WorkspaceID: workspaceID,
 		})
@@ -53,7 +50,7 @@ func WorkspaceGet(c *Context) http.HandlerFunc {
 		}
 
 		resp := toWorkspaceResponse(workspace)
-		enrichWorkspaceResponse(c, r.Context(), deps.Sess, deps.User.ID, workspace.ID, &resp)
+		enrichWorkspaceResponse(c, r.Context(), deps.User.ID, workspace.ID, &resp)
 		return resp, nil
 	})
 }
@@ -83,9 +80,8 @@ func toWorkspaceResponse(workspace *orchestrator.Workspace) dto.WorkspaceRespons
 // enrichWorkspaceResponse fetches aggregate workspace data (agent count, last message)
 // and attaches it to the runtime response. Errors are silently ignored since this
 // data is supplementary and should not block the workspace response.
-// sess must be the caller's already-open session — this function never opens its own.
 // userID is required for the defense-in-depth ownership check.
-func enrichWorkspaceResponse(c *Context, ctx context.Context, sess *dbr.Session, userID, workspaceID string, resp *dto.WorkspaceResponse) {
+func enrichWorkspaceResponse(c *Context, ctx context.Context, userID, workspaceID string, resp *dto.WorkspaceResponse) {
 	if resp.Runtime == nil {
 		return
 	}
@@ -93,7 +89,6 @@ func enrichWorkspaceResponse(c *Context, ctx context.Context, sess *dbr.Session,
 	// Defense-in-depth: verify ownership before fetching summary data.
 	// Callers already scope by user, but future callers may not.
 	if _, mErr := c.WorkspaceService.GetByID(ctx, &orchestratorservice.GetWorkspaceOpts{
-		Sess:        sess,
 		UserID:      userID,
 		WorkspaceID: workspaceID,
 	}); mErr != nil {
@@ -101,7 +96,6 @@ func enrichWorkspaceResponse(c *Context, ctx context.Context, sess *dbr.Session,
 	}
 
 	summary, mErr := c.ChatService.GetWorkspaceSummary(ctx, &orchestratorservice.GetWorkspaceSummaryOpts{
-		Sess:        sess,
 		WorkspaceID: workspaceID,
 	})
 	if mErr != nil {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -16,13 +17,14 @@ import (
 func UserUsageSummary(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.UserUsageSummaryResponse, *merrors.Error) {
 		period := time.Now().UTC().Format("2006-01")
+		sess := database.SessionFromContext(r.Context())
 
-		tokensUsed, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), deps.Sess, deps.User.ID, period)
+		tokensUsed, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), sess, deps.User.ID, period)
 		if mErr != nil {
 			return dto.UserUsageSummaryResponse{}, mErr
 		}
 
-		counters, mErr := c.UsageRepo.GetUserUsage(r.Context(), deps.Sess, deps.User.ID, period)
+		counters, mErr := c.UsageRepo.GetUserUsage(r.Context(), sess, deps.User.ID, period)
 		if mErr != nil {
 			return dto.UserUsageSummaryResponse{}, mErr
 		}
@@ -45,22 +47,22 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.WorkspaceUsageResponse, *merrors.Error) {
 		workspaceID := chi.URLParam(r, "id")
 		period := time.Now().UTC().Format("2006-01")
+		sess := database.SessionFromContext(r.Context())
 
 		// Verify the workspace belongs to this user.
 		if _, mErr := c.WorkspaceService.GetByID(r.Context(), &orchestratorservice.GetWorkspaceOpts{
-			Sess:        deps.Sess,
 			UserID:      deps.User.ID,
 			WorkspaceID: workspaceID,
 		}); mErr != nil {
 			return dto.WorkspaceUsageResponse{}, mErr
 		}
 
-		_, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), deps.Sess, deps.User.ID, period)
+		_, tokenLimit, mErr := c.UsageRepo.CheckQuota(r.Context(), sess, deps.User.ID, period)
 		if mErr != nil {
 			return dto.WorkspaceUsageResponse{}, mErr
 		}
 
-		counters, mErr := c.UsageRepo.GetWorkspaceUsage(r.Context(), deps.Sess, workspaceID)
+		counters, mErr := c.UsageRepo.GetWorkspaceUsage(r.Context(), sess, workspaceID)
 		if mErr != nil {
 			return dto.WorkspaceUsageResponse{}, mErr
 		}

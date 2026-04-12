@@ -24,6 +24,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 // NewServer creates and configures a Socket.IO server with authentication
@@ -190,14 +191,14 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			if db != nil && workspaceRepo != nil {
 				authorised = make([]string, 0, len(ids))
 				sess := db.NewSession(nil)
+				ctx := database.ContextWithSession(shutdownCtx, sess)
 
 				// Resolve Firebase subject → internal user.ID. The workspace repo
 				// queries by the internal PK (user_id column), not the subject.
 				// On failure, drop all requested IDs and bail early.
 				var userID string
 				if authService != nil {
-					user, mErr := authService.GetBySubject(shutdownCtx, &orchestratorservice.GetUserBySubjectOpts{
-						Sess:    sess,
+					user, mErr := authService.GetBySubject(ctx, &orchestratorservice.GetUserBySubjectOpts{
 						Subject: userSubject,
 					})
 					if mErr != nil {
@@ -214,7 +215,7 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 					userID = userSubject
 				}
 
-				owned, mErr := workspaceRepo.ListOwnedByUser(shutdownCtx, sess, userID, ids)
+				owned, mErr := workspaceRepo.ListOwnedByUser(ctx, sess, userID, ids)
 				if mErr != nil {
 					logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
 						"socket_id", string(s.Id()),

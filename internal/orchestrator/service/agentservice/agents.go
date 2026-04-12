@@ -10,6 +10,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -17,16 +18,17 @@ import (
 // GetAgent retrieves a single agent by ID with runtime status enrichment.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
 func (s *service) GetAgent(ctx context.Context, opts *orchestratorservice.GetAgentOpts) (*orchestrator.Agent, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	workspace, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -39,21 +41,22 @@ func (s *service) GetAgent(ctx context.Context, opts *orchestratorservice.GetAge
 // GetAgentDetails retrieves full agent details including stats.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
 func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice.GetAgentDetailsOpts) (*orchestrator.AgentDetails, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	workspace, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	workspace, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	totalMessages, mErr := s.agentRepo.CountMessagesByAgentID(ctx, opts.Sess, opts.AgentID)
+	totalMessages, mErr := s.agentRepo.CountMessagesByAgentID(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -61,7 +64,7 @@ func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice
 	// Fetch lifetime token usage for the agent.
 	var tokenStats orchestrator.AgentStats
 	if s.usageRepo != nil {
-		usage, uErr := s.usageRepo.GetAgentUsage(ctx, opts.Sess, opts.AgentID)
+		usage, uErr := s.usageRepo.GetAgentUsage(ctx, sess, opts.AgentID)
 		if uErr != nil {
 			slog.Warn("failed to get agent usage", "agent_id", opts.AgentID, "error", uErr.Error())
 		} else if usage != nil {
@@ -91,25 +94,26 @@ func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice
 // GetAgentHistory retrieves paginated conversation history for an agent.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
 func (s *service) GetAgentHistory(ctx context.Context, opts *orchestratorservice.GetAgentHistoryOpts) ([]orchestrator.AgentHistoryItem, *orchestrator.OffsetPagination, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, nil, mErr
 	}
 
-	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID); mErr != nil {
+	if _, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID); mErr != nil {
 		return nil, nil, mErr
 	}
 
-	rows, mErr := s.agentHistoryRepo.ListByAgentID(ctx, opts.Sess, opts.AgentID, opts.Limit, opts.Offset)
+	rows, mErr := s.agentHistoryRepo.ListByAgentID(ctx, sess, opts.AgentID, opts.Limit, opts.Offset)
 	if mErr != nil {
 		return nil, nil, mErr
 	}
 
-	total, mErr := s.agentHistoryRepo.CountByAgentID(ctx, opts.Sess, opts.AgentID)
+	total, mErr := s.agentHistoryRepo.CountByAgentID(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, nil, mErr
 	}
@@ -130,20 +134,21 @@ func (s *service) GetAgentHistory(ctx context.Context, opts *orchestratorservice
 // GetAgentSettings retrieves model and prompt configuration for an agent.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
 func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservice.GetAgentSettingsOpts) (*orchestrator.AgentSettings, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID); mErr != nil {
+	if _, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID); mErr != nil {
 		return nil, mErr
 	}
 
-	settingsRow, mErr := s.agentSettingsRepo.GetByAgentID(ctx, opts.Sess, opts.AgentID)
+	settingsRow, mErr := s.agentSettingsRepo.GetByAgentID(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -164,7 +169,7 @@ func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservic
 
 	modelDef := resolveModelDef(modelID)
 
-	promptRows, mErr := s.agentPromptsRepo.ListByAgentID(ctx, opts.Sess, opts.AgentID)
+	promptRows, mErr := s.agentPromptsRepo.ListByAgentID(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -191,21 +196,22 @@ func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservic
 // GetAgentTools retrieves the tools assigned to an agent with pagination.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
 func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	if _, mErr := s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID); mErr != nil {
+	if _, mErr := s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID); mErr != nil {
 		return nil, mErr
 	}
 
 	// Get agent settings to determine allowed tools.
-	settingsRow, mErr := s.agentSettingsRepo.GetByAgentID(ctx, opts.Sess, opts.AgentID)
+	settingsRow, mErr := s.agentSettingsRepo.GetByAgentID(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -229,7 +235,7 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 	}
 
 	// Fetch matching tools from the catalog.
-	allTools, mErr := s.toolsRepo.GetByNames(ctx, opts.Sess, allowedTools)
+	allTools, mErr := s.toolsRepo.GetByNames(ctx, sess, allowedTools)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -261,16 +267,17 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 // from memory_drawers — the table populated by the memory_add_drawer
 // tool and by CreateAgentMemory below.
 func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
-	if opts == nil || opts.Sess == nil {
+	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return nil, mErr
 	}
 
-	_, mErr = s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	_, mErr = s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID)
 	if mErr != nil {
 		return nil, mErr
 	}
@@ -280,7 +287,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 		limit = 50
 	}
 
-	drawers, err := s.drawerRepo.ListByWorkspace(ctx, opts.Sess, agent.WorkspaceID, limit, opts.Offset)
+	drawers, err := s.drawerRepo.ListByWorkspace(ctx, sess, agent.WorkspaceID, limit, opts.Offset)
 	if err != nil {
 		return nil, merrors.WrapStdServerError(err, "list drawer memories")
 	}
@@ -301,21 +308,22 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 
 // DeleteAgentMemory removes a memory drawer by ID.
 func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil || opts.Key == "" {
+	if opts == nil || opts.Key == "" {
 		return merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return mErr
 	}
 
-	_, mErr = s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	_, mErr = s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID)
 	if mErr != nil {
 		return mErr
 	}
 
-	if err := s.drawerRepo.Delete(ctx, opts.Sess, agent.WorkspaceID, opts.Key); err != nil {
+	if err := s.drawerRepo.Delete(ctx, sess, agent.WorkspaceID, opts.Key); err != nil {
 		return merrors.WrapStdServerError(err, "delete drawer memory")
 	}
 	return nil
@@ -323,16 +331,17 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 
 // CreateAgentMemory stores a memory as a drawer in the memory palace.
 func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
-	if opts == nil || opts.Sess == nil || opts.Key == "" || opts.Content == "" {
+	if opts == nil || opts.Key == "" || opts.Content == "" {
 		return merrors.ErrInvalidInput
 	}
+	sess := database.SessionFromContext(ctx)
 
-	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, opts.Sess, opts.AgentID)
+	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		return mErr
 	}
 
-	_, mErr = s.workspaceRepo.GetByID(ctx, opts.Sess, opts.UserID, agent.WorkspaceID)
+	_, mErr = s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID)
 	if mErr != nil {
 		return mErr
 	}
@@ -368,7 +377,7 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		FiledAt:   now,
 		CreatedAt: now,
 	}
-	if err := s.drawerRepo.Add(ctx, opts.Sess, drawer, nil); err != nil {
+	if err := s.drawerRepo.Add(ctx, sess, drawer, nil); err != nil {
 		return merrors.WrapStdServerError(err, "create drawer memory")
 	}
 	return nil

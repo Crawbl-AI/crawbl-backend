@@ -16,17 +16,12 @@ import (
 	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-
-	"github.com/gocraft/dbr/v2"
 )
 
 // SignUpOpts contains the parameters required for user registration.
 // This struct is used when creating a new user account in the system.
 type SignUpOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// Principal contains the authentication credentials and identity information
 	// for the user being created.
 	Principal *orchestrator.Principal
@@ -35,8 +30,6 @@ type SignUpOpts struct {
 // SignInOpts contains the parameters required for user authentication.
 // This struct is used when authenticating an existing user.
 type SignInOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// Principal contains the authentication credentials to validate.
 	Principal *orchestrator.Principal
 }
@@ -44,8 +37,6 @@ type SignInOpts struct {
 // DeleteOpts contains the parameters required for user account deletion.
 // This struct supports both soft-delete semantics and audit trail requirements.
 type DeleteOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// Principal identifies the user account to be deleted.
 	Principal *orchestrator.Principal
 	// Reason provides a categorization for the deletion (e.g., "user_request", "admin_action").
@@ -58,9 +49,6 @@ type DeleteOpts struct {
 // GetUserBySubjectOpts contains the parameters for retrieving a user by their
 // external identity subject identifier (e.g., Firebase UID, OAuth provider ID).
 type GetUserBySubjectOpts struct {
-	// Sess is the database session or transaction runner. Accepts either a direct
-	// session or a transaction-wrapped runner for flexibility.
-	Sess orchestratorrepo.SessionRunner
 	// Subject is the unique external identifier for the user, typically provided
 	// by the authentication provider (Firebase Auth, OAuth, etc.).
 	Subject string
@@ -69,8 +57,6 @@ type GetUserBySubjectOpts struct {
 // UpdateProfileOpts contains the parameters for updating user profile information.
 // All profile fields are optional pointers; only non-nil fields will be updated.
 type UpdateProfileOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// Principal identifies the user whose profile is being updated.
 	Principal *orchestrator.Principal
 	// Nickname is the user's display name or handle. Set to nil to leave unchanged.
@@ -92,8 +78,6 @@ type UpdateProfileOpts struct {
 // AcceptLegalOpts contains the parameters for recording user acceptance of
 // legal documents (terms of service, privacy policy).
 type AcceptLegalOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// Principal identifies the user accepting the legal documents.
 	Principal *orchestrator.Principal
 	// TermsOfServiceVersion is the specific version of the terms of service
@@ -107,8 +91,6 @@ type AcceptLegalOpts struct {
 // SavePushTokenOpts contains the parameters for registering a push notification
 // token for a user's device.
 type SavePushTokenOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// Principal identifies the user whose push token is being registered.
 	Principal *orchestrator.Principal
 	// PushToken is the FCM (Firebase Cloud Messaging) or APNs (Apple Push
@@ -119,9 +101,6 @@ type SavePushTokenOpts struct {
 // EnsureDefaultWorkspaceOpts contains the parameters for creating the default
 // workspace for a user. This is typically called during user provisioning.
 type EnsureDefaultWorkspaceOpts struct {
-	// Sess is the database session or transaction runner. Accepts either a direct
-	// session or a transaction-wrapped runner for flexibility.
-	Sess orchestratorrepo.SessionRunner
 	// UserID is the unique identifier of the user who will own the default workspace.
 	UserID string
 }
@@ -129,9 +108,6 @@ type EnsureDefaultWorkspaceOpts struct {
 // ListWorkspacesOpts contains the parameters for listing all workspaces
 // associated with a specific user.
 type ListWorkspacesOpts struct {
-	// Sess is the database session or transaction runner. Accepts either a direct
-	// session or a transaction-wrapped runner for flexibility.
-	Sess orchestratorrepo.SessionRunner
 	// UserID is the unique identifier of the user whose workspaces are being listed.
 	UserID string
 }
@@ -139,9 +115,6 @@ type ListWorkspacesOpts struct {
 // GetWorkspaceOpts contains the parameters for retrieving a specific workspace
 // by its ID, scoped to a user.
 type GetWorkspaceOpts struct {
-	// Sess is the database session or transaction runner. Accepts either a direct
-	// session or a transaction-wrapped runner for flexibility.
-	Sess orchestratorrepo.SessionRunner
 	// UserID is the unique identifier of the user who owns the workspace.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace to retrieve.
@@ -151,8 +124,6 @@ type GetWorkspaceOpts struct {
 // ListAgentsOpts contains the parameters for listing all agents available
 // within a specific workspace.
 type ListAgentsOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the agent list.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace containing the agents.
@@ -162,8 +133,6 @@ type ListAgentsOpts struct {
 // ListConversationsOpts contains the parameters for listing all conversations
 // within a specific workspace.
 type ListConversationsOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the conversation list.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace containing the conversations.
@@ -173,8 +142,6 @@ type ListConversationsOpts struct {
 // GetConversationOpts contains the parameters for retrieving a specific conversation
 // by its ID, scoped to a workspace.
 type GetConversationOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the conversation.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace containing the conversation.
@@ -186,8 +153,6 @@ type GetConversationOpts struct {
 // ListMessagesOpts contains the parameters for paginated message retrieval
 // within a conversation.
 type ListMessagesOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the messages.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace containing the conversation.
@@ -205,8 +170,6 @@ type ListMessagesOpts struct {
 
 // SendMessageOpts contains the parameters for sending a new message to a conversation.
 type SendMessageOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user sending the message.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace containing the conversation.
@@ -229,16 +192,12 @@ type SendMessageOpts struct {
 
 // ClearPushTokenOpts contains the parameters for clearing all push tokens for a user.
 type ClearPushTokenOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user whose tokens are being cleared.
 	UserID string
 }
 
 // CreateConversationOpts contains the parameters for creating a new conversation.
 type CreateConversationOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user creating the conversation.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace for the conversation.
@@ -251,8 +210,6 @@ type CreateConversationOpts struct {
 
 // DeleteConversationOpts contains the parameters for deleting a conversation.
 type DeleteConversationOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the deletion.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace owning the conversation.
@@ -263,8 +220,6 @@ type DeleteConversationOpts struct {
 
 // MarkConversationReadOpts contains the parameters for marking a conversation as read.
 type MarkConversationReadOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user marking the conversation read.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace owning the conversation.
@@ -275,8 +230,6 @@ type MarkConversationReadOpts struct {
 
 // RespondToActionCardOpts contains the parameters for responding to an action card message.
 type RespondToActionCardOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user responding.
 	UserID string
 	// WorkspaceID is the unique identifier of the workspace owning the message.
@@ -289,16 +242,12 @@ type RespondToActionCardOpts struct {
 
 // GetWorkspaceSummaryOpts contains options for the GetWorkspaceSummary method.
 type GetWorkspaceSummaryOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// WorkspaceID is the unique identifier of the workspace to summarize.
 	WorkspaceID string
 }
 
 // GetAgentOpts contains the parameters for retrieving a single agent by ID.
 type GetAgentOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the requesting user.
 	UserID string
 	// AgentID is the unique identifier of the agent to retrieve.
@@ -307,8 +256,6 @@ type GetAgentOpts struct {
 
 // GetAgentDetailsOpts contains the parameters for retrieving full agent details.
 type GetAgentDetailsOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the requesting user.
 	UserID string
 	// AgentID is the unique identifier of the agent to retrieve.
@@ -317,8 +264,6 @@ type GetAgentDetailsOpts struct {
 
 // GetAgentHistoryOpts contains the parameters for retrieving agent history.
 type GetAgentHistoryOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the requesting user.
 	UserID string
 	// AgentID is the unique identifier of the agent.
@@ -331,8 +276,6 @@ type GetAgentHistoryOpts struct {
 
 // GetAgentSettingsOpts contains the parameters for retrieving agent settings.
 type GetAgentSettingsOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the requesting user.
 	UserID string
 	// AgentID is the unique identifier of the agent.
@@ -341,8 +284,6 @@ type GetAgentSettingsOpts struct {
 
 // GetAgentToolsOpts contains the parameters for retrieving an agent's tools.
 type GetAgentToolsOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the requesting user.
 	UserID string
 	// AgentID is the unique identifier of the agent.
@@ -355,7 +296,6 @@ type GetAgentToolsOpts struct {
 
 // GetAgentMemoriesOpts contains the parameters for retrieving agent memories.
 type GetAgentMemoriesOpts struct {
-	Sess     *dbr.Session
 	UserID   string
 	AgentID  string
 	Category string
@@ -365,7 +305,6 @@ type GetAgentMemoriesOpts struct {
 
 // DeleteAgentMemoryOpts contains the parameters for deleting an agent memory.
 type DeleteAgentMemoryOpts struct {
-	Sess    *dbr.Session
 	UserID  string
 	AgentID string
 	Key     string
@@ -373,7 +312,6 @@ type DeleteAgentMemoryOpts struct {
 
 // CreateAgentMemoryOpts contains the parameters for creating an agent memory.
 type CreateAgentMemoryOpts struct {
-	Sess     *dbr.Session
 	UserID   string
 	AgentID  string
 	Key      string
@@ -596,16 +534,12 @@ type AgentService interface {
 
 // ListIntegrationsOpts contains parameters for listing available integrations.
 type ListIntegrationsOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the integration list.
 	UserID string
 }
 
 // GetOAuthConfigOpts contains parameters for getting OAuth config for a provider.
 type GetOAuthConfigOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user requesting the OAuth config.
 	UserID string
 	// Provider is the integration provider identifier (e.g., "google_calendar", "gmail").
@@ -614,8 +548,6 @@ type GetOAuthConfigOpts struct {
 
 // OAuthCallbackOpts contains the OAuth callback parameters from the mobile app.
 type OAuthCallbackOpts struct {
-	// Sess is the database session for the transaction. Must be non-nil.
-	Sess *dbr.Session
 	// UserID is the unique identifier of the user completing the OAuth flow.
 	UserID string
 	// Provider is the integration provider identifier.
