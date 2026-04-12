@@ -17,5 +17,5 @@ fi
 
 cd "${repo_root}"
 echo "crawbl: running post-clone bootstrap..."
-make setup
+./crawbl setup
 touch "${sentinel}"

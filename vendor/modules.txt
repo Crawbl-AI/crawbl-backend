@@ -144,7 +144,7 @@ github.com/ProtonMail/go-crypto/openpgp/packet
 github.com/ProtonMail/go-crypto/openpgp/s2k
 github.com/ProtonMail/go-crypto/openpgp/x25519
 github.com/ProtonMail/go-crypto/openpgp/x448
-# github.com/achetronic/adk-utils-go v0.13.0
+# github.com/achetronic/adk-utils-go v0.13.0 => github.com/Crawbl-AI/adk-utils-go v0.13.0-crawbl.1
 ## explicit; go 1.25.5
 github.com/achetronic/adk-utils-go/genai/openai
 # github.com/agext/levenshtein v1.2.3
@@ -2225,3 +2225,4 @@ sigs.k8s.io/structured-merge-diff/v6/value
 # sigs.k8s.io/yaml v1.6.0
 ## explicit; go 1.22
 sigs.k8s.io/yaml
+# github.com/achetronic/adk-utils-go => github.com/Crawbl-AI/adk-utils-go v0.13.0-crawbl.1

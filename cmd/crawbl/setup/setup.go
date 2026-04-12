@@ -27,11 +27,12 @@ func NewSetupCommand() *cobra.Command {
 		Long: `Verifies your development environment and prepares .env configuration.
 
 What it does:
-  1. Installs repo-managed tools with mise (when available)
-  2. Checks that required tools are installed (Go, Docker, kubectl, etc.)
-  3. Creates .env from .env.example if it doesn't exist
+  1. Configures git hooks
+  2. Installs repo-managed tools with mise (when available)
+  3. Checks that required tools are installed (Go, ko, kubectl, etc.)
+  4. Creates .env from .env.example if it doesn't exist
 
-After setup completes, run './crawbl dev start' to start the orchestrator.`,
+After setup completes, deploy to dev with 'crawbl app deploy platform'.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup()
 		},
@@ -40,17 +41,28 @@ After setup completes, run './crawbl dev start' to start the orchestrator.`,
 	return cmd
 }
 
-// runSetup runs the three-step setup process:
-// 1. Install repo-managed tools when mise is available
-// 2. Verify all required tools are installed
-// 3. Create .env if it doesn't exist
+// runSetup runs the four-step setup process.
 func runSetup() error {
 	out.Ln()
 	out.Step(style.Setup, "Crawbl Backend Setup")
 	out.Ln()
 
-	// --- Step 1: Install repo-managed tools ---
-	out.Step(style.Setup, "Step 1/3: Installing repo-managed tools...")
+	// --- Step 1: Configure git hooks ---
+	out.Step(style.Setup, "Step 1/4: Configuring git hooks...")
+	out.Ln()
+
+	if err := runCmd("git", "config", "core.hooksPath", ".githooks"); err != nil {
+		out.Warning("git hooks config failed: %v", err)
+	} else {
+		_ = chmodExecutable(".githooks/pre-push")
+		_ = chmodExecutable(".githooks/pre-commit")
+		_ = chmodExecutable("crawbl")
+		out.Step(style.Check, "Git hooks configured")
+	}
+	out.Ln()
+
+	// --- Step 2: Install repo-managed tools ---
+	out.Step(style.Setup, "Step 2/4: Installing repo-managed tools...")
 	out.Ln()
 
 	if fileExists(".mise.toml") {
@@ -70,14 +82,14 @@ func runSetup() error {
 	}
 	out.Ln()
 
-	// --- Step 2: Check required tools ---
-	out.Step(style.Setup, "Step 2/3: Checking required tools...")
+	// --- Step 3: Check required tools ---
+	out.Step(style.Setup, "Step 3/4: Checking required tools...")
 	out.Ln()
 
 	allFound := true
 	tools := []toolCheck{
 		{"go", "go version", "https://go.dev/dl/ or: mise install go"},
-		{"docker", "docker --version", "https://docs.docker.com/get-docker/"},
+		{"ko", "ko version", "go install github.com/google/ko@latest"},
 		{"kubectl", "kubectl version --client --short 2>/dev/null || kubectl version --client", "mise install kubectl"},
 		{"helm", "helm version --short", "mise install helm"},
 		{"doctl", "doctl version", "mise install doctl"},
@@ -85,6 +97,7 @@ func runSetup() error {
 		{"pulumi", "pulumi version", "mise install pulumi"},
 		{"yq", "yq --version", "mise install yq  (required for crawbl app deploy)"},
 		{"gh", "gh --version", "https://cli.github.com/"},
+		{"docker (auth-filter only)", "docker --version", "https://docs.docker.com/get-docker/ (only needed for auth-filter WASM builds)"},
 	}
 
 	for _, t := range tools {
@@ -97,7 +110,6 @@ func runSetup() error {
 	}
 	out.Ln()
 
-	// If anything is missing, suggest mise as the fix.
 	if !allFound {
 		out.Step(style.Tip, "Install all tools at once with mise:")
 		out.Infof("curl https://mise.run | sh")
@@ -106,8 +118,8 @@ func runSetup() error {
 		out.Ln()
 	}
 
-	// --- Step 3: Check/create .env file ---
-	out.Step(style.Config, "Step 3/3: Checking .env file...")
+	// --- Step 4: Check/create .env file ---
+	out.Step(style.Config, "Step 4/4: Checking .env file...")
 	out.Ln()
 
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
@@ -128,10 +140,10 @@ func runSetup() error {
 	out.Step(style.Celebrate, "Ready! Next steps:")
 	out.Infof("1. Source your environment:")
 	out.Infof("   set -a && source .env && set +a")
-	out.Infof("2. Start everything:")
-	out.Infof("   ./crawbl dev start")
-	out.Infof("3. Verify:")
-	out.Infof("   curl http://localhost:7171/v1/health")
+	out.Infof("2. Deploy to dev:")
+	out.Infof("   crawbl app deploy platform")
+	out.Infof("3. Run e2e tests:")
+	out.Infof("   crawbl test e2e --base-url https://dev.api.crawbl.com")
 	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")
 	out.Ln()
 
@@ -142,9 +154,9 @@ func runSetup() error {
 
 // toolCheck holds the info needed to verify one tool is installed.
 type toolCheck struct {
-	name        string // Display name (e.g. "go")
-	checkCmd    string // Shell command to run (e.g. "go version")
-	installHint string // How to install if missing
+	name        string
+	checkCmd    string
+	installHint string
 }
 
 // checkTool runs the check command via sh so shell operators (||, redirects) work.
@@ -172,11 +184,17 @@ func runCmd(name string, args ...string) error {
 	return cmd.Run()
 }
 
-// copyFile copies src to dst.
 func copyFile(src, dst string) error {
 	data, err := os.ReadFile(filepath.Clean(src))
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(dst, data, configFileMode)
+}
+
+// executableMode is the permission bits for executable files (rwxr-xr-x).
+const executableMode = 0o755
+
+func chmodExecutable(path string) error {
+	return os.Chmod(path, executableMode)
 }

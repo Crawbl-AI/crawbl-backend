@@ -1,6 +1,7 @@
 # Reusable Build Workflow
 #
-# Build Go binary and Docker images, calculate semver from conventional commits.
+# Build Go binary and container images, calculate semver from conventional commits.
+# Platform and agent-runtime use ko; auth-filter uses Docker (TinyGo/WASM).
 #
 # Usage:
 #   jobs:
@@ -16,7 +17,7 @@ on:
   workflow_call:
     inputs:
       registry:
-        description: 'Docker registry URL'
+        description: 'Container registry URL'
         required: false
         default: 'registry.digitalocean.com/crawbl'
         type: string
@@ -75,13 +76,18 @@ jobs:
           path: crawbl
           retention-days: 1
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Install ko
+        uses: ko-build/setup-ko@v0.8
 
-      - name: Login to Docker registry
+      - name: Login to container registry
         uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.digitalocean-token }}
       - run: doctl registry login --expiry-seconds 1200
+
+      # Docker setup — only needed for auth-filter WASM build.
+      - uses: docker/setup-buildx-action@v3
+        if: inputs.push-images
 
       - name: Calculate version from conventional commits
         id: calc-version
@@ -144,21 +150,30 @@ jobs:
           echo "new-tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
           echo "latest-tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push platform image
+      - name: Build and push platform image (ko)
         if: inputs.push-images
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: dockerfiles/platform.dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ inputs.registry }}/crawbl-platform:${{ steps.calc-version.outputs.new-tag }}
-            ${{ inputs.registry }}/crawbl-platform:latest
-          cache-from: type=gha,scope=crawbl-platform
-          cache-to: type=gha,mode=max,scope=crawbl-platform
+        env:
+          KO_DOCKER_REPO: ${{ inputs.registry }}/crawbl-platform
+          KO_BUILD_VERSION: ${{ steps.calc-version.outputs.new-tag }}
+        run: |
+          ko build ./cmd/crawbl \
+            --bare \
+            --push \
+            --tags ${{ steps.calc-version.outputs.new-tag }},latest \
+            --platform linux/amd64
 
-      - name: Build and push auth filter
+      - name: Build and push agent-runtime image (ko)
+        if: inputs.push-images
+        env:
+          KO_DOCKER_REPO: ${{ inputs.registry }}/crawbl-agent-runtime
+        run: |
+          ko build ./cmd/crawbl-agent-runtime \
+            --bare \
+            --push \
+            --tags ${{ steps.calc-version.outputs.new-tag }},latest \
+            --platform linux/amd64
+
+      - name: Build and push auth filter (Docker)
         if: inputs.push-images
         uses: docker/build-push-action@v6
         with:

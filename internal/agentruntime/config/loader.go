@@ -14,7 +14,7 @@ import (
 
 // envPrefix is the common prefix used for every environment variable
 // this binary reads. Matches the orchestrator's CRAWBL_* convention so
-// a single .env file can drive both processes in docker-compose.
+// a single .env file can drive both processes locally or in the cluster.
 const envPrefix = "CRAWBL_"
 
 // Load parses configuration from CLI flags first, then fills unset fields

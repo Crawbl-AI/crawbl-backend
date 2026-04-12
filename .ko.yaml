@@ -1,0 +1,23 @@
+defaultBaseImage: gcr.io/distroless/static-debian12:nonroot
+defaultPlatforms:
+  - linux/amd64
+builds:
+  - id: platform
+    main: ./cmd/crawbl
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+      - -mod=vendor
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Env.KO_BUILD_VERSION }}
+  - id: agent-runtime
+    main: ./cmd/crawbl-agent-runtime
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+      - -mod=vendor
+    ldflags:
+      - -s -w

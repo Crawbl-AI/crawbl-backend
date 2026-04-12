@@ -27,7 +27,7 @@ func newDeployCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy [component]",
 		Short: "Build, push, and deploy a component",
-		Long:  "Build and deploy a component. Backend components use Docker + ArgoCD. Docs and website deploy to Cloudflare Pages.",
+		Long:  "Build and deploy a component. Platform and agent-runtime use ko + ArgoCD. Auth-filter uses Docker + ArgoCD. Docs and website deploy to Cloudflare Pages.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
   crawbl app deploy auth-filter --tag v1.0.0
   crawbl app deploy agent-runtime --tag v1.0.0
@@ -50,8 +50,14 @@ func newDeployCommand() *cobra.Command {
 	return cmd
 }
 
-// addDeployFlags registers shared flags for deploy subcommands.
-func addDeployFlags(cmd *cobra.Command, tag *string, platform *string, argocdRepo *string) {
+// addKoDeployFlags registers shared flags for ko-based deploy subcommands (platform, agent-runtime).
+func addKoDeployFlags(cmd *cobra.Command, tag *string, argocdRepo *string) {
+	cmd.Flags().StringVarP(tag, "tag", "t", "", "Image tag (default: auto-calculated semver)")
+	cmd.Flags().StringVar(argocdRepo, "argocd-repo", "", "Path to crawbl-argocd-apps (default: sibling dir)")
+}
+
+// addDockerDeployFlags registers shared flags for Docker-based deploy subcommands (auth-filter).
+func addDockerDeployFlags(cmd *cobra.Command, tag *string, platform *string, argocdRepo *string) {
 	cmd.Flags().StringVarP(tag, "tag", "t", "", "Image tag (default: auto-calculated semver)")
 	cmd.Flags().StringVar(platform, "platform", "linux/amd64", "Build platform")
 	cmd.Flags().StringVar(argocdRepo, "argocd-repo", "", "Path to crawbl-argocd-apps (default: sibling dir)")
@@ -68,14 +74,13 @@ func checkAllTools() error {
 func newDeployPlatformCommand() *cobra.Command {
 	var (
 		tag        string
-		platform   string
 		argocdRepo string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "platform",
 		Short: "Deploy the platform",
-		Long:  "Build and push the crawbl-platform image, then update orchestrator, webhook, and reaper image tags in crawbl-argocd-apps.",
+		Long:  "Build and push the crawbl-platform image via ko, then update orchestrator, webhook, and reaper image tags in crawbl-argocd-apps.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
   crawbl app deploy platform --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -89,18 +94,12 @@ func newDeployPlatformCommand() *cobra.Command {
 			}
 			tag = resolved.Tag
 
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-
-			if err := runDockerBuild(buildOpts{
-				imageRepo:  buildPlatformImageRepo,
-				dockerfile: filepath.Join(rootDir, buildPlatformDockerfile),
-				contextDir: rootDir,
-				tag:        tag,
-				platform:   platform,
-				push:       true,
+			if err := runKoBuild(ctx, koBuildOpts{
+				importPath:   "./cmd/crawbl",
+				imageRepo:    buildPlatformImageRepo,
+				tag:          tag,
+				push:         true,
+				buildVersion: tag,
 			}); err != nil {
 				return err
 			}
@@ -123,6 +122,10 @@ func newDeployPlatformCommand() *cobra.Command {
 				return err
 			}
 
+			rootDir, err := gitutil.RootDir()
+			if err != nil {
+				return err
+			}
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: RepoSlugBackend,
@@ -132,7 +135,7 @@ func newDeployPlatformCommand() *cobra.Command {
 		},
 	}
 
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
+	addKoDeployFlags(cmd, &tag, &argocdRepo)
 	return cmd
 }
 
@@ -168,7 +171,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 				return err
 			}
 
-			if err := runDockerBuild(buildOpts{
+			if err := runDockerBuild(ctx, dockerBuildOpts{
 				imageRepo:  buildAuthFilterImageRepo,
 				dockerfile: filepath.Join(rootDir, buildAuthFilterDockerfile),
 				contextDir: filepath.Join(rootDir, buildAuthFilterContext),
@@ -203,15 +206,14 @@ func newDeployAuthFilterCommand() *cobra.Command {
 		},
 	}
 
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
+	addDockerDeployFlags(cmd, &tag, &platform, &argocdRepo)
 	return cmd
 }
 
-// newDeployAgentRuntimeCommand ships the new Phase 2 crawbl-agent-runtime
-// image: builds the small distroless binary from dockerfiles/agent-runtime
-// .dockerfile, pushes to DOCR, bumps the tag in crawbl-argocd-apps, and
-// tags the crawbl-backend repo with an agent-runtime/vX.Y.Z namespaced
-// tag so it doesn't collide with the main platform tag sequence.
+// newDeployAgentRuntimeCommand builds the crawbl-agent-runtime image via ko,
+// pushes to DOCR, bumps the tag in crawbl-argocd-apps, and tags the
+// crawbl-backend repo with an agent-runtime/vX.Y.Z namespaced tag so it
+// doesn't collide with the main platform tag sequence.
 //
 // This is the deploy counterpart to `crawbl app build agent-runtime`
 // (which just builds locally without pushing). Use this once per
@@ -220,14 +222,13 @@ func newDeployAuthFilterCommand() *cobra.Command {
 func newDeployAgentRuntimeCommand() *cobra.Command {
 	var (
 		tag        string
-		platform   string
 		argocdRepo string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "agent-runtime",
 		Short: "Deploy the crawbl-agent-runtime image",
-		Long:  "Build and push the crawbl-agent-runtime image (distroless, ~26 MB), then update the agent-runtime image tag in crawbl-argocd-apps. Tags releases under agent-runtime/vX.Y.Z.",
+		Long:  "Build and push the crawbl-agent-runtime image via ko, then update the agent-runtime image tag in crawbl-argocd-apps. Tags releases under agent-runtime/vX.Y.Z.",
 		Example: `  crawbl app deploy agent-runtime
   crawbl app deploy agent-runtime --tag v0.1.0
   crawbl app deploy agent-runtime --argocd-repo ../crawbl-argocd-apps`,
@@ -245,17 +246,10 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 			imageTag := strings.TrimPrefix(gitTag, "agent-runtime/")
 			tag = imageTag
 
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-
-			if err := runDockerBuild(buildOpts{
+			if err := runKoBuild(ctx, koBuildOpts{
+				importPath: "./cmd/crawbl-agent-runtime",
 				imageRepo:  buildAgentRuntimeImageRepo,
-				dockerfile: filepath.Join(rootDir, buildAgentRuntimeDockerfile),
-				contextDir: rootDir,
 				tag:        tag,
-				platform:   platform,
 				push:       true,
 			}); err != nil {
 				return err
@@ -276,6 +270,10 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 				return err
 			}
 
+			rootDir, err := gitutil.RootDir()
+			if err != nil {
+				return err
+			}
 			return release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: RepoSlugBackend,
@@ -285,7 +283,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 		},
 	}
 
-	addDeployFlags(cmd, &tag, &platform, &argocdRepo)
+	addKoDeployFlags(cmd, &tag, &argocdRepo)
 	return cmd
 }
 

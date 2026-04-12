@@ -6,7 +6,7 @@ Go implementation of the per-workspace agent runtime pod. Exposes a gRPC service
 
 ## Layout
 
-- `proto/v1/` — Generated gRPC bindings for the `AgentRuntime` (Converse) service. Do not edit `.pb.go` files directly; regenerate with `make generate`.
+- `proto/v1/` — Generated gRPC bindings for the `AgentRuntime` (Converse) service. Do not edit `.pb.go` files directly; regenerate with `crawbl generate`.
 - `server/` — gRPC server wiring: registers the `AgentRuntime` handler, installs the HMAC auth interceptor from `internal/pkg/grpc`, manages graceful shutdown lifecycle.
 - `runner/` — ADK runner construction and turn dispatch. `blueprint.go` fetches the workspace agent graph from the orchestrator at startup; `runner.go` routes each Converse turn to the correct per-agent ADK runner; `workflow.go` builds the multi-agent graph.
 - `agents/` — Concrete ADK `llmagent` constructors for the three default agents: Manager (root router with SubAgents), Wally (research), Eve (scheduling). All share a single `newLLMAgent` helper.
@@ -21,7 +21,7 @@ Go implementation of the per-workspace agent runtime pod. Exposes a gRPC service
 
 **gRPC services** — The Converse handler is a thin struct (`converseHandler`) constructed via a private `newConverseHandler` helper and registered against the `*grpc.Server` in `server/grpc_server.go`. Auth uses the shared HMAC interceptor from `internal/pkg/grpc`; gRPC reflection is always on (reflection paths are auth-exempt).
 
-**Proto regeneration** — Run `make generate` from the repo root after editing any `.proto` file under `proto/agentruntime/v1/`. Never hand-edit `*.pb.go` or `*_grpc.pb.go` files.
+**Proto regeneration** — Run `crawbl generate` from the repo root after editing any `.proto` file under `proto/agentruntime/v1/`. Never hand-edit `*.pb.go` or `*_grpc.pb.go` files.
 
 **Agent registration** — Every agent slug that appears in Go code must be a typed constant in `agents/defaults.go` (`ManagerName`, `WallyName`, `EveName`). Adding a new agent means: add a constant, add a `NewXxx` constructor (delegate to `newLLMAgent`), register it in `runner.BuildGraph`, and add a per-agent `adkrunner.Runner` entry in `runner.New`.
 
@@ -35,7 +35,7 @@ Go implementation of the per-workspace agent runtime pod. Exposes a gRPC service
 
 ## Gotchas
 
-- **Proto edits require `make generate`** — `*.pb.go` files are committed but generated; the workflow gate will catch drift. Always commit the generated files alongside the `.proto` change.
+- **Proto edits require `crawbl generate`** — `*.pb.go` files are committed but generated; the workflow gate will catch drift. Always commit the generated files alongside the `.proto` change.
 - **Separate binary** — This package tree is built as `cmd/crawbl-agent-runtime`, not as part of the orchestrator binary. Importing it from orchestrator code is a layering violation.
 - **Redis session TTL** — Session keys (metadata + events) expire after `RedisSessionTTL` (default 24h). App- and user-scoped state hashes do NOT expire. A client resuming a session after TTL expiry gets a fresh session (ADK `AutoCreateSession=true`); prior events are gone.
 - **Event list cap** — `maxSessionEvents = 60` events per session (≈15 turns). `AppendEvent` calls `LTrim` on every write; old events are silently dropped. Callers that need full history must use the orchestrator's memory palace (`memory_drawers`) via the `memory_add_drawer` tool.

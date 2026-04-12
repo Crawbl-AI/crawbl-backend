@@ -15,7 +15,7 @@ read -r local_ref local_sha remote_ref remote_sha || exit 0
 if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]] || \
    git diff --name-only "$remote_sha..$local_sha" -- 'proto/' | grep -q .; then
   echo "Running backend pre-push checks (proto files detected in push range)..."
-  make ci-check
+  ./crawbl ci check
 else
   echo "Skipping ci-check: no proto files modified in this push"
 fi

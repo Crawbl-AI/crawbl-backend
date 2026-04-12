@@ -13,21 +13,62 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
-// buildOpts holds the common parameters for a docker buildx build.
-type buildOpts struct {
+// koBuildOpts holds parameters for a ko build.
+type koBuildOpts struct {
+	importPath   string // Go import path, e.g. "./cmd/crawbl"
+	imageRepo    string // full image name, e.g. "registry.digitalocean.com/crawbl/crawbl-platform"
+	tag          string
+	push         bool
+	buildVersion string // injected as KO_BUILD_VERSION for ldflags template
+}
+
+// runKoBuild executes ko build with the given options.
+func runKoBuild(ctx context.Context, opts koBuildOpts) error {
+	imageRef := fmt.Sprintf("%s:%s", opts.imageRepo, opts.tag)
+	out.Step(style.Deploy, "Building %s (ko)", imageRef)
+
+	args := []string{"build", opts.importPath, "--bare", "--tags", opts.tag}
+
+	if opts.push {
+		args = append(args, "--push")
+	} else {
+		args = append(args, "--local")
+	}
+
+	cmd := exec.CommandContext(ctx, "ko", args...)
+	cmd.Env = append(os.Environ(),
+		"KO_DOCKER_REPO="+opts.imageRepo,
+	)
+	if opts.buildVersion != "" {
+		cmd.Env = append(cmd.Env, "KO_BUILD_VERSION="+opts.buildVersion)
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ko build failed: %w", err)
+	}
+
+	if opts.push {
+		out.Step(style.Deploy, "Pushed %s", imageRef)
+	} else {
+		out.Success("Built %s locally", imageRef)
+	}
+	return nil
+}
+
+// dockerBuildOpts holds parameters for a docker buildx build (auth-filter only).
+type dockerBuildOpts struct {
 	imageRepo  string
-	dockerfile string // relative to rootDir; empty if contextDir has its own Dockerfile
-	contextDir string // absolute path to the build context
+	dockerfile string
+	contextDir string
 	tag        string
 	platform   string
 	push       bool
-	target     string // Docker build --target stage (empty = default)
 }
 
-// runDockerBuild executes docker buildx build with the given options.
-// Vendor patches from vendor-patches/ are applied inside the Dockerfile
-// build stage, not on the host working tree (to avoid dirtying git status).
-func runDockerBuild(opts buildOpts) error {
+// runDockerBuild executes docker buildx build for the auth-filter WASM image.
+func runDockerBuild(ctx context.Context, opts dockerBuildOpts) error {
 	imageRef := fmt.Sprintf("%s:%s", opts.imageRepo, opts.tag)
 	out.Step(style.Docker, "Building %s", imageRef)
 
@@ -35,10 +76,6 @@ func runDockerBuild(opts buildOpts) error {
 		"buildx", "build",
 		"--platform", opts.platform,
 		"-t", imageRef,
-	}
-
-	if opts.target != "" {
-		args = append(args, "--target", opts.target)
 	}
 
 	if opts.dockerfile != "" {
@@ -53,7 +90,7 @@ func runDockerBuild(opts buildOpts) error {
 
 	args = append(args, opts.contextDir)
 
-	cmd := exec.CommandContext(context.Background(), "docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -69,8 +106,14 @@ func runDockerBuild(opts buildOpts) error {
 	return nil
 }
 
-// addBuildFlags registers --tag, --platform, and --push on a cobra command.
-func addBuildFlags(cmd *cobra.Command, tag *string, platform *string, push *bool) {
+// addKoBuildFlags registers --tag and --push on a cobra command for ko builds.
+func addKoBuildFlags(cmd *cobra.Command, tag *string, push *bool) {
+	cmd.Flags().StringVarP(tag, "tag", "t", "dev", "Image tag to build")
+	cmd.Flags().BoolVar(push, "push", true, "Push the image to the registry after building")
+}
+
+// addDockerBuildFlags registers --tag, --platform, and --push on a cobra command for Docker builds.
+func addDockerBuildFlags(cmd *cobra.Command, tag *string, platform *string, push *bool) {
 	cmd.Flags().StringVarP(tag, "tag", "t", "dev", "Image tag to build")
 	cmd.Flags().StringVar(platform, "platform", "linux/amd64", "Build platform, for example linux/amd64")
 	cmd.Flags().BoolVar(push, "push", true, "Push the image to the registry after building")
