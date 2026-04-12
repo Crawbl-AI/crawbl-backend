@@ -17,9 +17,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     continue
   fi
 
-  # For new branches, check all commits not on remote.
+  # Skip tag pushes — tags don't introduce new commits.
+  if [[ "$local_ref" == refs/tags/* ]]; then
+    continue
+  fi
+
+  # For new branches, check commits not reachable from any remote branch.
   if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]]; then
-    range="$local_sha"
+    range="$local_sha --not --remotes=origin"
   else
     range="${remote_sha}..${local_sha}"
   fi
