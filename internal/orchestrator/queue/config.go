@@ -16,7 +16,7 @@ import (
 //   - memory_process (periodic, 1m)        — cold LLM classification sweep
 //   - memory_maintain (daily)              — importance decay + prune
 //   - memory_enrich (periodic, 10m)        — KG backfill for fast-path drawers
-//   - memory_centroid_recompute            — weekly Sun 03:00 UTC
+//   - memory_centroid_recompute            — daily 03:00 UTC
 //   - usage_write (ad-hoc)                 — per-LLM-call ClickHouse billing row
 //   - pricing_refresh (daily)              — LiteLLM per-token price mirror
 //   - pricing_cache_refresh (periodic,10m) — reload in-memory pricing cache
@@ -44,10 +44,10 @@ func NewConfig(deps Deps) (*river.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse daily schedule: %w", err)
 	}
-	// Weekly centroid recompute: Sunday 03:00 UTC. Low-traffic window,
+	// Daily centroid recompute: 03:00 UTC. Low-traffic window,
 	// well away from daily maintenance so the two periodic jobs do not
 	// contend for a worker slot.
-	weeklyCentroid, err := cron.ParseStandard("0 3 * * 0")
+	dailyCentroid, err := cron.ParseStandard("0 3 * * *")
 	if err != nil {
 		return nil, fmt.Errorf("parse centroid schedule: %w", err)
 	}
@@ -96,9 +96,9 @@ func NewConfig(deps Deps) (*river.Config, error) {
 				},
 				&river.PeriodicJobOpts{RunOnStart: false},
 			),
-			// Memory — weekly centroid recompute.
+			// Memory — daily centroid recompute.
 			river.NewPeriodicJob(
-				weeklyCentroid,
+				dailyCentroid,
 				func() (river.JobArgs, *river.InsertOpts) {
 					return MemoryCentroidRecomputeArgs{}, nil
 				},

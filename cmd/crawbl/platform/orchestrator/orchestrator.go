@@ -20,7 +20,6 @@ import (
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
@@ -73,14 +72,7 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-const (
-	shutdownTimeout = 10 * time.Second
-	// centroidSeedTimeout bounds the best-effort centroid warm-up that
-	// runs once at startup so Phase 2 is not dormant until the first
-	// weekly cron tick. A missing or broken pgvector install can never
-	// gate orchestrator boot.
-	centroidSeedTimeout = 30 * time.Second
-)
+const shutdownTimeout = 10 * time.Second
 
 // NewOrchestratorCommand creates the "orchestrator" parent command.
 // Running it directly starts the HTTP server; "migrate" is a subcommand.
@@ -246,21 +238,6 @@ func runServer(ctx context.Context) error {
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
 	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
-
-	// Best-effort centroid seed: populates memory_type_centroids with
-	// whatever LLM-labelled history exists so Phase 2 is not dormant
-	// until the first weekly cron tick. Bounded to 30s so a missing or
-	// broken pgvector install can never gate orchestrator boot.
-	seedCtx, seedCancel := context.WithTimeout(ctx, centroidSeedTimeout)
-	if _, err := jobs.RunCentroidRecompute(seedCtx, jobs.CentroidRecomputeDeps{
-		DB:           db,
-		DrawerRepo:   drawerRepo,
-		CentroidRepo: centroidRepo,
-		Logger:       logger,
-	}); err != nil {
-		logger.Warn("memory.centroid.seed_skipped", "reason", err.Error())
-	}
-	seedCancel()
 
 	// In-process auto-ingest pool. Replaces the memory_autoingest River
 	// queue so the chat-turn hot path pays zero river_job inserts per

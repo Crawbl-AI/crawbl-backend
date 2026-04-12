@@ -670,9 +670,9 @@ func (r *Postgres) ListCentroidTrainingSamples(ctx context.Context, sess databas
 		MemoryType string          `db:"memory_type"`
 		Embedding  pgvector.Vector `db:"embedding"`
 	}
-	// ROW_NUMBER() window function with PARTITION BY and the interval cast
-	// ($1::int || ' days')::interval require raw SQL; dbr has no builder support
-	// for window functions or Postgres-specific interval arithmetic.
+	// ROW_NUMBER() window function with PARTITION BY require raw SQL;
+	// dbr has no builder support for window functions. Uses ? placeholders
+	// (not $N) because dbr's SelectBySql miscounts $N reuse.
 	var rows []row
 	_, err := sess.SelectBySql(
 		`SELECT id, memory_type, embedding FROM (
@@ -686,9 +686,9 @@ func (r *Postgres) ListCentroidTrainingSamples(ctx context.Context, sess databas
 		      AND pipeline_tier = 'llm'
 		      AND embedding IS NOT NULL
 		      AND memory_type <> ''
-		      AND created_at > NOW() - ($1::int || ' days')::interval
+		      AND created_at > NOW() - INTERVAL '1 day' * ?
 		 ) ranked
-		 WHERE rnk <= $2`,
+		 WHERE rnk <= ?`,
 		windowDays, topN,
 	).LoadContext(ctx, &rows)
 	if err != nil {
