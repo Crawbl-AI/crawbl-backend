@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/gocraft/dbr/v2"
-	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
@@ -247,7 +246,7 @@ func (r *Postgres) SearchHybrid(
 	var results []memory.HybridSearchResult
 	_, err := sess.SelectBySql(
 		hybridSearchSQL,
-		vec, workspaceID, vectorLimit, pq.Array(terms), limit,
+		vec, workspaceID, vectorLimit, database.StringArray(terms), limit,
 	).LoadContext(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("drawerrepo: hybrid search: %w", err)
@@ -270,8 +269,9 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	// count" because it counts occurrences, and its "?" path drops the
 	// pgvector OID so Postgres raises "vector <=> unknown". We sidestep
 	// both bugs by running the query through the underlying
-	// database/sql driver directly — lib/pq knows how to pass pgvector
-	// values and the $N placeholder reuse is native Postgres.
+	// database/sql driver directly — pgx's stdlib driver passes pgvector
+	// values via pgvector.Vector.Value() and $N placeholder reuse is
+	// native Postgres.
 	//
 	// Three pgvector type headaches to be aware of:
 	//

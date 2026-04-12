@@ -9,7 +9,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -55,7 +55,7 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	// reaper runs as a short-lived job and does not need high concurrency. The
 	// pool is closed with defer so it is released even if we return early on
 	// an error.
-	conn, err := dbr.Open("postgres", cfg.DatabaseDSN, nil)
+	conn, err := dbr.Open("pgx", cfg.DatabaseDSN, nil)
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}

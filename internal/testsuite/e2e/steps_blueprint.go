@@ -16,8 +16,9 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
-	"github.com/lib/pq"
 	"github.com/tidwall/gjson"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 // blueprintState holds per-scenario original values for teardown.
@@ -72,7 +73,7 @@ func registerBlueprintSteps(sc *godog.ScenarioContext, tc *testContext) {
 		}
 		s := tc.sess()
 		// Restore the model and tools that were present before this scenario ran.
-		tools := pq.Array(saved.originalTools)
+		tools := database.StringArray(saved.originalTools)
 		_, execErr := s.ExecContext(ctx, `
 			UPDATE agent_settings
 			SET    model        = $1,
@@ -112,7 +113,7 @@ func (tc *testContext) blueprintSetAgentModel(alias, slug, model string) (*bluep
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (agent_id) DO UPDATE
 			SET model = EXCLUDED.model, updated_at = EXCLUDED.updated_at`,
-			agentID, model, pq.Array(orig.originalTools),
+			agentID, model, database.StringArray(orig.originalTools),
 			time.Now().UTC(), time.Now().UTC(),
 		)
 		if execErr != nil {
@@ -182,7 +183,7 @@ func (tc *testContext) blueprintAddAgentTool(alias, tool, slug string) (*bluepri
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (agent_id) DO UPDATE
 			SET allowed_tools = EXCLUDED.allowed_tools, updated_at = EXCLUDED.updated_at`,
-			agentID, orig.originalModel, pq.Array(newTools),
+			agentID, orig.originalModel, database.StringArray(newTools),
 			time.Now().UTC(), time.Now().UTC(),
 		)
 		if execErr != nil {
@@ -229,7 +230,7 @@ func (tc *testContext) blueprintSnapshot(agentID string) *blueprintState {
 	}
 	s := tc.sess()
 	var model string
-	var tools pq.StringArray
+	var tools database.StringArray
 	row := s.QueryRowContext(context.Background(),
 		`SELECT model, allowed_tools FROM agent_settings WHERE agent_id = $1`, agentID)
 	if err := row.Scan(&model, &tools); err != nil {

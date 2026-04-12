@@ -12,7 +12,9 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
-	"github.com/lib/pq" // Required for pq.Error type and driver registration
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // pgx/v5 database/sql driver registration
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 )
@@ -48,7 +50,7 @@ func ConfigFromEnv(prefix string) Config {
 //   - A dbr.Connection ready for use with the PostgreSQL dialect.
 //   - An error if the connection cannot be established or pinged.
 func New(config Config) (*dbr.Connection, error) {
-	db, err := sql.Open("postgres", buildDriverDSN(config, true))
+	db, err := sql.Open("pgx", buildDriverDSN(config, true))
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +85,7 @@ func EnsureSchema(config Config) error {
 		return nil
 	}
 
-	db, err := sql.Open("postgres", BuildDSN(config, false))
+	db, err := sql.Open("pgx", BuildDSN(config, false))
 	if err != nil {
 		return err
 	}
@@ -94,7 +96,7 @@ func EnsureSchema(config Config) error {
 	}
 
 	_, err = db.ExecContext(context.Background(),
-		"CREATE SCHEMA IF NOT EXISTS "+pq.QuoteIdentifier(config.Schema))
+		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{config.Schema}.Sanitize())
 	return err
 }
 
@@ -135,8 +137,8 @@ func IsRecordExistsError(err error) bool {
 		return false
 	}
 
-	var pqErr *pq.Error
-	return errors.As(err, &pqErr) && pqErr.Code == "23505"
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // IsRecordNotFoundError checks if the given error indicates that no record was found.
@@ -183,7 +185,7 @@ func pingWithRetry(ctx context.Context, db *sql.DB, attempts int, delay time.Dur
 }
 
 // buildDriverDSN constructs a PostgreSQL connection string in URL format accepted
-// by lib/pq. Using url.UserPassword ensures special characters in the password
+// by pgx/v5. Using url.UserPassword ensures special characters in the password
 // (spaces, @, /, etc.) are percent-encoded and cannot break the DSN parsing.
 func buildDriverDSN(config Config, includeSchema bool) string {
 	return BuildDSN(config, includeSchema)
