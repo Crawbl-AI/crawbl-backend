@@ -11,6 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/databases"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 )
 
@@ -46,7 +47,14 @@ func buildProgram(infraCfg Config) pulumi.RunFunc {
 			return err
 		}
 
-		// Phase 3: Create platform services (ArgoCD + AWS backup resources)
+		// Phase 3: Create managed databases (prod only — nil config skips this phase)
+		if infraCfg.DatabasesConfig != nil {
+			if err := createDatabases(ctx, infraCfg, clusterResult); err != nil {
+				return err
+			}
+		}
+
+		// Phase 4: Create platform services (ArgoCD + repo bootstrap)
 		if err := createPlatform(ctx, infraCfg, k8sProvider); err != nil {
 			return err
 		}
@@ -75,6 +83,15 @@ func createKubernetesProvider(ctx *pulumi.Context, clusterResult *cluster.Cluste
 		return nil, fmt.Errorf("create kubernetes provider: %w", err)
 	}
 	return provider, nil
+}
+
+// createDatabases provisions managed PostgreSQL, Valkey, and PgBouncer for prod.
+func createDatabases(ctx *pulumi.Context, config Config, clusterResult *cluster.Cluster) error {
+	_, err := databases.NewDatabases(ctx, "databases", *config.DatabasesConfig, clusterResult.Cluster.ID())
+	if err != nil {
+		return fmt.Errorf("create databases: %w", err)
+	}
+	return nil
 }
 
 // createPlatform provisions platform services.

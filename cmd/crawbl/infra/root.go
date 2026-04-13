@@ -11,6 +11,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/databases"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
@@ -63,13 +64,23 @@ func buildConfig(env, region string) (infra.Config, error) {
 		out.Warning("ARGOCD_SSH_PRIVATE_KEY and ARGOCD_SSH_KEY_PATH are both unset — repo secret will not be managed by Pulumi")
 	}
 
+	// Managed databases are prod-only. Attempt to load the config section;
+	// when absent (dev stack), leave DatabasesConfig nil to skip provisioning.
+	var dbsCfg *databases.Config
+	var stackDBCfg databases.StackDatabasesConfig
+	if err := loadStackSection(env, "crawbl:databases", &stackDBCfg); err == nil {
+		cfg := databases.Config(stackDBCfg)
+		dbsCfg = &cfg
+	}
+
 	return infra.Config{
-		Environment:    env,
-		Region:         region,
-		ESCEnvironment: configenv.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
-		ExistingVPCID:  os.Getenv("DIGITALOCEAN_VPC_ID"),
-		ClusterConfig:  clusterConfig,
-		PlatformConfig: platformConfig,
+		Environment:     env,
+		Region:          region,
+		ESCEnvironment:  configenv.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
+		ExistingVPCID:   os.Getenv("DIGITALOCEAN_VPC_ID"),
+		ClusterConfig:   clusterConfig,
+		PlatformConfig:  platformConfig,
+		DatabasesConfig: dbsCfg,
 	}, nil
 }
 

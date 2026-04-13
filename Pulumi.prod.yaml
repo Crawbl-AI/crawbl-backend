@@ -102,3 +102,60 @@ config:
     # Whether to create a DigitalOcean Project to group resources.
     # Set to false because the project already exists.
     createProject: false
+
+  # -- Managed databases (prod only) --
+  # Dev uses self-hosted PG and Redis; this section is absent in Pulumi.dev.yaml.
+  #
+  # IMPORT NOTE: The PG and Valkey clusters were created manually via doctl
+  # before Pulumi management was added. Import them into Pulumi state with:
+  #   pulumi import digitalocean:index/databaseCluster:DatabaseCluster databases-pg <PG_CLUSTER_ID>
+  #   pulumi import digitalocean:index/databaseCluster:DatabaseCluster databases-valkey <VALKEY_CLUSTER_ID>
+  #   pulumi import digitalocean:index/databaseConnectionPool:DatabaseConnectionPool databases-pg-pool <PG_CLUSTER_ID>,<POOL_NAME>
+  #   pulumi import digitalocean:index/databaseDb:DatabaseDb databases-pg-db <PG_CLUSTER_ID>,<DB_NAME>
+  # Known IDs:
+  #   PG cluster:     3701f97b-10de-47e9-9099-638c5b43c075
+  #   Valkey cluster: 0fe7df9c-1686-4d11-ac78-9dc2b66a45ec
+  crawbl:databases:
+    postgres:
+      # Cluster name in DigitalOcean.
+      name: crawbl-prod-pg
+      # PostgreSQL major version.
+      version: "16"
+      # DO database droplet size. db-s-1vcpu-2gb = 1 vCPU, 2 GB RAM, 25 GB disk.
+      size: db-s-1vcpu-2gb
+      # Single primary node (no read replica). Increase to 2 to add a standby.
+      nodeCount: 1
+      # Application database created inside the cluster.
+      dbName: crawbl
+      tags:
+        - crawbl
+        - prod
+
+    valkey:
+      # Cluster name in DigitalOcean.
+      name: crawbl-prod-valkey
+      # Valkey major version.
+      version: "8"
+      # DO database droplet size.
+      size: db-s-1vcpu-1gb
+      # Single node.
+      nodeCount: 1
+      # Evict least-recently-used keys when memory is full — appropriate for
+      # a session/cache workload where stale entries can be safely evicted.
+      evictionPolicy: allkeysLru
+      tags:
+        - crawbl
+        - prod
+
+    pgbouncer:
+      # Pool name in DigitalOcean (matches the manually-created pool).
+      name: crawbl-pool
+      # Database the pool connects to (must match postgres.dbName).
+      dbName: crawbl
+      # Transaction mode: connections are returned to the pool after each
+      # transaction, allowing many app connections to share fewer PG backends.
+      mode: transaction
+      # Maximum number of server-side connections the pool may hold.
+      size: 20
+      # Leave user empty to use the cluster's default admin user (doadmin).
+      user: ""

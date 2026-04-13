@@ -5,6 +5,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/databases"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 )
 
@@ -16,6 +17,9 @@ type Config struct {
 	ExistingVPCID  string
 	ClusterConfig  cluster.Config
 	PlatformConfig platform.Config
+	// DatabasesConfig holds managed database settings.
+	// Only populated for prod; dev uses self-hosted PG and Redis.
+	DatabasesConfig *databases.Config
 }
 
 // Stack represents a Pulumi stack.
