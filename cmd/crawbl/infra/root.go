@@ -63,10 +63,6 @@ func buildConfig(env, region string) (infra.Config, error) {
 		out.Warning("ARGOCD_SSH_PRIVATE_KEY and ARGOCD_SSH_KEY_PATH are both unset — repo secret will not be managed by Pulumi")
 	}
 
-	// AWS backup infrastructure config
-	platformConfig.AWSRegion = configenv.StringOr("AWS_REGION", "eu-central-1")
-	platformConfig.Environment = env
-
 	return infra.Config{
 		Environment:    env,
 		Region:         region,

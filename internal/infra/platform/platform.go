@@ -52,12 +52,5 @@ func NewPlatform(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Re
 		}
 	}
 
-	// Create AWS backup resources (S3 bucket, IAM user, Secrets Manager)
-	if cfg.AWSRegion != "" {
-		if err := createAWSBackupResources(ctx, cfg, opts...); err != nil {
-			return nil, fmt.Errorf("create AWS backup resources: %w", err)
-		}
-	}
-
 	return result, nil
 }
