@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -164,14 +165,7 @@ func (tc *testContext) blueprintAddAgentTool(alias, tool, slug string) (*bluepri
 	// Build the new tool list, avoiding duplicates.
 	newTools := make([]string, len(orig.originalTools))
 	copy(newTools, orig.originalTools)
-	found := false
-	for _, t := range newTools {
-		if t == tool {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(newTools, tool) {
 		newTools = append(newTools, tool)
 	}
 
