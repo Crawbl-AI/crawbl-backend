@@ -1,0 +1,20 @@
+# Dependabot configuration — keeps Go module dependencies up to date.
+# Opens PRs daily against main for outdated go.mod entries.
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    reviewers:
+      - bejaneps
+    labels:
+      - dependencies
+      - go
+    commit-message:
+      prefix: "deps"
+      include: scope
