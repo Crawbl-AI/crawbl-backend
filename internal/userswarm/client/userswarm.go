@@ -134,9 +134,11 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 	// Fast path: return cached status if the runtime is already verified
 	// and the cache entry hasn't expired. Reduces K8s API calls by ~95%.
 	if cached, ok := c.cache.get(opts.WorkspaceID); ok {
-		cached.UserID = opts.UserID
-		cached.WorkspaceID = opts.WorkspaceID
-		return cached, nil
+		// Shallow copy so concurrent callers don't race on identity fields.
+		cp := *cached
+		cp.UserID = opts.UserID
+		cp.WorkspaceID = opts.WorkspaceID
+		return &cp, nil
 	}
 
 	desired := c.desiredUserSwarm(ctx, opts)

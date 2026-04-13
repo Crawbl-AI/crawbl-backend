@@ -1,1 +1,1 @@
-DROP INDEX CONCURRENTLY IF EXISTS idx_users_nickname;
+DROP INDEX IF EXISTS idx_users_nickname;
