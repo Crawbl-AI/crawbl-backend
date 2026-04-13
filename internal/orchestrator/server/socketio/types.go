@@ -102,7 +102,7 @@ type Config struct {
 
 	// RedisClient is the Redis client for the pub/sub adapter.
 	// Required for cross-pod fan-out in clustered deployments.
-	RedisClient *redis.Client
+	RedisClient redis.UniversalClient
 
 	// DB is the database connection for creating per-request sessions.
 	// Required for workspace ownership checks and message.send handling.

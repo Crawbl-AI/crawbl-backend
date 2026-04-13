@@ -1,7 +1,10 @@
 package hmac
 
 import (
+	"encoding/base64"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestGenerateAndValidateToken(t *testing.T) {
@@ -49,5 +52,37 @@ func TestValidateToken_InvalidFormat(t *testing.T) {
 		if err == nil {
 			t.Errorf("should reject %q", tc)
 		}
+	}
+}
+
+func craftToken(key, part1, part2 string, ts int64) string {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(part1 + ":" + part2 + ":" + strconv.FormatInt(ts, 10)))
+	sig := computeMAC(key, payload)
+	return payload + "." + sig
+}
+
+func TestValidateToken_Expired(t *testing.T) {
+	key := "test-key"
+	old := time.Now().Add(-6 * time.Minute).Unix()
+	token := craftToken(key, "user-1", "ws-1", old)
+	_, _, err := ValidateToken(key, token)
+	if err == nil {
+		t.Fatal("should reject expired token")
+	}
+}
+
+func TestValidateToken_FutureToken(t *testing.T) {
+	key := "test-key"
+	future := time.Now().Add(6 * time.Minute).Unix()
+	token := craftToken(key, "user-1", "ws-1", future)
+	_, _, err := ValidateToken(key, token)
+	if err == nil {
+		t.Fatal("should reject token with far-future timestamp")
+	}
+}
+
+func TestTokenMaxAge(t *testing.T) {
+	if TokenMaxAge != 5*time.Minute {
+		t.Errorf("TokenMaxAge = %v, want 5m", TokenMaxAge)
 	}
 }

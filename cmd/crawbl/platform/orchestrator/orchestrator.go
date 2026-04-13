@@ -86,6 +86,9 @@ func NewOrchestratorCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newMigrateCommand())
+	cmd.AddCommand(newAPICommand())
+	cmd.AddCommand(newMCPCommand())
+	cmd.AddCommand(newWorkerCommand())
 
 	return cmd
 }

@@ -31,15 +31,25 @@ type Config struct {
 	DefaultNodePoolName           string
 	DefaultNodeSize               string
 	DefaultNodeCount              int
-	DefaultNodeLabels             map[string]string
-	DefaultNodeTaints             []NodeTaint
-	Tags                          []string
-	ManageRegistry                bool
-	RegistryName                  string
-	RegistrySubscriptionTier      string
-	ProjectName                   string
-	CreateProject                 bool
-	ProjectDescription            string
+	// Autoscaling for the default (platform) node pool.
+	// When AutoScale is true, MinNodes/MaxNodes control the range and NodeCount is ignored.
+	AutoScale bool
+	MinNodes  int
+	MaxNodes  int
+
+	// AgentNodePool — separate node pool for agent runtime pods.
+	// When non-empty, a second node pool is created with these settings.
+	AgentNodePool *AgentNodePoolConfig
+
+	DefaultNodeLabels        map[string]string
+	DefaultNodeTaints        []NodeTaint
+	Tags                     []string
+	ManageRegistry           bool
+	RegistryName             string
+	RegistrySubscriptionTier string
+	ProjectName              string
+	CreateProject            bool
+	ProjectDescription       string
 }
 
 // NodeTaint represents a Kubernetes node taint.
@@ -47,6 +57,19 @@ type NodeTaint struct {
 	Key    string
 	Value  string
 	Effect string
+}
+
+// AgentNodePoolConfig holds settings for the optional agent node pool.
+// Agent runtime pods run on dedicated nodes with a taint so platform
+// workloads are not scheduled alongside untrusted user workloads.
+type AgentNodePoolConfig struct {
+	Name     string
+	Size     string
+	MinNodes int
+	MaxNodes int
+	Labels   map[string]string
+	Taints   []NodeTaint
+	Tags     []string
 }
 
 // Outputs contains cluster outputs.
@@ -85,11 +108,29 @@ type StackClusterConfig struct {
 	NodeSize                      string            `yaml:"nodeSize"`
 	NodeCount                     int               `yaml:"nodeCount"`
 	NodeLabels                    map[string]string `yaml:"nodeLabels"`
-	Tags                          []string          `yaml:"tags"`
-	ManageRegistry                bool              `yaml:"manageRegistry"`
-	RegistryName                  string            `yaml:"registryName"`
-	RegistrySubscriptionTier      string            `yaml:"registrySubscriptionTier"`
-	ProjectName                   string            `yaml:"projectName"`
-	CreateProject                 bool              `yaml:"createProject"`
-	ProjectDescription            string            `yaml:"projectDescription"`
+	// Autoscaling for default node pool.
+	AutoScale bool `yaml:"autoScale"`
+	MinNodes  int  `yaml:"minNodes"`
+	MaxNodes  int  `yaml:"maxNodes"`
+
+	// Agent node pool (optional — omit to keep everything on one pool).
+	AgentNodePool *StackAgentNodePoolConfig `yaml:"agentNodePool"`
+
+	Tags                     []string `yaml:"tags"`
+	ManageRegistry           bool     `yaml:"manageRegistry"`
+	RegistryName             string   `yaml:"registryName"`
+	RegistrySubscriptionTier string   `yaml:"registrySubscriptionTier"`
+	ProjectName              string   `yaml:"projectName"`
+	CreateProject            bool     `yaml:"createProject"`
+	ProjectDescription       string   `yaml:"projectDescription"`
+}
+
+// StackAgentNodePoolConfig is the YAML form of the agent node pool config.
+type StackAgentNodePoolConfig struct {
+	Name     string            `yaml:"name"`
+	Size     string            `yaml:"size"`
+	MinNodes int               `yaml:"minNodes"`
+	MaxNodes int               `yaml:"maxNodes"`
+	Labels   map[string]string `yaml:"labels"`
+	Tags     []string          `yaml:"tags"`
 }

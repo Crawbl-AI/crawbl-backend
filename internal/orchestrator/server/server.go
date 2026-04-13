@@ -102,6 +102,8 @@ func NewServer(config *Config, opts *NewServerOpts) *Server {
 		ReadHeaderTimeout: DefaultReadHeaderTimeout,
 		ReadTimeout:       DefaultReadTimeout,
 		WriteTimeout:      DefaultWriteTimeout,
+		IdleTimeout:       DefaultIdleTimeout,
+		MaxHeaderBytes:    DefaultMaxHeaderBytes,
 	}
 
 	return srv

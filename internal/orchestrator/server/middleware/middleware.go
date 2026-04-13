@@ -106,7 +106,7 @@ func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handle
 			// is NOT production, allow requests with a matching X-E2E-Token header
 			// to authenticate via X-E2E-UID/Email/Name instead of Firebase JWT.
 			// This is disabled in production even if the env var is accidentally set.
-			if cfg.E2EToken != "" && env != "production" && env != "prod" {
+			if cfg.E2EToken != "" && (env == EnvironmentLocal || env == "dev") {
 				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(cfg.E2EToken)) == 1 {
 					e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
 					if e2eUID == "" {

@@ -78,14 +78,7 @@ func createCluster(ctx *pulumi.Context, name string, cfg Config, version pulumi.
 			Day:       pulumi.String(cfg.MaintenanceDay),
 			StartTime: pulumi.String(cfg.MaintenanceStartTime),
 		},
-		NodePool: &digitalocean.KubernetesClusterNodePoolArgs{
-			Name:      pulumi.String(cfg.DefaultNodePoolName),
-			Size:      pulumi.String(cfg.DefaultNodeSize),
-			NodeCount: pulumi.Int(cfg.DefaultNodeCount),
-			Tags:      pulumi.ToStringArray(tags),
-			Labels:    pulumi.ToStringMap(labels),
-			Taints:    taints,
-		},
+		NodePool: buildDefaultNodePoolArgs(cfg, tags, labels, taints),
 	}, opts...)
 	if err != nil {
 		return fmt.Errorf("create cluster: %w", err)
@@ -131,6 +124,77 @@ func attachToProject(ctx *pulumi.Context, name string, cfg Config, result *Clust
 	}, pulumi.DependsOn([]pulumi.Resource{result.Cluster}))
 	if err != nil {
 		return fmt.Errorf("attach cluster to project: %w", err)
+	}
+
+	return nil
+}
+
+// buildDefaultNodePoolArgs constructs the default (platform) node pool args.
+// When AutoScale is true, the pool uses MinNodes/MaxNodes and NodeCount is
+// ignored. When AutoScale is false, the pool uses a fixed NodeCount.
+func buildDefaultNodePoolArgs(cfg Config, tags []string, labels map[string]string, taints digitalocean.KubernetesClusterNodePoolTaintArray) *digitalocean.KubernetesClusterNodePoolArgs {
+	args := &digitalocean.KubernetesClusterNodePoolArgs{
+		Name:   pulumi.String(cfg.DefaultNodePoolName),
+		Size:   pulumi.String(cfg.DefaultNodeSize),
+		Tags:   pulumi.ToStringArray(tags),
+		Labels: pulumi.ToStringMap(labels),
+		Taints: taints,
+	}
+	if cfg.AutoScale {
+		args.AutoScale = pulumi.Bool(true)
+		args.MinNodes = pulumi.Int(cfg.MinNodes)
+		args.MaxNodes = pulumi.Int(cfg.MaxNodes)
+	} else {
+		args.NodeCount = pulumi.Int(cfg.DefaultNodeCount)
+	}
+	return args
+}
+
+// createAgentNodePool creates a separate node pool for agent runtime pods.
+// The pool is tainted with crawbl.io/role=agent:NoSchedule so only pods
+// that tolerate this taint (agent runtimes) are scheduled on these nodes.
+func createAgentNodePool(ctx *pulumi.Context, name string, cfg Config, clusterID pulumi.IDOutput, opts ...pulumi.ResourceOption) error {
+	if cfg.AgentNodePool == nil {
+		return nil
+	}
+
+	ap := cfg.AgentNodePool
+	tags := make([]string, 0, len(cfg.Tags)+1+len(ap.Tags))
+	tags = append(tags, cfg.Tags...)
+	tags = append(tags, TagCrawbl)
+	if len(ap.Tags) > 0 {
+		tags = append(tags, ap.Tags...)
+	}
+
+	labels := map[string]string{
+		LabelNodePool: ap.Name,
+	}
+	for k, v := range ap.Labels {
+		labels[k] = v
+	}
+
+	// Agent pool always has the agent taint to isolate workloads.
+	taints := digitalocean.KubernetesNodePoolTaintArray{
+		digitalocean.KubernetesNodePoolTaintArgs{
+			Key:    pulumi.String("crawbl.io/role"),
+			Value:  pulumi.String("agent"),
+			Effect: pulumi.String("NoSchedule"),
+		},
+	}
+
+	_, err := digitalocean.NewKubernetesNodePool(ctx, name+"-agent-pool", &digitalocean.KubernetesNodePoolArgs{
+		ClusterId: clusterID,
+		Name:      pulumi.String(ap.Name),
+		Size:      pulumi.String(ap.Size),
+		AutoScale: pulumi.Bool(true),
+		MinNodes:  pulumi.Int(ap.MinNodes),
+		MaxNodes:  pulumi.Int(ap.MaxNodes),
+		Tags:      pulumi.ToStringArray(tags),
+		Labels:    pulumi.ToStringMap(labels),
+		Taints:    taints,
+	}, opts...)
+	if err != nil {
+		return fmt.Errorf("create agent node pool: %w", err)
 	}
 
 	return nil

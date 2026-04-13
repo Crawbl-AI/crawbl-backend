@@ -17,3 +17,5 @@ ko = "0.18"
 # in internal/agentruntime and proto/agentruntime/v1/*.proto. The Go plugins
 # (protoc-gen-go, protoc-gen-go-grpc) are installed via `crawbl generate --install-tools`
 protoc = "34.1"
+# Snyk CLI for security scanning and MCP integration with Claude Code.
+"npm:snyk" = "latest"

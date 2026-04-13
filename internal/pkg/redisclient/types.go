@@ -9,7 +9,7 @@ import (
 
 // redis implements the Client interface using go-redis.
 type redis struct {
-	rc *goredis.Client
+	rc goredis.UniversalClient
 }
 
 // Default Redis connection configuration values.

@@ -74,7 +74,7 @@ func NewServer(cfg *Config) *socket.Server {
 // configureRedisAdapter attaches the Redis pub/sub adapter to the Socket.IO server.
 // If redisClient is nil the default in-memory adapter is kept, which is fine for
 // single-pod development but will not fan out events across pods.
-func configureRedisAdapter(io *socket.Server, redisClient *redis.Client, logger *slog.Logger) {
+func configureRedisAdapter(io *socket.Server, redisClient redis.UniversalClient, logger *slog.Logger) {
 	if redisClient == nil {
 		logger.Info("socketio: no redis client provided, using in-memory adapter")
 		return

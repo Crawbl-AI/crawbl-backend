@@ -22,6 +22,9 @@ func ConfigFromStack(env, region string, sc StackClusterConfig) Config {
 		DefaultNodePoolName:           sc.NodePoolName,
 		DefaultNodeSize:               sc.NodeSize,
 		DefaultNodeCount:              sc.NodeCount,
+		AutoScale:                     sc.AutoScale,
+		MinNodes:                      sc.MinNodes,
+		MaxNodes:                      sc.MaxNodes,
 		DefaultNodeLabels:             sc.NodeLabels,
 		Tags:                          sc.Tags,
 		ManageRegistry:                sc.ManageRegistry,
@@ -37,6 +40,22 @@ func ConfigFromStack(env, region string, sc StackClusterConfig) Config {
 	if cfg.DefaultNodeTaints == nil {
 		cfg.DefaultNodeTaints = []NodeTaint{}
 	}
+
+	if sc.AgentNodePool != nil {
+		cfg.AgentNodePool = &AgentNodePoolConfig{
+			Name:     sc.AgentNodePool.Name,
+			Size:     sc.AgentNodePool.Size,
+			MinNodes: sc.AgentNodePool.MinNodes,
+			MaxNodes: sc.AgentNodePool.MaxNodes,
+			Labels:   sc.AgentNodePool.Labels,
+			Tags:     sc.AgentNodePool.Tags,
+		}
+		if cfg.AgentNodePool.Labels == nil {
+			cfg.AgentNodePool.Labels = map[string]string{}
+		}
+		cfg.AgentNodePool.Labels[LabelNodePool] = cfg.AgentNodePool.Name
+	}
+
 	return cfg
 }
 
@@ -58,6 +77,11 @@ func NewCluster(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.Res
 
 	// Create cluster
 	if err := createCluster(ctx, name, cfg, version, vpcID, result, opts...); err != nil {
+		return nil, err
+	}
+
+	// Create agent node pool if configured (separate from the default pool)
+	if err := createAgentNodePool(ctx, name, cfg, result.Cluster.ID(), opts...); err != nil {
 		return nil, err
 	}
 

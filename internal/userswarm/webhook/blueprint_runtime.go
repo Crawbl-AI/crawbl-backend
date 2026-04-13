@@ -58,13 +58,28 @@ func buildRuntimeDeployment(sw *crawblv1alpha1.UserSwarm, ns string, cfg *runtim
 // volumes (cache + tmp), restricted security context, and no init work.
 func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secretName string, cfg *runtimeConfig) corev1.PodSpec {
 	return corev1.PodSpec{
-		ServiceAccountName: runtimeServiceAccountName(sw),
+		AutomountServiceAccountToken: ptr.To(false),
+		ServiceAccountName:           runtimeServiceAccountName(sw),
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsNonRoot:   ptr.To(true),
 			RunAsUser:      ptr.To(runtimeUID),
 			RunAsGroup:     ptr.To(runtimeGID),
 			FSGroup:        ptr.To(runtimeGID),
 			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		// Schedule agent pods on the dedicated agent node pool (prod) via
+		// nodeSelector + toleration. In dev (single pool, no taints) these
+		// are harmless no-ops — pods schedule wherever there's capacity.
+		NodeSelector: map[string]string{
+			"crawbl.io/role": "agent",
+		},
+		Tolerations: []corev1.Toleration{
+			{
+				Key:      "crawbl.io/role",
+				Value:    "agent",
+				Effect:   corev1.TaintEffectNoSchedule,
+				Operator: corev1.TolerationOpEqual,
+			},
 		},
 		Containers: []corev1.Container{buildAgentRuntimeContainer(sw, port, image, secretName, cfg)},
 		Volumes: []corev1.Volume{
