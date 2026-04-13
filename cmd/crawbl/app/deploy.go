@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -63,6 +64,28 @@ func addDockerDeployFlags(cmd *cobra.Command, tag *string, platform *string, arg
 	cmd.Flags().StringVar(argocdRepo, "argocd-repo", "", "Path to crawbl-argocd-apps (default: sibling dir)")
 }
 
+// prodKubeContext is the kubectl context name for the production cluster.
+// Direct CLI deploys to this context are not allowed — use deploy-prod.yml in CI.
+const prodKubeContext = "do-fra1-crawbl-prod"
+
+// checkNotProdContext returns an error when the current kubectl context targets
+// the production cluster. Production deploys must go through GitHub CI only.
+func checkNotProdContext() error {
+	var buf bytes.Buffer
+	cmd := exec.CommandContext(context.Background(), "kubectl", "config", "current-context")
+	cmd.Stdout = &buf
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
+		// If kubectl is unavailable or returns an error, allow the deploy to
+		// proceed — the context check is a safety net, not a hard dependency.
+		return nil
+	}
+	if strings.TrimSpace(buf.String()) == prodKubeContext {
+		return fmt.Errorf("production deploys must go through GitHub CI (deploy-prod.yml). Direct CLI deploys to prod are not allowed")
+	}
+	return nil
+}
+
 // checkAllTools verifies all required tools (argocd + release) are present.
 func checkAllTools() error {
 	if err := release.CheckTools(); err != nil {
@@ -87,6 +110,9 @@ func newDeployPlatformCommand() *cobra.Command {
   crawbl app deploy platform --gc`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
+			if err := checkNotProdContext(); err != nil {
+				return err
+			}
 			if err := checkAllTools(); err != nil {
 				return err
 			}
@@ -166,6 +192,9 @@ func newDeployAuthFilterCommand() *cobra.Command {
   crawbl app deploy auth-filter --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
+			if err := checkNotProdContext(); err != nil {
+				return err
+			}
 			if err := checkAllTools(); err != nil {
 				return err
 			}
@@ -254,6 +283,9 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
   crawbl app deploy agent-runtime --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
+			if err := checkNotProdContext(); err != nil {
+				return err
+			}
 			if err := checkAllTools(); err != nil {
 				return err
 			}

@@ -112,7 +112,9 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 
 ## Deploy Workflow
 
-Deploys run **locally** via `crawbl app deploy <component>`. CI (`deploy-dev.yml`) is a validation gate only — it runs e2e + release tagging, not builds or pushes.
+**Dev deploys** run locally via `crawbl app deploy <component>`. The CLI blocks deploys when the active kubectl context is `do-fra1-crawbl-prod` — prod is CI-only.
+
+**Prod deploys** must go through GitHub CI (`deploy-prod.yml`). Never run `crawbl app deploy` targeting prod.
 
 ```bash
 crawbl app deploy platform
@@ -128,7 +130,7 @@ Tag is auto-calculated from conventional commits since the last `v*` tag: `feat:
 
 Backend components (platform, auth-filter) build the image, push to DOCR (`registry.digitalocean.com/crawbl/`), bump the tag in `crawbl-argocd-apps`, and create a GitHub release — ArgoCD auto-syncs. Docs / website skip the Docker path and run `npm run build` + `wrangler pages deploy` instead.
 
-All deploy commands are available via `crawbl app deploy platform`, `crawbl app deploy agent-runtime`, etc.
+CI (`deploy-dev.yml`) is a validation gate only — it runs e2e + release tagging, not builds or pushes.
 
 ## E2E Testing
 
