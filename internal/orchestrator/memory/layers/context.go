@@ -33,6 +33,19 @@ type BuildContextOpts struct {
 	Header string
 }
 
+// BuildContextParams groups the required (non-optional) parameters for
+// BuildContextForConversation. ctx and sess remain positional per the project
+// session/opts/repo pattern.
+type BuildContextParams struct {
+	Stack          Stack
+	Messages       messageReader
+	Namer          AgentNamer
+	WorkspaceID    string
+	ConversationID string
+	Limit          int
+	Opts           BuildContextOpts
+}
+
 // BuildContextForConversation returns the formatted context block that both
 // ChatService and MCPService prepend to LLM prompts. It performs the
 // memory-layer wake-up (L0+L1), appends recent messages, and caps the result
@@ -40,16 +53,14 @@ type BuildContextOpts struct {
 //
 // The returned string does NOT include a leading "\n\n" separator — callers
 // that need one must prepend it themselves.
-func BuildContextForConversation(
-	ctx context.Context,
-	sess database.SessionRunner,
-	stack Stack,
-	messages messageReader,
-	namer AgentNamer,
-	workspaceID, conversationID string,
-	limit int,
-	opts BuildContextOpts,
-) string {
+func BuildContextForConversation(ctx context.Context, sess database.SessionRunner, params BuildContextParams) string {
+	stack := params.Stack
+	messages := params.Messages
+	namer := params.Namer
+	workspaceID := params.WorkspaceID
+	conversationID := params.ConversationID
+	limit := params.Limit
+	opts := params.Opts
 	maxTextLen := opts.MaxTextLen
 	if maxTextLen <= 0 {
 		maxTextLen = 500

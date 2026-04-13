@@ -42,17 +42,40 @@ func (s *stack) Recall(ctx context.Context, sess database.SessionRunner, workspa
 
 func (s *stack) Search(ctx context.Context, sess database.SessionRunner, workspaceID, query, wing, room string, limit int) (string, error) {
 	if s.embedder == nil {
-		return renderL3(ctx, sess, s.drawerRepo, s.embedder, workspaceID, query, wing, room, limit)
+		return renderL3(ctx, sess, renderL3Opts{
+			DrawerRepo:  s.drawerRepo,
+			Embedder:    s.embedder,
+			WorkspaceID: workspaceID,
+			Query:       query,
+			Wing:        wing,
+			Room:        room,
+			Limit:       limit,
+		})
 	}
 
-	results, err := HybridRetrieve(ctx, sess, s.drawerRepo, s.embedder, workspaceID, query, "", limit)
+	results, err := HybridRetrieve(ctx, sess, HybridRetrieveOpts{
+		DrawerRepo:  s.drawerRepo,
+		Embedder:    s.embedder,
+		WorkspaceID: workspaceID,
+		Query:       query,
+		AgentSlug:   "",
+		Limit:       limit,
+	})
 	if err != nil {
 		slog.WarnContext(ctx, "memory-search: hybrid retrieval failed, falling back to pure vector search",
 			slog.String("workspace_id", workspaceID),
 			slog.String("query", query),
 			slog.String("error", err.Error()),
 		)
-		return renderL3(ctx, sess, s.drawerRepo, s.embedder, workspaceID, query, wing, room, limit)
+		return renderL3(ctx, sess, renderL3Opts{
+			DrawerRepo:  s.drawerRepo,
+			Embedder:    s.embedder,
+			WorkspaceID: workspaceID,
+			Query:       query,
+			Wing:        wing,
+			Room:        room,
+			Limit:       limit,
+		})
 	}
 	if len(results) == 0 {
 		return "No results found.", nil

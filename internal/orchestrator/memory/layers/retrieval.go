@@ -31,43 +31,48 @@ const (
 	minQueryWordLen = 4
 )
 
+// HybridRetrieveOpts groups the parameters for HybridRetrieve. ctx and sess
+// remain positional per the project session/opts/repo pattern.
+type HybridRetrieveOpts struct {
+	DrawerRepo  drawerStore
+	Embedder    embed.Embedder
+	WorkspaceID string
+	Query       string
+	AgentSlug   string
+	Limit       int
+}
+
 // HybridRetrieve issues a single hybrid search query (pgvector ANN unioned
 // with a KG entity-name lookup) and ranks the merged results by
 // importance × recency × relevance + agent affinity.
 //
 // This function does no fan-out — the CTE in drawerrepo.SearchHybrid does
 // both lookups in one round-trip, so no goroutines are involved.
-func HybridRetrieve(
-	ctx context.Context,
-	sess database.SessionRunner,
-	drawerRepo drawerStore,
-	embedder embed.Embedder,
-	workspaceID, query, agentSlug string,
-	limit int,
-) ([]RetrievalResult, error) {
+func HybridRetrieve(ctx context.Context, sess database.SessionRunner, opts HybridRetrieveOpts) ([]RetrievalResult, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
 	}
 
-	queryEmbedding, err := embedder.Embed(ctx, query)
+	queryEmbedding, err := opts.Embedder.Embed(ctx, opts.Query)
 	if err != nil {
 		return nil, err
 	}
 
-	terms := extractQueryWords(query)
+	terms := extractQueryWords(opts.Query)
 
-	rows, err := drawerRepo.SearchHybrid(ctx, sess, workspaceID, queryEmbedding, terms, limit*2)
+	rows, err := opts.DrawerRepo.SearchHybrid(ctx, sess, opts.WorkspaceID, queryEmbedding, terms, limit*2)
 	if err != nil {
 		return nil, err
 	}
 
-	results := rankHybridResults(rows, agentSlug, time.Now())
+	results := rankHybridResults(rows, opts.AgentSlug, time.Now())
 
 	if len(results) > limit {
 		results = results[:limit]
 	}
 
-	touchReturnedDrawers(ctx, sess, drawerRepo, workspaceID, results)
+	touchReturnedDrawers(ctx, sess, opts.DrawerRepo, opts.WorkspaceID, results)
 	return results, nil
 }
 

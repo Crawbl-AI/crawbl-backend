@@ -377,16 +377,27 @@ ON CONFLICT (id) DO UPDATE SET
 	return nil
 }
 
+// RecordDelegationOpts groups the fields for RecordDelegation. ctx and sess
+// remain positional per the project session/opts/repo pattern.
+type RecordDelegationOpts struct {
+	WorkspaceID      string
+	ConversationID   string
+	TriggerMsgID     string
+	DelegatorAgentID string
+	DelegateAgentID  string
+	TaskSummary      string
+}
+
 // RecordDelegation inserts an agent_delegations row to track when one agent
 // delegates a task to another. This is called asynchronously and is best-effort.
-func (r *messageRepo) RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) *merrors.Error {
+func (r *messageRepo) RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, opts RecordDelegationOpts) *merrors.Error {
 	_, err := sess.InsertInto("agent_delegations").
-		Pair("workspace_id", workspaceID).
-		Pair("conversation_id", conversationID).
-		Pair("trigger_message_id", triggerMsgID).
-		Pair("delegator_agent_id", delegatorAgentID).
-		Pair("delegate_agent_id", delegateAgentID).
-		Pair("task_summary", taskSummary).
+		Pair("workspace_id", opts.WorkspaceID).
+		Pair("conversation_id", opts.ConversationID).
+		Pair("trigger_message_id", opts.TriggerMsgID).
+		Pair("delegator_agent_id", opts.DelegatorAgentID).
+		Pair("delegate_agent_id", opts.DelegateAgentID).
+		Pair("task_summary", opts.TaskSummary).
 		Pair("status", string(orchestrator.MessageStatusRead)).
 		ExecContext(ctx)
 	if err != nil {

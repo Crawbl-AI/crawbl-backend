@@ -293,17 +293,17 @@ func (s *Service) buildConversationContext(
 	if limit == 0 {
 		limit = 20
 	}
-	result := layers.BuildContextForConversation(
-		ctx, sess,
-		s.memoryStack,
-		s.messageRepo,
-		mapNamer(lookups.byID),
-		workspaceID, conversationID,
-		limit,
-		layers.BuildContextOpts{
+	result := layers.BuildContextForConversation(ctx, sess, layers.BuildContextParams{
+		Stack:          s.memoryStack,
+		Messages:       s.messageRepo,
+		Namer:          mapNamer(lookups.byID),
+		WorkspaceID:    workspaceID,
+		ConversationID: conversationID,
+		Limit:          limit,
+		Opts: layers.BuildContextOpts{
 			Header: "## Conversation Context\nRecent messages in this conversation (most recent last):\n\n",
 		},
-	)
+	})
 	if result == "" {
 		return ""
 	}

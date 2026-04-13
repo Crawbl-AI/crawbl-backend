@@ -529,13 +529,24 @@ func (r *Postgres) UpdateEmbedding(ctx context.Context, sess database.SessionRun
 	return err
 }
 
-func (r *Postgres) UpdateClassification(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, memoryType, summary, room string, importance float64) error {
+// UpdateClassificationOpts groups the classification fields for UpdateClassification.
+// ctx and sess remain positional per the project session/opts/repo pattern.
+type UpdateClassificationOpts struct {
+	WorkspaceID string
+	DrawerID    string
+	MemoryType  string
+	Summary     string
+	Room        string
+	Importance  float64
+}
+
+func (r *Postgres) UpdateClassification(ctx context.Context, sess database.SessionRunner, opts UpdateClassificationOpts) error {
 	_, err := sess.Update("memory_drawers").
-		Set("memory_type", memoryType).
-		Set("summary", summary).
-		Set("room", room).
-		Set("importance", importance).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Set("memory_type", opts.MemoryType).
+		Set("summary", opts.Summary).
+		Set("room", opts.Room).
+		Set("importance", opts.Importance).
+		Where("workspace_id = ? AND id = ?", opts.WorkspaceID, opts.DrawerID).
 		ExecContext(ctx)
 	return err
 }
