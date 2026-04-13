@@ -161,7 +161,7 @@ func runSetup() error {
 	out.Infof("2. Deploy to dev:")
 	out.Infof("   crawbl app deploy platform")
 	out.Infof("3. Run e2e tests:")
-	out.Infof("   crawbl test e2e --base-url https://dev.api.crawbl.com")
+	out.Infof("   crawbl test e2e --base-url https://api-dev.crawbl.com")
 	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")
 	out.Ln()
 

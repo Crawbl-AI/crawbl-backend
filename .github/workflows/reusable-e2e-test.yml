@@ -9,7 +9,7 @@
 #       needs: [update-argocd]
 #       with:
 #         image-tag: v0.2.0
-#         base-url: https://dev.api.crawbl.com
+#         base-url: https://api-dev.crawbl.com
 #         cluster-name: crawbl-dev
 #       secrets:
 #         digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
@@ -26,7 +26,7 @@ on:
       base-url:
         description: 'Base URL for the API'
         required: false
-        default: 'https://dev.api.crawbl.com'
+        default: 'https://api-dev.crawbl.com'
         type: string
       cluster-name:
         description: 'Kubernetes cluster name'

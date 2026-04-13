@@ -151,7 +151,7 @@ runs only test-features/chat/).`,
   crawbl test e2e --port-forward --category tools --verbose
 
   # Gateway mode (CI) — no port-forward needed
-  crawbl test e2e --base-url https://dev.api.crawbl.com --e2e-token $CRAWBL_E2E_TOKEN`,
+  crawbl test e2e --base-url https://api-dev.crawbl.com --e2e-token $CRAWBL_E2E_TOKEN`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			var pfCleanup func()
 			if portForwardFlag {

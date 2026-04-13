@@ -134,7 +134,7 @@ All deploy commands are available via `crawbl app deploy platform`, `crawbl app 
 
 `crawbl test e2e` runs godog/Gherkin tests against a live orchestrator. Write steps at the **product level** — never raw HTTP assertions.
 
-- **CI mode**: `https://dev.api.crawbl.com` with `--e2e-token`.
+- **CI mode**: `https://api-dev.crawbl.com` with `--e2e-token`.
 - **Local mode**: port-forward the orchestrator (and optionally postgres), no token needed.
 
 ```bash

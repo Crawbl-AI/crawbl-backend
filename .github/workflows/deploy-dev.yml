@@ -100,7 +100,7 @@ jobs:
           CRAWBL_E2E_SPACES_SECRET_KEY: ${{ steps.secrets.outputs.spaces_sk }}
         run: |
           ./.artifacts/bin/crawbl test e2e \
-            --base-url https://dev.api.crawbl.com \
+            --base-url https://api-dev.crawbl.com \
             --e2e-token "$CRAWBL_E2E_TOKEN" \
             --timeout 180s \
             --verbose
