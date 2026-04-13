@@ -17,13 +17,13 @@ import (
 func newScanCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Run SonarQube static analysis on the codebase",
-		Long: `Run the SonarQube scanner against the crawbl-backend source code.
-Results are pushed to the SonarQube server. Configuration is in
-sonar-project.properties at the repo root.
+		Short: "Run security + quality analysis on the codebase",
+		Long: `Run gosec (Go security scanner) and SonarQube analysis against
+the crawbl-backend source code. gosec findings are imported into
+SonarQube as external security issues.
 
-Requires sonar-scanner (install via mise install) and SONARQUBE_TOKEN.`,
-		Example: `  crawbl app scan   # Scan the codebase and push results to SonarQube`,
+Requires sonar-scanner and gosec (install via mise install) and SONARQUBE_TOKEN.`,
+		Example: `  crawbl app scan   # Run gosec + SonarQube analysis`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runScan(cmd.Context())
 		},
@@ -40,8 +40,10 @@ func runScan(ctx context.Context) error {
 
 	sonarURL := configenv.StringOr("SONARQUBE_URL", "https://sonar-dev.crawbl.com")
 
-	if _, err := exec.LookPath("sonar-scanner"); err != nil {
-		return fmt.Errorf("sonar-scanner is required but not found in PATH (run: mise install)")
+	for _, tool := range []string{"sonar-scanner", "gosec"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			return fmt.Errorf("%s is required but not found in PATH (run: mise install)", tool)
+		}
 	}
 
 	rootDir, err := gitutil.RootDir()
@@ -49,27 +51,51 @@ func runScan(ctx context.Context) error {
 		return fmt.Errorf("find repo root: %w", err)
 	}
 
-	out.Step(style.Lint, "Running SonarQube analysis")
-	out.Infof("Server: %s", sonarURL)
-	out.Infof("Project: crawbl-backend")
+	// Step 1: Run gosec — produces a SonarQube-compatible JSON report.
+	out.Step(style.Lint, "Running gosec security scan")
+	gosecReport := "gosec-report.json"
+	gosecCmd := exec.CommandContext(ctx, "gosec",
+		"-fmt=sonarqube",
+		"-out="+gosecReport,
+		"-exclude-dir=vendor",
+		"-exclude-dir=api",
+		"-exclude-dir=.cache",
+		"-exclude-dir=proto",
+		"./...",
+	)
+	gosecCmd.Dir = rootDir
+	gosecCmd.Stdout = os.Stdout
+	gosecCmd.Stderr = os.Stderr
 
-	// sonar-project.properties handles all configuration.
-	// Only the server URL and token are passed via CLI (from env vars).
-	args := []string{
-		"-Dsonar.host.url=" + sonarURL,
-		"-Dsonar.token=" + token,
+	// gosec exits non-zero when it finds issues — that's expected.
+	// We only fail on actual execution errors (binary not found, etc.).
+	if err := gosecCmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() > 0 {
+			out.Infof("gosec found issues (exit code %d) — report written to %s", exitErr.ExitCode(), gosecReport)
+		} else {
+			return fmt.Errorf("gosec failed: %w", err)
+		}
+	} else {
+		out.Success("gosec: no security issues found")
 	}
 
-	cmd := exec.CommandContext(ctx, "sonar-scanner", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Dir = rootDir
+	// Step 2: Run sonar-scanner — picks up gosec report via sonar-project.properties.
+	out.Step(style.Lint, "Running SonarQube analysis")
+	out.Infof("Server: %s", sonarURL)
 
-	if err := cmd.Run(); err != nil {
+	sonarCmd := exec.CommandContext(ctx, "sonar-scanner",
+		"-Dsonar.host.url="+sonarURL,
+		"-Dsonar.token="+token,
+	)
+	sonarCmd.Stdout = os.Stdout
+	sonarCmd.Stderr = os.Stderr
+	sonarCmd.Dir = rootDir
+
+	if err := sonarCmd.Run(); err != nil {
 		return fmt.Errorf("sonar-scanner failed: %w", err)
 	}
 
-	out.Success("SonarQube analysis complete")
+	out.Success("Analysis complete")
 	out.Step(style.URL, "%s/dashboard?id=crawbl-backend", sonarURL)
 	return nil
 }

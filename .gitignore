@@ -7,5 +7,7 @@ e2e/*.xml
 bin/
 .omc/
 .scannerwork/
+gosec-report.json
+coverage.out
 usage-writer
 mempalace/

@@ -19,5 +19,8 @@ ko = "0.18"
 protoc = "34.1"
 # SonarQube scanner CLI for static analysis (Go code quality).
 sonar-scanner-cli = "latest"
+# gosec — Go security scanner (OWASP vulnerabilities, hardcoded secrets, weak crypto).
+# Outputs SonarQube-compatible reports imported as external issues.
+"go:github.com/securego/gosec/v2/cmd/gosec" = "latest"
 # Snyk CLI for security scanning and MCP integration with Claude Code.
 "npm:snyk" = "latest"
