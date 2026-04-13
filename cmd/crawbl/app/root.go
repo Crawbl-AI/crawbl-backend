@@ -23,6 +23,7 @@ func NewAppCommand() *cobra.Command {
 	cmd.AddCommand(newBuildCommand())
 	cmd.AddCommand(newDeployCommand())
 	cmd.AddCommand(newGCCommand())
+	cmd.AddCommand(newScanCommand())
 	cmd.AddCommand(newSyncCommand())
 
 	return cmd

@@ -99,6 +99,7 @@ func newDeployPlatformCommand() *cobra.Command {
 		tag        string
 		argocdRepo string
 		gc         bool
+		scan       bool
 	)
 
 	cmd := &cobra.Command{
@@ -163,6 +164,11 @@ func newDeployPlatformCommand() *cobra.Command {
 				return err
 			}
 
+			if scan {
+				if err := runScan(ctx); err != nil {
+					out.Warning("SonarQube scan failed: %v", err)
+				}
+			}
 			if gc {
 				return runGC(ctx, defaultGCKeep, false)
 			}
@@ -171,7 +177,8 @@ func newDeployPlatformCommand() *cobra.Command {
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", false, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&scan, "scan", true, "Run SonarQube analysis after deploy")
 	return cmd
 }
 
@@ -254,7 +261,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 	}
 
 	addDockerDeployFlags(cmd, &tag, &platform, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", false, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
 	return cmd
 }
 
@@ -343,7 +350,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", false, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
 	return cmd
 }
 

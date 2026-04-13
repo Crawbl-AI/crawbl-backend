@@ -5,6 +5,9 @@
 "**Control plane for Crawbl AI**"
 
 [![CI](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml)
+[![Quality Gate](https://sonar-dev.crawbl.com/api/project_badges/measure?project=crawbl-backend&metric=alert_status)](https://sonar-dev.crawbl.com/dashboard?id=crawbl-backend)
+[![Bugs](https://sonar-dev.crawbl.com/api/project_badges/measure?project=crawbl-backend&metric=bugs)](https://sonar-dev.crawbl.com/dashboard?id=crawbl-backend)
+[![Code Smells](https://sonar-dev.crawbl.com/api/project_badges/measure?project=crawbl-backend&metric=code_smells)](https://sonar-dev.crawbl.com/dashboard?id=crawbl-backend)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![K8s](https://img.shields.io/badge/K8s-DOKS-326CE5?logo=kubernetes&logoColor=white)]()
 [![MCP](https://img.shields.io/badge/MCP-v1-8B5CF6)]()

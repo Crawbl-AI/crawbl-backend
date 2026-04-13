@@ -99,6 +99,7 @@ func runSetup() error {
 		{"yq", "yq --version", "mise install yq  (required for crawbl app deploy)"},
 		{"gh", "gh --version", "https://cli.github.com/"},
 		{"snyk", "snyk --version", "mise install  (npm:snyk in .mise.toml)"},
+		{"sonar-scanner", "sonar-scanner --version", "mise install  (sonar-scanner-cli in .mise.toml)"},
 		{"docker (auth-filter only)", "docker --version", "https://docs.docker.com/get-docker/ (only needed for auth-filter WASM builds)"},
 	}
 

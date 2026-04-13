@@ -115,9 +115,6 @@ func runGC(ctx context.Context, keep int, dryRun bool) error {
 		out.Step(style.Tip, "Dry run: %d tags would be deleted", totalDeleted)
 	} else {
 		out.Step(style.Reaper, "Deleted %d tags total", totalDeleted)
-		if totalDeleted > 0 {
-			out.Step(style.Tip, "Run 'doctl registry garbage-collection start --force' to reclaim storage")
-		}
 	}
 
 	return nil
