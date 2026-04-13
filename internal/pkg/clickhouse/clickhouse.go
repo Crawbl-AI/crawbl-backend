@@ -51,6 +51,17 @@ func Open(ctx context.Context, logger *slog.Logger) (*sql.DB, error) {
 		dsn = strings.Replace(dsn, "clickhouse://", "clickhouse://"+user+":"+password+"@", 1)
 	}
 
+	// Enable async inserts so high-volume LLM usage writes are batched
+	// server-side. wait_for_async_insert=0 makes writes fire-and-forget
+	// (the driver returns immediately; ClickHouse flushes in the background).
+	if !strings.Contains(dsn, "async_insert") {
+		if strings.Contains(dsn, "?") {
+			dsn += "&async_insert=1&wait_for_async_insert=0"
+		} else {
+			dsn += "?async_insert=1&wait_for_async_insert=0"
+		}
+	}
+
 	db, err := sql.Open("clickhouse", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse connect: %w", err)
