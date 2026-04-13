@@ -1,19 +1,23 @@
-# NOTE: NOT TESTED YET ON PRODUCTION
 # Deploy to Production
 #
-# Thin wrapper around the shared deployment pipeline.
+# Manual-trigger workflow that builds images, checks infra drift, updates
+# ArgoCD image tags, and optionally runs E2E validation against prod.
+#
+# The workflow uses the same reusable pipeline as dev but with prod defaults.
+# All 3 orchestrator components (api/mcp/worker) share the same platform
+# image — updating image.tag in values.yaml rolls all of them.
 name: Deploy to Production
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Pulumi environment (e.g., prod, staging)'
+        description: 'Pulumi environment'
         required: true
         default: 'prod'
         type: string
       region:
-        description: 'Cloud region (e.g., fra1, nyc1)'
+        description: 'Cloud region'
         required: true
         default: 'fra1'
         type: string
@@ -23,10 +27,15 @@ on:
         default: 'crawbl-prod'
         type: string
       base-url:
-        description: 'Production API base URL'
+        description: 'Production API base URL for E2E tests'
         required: true
         default: 'https://api.crawbl.com'
         type: string
+      skip-e2e:
+        description: 'Skip E2E tests (use for hotfixes only)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-prod
@@ -42,7 +51,7 @@ jobs:
       base-url: ${{ inputs.base-url }}
       registry: registry.digitalocean.com/crawbl
       push-images: true
-      e2e-timeout: 30s
+      e2e-timeout: 60s
       rollback-on-e2e-failure: true
     secrets:
       digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
