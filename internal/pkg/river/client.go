@@ -15,7 +15,7 @@ import (
 
 // Client is a type alias for the upstream River client parameterized with
 // the standard library transaction type. We use the database/sql driver so
-// the existing dbr+lib/pq connection pool can be shared with River.
+// the existing dbr+pgx/v5 connection pool can be shared with River.
 type Client = upstream.Client[*sql.Tx]
 
 // Config is a type alias for the upstream River config. Exposed so that

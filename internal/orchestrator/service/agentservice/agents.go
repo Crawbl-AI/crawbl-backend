@@ -17,7 +17,7 @@ import (
 
 // GetAgent retrieves a single agent by ID with runtime status enrichment.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
-func (s *service) GetAgent(ctx context.Context, opts *orchestratorservice.GetAgentOpts) (*orchestrator.Agent, *merrors.Error) {
+func (s *Service) GetAgent(ctx context.Context, opts *orchestratorservice.GetAgentOpts) (*orchestrator.Agent, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -40,7 +40,7 @@ func (s *service) GetAgent(ctx context.Context, opts *orchestratorservice.GetAge
 
 // GetAgentDetails retrieves full agent details including stats.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
-func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice.GetAgentDetailsOpts) (*orchestrator.AgentDetails, *merrors.Error) {
+func (s *Service) GetAgentDetails(ctx context.Context, opts *orchestratorservice.GetAgentDetailsOpts) (*orchestrator.AgentDetails, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -93,7 +93,7 @@ func (s *service) GetAgentDetails(ctx context.Context, opts *orchestratorservice
 
 // GetAgentHistory retrieves paginated conversation history for an agent.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
-func (s *service) GetAgentHistory(ctx context.Context, opts *orchestratorservice.GetAgentHistoryOpts) ([]orchestrator.AgentHistoryItem, *orchestrator.OffsetPagination, *merrors.Error) {
+func (s *Service) GetAgentHistory(ctx context.Context, opts *orchestratorservice.GetAgentHistoryOpts) ([]orchestrator.AgentHistoryItem, *orchestrator.OffsetPagination, *merrors.Error) {
 	if opts == nil {
 		return nil, nil, merrors.ErrInvalidInput
 	}
@@ -133,7 +133,7 @@ func (s *service) GetAgentHistory(ctx context.Context, opts *orchestratorservice
 
 // GetAgentSettings retrieves model and prompt configuration for an agent.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
-func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservice.GetAgentSettingsOpts) (*orchestrator.AgentSettings, *merrors.Error) {
+func (s *Service) GetAgentSettings(ctx context.Context, opts *orchestratorservice.GetAgentSettingsOpts) (*orchestrator.AgentSettings, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -195,7 +195,7 @@ func (s *service) GetAgentSettings(ctx context.Context, opts *orchestratorservic
 
 // GetAgentTools retrieves the tools assigned to an agent with pagination.
 // Authorization: the agent is fetched globally, then workspace ownership is verified.
-func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error) {
+func (s *Service) GetAgentTools(ctx context.Context, opts *orchestratorservice.GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -266,7 +266,7 @@ func (s *service) GetAgentTools(ctx context.Context, opts *orchestratorservice.G
 // GetAgentMemories retrieves memories for the agent's workspace. Reads
 // from memory_drawers — the table populated by the memory_add_drawer
 // tool and by CreateAgentMemory below.
-func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
+func (s *Service) GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -307,7 +307,7 @@ func (s *service) GetAgentMemories(ctx context.Context, opts *orchestratorservic
 }
 
 // DeleteAgentMemory removes a memory drawer by ID.
-func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
+func (s *Service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Key == "" {
 		return merrors.ErrInvalidInput
 	}
@@ -330,7 +330,7 @@ func (s *service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 }
 
 // CreateAgentMemory stores a memory as a drawer in the memory palace.
-func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
+func (s *Service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
 	if opts == nil || opts.Key == "" || opts.Content == "" {
 		return merrors.ErrInvalidInput
 	}
@@ -384,7 +384,7 @@ func (s *service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 }
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
-func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
+func (s *Service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,

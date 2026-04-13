@@ -13,14 +13,14 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
-// New creates a new IntegrationService, returning an error if any required
-// dependency is nil.
-func New(logger *slog.Logger, connRepo integrationConnStore) (orchestratorservice.IntegrationService, error) {
+// New creates a new integrationservice.Service, returning an error if any
+// required dependency is nil.
+func New(logger *slog.Logger, connRepo integrationConnStore) (*Service, error) {
 	if logger == nil {
 		return nil, errors.New("integrationservice: logger is required")
 	}
 
-	return &service{
+	return &Service{
 		logger:   logger,
 		connRepo: connRepo,
 	}, nil
@@ -28,7 +28,7 @@ func New(logger *slog.Logger, connRepo integrationConnStore) (orchestratorservic
 
 // MustNew wraps New and panics on dependency-validation errors. Intended for
 // use from main/init paths where misconfiguration is unrecoverable.
-func MustNew(logger *slog.Logger, connRepo integrationConnStore) orchestratorservice.IntegrationService {
+func MustNew(logger *slog.Logger, connRepo integrationConnStore) *Service {
 	svc, err := New(logger, connRepo)
 	if err != nil {
 		panic(err)
@@ -38,7 +38,7 @@ func MustNew(logger *slog.Logger, connRepo integrationConnStore) orchestratorser
 
 // ListIntegrations returns all available integrations, merging the static catalog
 // with the user's actual connection status from the database.
-func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservice.ListIntegrationsOpts) ([]*orchestrator.IntegrationItem, *merrors.Error) {
+func (s *Service) ListIntegrations(ctx context.Context, opts *orchestratorservice.ListIntegrationsOpts) ([]*orchestrator.IntegrationItem, *merrors.Error) {
 	if opts == nil || opts.UserID == "" {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -77,7 +77,7 @@ func (s *service) ListIntegrations(ctx context.Context, opts *orchestratorservic
 
 // GetOAuthConfig returns the OAuth parameters for the given provider.
 // The mobile app uses these to initiate the PKCE authorization flow.
-func (s *service) GetOAuthConfig(ctx context.Context, opts *orchestratorservice.GetOAuthConfigOpts) (*orchestrator.OAuthConfig, *merrors.Error) {
+func (s *Service) GetOAuthConfig(ctx context.Context, opts *orchestratorservice.GetOAuthConfigOpts) (*orchestrator.OAuthConfig, *merrors.Error) {
 	if opts == nil || opts.Provider == "" {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -94,7 +94,7 @@ func (s *service) GetOAuthConfig(ctx context.Context, opts *orchestratorservice.
 
 // HandleOAuthCallback exchanges the authorization code for access/refresh tokens
 // and stores the connection in the integration_connections table.
-func (s *service) HandleOAuthCallback(ctx context.Context, opts *orchestratorservice.OAuthCallbackOpts) *merrors.Error {
+func (s *Service) HandleOAuthCallback(ctx context.Context, opts *orchestratorservice.OAuthCallbackOpts) *merrors.Error {
 	if opts == nil || opts.Provider == "" || opts.AuthorizationCode == "" {
 		return merrors.ErrInvalidInput
 	}

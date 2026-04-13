@@ -17,7 +17,7 @@ type agentLookups struct {
 }
 
 // ListAgents retrieves all agents for a workspace with current runtime status.
-func (s *service) ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error) {
+func (s *Service) ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -84,7 +84,7 @@ func newAgentLookups(agents []*orchestrator.Agent) agentLookups {
 }
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
-func (s *service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
+func (s *Service) enrichAgentStatus(ctx context.Context, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) {
 	runtimeState, mErr := s.runtimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          workspace.UserID,
 		WorkspaceID:     workspace.ID,

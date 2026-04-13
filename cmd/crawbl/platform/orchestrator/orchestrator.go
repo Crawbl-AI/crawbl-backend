@@ -48,7 +48,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server"
 	crawblmcp "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcp"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/socketio"
-	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	agentservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/agentservice"
 	auditservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/auditservice"
 	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
@@ -638,7 +637,7 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // db, workspaceRepo, and authService are forwarded to the Socket.IO server so
 // it can verify workspace ownership before joining rooms on workspace.subscribe
 // events. authService resolves the Firebase subject to an internal user.ID.
-func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService orchestratorservice.AuthService) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService *authservice.Service) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, func() {}

@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/dbr/v2/dialect"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -42,7 +42,7 @@ func newSuiteDeps(cfg *Config) *suiteDeps {
 		http: &http.Client{Timeout: cfg.Timeout},
 	}
 	if cfg.DatabaseDSN != "" {
-		if conn, err := dbr.Open("postgres", cfg.DatabaseDSN, nil); err == nil {
+		if conn, err := dbr.Open("pgx", cfg.DatabaseDSN, nil); err == nil {
 			conn.Dialect = dialect.PostgreSQL
 			conn.SetMaxOpenConns(dbMaxOpenConns)
 			conn.SetMaxIdleConns(dbMaxIdleConns)

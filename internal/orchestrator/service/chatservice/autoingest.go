@@ -10,7 +10,7 @@ import (
 
 // autoIngestConversation submits a conversation exchange to the in-process
 // memory auto-ingest pool. Non-blocking: see autoingest.Service.Submit.
-func (s *service) autoIngestConversation(ctx context.Context, workspaceID, agentSlug, userText string, replies []*orchestrator.Message) {
+func (s *Service) autoIngestConversation(ctx context.Context, workspaceID, agentSlug, userText string, replies []*orchestrator.Message) {
 	if s.ingestPool == nil {
 		return
 	}

@@ -12,7 +12,7 @@ import (
 
 // GetWorkspaceSummary retrieves aggregate workspace data: agent count and last message preview.
 // Uses existing repo methods to avoid adding new query infrastructure.
-func (s *service) GetWorkspaceSummary(ctx context.Context, opts *orchestratorservice.GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error) {
+func (s *Service) GetWorkspaceSummary(ctx context.Context, opts *orchestratorservice.GetWorkspaceSummaryOpts) (*orchestrator.WorkspaceSummary, *merrors.Error) {
 	if opts == nil || strings.TrimSpace(opts.WorkspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}

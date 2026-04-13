@@ -6,14 +6,11 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-// service implements the WorkspaceService interface, providing workspace
-// management capabilities backed by a repository and runtime client.
-//
-// This struct is the core implementation that coordinates between persistent
-// storage (via workspaceRepo) and runtime orchestration (via runtimeClient).
-// All public methods are defined on this struct to fulfill the WorkspaceService
-// contract.
-type service struct {
+// Service implements workspace management operations.
+// Consumers depend on their own consumer-side interfaces
+// (e.g. handler.workspacePort) per the project's "interfaces at
+// consumer" convention.
+type Service struct {
 	// workspaceRepo provides access to workspace persistence operations
 	// including listing, retrieval, and creation of workspace records.
 	// Typed against the consumer-side workspaceStore interface declared in

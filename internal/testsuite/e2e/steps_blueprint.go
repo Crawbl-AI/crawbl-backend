@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,7 +73,7 @@ func registerBlueprintSteps(sc *godog.ScenarioContext, tc *testContext) {
 		}
 		s := tc.sess()
 		// Restore the model and tools that were present before this scenario ran.
-		tools := pq.Array(saved.originalTools)
+		tools := pq.StringArray(saved.originalTools)
 		_, execErr := s.ExecContext(ctx, `
 			UPDATE agent_settings
 			SET    model        = $1,
@@ -112,7 +113,7 @@ func (tc *testContext) blueprintSetAgentModel(alias, slug, model string) (*bluep
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (agent_id) DO UPDATE
 			SET model = EXCLUDED.model, updated_at = EXCLUDED.updated_at`,
-			agentID, model, pq.Array(orig.originalTools),
+			agentID, model, pq.StringArray(orig.originalTools),
 			time.Now().UTC(), time.Now().UTC(),
 		)
 		if execErr != nil {
@@ -164,14 +165,7 @@ func (tc *testContext) blueprintAddAgentTool(alias, tool, slug string) (*bluepri
 	// Build the new tool list, avoiding duplicates.
 	newTools := make([]string, len(orig.originalTools))
 	copy(newTools, orig.originalTools)
-	found := false
-	for _, t := range newTools {
-		if t == tool {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(newTools, tool) {
 		newTools = append(newTools, tool)
 	}
 
@@ -182,7 +176,7 @@ func (tc *testContext) blueprintAddAgentTool(alias, tool, slug string) (*bluepri
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (agent_id) DO UPDATE
 			SET allowed_tools = EXCLUDED.allowed_tools, updated_at = EXCLUDED.updated_at`,
-			agentID, orig.originalModel, pq.Array(newTools),
+			agentID, orig.originalModel, pq.StringArray(newTools),
 			time.Now().UTC(), time.Now().UTC(),
 		)
 		if execErr != nil {

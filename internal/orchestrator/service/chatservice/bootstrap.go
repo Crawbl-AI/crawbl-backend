@@ -23,7 +23,7 @@ import (
 // queries that are otherwise executed on every read path. The cache is
 // self-healing: if the fast-path fetch returns an error (e.g. workspace
 // deleted), the entry is evicted so the next call retries the slow path.
-func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Session, userID, workspaceID string) (*orchestrator.Workspace, []*orchestrator.Agent, []*orchestrator.Conversation, *merrors.Error) {
+func (s *Service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Session, userID, workspaceID string) (*orchestrator.Workspace, []*orchestrator.Agent, []*orchestrator.Conversation, *merrors.Error) {
 	if _, alreadyDone := s.bootstrappedWorkspaces.Load(workspaceID); alreadyDone {
 		// Fast path: workspace was bootstrapped earlier in this process.
 		// Still need to return live data, so fetch workspace + agents.
@@ -77,7 +77,7 @@ func (s *service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 }
 
 // ensureDefaultAgents ensures all default agents exist for the workspace.
-func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Agent, *merrors.Error) {
+func (s *Service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Agent, *merrors.Error) {
 	agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
 	if mErr != nil {
 		return nil, mErr
@@ -147,7 +147,7 @@ func (s *service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 }
 
 // ensureDefaultConversations ensures swarm + per-agent conversations exist.
-func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) ([]*orchestrator.Conversation, *merrors.Error) {
+func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) ([]*orchestrator.Conversation, *merrors.Error) {
 	conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
 	if mErr != nil {
 		return nil, mErr
@@ -227,7 +227,7 @@ func (s *service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 // ensureDefaultTools seeds the tool catalog from the crawbl-agent-runtime
 // tools package. Idempotent — the repo's Seed method uses ON CONFLICT DO
 // UPDATE.
-func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.SessionRunner) *merrors.Error {
+func (s *Service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.SessionRunner) *merrors.Error {
 	catalog := agentruntimetools.DefaultCatalog()
 	rows := make([]orchestratorrepo.ToolRow, 0, len(catalog))
 	now := time.Now().UTC()
@@ -246,7 +246,7 @@ func (s *service) ensureDefaultTools(ctx context.Context, sess orchestratorrepo.
 }
 
 // ensureDefaultAgentSettings seeds default settings for each agent that lacks a row.
-func (s *service) ensureDefaultAgentSettings(ctx context.Context, sess orchestratorrepo.SessionRunner, agents []*orchestrator.Agent) *merrors.Error {
+func (s *Service) ensureDefaultAgentSettings(ctx context.Context, sess orchestratorrepo.SessionRunner, agents []*orchestrator.Agent) *merrors.Error {
 	now := time.Now().UTC()
 	for _, agent := range agents {
 		existing, mErr := s.agentSettingsRepo.GetByAgentID(ctx, sess, agent.ID)
@@ -282,7 +282,7 @@ func (s *service) ensureDefaultAgentSettings(ctx context.Context, sess orchestra
 
 // ensureDefaultAgentPrompts seeds IDENTITY.md, TOOLS.md, and SOUL.md for each agent
 // that has no prompts yet.
-func (s *service) ensureDefaultAgentPrompts(ctx context.Context, sess orchestratorrepo.SessionRunner, agents []*orchestrator.Agent) *merrors.Error {
+func (s *Service) ensureDefaultAgentPrompts(ctx context.Context, sess orchestratorrepo.SessionRunner, agents []*orchestrator.Agent) *merrors.Error {
 	now := time.Now().UTC()
 	for _, agent := range agents {
 		existing, mErr := s.agentPromptsRepo.ListByAgentID(ctx, sess, agent.ID)

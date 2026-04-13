@@ -275,7 +275,7 @@ func (r *Postgres) SearchHybrid(
 	if !ok || db == nil || db.DB == nil {
 		return nil, fmt.Errorf("drawerrepo: hybrid search: session is not a *dbr.Session with a live connection")
 	}
-	rows, err := db.QueryContext(ctx, hybridSearchSQL, vec, workspaceID, vectorLimit, pq.Array(terms), limit)
+	rows, err := db.QueryContext(ctx, hybridSearchSQL, vec, workspaceID, vectorLimit, pq.StringArray(terms), limit)
 	if err != nil {
 		return nil, fmt.Errorf("drawerrepo: hybrid search: %w", err)
 	}
@@ -316,8 +316,9 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	// count" because it counts occurrences, and its "?" path drops the
 	// pgvector OID so Postgres raises "vector <=> unknown". We sidestep
 	// both bugs by running the query through the underlying
-	// database/sql driver directly — lib/pq knows how to pass pgvector
-	// values and the $N placeholder reuse is native Postgres.
+	// database/sql driver directly — pgx's stdlib driver passes pgvector
+	// values via pgvector.Vector.Value() and $N placeholder reuse is
+	// native Postgres.
 	//
 	// Three pgvector type headaches to be aware of:
 	//

@@ -1,9 +1,11 @@
-// Package workspaceservice provides the core implementation of WorkspaceService
-// for managing user workspaces and their associated runtime status.
+// Package workspaceservice manages user workspaces and their associated
+// runtime status.
 //
-// This package handles workspace lifecycle operations including creation,
-// retrieval, and listing of workspaces. It also integrates with the runtime
-// client to attach runtime status information to workspace responses.
+// It handles workspace lifecycle operations including creation, retrieval,
+// and listing, and integrates with the runtime client to attach runtime
+// status information to workspace responses. Consumers depend on their
+// own narrow interfaces (e.g. handler.workspacePort, socketio.workspaceAuthorizer)
+// rather than a producer-side contract.
 package workspaceservice
 
 import (
@@ -34,8 +36,8 @@ import (
 //   - runtimeClient: Client interface for managing and querying swarm runtimes.
 //   - logger: Structured logger for diagnostic and error logging.
 //
-// Returns an orchestratorservice.WorkspaceService implementation and nil error on success.
-func New(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) (orchestratorservice.WorkspaceService, error) {
+// Returns a *Service and nil error on success.
+func New(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) (*Service, error) {
 	if workspaceRepo == nil {
 		return nil, errors.New("workspaceservice: workspaceRepo is required")
 	}
@@ -46,16 +48,16 @@ func New(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, log
 		return nil, errors.New("workspaceservice: logger is required")
 	}
 
-	return &service{
+	return &Service{
 		workspaceRepo: workspaceRepo,
 		runtimeClient: runtimeClient,
 		logger:        logger,
 	}, nil
 }
 
-// MustNew creates a new WorkspaceService or panics if any required dependency is nil.
+// MustNew creates a new *Service or panics if any required dependency is nil.
 // Use in main/wiring only; prefer New in code that can propagate errors.
-func MustNew(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) orchestratorservice.WorkspaceService {
+func MustNew(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client, logger *slog.Logger) *Service {
 	s, err := New(workspaceRepo, runtimeClient, logger)
 	if err != nil {
 		panic(err)
@@ -75,7 +77,7 @@ func MustNew(workspaceRepo workspaceStore, runtimeClient userswarmclient.Client,
 //
 // Returns a merrors.Error if the input is invalid or if the repository
 // operation fails. Returns nil on success or if a workspace already exists.
-func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestratorservice.EnsureDefaultWorkspaceOpts) *merrors.Error {
+func (s *Service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestratorservice.EnsureDefaultWorkspaceOpts) *merrors.Error {
 	if opts == nil || strings.TrimSpace(opts.UserID) == "" {
 		return merrors.ErrInvalidInput
 	}
@@ -137,7 +139,7 @@ func (s *service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 // unbounded goroutine growth.
 const workspaceRuntimeParallelism = 5
 
-func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error) {
+func (s *Service) ListByUserID(ctx context.Context, opts *orchestratorservice.ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -175,7 +177,7 @@ func (s *service) ListByUserID(ctx context.Context, opts *orchestratorservice.Li
 //
 // Returns the workspace pointer on success, or a merrors.Error if the input
 // is invalid, the workspace is not found, or the repository operation fails.
-func (s *service) GetByID(ctx context.Context, opts *orchestratorservice.GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error) {
+func (s *Service) GetByID(ctx context.Context, opts *orchestratorservice.GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -202,7 +204,7 @@ func (s *service) GetByID(ctx context.Context, opts *orchestratorservice.GetWork
 // Parameters:
 //   - ctx: Context for cancellation and timeout control.
 //   - workspace: Pointer to the workspace to enrich with runtime status.
-func (s *service) attachRuntimeStatus(ctx context.Context, workspace *orchestrator.Workspace) {
+func (s *Service) attachRuntimeStatus(ctx context.Context, workspace *orchestrator.Workspace) {
 	if workspace == nil {
 		return
 	}

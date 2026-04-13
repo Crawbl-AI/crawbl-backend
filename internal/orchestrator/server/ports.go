@@ -15,9 +15,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// authPort mirrors the handler-side authPort and is used here so the
-// server can store service handles without importing the producer
-// AuthService interface directly.
+// authPort mirrors the handler-side authPort: the minimal auth-service
+// surface this package holds, declared at the consumer per the project's
+// "interfaces at consumer" convention.
 type authPort interface {
 	SignUp(ctx context.Context, opts *orchestratorservice.SignUpOpts) (*orchestrator.User, *merrors.Error)
 	SignIn(ctx context.Context, opts *orchestratorservice.SignInOpts) (*orchestrator.User, *merrors.Error)

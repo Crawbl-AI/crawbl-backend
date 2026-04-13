@@ -25,10 +25,10 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// New creates a new AuthService instance with the provided dependencies.
-// It initializes the auth service with a user repository for persistence,
-// a workspace bootstrapper for default workspace creation, and legal document configuration.
-// Returns an error if any required dependency is nil.
+// New creates a new authservice.Service with the provided dependencies.
+// It initializes the service with a user repository for persistence, a
+// workspace bootstrapper for default workspace creation, and legal-document
+// configuration. Returns an error if any required dependency is nil.
 //
 // Parameters:
 //   - userRepo: Repository for user persistence operations. Must not be nil.
@@ -36,8 +36,8 @@ import (
 //   - legalDocuments: Configuration for legal document URLs and versions. May be nil for defaults.
 //   - usageQuotaRepo: Repository for usage quota creation. Must not be nil.
 //
-// Returns an AuthService implementation and nil error on success.
-func New(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) (orchestratorservice.AuthService, error) {
+// Returns a *Service and nil error on success.
+func New(userRepo userStore, workspaceBootstrapper workspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) (*Service, error) {
 	if userRepo == nil {
 		return nil, errors.New("authservice: userRepo is required")
 	}
@@ -48,7 +48,7 @@ func New(userRepo userStore, workspaceBootstrapper orchestratorservice.Workspace
 		return nil, errors.New("authservice: usageQuotaRepo is required")
 	}
 
-	return &service{
+	return &Service{
 		userRepo:              userRepo,
 		workspaceBootstrapper: workspaceBootstrapper,
 		legalDocuments:        newLegalDocumentsConfig(legalDocuments),
@@ -56,9 +56,9 @@ func New(userRepo userStore, workspaceBootstrapper orchestratorservice.Workspace
 	}, nil
 }
 
-// MustNew creates a new AuthService or panics if any required dependency is nil.
+// MustNew creates a new authservice.Service or panics if any required dependency is nil.
 // Use in main/wiring only; prefer New in code that can propagate errors.
-func MustNew(userRepo userStore, workspaceBootstrapper orchestratorservice.WorkspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) orchestratorservice.AuthService {
+func MustNew(userRepo userStore, workspaceBootstrapper workspaceBootstrapper, legalDocuments *orchestrator.LegalDocuments, usageQuotaRepo usageQuotaCreator) *Service {
 	s, err := New(userRepo, workspaceBootstrapper, legalDocuments, usageQuotaRepo)
 	if err != nil {
 		panic(err)
@@ -81,7 +81,7 @@ func MustNew(userRepo userStore, workspaceBootstrapper orchestratorservice.Works
 //   - ErrEmptyEmail: empty email in principal
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID mismatch detected
-func (s *service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOpts) (*orchestrator.User, *merrors.Error) {
+func (s *Service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -104,7 +104,7 @@ func (s *service) SignIn(ctx context.Context, opts *orchestratorservice.SignInOp
 //   - ErrEmptyEmail: empty email in principal
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID mismatch detected
-func (s *service) SignUp(ctx context.Context, opts *orchestratorservice.SignUpOpts) (*orchestrator.User, *merrors.Error) {
+func (s *Service) SignUp(ctx context.Context, opts *orchestratorservice.SignUpOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -125,7 +125,7 @@ func (s *service) SignUp(ctx context.Context, opts *orchestratorservice.SignUpOp
 //   - ErrNilPrincipal / ErrEmptySubject / ErrEmptyEmail: invalid principal
 //   - ErrUserDeleted: account has been soft-deleted
 //   - ErrUserFirebaseUIDMismatch: Firebase UID collision detected
-func (s *service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipal *orchestrator.Principal, requireLegalConsent bool) (*orchestrator.User, *merrors.Error) {
+func (s *Service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipal *orchestrator.Principal, requireLegalConsent bool) (*orchestrator.User, *merrors.Error) {
 	principal, mErr := validatePrincipal(rawPrincipal)
 	if mErr != nil {
 		return nil, mErr
@@ -186,7 +186,7 @@ func (s *service) signInOrUp(ctx context.Context, sess *dbr.Session, rawPrincipa
 //   - ErrEmptySubject: empty subject in principal
 //   - ErrEmptyEmail: empty email in principal
 //   - Errors from user repository if lookup fails
-func (s *service) Delete(ctx context.Context, opts *orchestratorservice.DeleteOpts) *merrors.Error {
+func (s *Service) Delete(ctx context.Context, opts *orchestratorservice.DeleteOpts) *merrors.Error {
 	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
@@ -219,7 +219,7 @@ func (s *service) Delete(ctx context.Context, opts *orchestratorservice.DeleteOp
 //   - opts: Options containing the session and subject identifier.
 //
 // Returns the user entity or an error if not found.
-func (s *service) GetBySubject(ctx context.Context, opts *orchestratorservice.GetUserBySubjectOpts) (*orchestrator.User, *merrors.Error) {
+func (s *Service) GetBySubject(ctx context.Context, opts *orchestratorservice.GetUserBySubjectOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -240,7 +240,7 @@ func (s *service) GetBySubject(ctx context.Context, opts *orchestratorservice.Ge
 //   - ErrInvalidInput: nil options or session
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
-func (s *service) UpdateProfile(ctx context.Context, opts *orchestratorservice.UpdateProfileOpts) (*orchestrator.User, *merrors.Error) {
+func (s *Service) UpdateProfile(ctx context.Context, opts *orchestratorservice.UpdateProfileOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -303,7 +303,7 @@ func (s *service) UpdateProfile(ctx context.Context, opts *orchestratorservice.U
 //   - ctx: Context for the operation (unused, but kept for interface consistency).
 //
 // Returns the legal documents configuration or an error.
-func (s *service) GetLegalDocuments(_ context.Context) (*orchestrator.LegalDocuments, *merrors.Error) {
+func (s *Service) GetLegalDocuments(_ context.Context) (*orchestrator.LegalDocuments, *merrors.Error) {
 	return &orchestrator.LegalDocuments{
 		TermsOfService:        s.legalDocuments.TermsOfService,
 		PrivacyPolicy:         s.legalDocuments.PrivacyPolicy,
@@ -325,7 +325,7 @@ func (s *service) GetLegalDocuments(_ context.Context) (*orchestrator.LegalDocum
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
 //   - Business error if version doesn't match current version
-func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.AcceptLegalOpts) (*orchestrator.User, *merrors.Error) {
+func (s *Service) AcceptLegal(ctx context.Context, opts *orchestratorservice.AcceptLegalOpts) (*orchestrator.User, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
 	}
@@ -378,7 +378,7 @@ func (s *service) AcceptLegal(ctx context.Context, opts *orchestratorservice.Acc
 //   - ErrInvalidInput: nil options or session
 //   - ErrNilPrincipal: nil principal in options
 //   - ErrUserDeleted: user account has been soft-deleted
-func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.SavePushTokenOpts) *merrors.Error {
+func (s *Service) SavePushToken(ctx context.Context, opts *orchestratorservice.SavePushTokenOpts) *merrors.Error {
 	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
@@ -412,7 +412,7 @@ func (s *service) SavePushToken(ctx context.Context, opts *orchestratorservice.S
 //
 // Returns an error if the operation fails. Possible errors include:
 //   - ErrInvalidInput: nil options or session
-func (s *service) ClearPushToken(ctx context.Context, opts *orchestratorservice.ClearPushTokenOpts) *merrors.Error {
+func (s *Service) ClearPushToken(ctx context.Context, opts *orchestratorservice.ClearPushTokenOpts) *merrors.Error {
 	if opts == nil {
 		return merrors.ErrInvalidInput
 	}
@@ -432,7 +432,7 @@ func (s *service) ClearPushToken(ctx context.Context, opts *orchestratorservice.
 //
 // Returns the created user entity or an error. The method also ensures
 // a default workspace is created for the new user.
-func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *orchestrator.Principal, hasAgreedWithLegal bool) (*orchestrator.User, *merrors.Error) {
+func (s *Service) createUser(ctx context.Context, sess *dbr.Session, principal *orchestrator.Principal, hasAgreedWithLegal bool) (*orchestrator.User, *merrors.Error) {
 	// Generate unique nickname
 	nickname, mErr := s.generateUniqueNickname(ctx, sess, principal.Email)
 	if mErr != nil {
@@ -494,7 +494,7 @@ func (s *service) createUser(ctx context.Context, sess *dbr.Session, principal *
 //   - email: User's email address to extract the prefix from.
 //
 // Returns a unique nickname or an error if generation fails after max attempts.
-func (s *service) generateUniqueNickname(ctx context.Context, sess *dbr.Session, email string) (string, *merrors.Error) {
+func (s *Service) generateUniqueNickname(ctx context.Context, sess *dbr.Session, email string) (string, *merrors.Error) {
 	if sess == nil || email == "" {
 		return "", merrors.ErrInvalidInput
 	}
@@ -539,7 +539,7 @@ func (s *service) generateUniqueNickname(ctx context.Context, sess *dbr.Session,
 //   - user: User entity to save.
 //
 // Returns an error if the save operation fails.
-func (s *service) saveUser(ctx context.Context, sess *dbr.Session, user *orchestrator.User) *merrors.Error {
+func (s *Service) saveUser(ctx context.Context, sess *dbr.Session, user *orchestrator.User) *merrors.Error {
 	return database.WithTransactionNoResult(sess, "save user", func(tx *dbr.Tx) *merrors.Error {
 		return s.userRepo.Save(ctx, tx, user)
 	})
