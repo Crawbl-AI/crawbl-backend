@@ -59,7 +59,7 @@ type agentPort interface {
 	GetAgentTools(ctx context.Context, opts *orchestratorservice.GetAgentToolsOpts) (*orchestrator.ToolPage, *merrors.Error)
 	GetAgentMemories(ctx context.Context, opts *orchestratorservice.GetAgentMemoriesOpts) ([]orchestratorservice.AgentMemory, *merrors.Error)
 	DeleteAgentMemory(ctx context.Context, opts *orchestratorservice.DeleteAgentMemoryOpts) *merrors.Error
-	CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error
+	CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) (*orchestratorservice.AgentMemory, *merrors.Error)
 }
 
 // integrationPort mirrors handler-side integrationPort.

@@ -329,21 +329,23 @@ func (s *Service) DeleteAgentMemory(ctx context.Context, opts *orchestratorservi
 	return nil
 }
 
-// CreateAgentMemory stores a memory as a drawer in the memory palace.
-func (s *Service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) *merrors.Error {
+// CreateAgentMemory stores a memory as a drawer in the memory palace and
+// returns the created memory entry so callers can reflect server-generated
+// timestamps without a follow-up fetch.
+func (s *Service) CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) (*orchestratorservice.AgentMemory, *merrors.Error) {
 	if opts == nil || opts.Key == "" || opts.Content == "" {
-		return merrors.ErrInvalidInput
+		return nil, merrors.ErrInvalidInput
 	}
 	sess := database.SessionFromContext(ctx)
 
 	agent, mErr := s.agentRepo.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
-		return mErr
+		return nil, mErr
 	}
 
 	_, mErr = s.workspaceRepo.GetByID(ctx, sess, opts.UserID, agent.WorkspaceID)
 	if mErr != nil {
-		return mErr
+		return nil, mErr
 	}
 
 	now := time.Now().UTC()
@@ -378,9 +380,17 @@ func (s *Service) CreateAgentMemory(ctx context.Context, opts *orchestratorservi
 		CreatedAt: now,
 	}
 	if err := s.drawerRepo.Add(ctx, sess, drawer, nil); err != nil {
-		return merrors.WrapStdServerError(err, "create drawer memory")
+		return nil, merrors.WrapStdServerError(err, "create drawer memory")
 	}
-	return nil
+
+	category := drawer.Wing + "/" + drawer.Room
+	return &orchestratorservice.AgentMemory{
+		Key:       drawer.ID,
+		Content:   drawer.Content,
+		Category:  category,
+		CreatedAt: drawer.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: drawer.FiledAt.Format(time.RFC3339),
+	}, nil
 }
 
 // enrichAgentStatus sets each agent's status based on the workspace runtime state.
