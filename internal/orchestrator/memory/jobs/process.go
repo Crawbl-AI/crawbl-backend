@@ -161,7 +161,11 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 	d.Room = room
 	d.Importance = scaledImportance
 
-	linkEntities(ctx, sess, deps, d.WorkspaceID, classification)
+	entityCount, tripleCount := linkAndCount(ctx, sess, deps.KGRepo, d.WorkspaceID, d.Hall, classification)
+	if err := deps.DrawerRepo.UpdateEnrichment(ctx, sess, d.WorkspaceID, d.ID, entityCount, tripleCount); err != nil {
+		slog.Warn("memory-process: update enrichment counts failed",
+			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
+	}
 
 	// Embed once for clustering and conflict detection, then persist so the
 	// drawer is visible to vector search (#62).
@@ -181,30 +185,6 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 	clusterDrawers(ctx, sess, deps, d, embedding)
 	detectDrawerConflicts(ctx, sess, deps, d, embedding)
 	return deps.DrawerRepo.UpdateState(ctx, sess, d.WorkspaceID, d.ID, string(memory.DrawerStateProcessed))
-}
-
-func linkEntities(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, workspaceID string, classification *extract.LLMClassification) {
-	if deps.KGRepo == nil {
-		return
-	}
-	for _, entity := range classification.Entities {
-		if _, err := deps.KGRepo.AddEntity(ctx, sess, workspaceID, entity.Name, entity.Type, "{}"); err != nil {
-			slog.Warn("memory-process: add entity failed", "entity", entity.Name, "error", err)
-		}
-	}
-	for _, triple := range classification.Triples {
-		t := &memory.Triple{
-			WorkspaceID: workspaceID,
-			Subject:     triple.Subject,
-			Predicate:   triple.Predicate,
-			Object:      triple.Object,
-			Confidence:  1.0,
-		}
-		if _, err := deps.KGRepo.AddTriple(ctx, sess, workspaceID, t); err != nil {
-			slog.Warn("memory-process: add triple failed",
-				"subject", triple.Subject, "predicate", triple.Predicate, "error", err)
-		}
-	}
 }
 
 func clusterDrawers(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, d *memory.Drawer, embedding []float32) {

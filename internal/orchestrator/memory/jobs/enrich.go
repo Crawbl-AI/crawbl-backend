@@ -96,7 +96,7 @@ func enrichOneDrawer(ctx context.Context, sess database.SessionRunner, deps Enri
 		return
 	}
 
-	entityCount, tripleCount := linkEnrichEntities(ctx, sess, deps, d.WorkspaceID, classification)
+	entityCount, tripleCount := linkAndCount(ctx, sess, deps.KGRepo, d.WorkspaceID, d.Hall, classification)
 
 	if err := deps.DrawerRepo.UpdateEnrichment(ctx, sess, d.WorkspaceID, d.ID, entityCount, tripleCount); err != nil {
 		deps.Logger.WarnContext(ctx, "memory-enrich: update failed",
@@ -108,47 +108,4 @@ func enrichOneDrawer(ctx context.Context, sess database.SessionRunner, deps Enri
 		return
 	}
 	result.Processed++
-}
-
-// linkEnrichEntities wires an LLMClassification's entities and triples
-// into the KG, returning the successfully-inserted counts so the caller
-// can write them back onto the drawer. Mirrors jobs/process.go's
-// linkEntities but without the fire-and-forget error discard.
-func linkEnrichEntities(ctx context.Context, sess database.SessionRunner, deps EnrichDeps, workspaceID string, classification *extract.LLMClassification) (int, int) {
-	if deps.KGRepo == nil {
-		return 0, 0
-	}
-	entityCount := 0
-	for _, entity := range classification.Entities {
-		if _, err := deps.KGRepo.AddEntity(ctx, sess, workspaceID, entity.Name, entity.Type, "{}"); err != nil {
-			deps.Logger.WarnContext(ctx, "memory-enrich: add entity failed",
-				slog.String("workspace_id", workspaceID),
-				slog.String("entity", entity.Name),
-				slog.String("error", err.Error()),
-			)
-			continue
-		}
-		entityCount++
-	}
-	tripleCount := 0
-	for _, triple := range classification.Triples {
-		t := &memory.Triple{
-			WorkspaceID: workspaceID,
-			Subject:     triple.Subject,
-			Predicate:   triple.Predicate,
-			Object:      triple.Object,
-			Confidence:  1.0,
-		}
-		if _, err := deps.KGRepo.AddTriple(ctx, sess, workspaceID, t); err != nil {
-			deps.Logger.WarnContext(ctx, "memory-enrich: add triple failed",
-				slog.String("workspace_id", workspaceID),
-				slog.String("subject", triple.Subject),
-				slog.String("predicate", triple.Predicate),
-				slog.String("error", err.Error()),
-			)
-			continue
-		}
-		tripleCount++
-	}
-	return entityCount, tripleCount
 }
