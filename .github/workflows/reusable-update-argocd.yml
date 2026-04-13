@@ -88,6 +88,15 @@ jobs:
             components/metacontroller/resources/userswarm-webhook.yaml \
             components/metacontroller/resources/e2e-reaper-cronjob.yaml
 
+          # Update prod-specific resources — prod image tag is pinned independently
+          # in values-prod.yaml so CLI (dev-only) deploys don't affect prod.
+          echo "Updating prod orchestrator image to ${IMAGE_TAG}"
+          yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values-prod.yaml
+
+          echo "Updating prod reaper image to ${IMAGE_TAG}"
+          sed -i "s|registry.digitalocean.com/crawbl/crawbl-platform:[^ ]*|registry.digitalocean.com/crawbl/crawbl-platform:${IMAGE_TAG}|g" \
+            components/metacontroller/resources-prod/e2e-reaper-cronjob.yaml
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
