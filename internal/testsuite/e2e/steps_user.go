@@ -74,7 +74,7 @@ func (tc *testContext) userHasWorkspaceSaved(alias, key string) error {
 	if err != nil {
 		return err
 	}
-	id := gjsonGet(resp, "data.0.id")
+	id := gjsonGet(resp, firstIDPath)
 	if id == "" {
 		return fmt.Errorf("no workspace found for user %q", alias)
 	}
@@ -87,11 +87,11 @@ func (tc *testContext) userHasConversationSaved(alias, key string) error {
 	if wsID == "" {
 		return fmt.Errorf("no workspace_id in state for user %q", alias)
 	}
-	resp, err := tc.doRequest("GET", "/v1/workspaces/"+wsID+"/conversations", alias, nil)
+	resp, err := tc.doRequest("GET", workspacesPath+wsID+"/conversations", alias, nil)
 	if err != nil {
 		return err
 	}
-	id := gjsonGet(resp, "data.0.id")
+	id := gjsonGet(resp, firstIDPath)
 	if id == "" {
 		return fmt.Errorf("no conversation found for user %q", alias)
 	}
@@ -119,7 +119,7 @@ func (tc *testContext) findWorkspaceID(alias string) string {
 	if err != nil {
 		return ""
 	}
-	id := gjsonGet(resp, "data.0.id")
+	id := gjsonGet(resp, firstIDPath)
 	if id != "" {
 		tc.saved["workspace_id"] = id
 	}

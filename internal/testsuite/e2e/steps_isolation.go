@@ -35,7 +35,7 @@ func (tc *testContext) userOpensAnotherUsersWorkspace(alias, ownerAlias string) 
 		return err
 	}
 	ownerWS := tc.userState(ownerAlias).workspaceID
-	_, err := tc.doRequest("GET", "/v1/workspaces/"+ownerWS, alias, nil)
+	_, err := tc.doRequest("GET", workspacesPath+ownerWS, alias, nil)
 	return err
 }
 
@@ -44,7 +44,7 @@ func (tc *testContext) userOpensAnotherUsersAgents(alias, ownerAlias string) err
 		return err
 	}
 	ownerWS := tc.userState(ownerAlias).workspaceID
-	_, err := tc.doRequest("GET", "/v1/workspaces/"+ownerWS+"/agents", alias, nil)
+	_, err := tc.doRequest("GET", workspacesPath+ownerWS+"/agents", alias, nil)
 	return err
 }
 
@@ -53,7 +53,7 @@ func (tc *testContext) userOpensAnotherUsersConversations(alias, ownerAlias stri
 		return err
 	}
 	ownerWS := tc.userState(ownerAlias).workspaceID
-	_, err := tc.doRequest("GET", "/v1/workspaces/"+ownerWS+"/conversations", alias, nil)
+	_, err := tc.doRequest("GET", workspacesPath+ownerWS+"/conversations", alias, nil)
 	return err
 }
 

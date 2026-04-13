@@ -29,6 +29,8 @@ import (
 	"syscall"
 	"time"
 
+	adktool "google.golang.org/adk/tool"
+
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/model"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
@@ -78,22 +80,8 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	)
 
 	// Step 1.5: wire OpenTelemetry metrics export to VictoriaMetrics.
-	// Disabled when CRAWBL_OTEL_METRICS_ENDPOINT is empty so local dev
-	// runs stay quiet; cluster deployments inject the endpoint through
-	// the webhook env and get metrics automatically.
-	telCtx, telCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	telemetryShutdown, tErr := telemetry.Init(telCtx, telemetry.ConfigFromEnv("crawbl-agent-runtime", version), logger)
-	telCancel()
-	if tErr != nil {
-		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := telemetryShutdown(shutdownCtx); err != nil {
-			logger.Warn("telemetry shutdown returned error", "error", err)
-		}
-	}()
+	telShutdown := initTelemetry(logger)
+	defer telShutdown(logger)
 
 	// Step 2: Redis (shared client + ADK session service).
 	redisCli, err := redisclient.New(cfg.Redis)
@@ -106,21 +94,14 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	}
 	sessionSvc := session.NewRedisService(rawRedis, cfg.RedisSessionTTL)
 
-	// Step 3: fetch workspace blueprint from the orchestrator. This is
-	// done before any heavy init so a blueprint fetch failure fails
-	// fast before we burn time on the LLM adapter or MCP dial. A
-	// failure here is fatal — see runner/blueprint.go for the
-	// rationale.
+	// Step 3: fetch workspace blueprint from the orchestrator.
 	bpCtx, bpCancel := context.WithTimeout(context.Background(), cfg.Startup.BlueprintFetchTimeout)
 	blueprint, err := runner.FetchBlueprint(bpCtx, cfg, logger)
 	bpCancel()
 	if err != nil {
 		return err
 	}
-	logger.Info("workspace blueprint loaded", "workspace_id", blueprint.WorkspaceID, "agent_count", len(blueprint.Agents))
-	for _, a := range blueprint.Agents {
-		logger.Info("blueprint agent", "slug", a.Slug, "role", a.Role, "allowed_tools", a.AllowedTools)
-	}
+	logBlueprint(logger, blueprint)
 
 	// Step 4a: LLM adapter.
 	llm, err := model.NewFromConfig(cfg)
@@ -139,47 +120,13 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		}
 	}()
 
-	// Step 4c: DigitalOcean Spaces client for file_read / file_write.
-	// Returns (nil, nil) when every CRAWBL_SPACES_* field is empty so
-	// local dev without object storage stays on a single code path;
-	// BuildCommonTools below skips the file tools when the client is
-	// nil but keeps the rest of the tool set available.
-	spacesClient, err := storage.NewSpacesClient(storage.Config{
-		Endpoint:  cfg.Spaces.Endpoint,
-		Region:    cfg.Spaces.Region,
-		Bucket:    cfg.Spaces.Bucket,
-		AccessKey: cfg.Spaces.AccessKey,
-		SecretKey: cfg.Spaces.SecretKey,
-	})
-	if err != nil {
-		return err
-	}
-	if spacesClient != nil {
-		logger.Info("spaces client ready",
-			"endpoint", cfg.Spaces.Endpoint,
-			"region", cfg.Spaces.Region,
-			"bucket", spacesClient.Bucket(),
-		)
-	} else {
-		logger.Info("spaces client disabled (no CRAWBL_SPACES_* config); file_read/file_write unavailable")
-	}
-
-	// Step 4d: shared local tool slice (web_fetch, web_search_tool,
-	// + file_read/file_write when Spaces is configured) built once per
-	// pod and bound onto every agent in the graph. Memory tools are now
-	// provided by the orchestrator's MCP MemPalace toolset.
-	localTools, err := tools.BuildCommonTools(tools.CommonToolDeps{
-		WorkspaceID:     cfg.WorkspaceID,
-		SearXNGEndpoint: cfg.SearXNGEndpoint,
-		Spaces:          spacesClient,
-	})
+	// Step 4c+4d: Spaces client and local tools.
+	localTools, err := buildLocalTools(cfg, logger)
 	if err != nil {
 		return err
 	}
 
-	// Step 5: agent graph + ADK runner. The runner owns the session
-	// service from this point forward; server.Shutdown calls
-	// runner.Close to tear it down on SIGTERM.
+	// Step 5: agent graph + ADK runner.
 	r, err := runner.New(runner.BuildOptions{
 		Model:          llm,
 		MCPToolset:     mcpToolset,
@@ -202,13 +149,86 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 
-	// Step 7: flip health to SERVING so Kubernetes probes mark the pod
-	// Ready as soon as the listener is up. The runner is already
-	// constructed above, so from this point forward Converse calls
-	// will succeed (subject to auth).
+	// Step 7: flip health to SERVING.
 	srv.Health().SetServing()
 
 	// Step 8: serve + signal loop.
+	if err := serveUntilSignal(srv, logger); err != nil {
+		return err
+	}
+
+	// Graceful stop.
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), cfg.Startup.GracefulShutdownTimeout)
+	defer stopCancel()
+	_ = stopCtx
+	srv.Shutdown()
+	if cerr := redisCli.Close(); cerr != nil {
+		logger.Warn("redis client close error", "error", cerr)
+	}
+	logger.Info("crawbl-agent-runtime stopped")
+	return nil
+}
+
+// initTelemetry wires OpenTelemetry metrics export and returns a shutdown
+// function. Disabled when CRAWBL_OTEL_METRICS_ENDPOINT is empty.
+func initTelemetry(logger *slog.Logger) func(*slog.Logger) {
+	telCtx, telCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	telemetryShutdown, tErr := telemetry.Init(telCtx, telemetry.ConfigFromEnv("crawbl-agent-runtime", version), logger)
+	telCancel()
+	if tErr != nil {
+		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
+	}
+	return func(log *slog.Logger) {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			log.Warn("telemetry shutdown returned error", "error", err)
+		}
+	}
+}
+
+// logBlueprint logs the loaded workspace blueprint details.
+func logBlueprint(logger *slog.Logger, blueprint *runner.WorkspaceBlueprint) {
+	logger.Info("workspace blueprint loaded", "workspace_id", blueprint.WorkspaceID, "agent_count", len(blueprint.Agents))
+	for _, a := range blueprint.Agents {
+		logger.Info("blueprint agent", "slug", a.Slug, "role", a.Role, "allowed_tools", a.AllowedTools)
+	}
+}
+
+// buildLocalTools initialises the Spaces client and assembles the shared local
+// tool slice (web_fetch, web_search_tool, file_read/file_write when Spaces is
+// configured). Memory tools are provided by the orchestrator MCP toolset.
+func buildLocalTools(cfg config.Config, logger *slog.Logger) ([]adktool.Tool, error) {
+	spacesClient, err := storage.NewSpacesClient(storage.Config{
+		Endpoint:  cfg.Spaces.Endpoint,
+		Region:    cfg.Spaces.Region,
+		Bucket:    cfg.Spaces.Bucket,
+		AccessKey: cfg.Spaces.AccessKey,
+		SecretKey: cfg.Spaces.SecretKey,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if spacesClient != nil {
+		logger.Info("spaces client ready",
+			"endpoint", cfg.Spaces.Endpoint,
+			"region", cfg.Spaces.Region,
+			"bucket", spacesClient.Bucket(),
+		)
+	} else {
+		logger.Info("spaces client disabled (no CRAWBL_SPACES_* config); file_read/file_write unavailable")
+	}
+	return tools.BuildCommonTools(tools.CommonToolDeps{
+		WorkspaceID:     cfg.WorkspaceID,
+		SearXNGEndpoint: cfg.SearXNGEndpoint,
+		Spaces:          spacesClient,
+	})
+}
+
+// serveUntilSignal starts the gRPC server in a goroutine and blocks until
+// either the server exits with an error or an OS interrupt/SIGTERM arrives.
+// Returns a non-nil error only when the server itself fails.
+func serveUntilSignal(srv *server.Server, logger *slog.Logger) error {
 	serveErr := make(chan error, 1)
 	go func() {
 		if err := srv.Start(); err != nil {
@@ -222,20 +242,8 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	select {
 	case s := <-sig:
 		logger.Info("shutdown signal received", "signal", s.String())
+		return nil
 	case err := <-serveErr:
-		if err != nil {
-			return err
-		}
+		return err
 	}
-
-	// Graceful stop, bounded by the configured shutdown timeout.
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), cfg.Startup.GracefulShutdownTimeout)
-	defer stopCancel()
-	_ = stopCtx
-	srv.Shutdown()
-	if cerr := redisCli.Close(); cerr != nil {
-		logger.Warn("redis client close error", "error", cerr)
-	}
-	logger.Info("crawbl-agent-runtime stopped")
-	return nil
 }

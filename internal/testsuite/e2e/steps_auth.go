@@ -94,7 +94,7 @@ func (tc *testContext) userShouldSeeDefaultProfileDetails(alias string) error {
 
 func (tc *testContext) userUpdatesProfileDetails(alias string) error {
 	body := map[string]any{
-		"nickname":      "berlin-builder",
+		"nickname":      berlinBuilderSlug,
 		"name":          "Alex",
 		"surname":       "Tester",
 		"country_code":  "DE",
@@ -116,7 +116,7 @@ func (tc *testContext) userShouldSeeUpdatedProfileDetails(alias string) error {
 		return err
 	}
 	for path, expected := range map[string]string{
-		"data.nickname":                      "berlin-builder",
+		"data.nickname":                      berlinBuilderSlug,
 		"data.name":                          "Alex",
 		"data.surname":                       "Tester",
 		"data.country_code":                  "DE",
@@ -128,7 +128,7 @@ func (tc *testContext) userShouldSeeUpdatedProfileDetails(alias string) error {
 			return err
 		}
 	}
-	if err := tc.dbUserHasNickname(alias, "berlin-builder"); err != nil {
+	if err := tc.dbUserHasNickname(alias, berlinBuilderSlug); err != nil {
 		return err
 	}
 	return tc.dbUserHasCountryCode(alias, "DE")

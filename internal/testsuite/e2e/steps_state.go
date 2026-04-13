@@ -48,7 +48,7 @@ func (tc *testContext) saveFromConversations(arrayPath, matchField, matchValue, 
 		return fmt.Errorf("no workspace_id saved — fetch workspaces first")
 	}
 	// Fetch conversations, save into lastBody temporarily.
-	resp, err := tc.doRequest("GET", "/v1/workspaces/"+wsID+"/conversations", "primary", nil)
+	resp, err := tc.doRequest("GET", workspacesPath+wsID+"/conversations", "primary", nil)
 	if err != nil {
 		return fmt.Errorf("fetch conversations: %w", err)
 	}

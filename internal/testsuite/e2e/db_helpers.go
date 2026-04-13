@@ -219,7 +219,7 @@ func (tc *testContext) fetchAgents(alias string) error {
 		return err
 	}
 	state := tc.userState(alias)
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/agents", alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID+"/agents", alias, nil); err != nil {
 		return err
 	}
 	if err := tc.assertStatus(http.StatusOK); err != nil {
@@ -233,7 +233,7 @@ func (tc *testContext) fetchConversations(alias string) error {
 		return err
 	}
 	state := tc.userState(alias)
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID+"/conversations", alias, nil); err != nil {
 		return err
 	}
 	if err := tc.assertStatus(http.StatusOK); err != nil {
@@ -244,7 +244,7 @@ func (tc *testContext) fetchConversations(alias string) error {
 
 func (tc *testContext) captureDefaultWorkspace(alias string) error {
 	state := tc.userState(alias)
-	workspaceID := gjson.GetBytes(tc.lastBody, "data.0.id").String()
+	workspaceID := gjson.GetBytes(tc.lastBody, firstIDPath).String()
 	if workspaceID == "" {
 		return fmt.Errorf("no default workspace found for %q", alias)
 	}

@@ -199,7 +199,7 @@ func (tc *testContext) usageWorkspaceSummaryShowsActivity() error {
 
 	// Allow time for the async usage write to propagate before reading the summary.
 	return tc.pollDefault(func() error {
-		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/usage", "primary", nil); err != nil {
+		if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID+"/usage", "primary", nil); err != nil {
 			return err
 		}
 		if err := tc.assertStatus(http.StatusOK); err != nil {

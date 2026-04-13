@@ -109,7 +109,16 @@ func (s *Service) sendDirectMessage(
 	}
 
 	// Stream response from the agent.
-	return s.callAgentStreaming(ctx, opts, pm, conversation, runtimeState, primaryResponder, lookups, "")
+	return s.callAgentStreaming(callAgentStreamingOpts{
+		ctx:          ctx,
+		sendOpts:     opts,
+		pm:           pm,
+		conversation: conversation,
+		runtimeState: runtimeState,
+		agent:        primaryResponder,
+		lookups:      lookups,
+		extraContext: "",
+	})
 }
 
 // sendSwarmMessage handles swarm group chat: persist user message first,
@@ -148,7 +157,16 @@ func (s *Service) sendSwarmMessage(
 	sess := database.SessionFromContext(ctx)
 	conversationContext := s.buildConversationContext(ctx, sess, opts.WorkspaceID, conversation.ID, lookups, 20)
 
-	return s.callAgentStreaming(ctx, opts, pm, conversation, runtimeState, lookups.manager, lookups, conversationContext)
+	return s.callAgentStreaming(callAgentStreamingOpts{
+		ctx:          ctx,
+		sendOpts:     opts,
+		pm:           pm,
+		conversation: conversation,
+		runtimeState: runtimeState,
+		agent:        lookups.manager,
+		lookups:      lookups,
+		extraContext: conversationContext,
+	})
 }
 
 // executeParallel fires all agent calls concurrently. Each agent responds
@@ -174,7 +192,16 @@ func (s *Service) executeParallel(
 			// The session travels on a derived context so opts stays read-only.
 			agentSess := s.db.NewSession(nil)
 			agentCtx := database.ContextWithSession(ctx, agentSess)
-			replies, err := s.callAgentStreaming(agentCtx, opts, pm, conversation, runtimeState, ag, lookups, "")
+			replies, err := s.callAgentStreaming(callAgentStreamingOpts{
+				ctx:          agentCtx,
+				sendOpts:     opts,
+				pm:           pm,
+				conversation: conversation,
+				runtimeState: runtimeState,
+				agent:        ag,
+				lookups:      lookups,
+				extraContext: "",
+			})
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}

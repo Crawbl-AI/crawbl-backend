@@ -33,7 +33,7 @@ func (tc *testContext) userOpensDefaultWorkspace(alias string) error {
 		return err
 	}
 	state := tc.userState(alias)
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID, alias, nil); err != nil {
 		return err
 	}
 	return tc.assertStatus(http.StatusOK)
@@ -64,7 +64,7 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 	defer cancel()
 
 	return pollUntil(ctx, func() error {
-		if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID, alias, nil); err != nil {
+		if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID, alias, nil); err != nil {
 			return err
 		}
 		if err := tc.assertStatus(http.StatusOK); err != nil {
@@ -127,7 +127,7 @@ func (tc *testContext) userOpensMissingConversation(alias string) error {
 		return err
 	}
 	state := tc.userState(alias)
-	path := "/v1/workspaces/" + state.workspaceID + "/conversations/00000000-0000-0000-0000-000000000000"
+	path := workspacesPath + state.workspaceID + conversationsPath + "00000000-0000-0000-0000-000000000000"
 	_, err := tc.doRequest("GET", path, alias, nil)
 	return err
 }

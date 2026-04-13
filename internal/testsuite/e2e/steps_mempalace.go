@@ -119,7 +119,7 @@ func (tc *testContext) mempalaceFindByTopic(minCount int, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, reqErr := tc.doRequest("GET", "/v1/agents/"+id+"/memories", "primary", nil)
+	_, reqErr := tc.doRequest("GET", agentsPath+id+memoriesPath, "primary", nil)
 	if reqErr != nil {
 		return reqErr
 	}

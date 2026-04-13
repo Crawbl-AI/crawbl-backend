@@ -293,9 +293,9 @@ func runServer(ctx context.Context) error {
 
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
-	chatService := chatservice.MustNew(
-		db,
-		chatservice.Repos{
+	chatService := chatservice.MustNew(chatservice.NewServiceOpts{
+		DB: db,
+		Repos: chatservice.Repos{
 			Workspace:     workspaceRepo,
 			Agent:         agentRepo,
 			Conversation:  conversationRepo,
@@ -306,9 +306,13 @@ func runServer(ctx context.Context) error {
 			AgentHistory:  agentHistoryRepo,
 			Usage:         usagerepo.New(),
 		},
-		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
-		ingestPool,
-	)
+		RuntimeClient:  runtimeClient,
+		Broadcaster:    broadcaster,
+		MemoryStack:    memoryStack,
+		PricingCache:   pricingCache,
+		UsagePublisher: usagePublisher,
+		IngestPool:     ingestPool,
+	})
 	agentService := agentservice.MustNew(
 		agentservice.Repos{
 			Workspace:     workspaceRepo,

@@ -26,7 +26,7 @@ func (tc *testContext) userOpensAgentDetails(alias, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/details", alias, nil)
+	_, err = tc.doRequest("GET", agentsPath+id+"/details", alias, nil)
 	return err
 }
 
@@ -38,7 +38,7 @@ func (tc *testContext) userOpensAgent(alias, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("GET", "/v1/agents/"+id, alias, nil)
+	_, err = tc.doRequest("GET", agentsPath+id, alias, nil)
 	return err
 }
 
@@ -47,7 +47,7 @@ func (tc *testContext) userOpensAgentHistory(alias, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/history", alias, nil)
+	_, err = tc.doRequest("GET", agentsPath+id+"/history", alias, nil)
 	return err
 }
 
@@ -56,7 +56,7 @@ func (tc *testContext) userOpensAgentSettings(alias, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/settings", alias, nil)
+	_, err = tc.doRequest("GET", agentsPath+id+"/settings", alias, nil)
 	return err
 }
 
@@ -65,7 +65,7 @@ func (tc *testContext) userOpensAgentTools(alias, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/tools", alias, nil)
+	_, err = tc.doRequest("GET", agentsPath+id+"/tools", alias, nil)
 	return err
 }
 
@@ -74,7 +74,7 @@ func (tc *testContext) userOpensAgentMemories(alias, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("GET", "/v1/agents/"+id+"/memories", alias, nil)
+	_, err = tc.doRequest("GET", agentsPath+id+memoriesPath, alias, nil)
 	return err
 }
 
@@ -84,7 +84,7 @@ func (tc *testContext) userSavesAgentMemory(alias, key, content, slug string) er
 		return err
 	}
 	body := map[string]any{"key": key, "content": content}
-	_, err = tc.doRequest("POST", "/v1/agents/"+id+"/memories", alias, body)
+	_, err = tc.doRequest("POST", agentsPath+id+memoriesPath, alias, body)
 	return err
 }
 
@@ -93,7 +93,7 @@ func (tc *testContext) userDeletesAgentMemory(alias, key, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("DELETE", "/v1/agents/"+id+"/memories/"+key, alias, map[string]any{})
+	_, err = tc.doRequest("DELETE", agentsPath+id+memoriesPath+"/"+key, alias, map[string]any{})
 	return err
 }
 
@@ -114,7 +114,7 @@ func (tc *testContext) assertMemoryKeyExists(alias, key, slug string, shouldExis
 	if err != nil {
 		return err
 	}
-	if _, err := tc.doRequest("GET", "/v1/agents/"+id+"/memories", alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", agentsPath+id+memoriesPath, alias, nil); err != nil {
 		return err
 	}
 	entries := gjson.GetBytes(tc.lastBody, "data").Array()

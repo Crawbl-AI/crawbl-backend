@@ -135,7 +135,7 @@ func (tc *testContext) blueprintAssertAgentModel(slug, expectedModel string) err
 	if err != nil {
 		return err
 	}
-	if _, err = tc.doRequest("GET", "/v1/agents/"+agentID+"/settings", "primary", nil); err != nil {
+	if _, err = tc.doRequest("GET", agentsPath+agentID+"/settings", "primary", nil); err != nil {
 		return err
 	}
 	if sErr := tc.assertStatus(http.StatusOK); sErr != nil {
@@ -198,7 +198,7 @@ func (tc *testContext) blueprintAssertAgentHasTool(slug, expectedTool string) er
 	if err != nil {
 		return err
 	}
-	if _, err = tc.doRequest("GET", "/v1/agents/"+agentID+"/tools", "primary", nil); err != nil {
+	if _, err = tc.doRequest("GET", agentsPath+agentID+"/tools", "primary", nil); err != nil {
 		return err
 	}
 	if sErr := tc.assertStatus(http.StatusOK); sErr != nil {

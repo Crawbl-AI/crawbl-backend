@@ -22,6 +22,11 @@ const (
 	// cannot derive the agent-runtime image from the userswarm spec. Points
 	// at the dev tag so local clusters work without extra configuration.
 	defaultAgentRuntimeImage = "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"
+
+	// agentRuntimeNameFormat is the fmt.Sprintf format for all agent-runtime
+	// child resource names (ServiceAccount, Service, Deployment). The single
+	// %s placeholder is replaced with the UserSwarm CR name.
+	agentRuntimeNameFormat = "agent-runtime-%s"
 )
 
 // workspaceIDFromSwarmName strips the "workspace-" prefix off a CR name to
@@ -32,15 +37,15 @@ func workspaceIDFromSwarmName(name string) string {
 }
 
 func runtimeServiceAccountName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf(agentRuntimeNameFormat, sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeServiceName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf(agentRuntimeNameFormat, sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeDeploymentName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf(agentRuntimeNameFormat, sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeNamespaceFor(sw *crawblv1alpha1.UserSwarm) string {

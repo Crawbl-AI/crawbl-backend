@@ -65,13 +65,13 @@ func (tc *testContext) hardDeleteUserBySubject(subject string) bool {
 	if len(workspaceIDs) > 0 {
 		for _, table := range memoryWorkspaceTables {
 			if _, err := sess.DeleteFrom(table).
-				Where("workspace_id IN ?", workspaceIDs).
+				Where(whereWorkspaceIN, workspaceIDs).
 				ExecContext(ctx); err != nil {
 				log.Printf("e2e hardDelete: wipe %s for %q: %v", table, subject, err)
 			}
 		}
 		if _, err := sess.DeleteFrom("mcp_audit_logs").
-			Where("workspace_id IN ?", workspaceIDs).
+			Where(whereWorkspaceIN, workspaceIDs).
 			ExecContext(ctx); err != nil {
 			log.Printf("e2e hardDelete: wipe mcp_audit_logs for %q: %v", subject, err)
 		}
@@ -87,6 +87,10 @@ func (tc *testContext) hardDeleteUserBySubject(subject string) bool {
 	n, _ := res.RowsAffected()
 	return n > 0
 }
+
+// whereWorkspaceIN is the dbr WHERE clause fragment for filtering by a
+// list of workspace IDs. Extracted to avoid repeating the string literal.
+const whereWorkspaceIN = "workspace_id IN ?"
 
 // e2eSubjectPattern is the LIKE pattern every test user's subject
 // matches. It is set once in Run() from the suite's fixed
@@ -131,7 +135,7 @@ func wipeE2EResidue(deps *suiteDeps) {
 	if len(workspaceIDs) > 0 {
 		for _, table := range memoryWorkspaceTables {
 			if _, err := sess.DeleteFrom(table).
-				Where("workspace_id IN ?", workspaceIDs).
+				Where(whereWorkspaceIN, workspaceIDs).
 				ExecContext(ctx); err != nil {
 				log.Printf("e2e cleanup: wipe %s: %v", table, err)
 			}
@@ -141,7 +145,7 @@ func wipeE2EResidue(deps *suiteDeps) {
 		// keeps orphaned audit rows around. Drop them explicitly so
 		// repeated runs do not pile up audit residue.
 		if _, err := sess.DeleteFrom("mcp_audit_logs").
-			Where("workspace_id IN ?", workspaceIDs).
+			Where(whereWorkspaceIN, workspaceIDs).
 			ExecContext(ctx); err != nil {
 			log.Printf("e2e cleanup: wipe mcp_audit_logs: %v", err)
 		}

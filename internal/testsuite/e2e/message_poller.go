@@ -53,7 +53,7 @@ func (tc *testContext) sendMessage(alias, text string) error {
 		"content":     map[string]any{"type": "text", "text": text},
 		"attachments": []any{},
 	}
-	if _, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body); err != nil {
+	if _, err := tc.doRequest("POST", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation+messagesPath, alias, body); err != nil {
 		return err
 	}
 	// Empty-text scenarios expect a rejection status (400/422/etc.);
@@ -82,7 +82,7 @@ func (tc *testContext) sendMessage(alias, text string) error {
 // assertions keep working against the first assistant turn.
 func (tc *testContext) pollForAssistantReply(alias, userMsgID, userMsgCreatedAt string) error {
 	state := tc.userState(alias)
-	listURL := "/v1/workspaces/" + state.workspaceID + "/conversations/" + state.currentConversation + "/messages"
+	listURL := workspacesPath + state.workspaceID + conversationsPath + state.currentConversation + messagesPath
 	deadline := time.Now().Add(assistantReplyPollWindow)
 	for {
 		if _, err := tc.doRequest("GET", listURL, alias, nil); err != nil {
@@ -156,6 +156,6 @@ func (tc *testContext) sendWarmupMessage(alias string) error {
 		"content":     map[string]any{"type": "text", "text": "Reply with the single word READY."},
 		"attachments": []any{},
 	}
-	_, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body)
+	_, err := tc.doRequest("POST", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation+messagesPath, alias, body)
 	return err
 }

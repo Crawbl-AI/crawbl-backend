@@ -95,7 +95,7 @@ func (tc *testContext) userOpensSwarmConversation(alias string) error {
 	}
 	state := tc.userState(alias)
 	state.currentConversation = state.swarmConversationID
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation, alias, nil); err != nil {
 		return err
 	}
 	if err := tc.assertStatus(http.StatusOK); err != nil {
@@ -115,7 +115,7 @@ func (tc *testContext) userOpensDirectConversation(alias, role string) error {
 		return fmt.Errorf("no direct conversation found for %q", role)
 	}
 	state.currentConversation = convID
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation, alias, nil); err != nil {
 		return err
 	}
 	if err := tc.assertStatus(http.StatusOK); err != nil {
@@ -135,7 +135,7 @@ func (tc *testContext) userOpensMessagesInCurrentConversation(alias string) erro
 			return err
 		}
 	}
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation+messagesPath, alias, nil); err != nil {
 		return err
 	}
 	return tc.assertStatus(http.StatusOK)
@@ -182,7 +182,7 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 			{"id": agentID, "name": agentName, "type": "agent"},
 		},
 	}
-	if _, err = tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body); err != nil {
+	if _, err = tc.doRequest("POST", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation+messagesPath, alias, body); err != nil {
 		return err
 	}
 	if tc.lastStatus != http.StatusOK && tc.lastStatus != http.StatusCreated {
@@ -274,7 +274,7 @@ func (tc *testContext) userCreatesConversation(alias, title string) error {
 	}
 	state := tc.userState(alias)
 	body := map[string]any{"title": title, "type": "swarm"}
-	if _, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, body); err != nil {
+	if _, err := tc.doRequest("POST", workspacesPath+state.workspaceID+"/conversations", alias, body); err != nil {
 		return err
 	}
 	id := gjson.GetBytes(tc.lastBody, "data.id").String()
@@ -287,35 +287,35 @@ func (tc *testContext) userCreatesConversation(alias, title string) error {
 func (tc *testContext) userMarksConversationRead(alias string) error {
 	state := tc.userState(alias)
 	if state.currentConversation == "" {
-		return fmt.Errorf("no current conversation set for %q", alias)
+		return fmt.Errorf(errNoCurrentConv, alias)
 	}
-	_, err := tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/read", alias, nil)
+	_, err := tc.doRequest("POST", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation+"/read", alias, nil)
 	return err
 }
 
 func (tc *testContext) userSearchesMessages(alias, query string) error {
 	state := tc.userState(alias)
 	if state.currentConversation == "" {
-		return fmt.Errorf("no current conversation set for %q", alias)
+		return fmt.Errorf(errNoCurrentConv, alias)
 	}
-	_, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages/search?q="+query, alias, nil)
+	_, err := tc.doRequest("GET", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation+messagesPath+"/search?q="+query, alias, nil)
 	return err
 }
 
 func (tc *testContext) userDeletesConversation(alias string) error {
 	state := tc.userState(alias)
 	if state.currentConversation == "" {
-		return fmt.Errorf("no current conversation set for %q", alias)
+		return fmt.Errorf(errNoCurrentConv, alias)
 	}
-	_, err := tc.doRequest("DELETE", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, map[string]any{})
+	_, err := tc.doRequest("DELETE", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation, alias, map[string]any{})
 	return err
 }
 
 func (tc *testContext) userOpensCurrentConversationAgain(alias string) error {
 	state := tc.userState(alias)
 	if state.currentConversation == "" {
-		return fmt.Errorf("no current conversation set for %q", alias)
+		return fmt.Errorf(errNoCurrentConv, alias)
 	}
-	_, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation, alias, nil)
+	_, err := tc.doRequest("GET", workspacesPath+state.workspaceID+conversationsPath+state.currentConversation, alias, nil)
 	return err
 }
