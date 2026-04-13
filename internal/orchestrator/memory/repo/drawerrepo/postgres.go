@@ -518,6 +518,22 @@ func (r *Postgres) UpdateState(ctx context.Context, sess database.SessionRunner,
 	return err
 }
 
+// ClaimForProcessing atomically transitions drawers from 'raw' to 'classifying'
+// using a compare-and-swap UPDATE. It must be called inside the same transaction
+// that ran ListByState with FOR UPDATE SKIP LOCKED so the row locks are held
+// until the state move commits. Any drawer already advanced past 'raw' by a
+// concurrent worker is silently skipped (the CAS WHERE clause filters it out).
+func (r *Postgres) ClaimForProcessing(ctx context.Context, sess database.SessionRunner, workspaceID string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := sess.Update("memory_drawers").
+		Set("state", string(memory.DrawerStateClassifying)).
+		Where("workspace_id = ? AND id IN ? AND state = ?", workspaceID, ids, string(memory.DrawerStateRaw)).
+		ExecContext(ctx)
+	return err
+}
+
 // UpdateEmbedding persists a freshly generated embedding vector for a drawer.
 // Called by the cold worker after classification so vector search can find the drawer.
 func (r *Postgres) UpdateEmbedding(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, embedding []float32) error {
