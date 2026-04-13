@@ -129,19 +129,14 @@ func runAPI(ctx context.Context) error {
 	pricingCache.Start(ctx)
 
 	// River client — API only publishes usage jobs, does not process them.
-	// Migration must have already run (via "orchestrator migrate" or the
-	// all-in-one mode).
+	// The client is NOT started (no Start call) because Start requires
+	// Queues+Workers config. Insert/InsertTx work without Start.
 	riverClient, err := pkgriver.New(db.DB, nil)
 	if err != nil {
 		logger.Error("river client construction failed", "error", err)
 		return fmt.Errorf("river client: %w", err)
 	}
-	if err := riverClient.Start(ctx); err != nil {
-		logger.Error("river client start failed", "error", err)
-		return fmt.Errorf("river start: %w", err)
-	}
-	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started (publish-only)")
+	logger.Info("river client ready (publish-only)")
 
 	// In-process auto-ingest pool (decision C4 — runs in the API process).
 	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
