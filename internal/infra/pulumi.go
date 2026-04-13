@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cloudflare"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/databases"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
@@ -59,6 +60,11 @@ func buildProgram(infraCfg Config) pulumi.RunFunc {
 			return err
 		}
 
+		// Phase 5: Create Cloudflare tunnel and DNS records (dev only — no-op when ManageTunnel=false)
+		if err := createCloudflare(ctx, infraCfg); err != nil {
+			return err
+		}
+
 		// Export outputs
 		exportOutputs(ctx, clusterResult)
 		return nil
@@ -102,6 +108,16 @@ func createPlatform(ctx *pulumi.Context, config Config, k8sProvider *kubernetes.
 	_, err := platform.NewPlatform(ctx, "platform", platformConfig, pulumi.Provider(k8sProvider))
 	if err != nil {
 		return fmt.Errorf("create platform: %w", err)
+	}
+	return nil
+}
+
+// createCloudflare provisions the Cloudflare tunnel, ingress config, and DNS records.
+// It is a no-op when cfg.CloudflareConfig.ManageTunnel is false.
+func createCloudflare(ctx *pulumi.Context, cfg Config) error {
+	_, err := cloudflare.NewCloudflare(ctx, "cloudflare", cfg.CloudflareConfig)
+	if err != nil {
+		return fmt.Errorf("create cloudflare: %w", err)
 	}
 	return nil
 }

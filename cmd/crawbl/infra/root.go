@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cloudflare"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/databases"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
@@ -73,14 +74,33 @@ func buildConfig(env, region string) (infra.Config, error) {
 		dbsCfg = &cfg
 	}
 
+	// Cloudflare tunnel config — optional; absent key means ManageTunnel stays false.
+	var cfConfig cloudflare.Config
+	var stackCFCfg cloudflare.StackCloudflareConfig
+	if err := loadStackSection(env, "crawbl:cloudflare", &stackCFCfg); err == nil {
+		cfConfig = cloudflare.Config{
+			ManageTunnel: stackCFCfg.ManageTunnel,
+			AccountID:    stackCFCfg.AccountID,
+			ZoneID:       stackCFCfg.ZoneID,
+			TunnelName:   stackCFCfg.TunnelName,
+			TunnelID:     stackCFCfg.TunnelID,
+			EnvoyService: stackCFCfg.EnvoyService,
+			Subdomains:   stackCFCfg.Subdomains,
+			ZoneName:     stackCFCfg.ZoneName,
+			// Tunnel secret is a runtime credential — never stored in YAML.
+			TunnelSecret: os.Getenv("CLOUDFLARE_TUNNEL_SECRET"),
+		}
+	}
+
 	return infra.Config{
-		Environment:     env,
-		Region:          region,
-		ESCEnvironment:  configenv.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
-		ExistingVPCID:   os.Getenv("DIGITALOCEAN_VPC_ID"),
-		ClusterConfig:   clusterConfig,
-		PlatformConfig:  platformConfig,
-		DatabasesConfig: dbsCfg,
+		Environment:      env,
+		Region:           region,
+		ESCEnvironment:   configenv.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
+		ExistingVPCID:    os.Getenv("DIGITALOCEAN_VPC_ID"),
+		ClusterConfig:    clusterConfig,
+		PlatformConfig:   platformConfig,
+		DatabasesConfig:  dbsCfg,
+		CloudflareConfig: cfConfig,
 	}, nil
 }
 

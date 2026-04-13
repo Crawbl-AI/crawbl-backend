@@ -24,7 +24,7 @@ require (
 	github.com/nats-io/nats.go v1.50.0
 	github.com/openai/openai-go/v3 v3.16.0
 	github.com/pgvector/pgvector-go v0.3.0
-	github.com/pulumi/pulumi-aws/sdk/v6 v6.83.2
+	github.com/pulumi/pulumi-cloudflare/sdk/v5 v5.49.1
 	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.63.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.28.0
 	github.com/pulumi/pulumi/sdk/v3 v3.228.0

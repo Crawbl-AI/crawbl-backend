@@ -925,12 +925,10 @@ github.com/pulumi/esc/internal/util
 github.com/pulumi/esc/schema
 github.com/pulumi/esc/syntax
 github.com/pulumi/esc/syntax/encoding
-# github.com/pulumi/pulumi-aws/sdk/v6 v6.83.2
-## explicit; go 1.23.0
-github.com/pulumi/pulumi-aws/sdk/v6/go/aws/iam
-github.com/pulumi/pulumi-aws/sdk/v6/go/aws/internal
-github.com/pulumi/pulumi-aws/sdk/v6/go/aws/s3
-github.com/pulumi/pulumi-aws/sdk/v6/go/aws/secretsmanager
+# github.com/pulumi/pulumi-cloudflare/sdk/v5 v5.49.1
+## explicit; go 1.22
+github.com/pulumi/pulumi-cloudflare/sdk/v5/go/cloudflare
+github.com/pulumi/pulumi-cloudflare/sdk/v5/go/cloudflare/internal
 # github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.63.0
 ## explicit; go 1.25.6
 github.com/pulumi/pulumi-digitalocean/sdk/v4/go/digitalocean

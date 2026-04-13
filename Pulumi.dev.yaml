@@ -68,3 +68,32 @@ config:
     # Whether to create a DigitalOcean Project to group resources.
     # Set to false because the project already exists.
     createProject: false
+
+  # -- Cloudflare tunnel and DNS configuration (dev only) --
+  # Prod traffic goes through the DigitalOcean Load Balancer; no tunnel needed.
+  crawbl:cloudflare:
+    # Enable Pulumi management of the CF tunnel and CNAME records.
+    manageTunnel: true
+
+    # Cloudflare account and zone identifiers.
+    accountID: "27414702a30e3e8ce6d2054aeecef638"
+    zoneID: "a6e53522f634b470a7d5ca3fb0928934"
+    zoneName: "crawbl.com"
+
+    # The manually-created tunnel that cloudflared in the cluster connects to.
+    # Tunnel ID: f74d61e0-9f8e-40a1-b866-a70f632ef2b5 (crawbl-dev)
+    # Token stored in AWS SM at: crawbl/dev/infra/cloudflare-tunnel
+    tunnelName: "crawbl-dev"
+    tunnelID: "f74d61e0-9f8e-40a1-b866-a70f632ef2b5"
+
+    # Envoy Gateway ClusterIP — all subdomain traffic routes here inside the cluster.
+    envoyService: "https://envoy-envoy-gateway-system-public-edge-33426344.envoy-gateway-system.svc.cluster.local:443"
+
+    # Dev subdomains that get CNAME records → <tunnel-id>.cfargotunnel.com
+    subdomains:
+      - api-dev
+      - river-dev
+      - metrics-dev
+      - logs-dev
+      - argocd-dev
+      - postgres-dev
