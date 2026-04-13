@@ -70,17 +70,10 @@ on:
         required: true
 
 jobs:
-  build:
-    uses: ./.github/workflows/reusable-build.yml
-    with:
-      registry: ${{ inputs.registry }}
-      push-images: ${{ inputs.push-images }}
-    secrets:
-      digitalocean-token: ${{ secrets.digitalocean-token }}
-
+  # Infra drift check runs FIRST — gates everything. If Pulumi state has
+  # drifted from the live cluster, we fail before wasting time on image builds.
   infra-drift-check:
     uses: ./.github/workflows/reusable-infra-drift-check.yml
-    needs: [build]
     with:
       environment: ${{ inputs.environment }}
       region: ${{ inputs.region }}
@@ -94,9 +87,18 @@ jobs:
       digitalocean-vpc-id: ${{ secrets.digitalocean-vpc-id }}
       digitalocean-project-name: ${{ secrets.digitalocean-project-name }}
 
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    needs: [infra-drift-check]
+    with:
+      registry: ${{ inputs.registry }}
+      push-images: ${{ inputs.push-images }}
+    secrets:
+      digitalocean-token: ${{ secrets.digitalocean-token }}
+
   update-argocd:
     uses: ./.github/workflows/reusable-update-argocd.yml
-    needs: [build, infra-drift-check]
+    needs: [build]
     with:
       image-tag: ${{ needs.build.outputs.semver-tag }}
     secrets:

@@ -37,6 +37,10 @@ type Config struct {
 
 	// DB is the Redis database number (0-15).
 	DB int
+
+	// TLS enables TLS connections to Redis/Valkey. Required for
+	// DO Managed Valkey and any other TLS-terminated endpoint.
+	TLS bool
 }
 
 // Client defines Redis operations used by the Crawbl platform.

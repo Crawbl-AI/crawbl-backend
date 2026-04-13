@@ -71,6 +71,21 @@ func IntOr(key string, defaultValue int) int {
 	return parsed
 }
 
+// BoolOr parses the environment variable key as a boolean and returns it,
+// or returns defaultValue if the variable is unset, empty, or not a valid boolean.
+// Truthy values: "1", "true", "yes", "on" (case-insensitive).
+func BoolOr(key string, defaultValue bool) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
+}
+
 // DurationOr parses the environment variable key as a time.Duration and returns it,
 // or returns defaultValue if the variable is unset, empty, or not a valid duration.
 // The duration format follows time.ParseDuration conventions (e.g., "5m", "1h30m").

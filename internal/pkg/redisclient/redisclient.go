@@ -5,6 +5,7 @@ package redisclient
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -26,6 +27,7 @@ func ConfigFromEnv(prefix string) Config {
 		Addr:     configenv.StringOr(prefix+"REDIS_ADDR", DefaultAddr),
 		Password: configenv.SecretString(prefix+"REDIS_PASSWORD", ""),
 		DB:       configenv.IntOr(prefix+"REDIS_DB", DefaultDB),
+		TLS:      configenv.BoolOr(prefix+"REDIS_TLS", false),
 	}
 }
 
@@ -34,7 +36,7 @@ func ConfigFromEnv(prefix string) Config {
 // NewUniversalClient is used so the client is compatible with both standalone
 // Redis/Valkey and cluster endpoints (e.g. DO Managed Valkey).
 func New(cfg Config) (Client, error) {
-	rc := goredis.NewUniversalClient(&goredis.UniversalOptions{
+	opts := &goredis.UniversalOptions{
 		Addrs:        []string{cfg.Addr},
 		Password:     cfg.Password,
 		DB:           cfg.DB,
@@ -44,7 +46,11 @@ func New(cfg Config) (Client, error) {
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
 		PoolTimeout:  4 * time.Second,
-	})
+	}
+	if cfg.TLS {
+		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	rc := goredis.NewUniversalClient(opts)
 
 	if err := pingWithRetry(context.Background(), rc, DefaultPingAttempts, DefaultPingDelay); err != nil {
 		_ = rc.Close()

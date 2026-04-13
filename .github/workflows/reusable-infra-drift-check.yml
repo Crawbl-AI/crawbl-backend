@@ -59,13 +59,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download binary artifact
-        uses: actions/download-artifact@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: crawbl-binary
+          go-version-file: go.mod
+          cache: true
 
-      - name: Make binary executable
-        run: chmod +x crawbl
+      - name: Build crawbl binary
+        run: go build -o crawbl ./cmd/crawbl
 
       - name: Check for infrastructure drift
         env:
