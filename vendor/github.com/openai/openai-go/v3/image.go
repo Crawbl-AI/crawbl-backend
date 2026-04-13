@@ -21,6 +21,8 @@ import (
 	"github.com/openai/openai-go/v3/shared/constant"
 )
 
+// Given a prompt and/or an input image, the model will generate a new image.
+//
 // ImageService contains methods and other services that help with interacting with
 // the openai API.
 //
@@ -45,22 +47,22 @@ func (r *ImageService) NewVariation(ctx context.Context, body ImageNewVariationP
 	opts = slices.Concat(r.Options, opts)
 	path := "images/variations"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
-	return
+	return res, err
 }
 
 // Creates an edited or extended image given one or more source images and a
 // prompt. This endpoint supports GPT Image models (`gpt-image-1.5`, `gpt-image-1`,
-// and `gpt-image-1-mini`) and `dall-e-2`.
+// `gpt-image-1-mini`, and `chatgpt-image-latest`) and `dall-e-2`.
 func (r *ImageService) Edit(ctx context.Context, body ImageEditParams, opts ...option.RequestOption) (res *ImagesResponse, err error) {
 	opts = slices.Concat(r.Options, opts)
 	path := "images/edits"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
-	return
+	return res, err
 }
 
 // Creates an edited or extended image given one or more source images and a
 // prompt. This endpoint supports GPT Image models (`gpt-image-1.5`, `gpt-image-1`,
-// and `gpt-image-1-mini`) and `dall-e-2`.
+// `gpt-image-1-mini`, and `chatgpt-image-latest`) and `dall-e-2`.
 func (r *ImageService) EditStreaming(ctx context.Context, body ImageEditParams, opts ...option.RequestOption) (stream *ssestream.Stream[ImageEditStreamEventUnion]) {
 	var (
 		raw *http.Response
@@ -81,7 +83,7 @@ func (r *ImageService) Generate(ctx context.Context, body ImageGenerateParams, o
 	opts = slices.Concat(r.Options, opts)
 	path := "images/generations"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
-	return
+	return res, err
 }
 
 // Creates an image given a prompt.
@@ -92,7 +94,7 @@ func (r *ImageService) GenerateStreaming(ctx context.Context, body ImageGenerate
 		err error
 	)
 	opts = slices.Concat(r.Options, opts)
-	opts = append([]option.RequestOption{option.WithJSONSet("stream", true)}, opts...)
+	opts = append(opts, option.WithJSONSet("stream", true))
 	path := "images/generations"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &raw, opts...)
 	return ssestream.NewStream[ImageGenStreamEventUnion](ssestream.NewDecoder(raw), err)
@@ -129,30 +131,30 @@ func (r *Image) UnmarshalJSON(data []byte) error {
 // Emitted when image editing has completed and the final image is available.
 type ImageEditCompletedEvent struct {
 	// Base64-encoded final edited image data, suitable for rendering as an image.
-	B64JSON string `json:"b64_json,required"`
+	B64JSON string `json:"b64_json" api:"required"`
 	// The background setting for the edited image.
 	//
 	// Any of "transparent", "opaque", "auto".
-	Background ImageEditCompletedEventBackground `json:"background,required"`
+	Background ImageEditCompletedEventBackground `json:"background" api:"required"`
 	// The Unix timestamp when the event was created.
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at" api:"required"`
 	// The output format for the edited image.
 	//
 	// Any of "png", "webp", "jpeg".
-	OutputFormat ImageEditCompletedEventOutputFormat `json:"output_format,required"`
+	OutputFormat ImageEditCompletedEventOutputFormat `json:"output_format" api:"required"`
 	// The quality setting for the edited image.
 	//
 	// Any of "low", "medium", "high", "auto".
-	Quality ImageEditCompletedEventQuality `json:"quality,required"`
+	Quality ImageEditCompletedEventQuality `json:"quality" api:"required"`
 	// The size of the edited image.
 	//
 	// Any of "1024x1024", "1024x1536", "1536x1024", "auto".
-	Size ImageEditCompletedEventSize `json:"size,required"`
+	Size ImageEditCompletedEventSize `json:"size" api:"required"`
 	// The type of the event. Always `image_edit.completed`.
-	Type constant.ImageEditCompleted `json:"type,required"`
+	Type constant.ImageEditCompleted `json:"type" default:"image_edit.completed"`
 	// For the GPT image models only, the token usage information for the image
 	// generation.
-	Usage ImageEditCompletedEventUsage `json:"usage,required"`
+	Usage ImageEditCompletedEventUsage `json:"usage" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		B64JSON      respjson.Field
@@ -216,13 +218,13 @@ const (
 // generation.
 type ImageEditCompletedEventUsage struct {
 	// The number of tokens (images and text) in the input prompt.
-	InputTokens int64 `json:"input_tokens,required"`
+	InputTokens int64 `json:"input_tokens" api:"required"`
 	// The input tokens detailed information for the image generation.
-	InputTokensDetails ImageEditCompletedEventUsageInputTokensDetails `json:"input_tokens_details,required"`
+	InputTokensDetails ImageEditCompletedEventUsageInputTokensDetails `json:"input_tokens_details" api:"required"`
 	// The number of image tokens in the output image.
-	OutputTokens int64 `json:"output_tokens,required"`
+	OutputTokens int64 `json:"output_tokens" api:"required"`
 	// The total number of tokens (images and text) used for the image generation.
-	TotalTokens int64 `json:"total_tokens,required"`
+	TotalTokens int64 `json:"total_tokens" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		InputTokens        respjson.Field
@@ -243,9 +245,9 @@ func (r *ImageEditCompletedEventUsage) UnmarshalJSON(data []byte) error {
 // The input tokens detailed information for the image generation.
 type ImageEditCompletedEventUsageInputTokensDetails struct {
 	// The number of image tokens in the input prompt.
-	ImageTokens int64 `json:"image_tokens,required"`
+	ImageTokens int64 `json:"image_tokens" api:"required"`
 	// The number of text tokens in the input prompt.
-	TextTokens int64 `json:"text_tokens,required"`
+	TextTokens int64 `json:"text_tokens" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ImageTokens respjson.Field
@@ -264,29 +266,29 @@ func (r *ImageEditCompletedEventUsageInputTokensDetails) UnmarshalJSON(data []by
 // Emitted when a partial image is available during image editing streaming.
 type ImageEditPartialImageEvent struct {
 	// Base64-encoded partial image data, suitable for rendering as an image.
-	B64JSON string `json:"b64_json,required"`
+	B64JSON string `json:"b64_json" api:"required"`
 	// The background setting for the requested edited image.
 	//
 	// Any of "transparent", "opaque", "auto".
-	Background ImageEditPartialImageEventBackground `json:"background,required"`
+	Background ImageEditPartialImageEventBackground `json:"background" api:"required"`
 	// The Unix timestamp when the event was created.
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at" api:"required"`
 	// The output format for the requested edited image.
 	//
 	// Any of "png", "webp", "jpeg".
-	OutputFormat ImageEditPartialImageEventOutputFormat `json:"output_format,required"`
+	OutputFormat ImageEditPartialImageEventOutputFormat `json:"output_format" api:"required"`
 	// 0-based index for the partial image (streaming).
-	PartialImageIndex int64 `json:"partial_image_index,required"`
+	PartialImageIndex int64 `json:"partial_image_index" api:"required"`
 	// The quality setting for the requested edited image.
 	//
 	// Any of "low", "medium", "high", "auto".
-	Quality ImageEditPartialImageEventQuality `json:"quality,required"`
+	Quality ImageEditPartialImageEventQuality `json:"quality" api:"required"`
 	// The size of the requested edited image.
 	//
 	// Any of "1024x1024", "1024x1536", "1536x1024", "auto".
-	Size ImageEditPartialImageEventSize `json:"size,required"`
+	Size ImageEditPartialImageEventSize `json:"size" api:"required"`
 	// The type of the event. Always `image_edit.partial_image`.
-	Type constant.ImageEditPartialImage `json:"type,required"`
+	Type constant.ImageEditPartialImage `json:"type" default:"image_edit.partial_image"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		B64JSON           respjson.Field
@@ -427,30 +429,30 @@ func (r *ImageEditStreamEventUnion) UnmarshalJSON(data []byte) error {
 // Emitted when image generation has completed and the final image is available.
 type ImageGenCompletedEvent struct {
 	// Base64-encoded image data, suitable for rendering as an image.
-	B64JSON string `json:"b64_json,required"`
+	B64JSON string `json:"b64_json" api:"required"`
 	// The background setting for the generated image.
 	//
 	// Any of "transparent", "opaque", "auto".
-	Background ImageGenCompletedEventBackground `json:"background,required"`
+	Background ImageGenCompletedEventBackground `json:"background" api:"required"`
 	// The Unix timestamp when the event was created.
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at" api:"required"`
 	// The output format for the generated image.
 	//
 	// Any of "png", "webp", "jpeg".
-	OutputFormat ImageGenCompletedEventOutputFormat `json:"output_format,required"`
+	OutputFormat ImageGenCompletedEventOutputFormat `json:"output_format" api:"required"`
 	// The quality setting for the generated image.
 	//
 	// Any of "low", "medium", "high", "auto".
-	Quality ImageGenCompletedEventQuality `json:"quality,required"`
+	Quality ImageGenCompletedEventQuality `json:"quality" api:"required"`
 	// The size of the generated image.
 	//
 	// Any of "1024x1024", "1024x1536", "1536x1024", "auto".
-	Size ImageGenCompletedEventSize `json:"size,required"`
+	Size ImageGenCompletedEventSize `json:"size" api:"required"`
 	// The type of the event. Always `image_generation.completed`.
-	Type constant.ImageGenerationCompleted `json:"type,required"`
+	Type constant.ImageGenerationCompleted `json:"type" default:"image_generation.completed"`
 	// For the GPT image models only, the token usage information for the image
 	// generation.
-	Usage ImageGenCompletedEventUsage `json:"usage,required"`
+	Usage ImageGenCompletedEventUsage `json:"usage" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		B64JSON      respjson.Field
@@ -514,13 +516,13 @@ const (
 // generation.
 type ImageGenCompletedEventUsage struct {
 	// The number of tokens (images and text) in the input prompt.
-	InputTokens int64 `json:"input_tokens,required"`
+	InputTokens int64 `json:"input_tokens" api:"required"`
 	// The input tokens detailed information for the image generation.
-	InputTokensDetails ImageGenCompletedEventUsageInputTokensDetails `json:"input_tokens_details,required"`
+	InputTokensDetails ImageGenCompletedEventUsageInputTokensDetails `json:"input_tokens_details" api:"required"`
 	// The number of image tokens in the output image.
-	OutputTokens int64 `json:"output_tokens,required"`
+	OutputTokens int64 `json:"output_tokens" api:"required"`
 	// The total number of tokens (images and text) used for the image generation.
-	TotalTokens int64 `json:"total_tokens,required"`
+	TotalTokens int64 `json:"total_tokens" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		InputTokens        respjson.Field
@@ -541,9 +543,9 @@ func (r *ImageGenCompletedEventUsage) UnmarshalJSON(data []byte) error {
 // The input tokens detailed information for the image generation.
 type ImageGenCompletedEventUsageInputTokensDetails struct {
 	// The number of image tokens in the input prompt.
-	ImageTokens int64 `json:"image_tokens,required"`
+	ImageTokens int64 `json:"image_tokens" api:"required"`
 	// The number of text tokens in the input prompt.
-	TextTokens int64 `json:"text_tokens,required"`
+	TextTokens int64 `json:"text_tokens" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ImageTokens respjson.Field
@@ -562,29 +564,29 @@ func (r *ImageGenCompletedEventUsageInputTokensDetails) UnmarshalJSON(data []byt
 // Emitted when a partial image is available during image generation streaming.
 type ImageGenPartialImageEvent struct {
 	// Base64-encoded partial image data, suitable for rendering as an image.
-	B64JSON string `json:"b64_json,required"`
+	B64JSON string `json:"b64_json" api:"required"`
 	// The background setting for the requested image.
 	//
 	// Any of "transparent", "opaque", "auto".
-	Background ImageGenPartialImageEventBackground `json:"background,required"`
+	Background ImageGenPartialImageEventBackground `json:"background" api:"required"`
 	// The Unix timestamp when the event was created.
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at" api:"required"`
 	// The output format for the requested image.
 	//
 	// Any of "png", "webp", "jpeg".
-	OutputFormat ImageGenPartialImageEventOutputFormat `json:"output_format,required"`
+	OutputFormat ImageGenPartialImageEventOutputFormat `json:"output_format" api:"required"`
 	// 0-based index for the partial image (streaming).
-	PartialImageIndex int64 `json:"partial_image_index,required"`
+	PartialImageIndex int64 `json:"partial_image_index" api:"required"`
 	// The quality setting for the requested image.
 	//
 	// Any of "low", "medium", "high", "auto".
-	Quality ImageGenPartialImageEventQuality `json:"quality,required"`
+	Quality ImageGenPartialImageEventQuality `json:"quality" api:"required"`
 	// The size of the requested image.
 	//
 	// Any of "1024x1024", "1024x1536", "1536x1024", "auto".
-	Size ImageGenPartialImageEventSize `json:"size,required"`
+	Size ImageGenPartialImageEventSize `json:"size" api:"required"`
 	// The type of the event. Always `image_generation.partial_image`.
-	Type constant.ImageGenerationPartialImage `json:"type,required"`
+	Type constant.ImageGenerationPartialImage `json:"type" default:"image_generation.partial_image"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		B64JSON           respjson.Field
@@ -735,7 +737,7 @@ const (
 // The response from the image generation endpoint.
 type ImagesResponse struct {
 	// The Unix timestamp (in seconds) of when the image was created.
-	Created int64 `json:"created,required"`
+	Created int64 `json:"created" api:"required"`
 	// The background parameter used for the image generation. Either `transparent` or
 	// `opaque`.
 	//
@@ -818,13 +820,13 @@ const (
 // For `gpt-image-1` only, the token usage information for the image generation.
 type ImagesResponseUsage struct {
 	// The number of tokens (images and text) in the input prompt.
-	InputTokens int64 `json:"input_tokens,required"`
+	InputTokens int64 `json:"input_tokens" api:"required"`
 	// The input tokens detailed information for the image generation.
-	InputTokensDetails ImagesResponseUsageInputTokensDetails `json:"input_tokens_details,required"`
+	InputTokensDetails ImagesResponseUsageInputTokensDetails `json:"input_tokens_details" api:"required"`
 	// The number of output tokens generated by the model.
-	OutputTokens int64 `json:"output_tokens,required"`
+	OutputTokens int64 `json:"output_tokens" api:"required"`
 	// The total number of tokens (images and text) used for the image generation.
-	TotalTokens int64 `json:"total_tokens,required"`
+	TotalTokens int64 `json:"total_tokens" api:"required"`
 	// The output token details for the image generation.
 	OutputTokensDetails ImagesResponseUsageOutputTokensDetails `json:"output_tokens_details"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -848,9 +850,9 @@ func (r *ImagesResponseUsage) UnmarshalJSON(data []byte) error {
 // The input tokens detailed information for the image generation.
 type ImagesResponseUsageInputTokensDetails struct {
 	// The number of image tokens in the input prompt.
-	ImageTokens int64 `json:"image_tokens,required"`
+	ImageTokens int64 `json:"image_tokens" api:"required"`
 	// The number of text tokens in the input prompt.
-	TextTokens int64 `json:"text_tokens,required"`
+	TextTokens int64 `json:"text_tokens" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ImageTokens respjson.Field
@@ -869,9 +871,9 @@ func (r *ImagesResponseUsageInputTokensDetails) UnmarshalJSON(data []byte) error
 // The output token details for the image generation.
 type ImagesResponseUsageOutputTokensDetails struct {
 	// The number of image output tokens generated by the model.
-	ImageTokens int64 `json:"image_tokens,required"`
+	ImageTokens int64 `json:"image_tokens" api:"required"`
 	// The number of text output tokens generated by the model.
-	TextTokens int64 `json:"text_tokens,required"`
+	TextTokens int64 `json:"text_tokens" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ImageTokens respjson.Field
@@ -890,7 +892,7 @@ func (r *ImagesResponseUsageOutputTokensDetails) UnmarshalJSON(data []byte) erro
 type ImageNewVariationParams struct {
 	// The image to use as the basis for the variation(s). Must be a valid PNG file,
 	// less than 4MB, and square.
-	Image io.Reader `json:"image,omitzero,required" format:"binary"`
+	Image io.Reader `json:"image,omitzero" api:"required" format:"binary"`
 	// The number of images to generate. Must be between 1 and 10.
 	N param.Opt[int64] `json:"n,omitzero"`
 	// A unique identifier representing your end-user, which can help OpenAI to monitor
@@ -957,14 +959,15 @@ type ImageEditParams struct {
 	//
 	// For the GPT image models (`gpt-image-1`, `gpt-image-1-mini`, and
 	// `gpt-image-1.5`), each image should be a `png`, `webp`, or `jpg` file less than
-	// 50MB. You can provide up to 16 images.
+	// 50MB. You can provide up to 16 images. `chatgpt-image-latest` follows the same
+	// input constraints as GPT image models.
 	//
 	// For `dall-e-2`, you can only provide one image, and it should be a square `png`
 	// file less than 4MB.
-	Image ImageEditParamsImageUnion `json:"image,omitzero,required" format:"binary"`
+	Image ImageEditParamsImageUnion `json:"image,omitzero" api:"required" format:"binary"`
 	// A text description of the desired image(s). The maximum length is 1000
 	// characters for `dall-e-2`, and 32000 characters for the GPT image models.
-	Prompt string `json:"prompt,required"`
+	Prompt string `json:"prompt" api:"required"`
 	// The number of images to generate. Must be between 1 and 10.
 	N param.Opt[int64] `json:"n,omitzero"`
 	// The compression level (0-100%) for the generated images. This parameter is only
@@ -994,14 +997,12 @@ type ImageEditParams struct {
 	Background ImageEditParamsBackground `json:"background,omitzero"`
 	// Control how much effort the model will exert to match the style and features,
 	// especially facial features, of input images. This parameter is only supported
-	// for `gpt-image-1`. Unsupported for `gpt-image-1-mini`. Supports `high` and
-	// `low`. Defaults to `low`.
+	// for `gpt-image-1` and `gpt-image-1.5` and later models, unsupported for
+	// `gpt-image-1-mini`. Supports `high` and `low`. Defaults to `low`.
 	//
 	// Any of "high", "low".
 	InputFidelity ImageEditParamsInputFidelity `json:"input_fidelity,omitzero"`
-	// The model to use for image generation. Only `dall-e-2` and the GPT image models
-	// are supported. Defaults to `dall-e-2` unless a parameter specific to the GPT
-	// image models is used.
+	// The model to use for image generation. Defaults to `gpt-image-1.5`.
 	Model ImageModel `json:"model,omitzero"`
 	// The format in which the generated images are returned. This parameter is only
 	// supported for the GPT image models. Must be one of `png`, `jpeg`, or `webp`. The
@@ -1009,16 +1010,15 @@ type ImageEditParams struct {
 	//
 	// Any of "png", "jpeg", "webp".
 	OutputFormat ImageEditParamsOutputFormat `json:"output_format,omitzero"`
-	// The quality of the image that will be generated. `high`, `medium` and `low` are
-	// only supported for the GPT image models. `dall-e-2` only supports `standard`
-	// quality. Defaults to `auto`.
+	// The quality of the image that will be generated for GPT image models. Defaults
+	// to `auto`.
 	//
 	// Any of "standard", "low", "medium", "high", "auto".
 	Quality ImageEditParamsQuality `json:"quality,omitzero"`
 	// The format in which the generated images are returned. Must be one of `url` or
 	// `b64_json`. URLs are only valid for 60 minutes after the image has been
-	// generated. This parameter is only supported for `dall-e-2`, as the GPT image
-	// models always return base64-encoded images.
+	// generated. This parameter is only supported for `dall-e-2` (default is `url` for
+	// `dall-e-2`), as GPT image models always return base64-encoded images.
 	//
 	// Any of "url", "b64_json".
 	ResponseFormat ImageEditParamsResponseFormat `json:"response_format,omitzero"`
@@ -1096,8 +1096,8 @@ const (
 
 // Control how much effort the model will exert to match the style and features,
 // especially facial features, of input images. This parameter is only supported
-// for `gpt-image-1`. Unsupported for `gpt-image-1-mini`. Supports `high` and
-// `low`. Defaults to `low`.
+// for `gpt-image-1` and `gpt-image-1.5` and later models, unsupported for
+// `gpt-image-1-mini`. Supports `high` and `low`. Defaults to `low`.
 type ImageEditParamsInputFidelity string
 
 const (
@@ -1116,9 +1116,8 @@ const (
 	ImageEditParamsOutputFormatWebP ImageEditParamsOutputFormat = "webp"
 )
 
-// The quality of the image that will be generated. `high`, `medium` and `low` are
-// only supported for the GPT image models. `dall-e-2` only supports `standard`
-// quality. Defaults to `auto`.
+// The quality of the image that will be generated for GPT image models. Defaults
+// to `auto`.
 type ImageEditParamsQuality string
 
 const (
@@ -1131,8 +1130,8 @@ const (
 
 // The format in which the generated images are returned. Must be one of `url` or
 // `b64_json`. URLs are only valid for 60 minutes after the image has been
-// generated. This parameter is only supported for `dall-e-2`, as the GPT image
-// models always return base64-encoded images.
+// generated. This parameter is only supported for `dall-e-2` (default is `url` for
+// `dall-e-2`), as GPT image models always return base64-encoded images.
 type ImageEditParamsResponseFormat string
 
 const (
@@ -1158,7 +1157,7 @@ type ImageGenerateParams struct {
 	// A text description of the desired image(s). The maximum length is 32000
 	// characters for the GPT image models, 1000 characters for `dall-e-2` and 4000
 	// characters for `dall-e-3`.
-	Prompt string `json:"prompt,required"`
+	Prompt string `json:"prompt" api:"required"`
 	// The number of images to generate. Must be between 1 and 10. For `dall-e-3`, only
 	// `n=1` is supported.
 	N param.Opt[int64] `json:"n,omitzero"`
