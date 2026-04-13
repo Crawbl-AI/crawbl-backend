@@ -69,6 +69,12 @@ func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip logging for health probe endpoints to avoid log spam
+			// (k8s probes hit these every 10s per pod).
+			if r.URL.Path == "/v1/health" || r.URL.Path == "/health" {
+				next.ServeHTTP(w, r)
+				return
+			}
 			logger.Info("request started",
 				"method", r.Method,
 				"path", r.URL.Path,
