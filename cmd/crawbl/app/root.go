@@ -22,6 +22,7 @@ func NewAppCommand() *cobra.Command {
 
 	cmd.AddCommand(newBuildCommand())
 	cmd.AddCommand(newDeployCommand())
+	cmd.AddCommand(newGCCommand())
 
 	return cmd
 }

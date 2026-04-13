@@ -75,6 +75,7 @@ func newDeployPlatformCommand() *cobra.Command {
 	var (
 		tag        string
 		argocdRepo string
+		gc         bool
 	)
 
 	cmd := &cobra.Command{
@@ -82,7 +83,8 @@ func newDeployPlatformCommand() *cobra.Command {
 		Short: "Deploy the platform",
 		Long:  "Build and push the crawbl-platform image via ko, then update orchestrator, webhook, and reaper image tags in crawbl-argocd-apps.",
 		Example: `  crawbl app deploy platform --tag v1.0.0
-  crawbl app deploy platform --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps`,
+  crawbl app deploy platform --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps
+  crawbl app deploy platform --gc`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			if err := checkAllTools(); err != nil {
@@ -126,16 +128,24 @@ func newDeployPlatformCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return release.TagAndRelease(release.Config{
+			if err := release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: RepoSlugBackend,
 				Tag:      tag,
 				PrevTag:  resolved.PrevTag,
-			})
+			}); err != nil {
+				return err
+			}
+
+			if gc {
+				return runGC(ctx, defaultGCKeep, false)
+			}
+			return nil
 		},
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
+	cmd.Flags().BoolVar(&gc, "gc", false, "Run registry garbage collection after deploy (keep latest 5 per repo)")
 	return cmd
 }
 
@@ -144,6 +154,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 		tag        string
 		platform   string
 		argocdRepo string
+		gc         bool
 	)
 
 	cmd := &cobra.Command{
@@ -197,16 +208,24 @@ func newDeployAuthFilterCommand() *cobra.Command {
 				return err
 			}
 
-			return release.TagAndRelease(release.Config{
+			if err := release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: RepoSlugBackend,
 				Tag:      gitTag,
 				PrevTag:  resolved.PrevTag,
-			})
+			}); err != nil {
+				return err
+			}
+
+			if gc {
+				return runGC(ctx, defaultGCKeep, false)
+			}
+			return nil
 		},
 	}
 
 	addDockerDeployFlags(cmd, &tag, &platform, &argocdRepo)
+	cmd.Flags().BoolVar(&gc, "gc", false, "Run registry garbage collection after deploy (keep latest 5 per repo)")
 	return cmd
 }
 
@@ -223,6 +242,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 	var (
 		tag        string
 		argocdRepo string
+		gc         bool
 	)
 
 	cmd := &cobra.Command{
@@ -274,16 +294,24 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return release.TagAndRelease(release.Config{
+			if err := release.TagAndRelease(release.Config{
 				RepoPath: rootDir,
 				RepoSlug: RepoSlugBackend,
 				Tag:      gitTag,
 				PrevTag:  resolved.PrevTag,
-			})
+			}); err != nil {
+				return err
+			}
+
+			if gc {
+				return runGC(ctx, defaultGCKeep, false)
+			}
+			return nil
 		},
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
+	cmd.Flags().BoolVar(&gc, "gc", false, "Run registry garbage collection after deploy (keep latest 5 per repo)")
 	return cmd
 }
 
