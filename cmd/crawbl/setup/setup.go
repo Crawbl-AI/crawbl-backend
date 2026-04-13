@@ -30,7 +30,8 @@ What it does:
   1. Configures git hooks
   2. Installs repo-managed tools with mise (when available)
   3. Checks that required tools are installed (Go, ko, kubectl, etc.)
-  4. Creates .env from .env.example if it doesn't exist
+  4. Configures Snyk MCP for Claude Code security scanning
+  5. Creates .env from .env.example if it doesn't exist
 
 After setup completes, deploy to dev with 'crawbl app deploy platform'.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -48,7 +49,7 @@ func runSetup() error {
 	out.Ln()
 
 	// --- Step 1: Configure git hooks ---
-	out.Step(style.Setup, "Step 1/4: Configuring git hooks...")
+	out.Step(style.Setup, "Step 1/5: Configuring git hooks...")
 	out.Ln()
 
 	if err := runCmd("git", "config", "core.hooksPath", ".githooks"); err != nil {
@@ -62,7 +63,7 @@ func runSetup() error {
 	out.Ln()
 
 	// --- Step 2: Install repo-managed tools ---
-	out.Step(style.Setup, "Step 2/4: Installing repo-managed tools...")
+	out.Step(style.Setup, "Step 2/5: Installing repo-managed tools...")
 	out.Ln()
 
 	if fileExists(".mise.toml") {
@@ -83,7 +84,7 @@ func runSetup() error {
 	out.Ln()
 
 	// --- Step 3: Check required tools ---
-	out.Step(style.Setup, "Step 3/4: Checking required tools...")
+	out.Step(style.Setup, "Step 3/5: Checking required tools...")
 	out.Ln()
 
 	allFound := true
@@ -97,6 +98,7 @@ func runSetup() error {
 		{"pulumi", "pulumi version", "mise install pulumi"},
 		{"yq", "yq --version", "mise install yq  (required for crawbl app deploy)"},
 		{"gh", "gh --version", "https://cli.github.com/"},
+		{"snyk", "snyk --version", "mise install  (npm:snyk in .mise.toml)"},
 		{"docker (auth-filter only)", "docker --version", "https://docs.docker.com/get-docker/ (only needed for auth-filter WASM builds)"},
 	}
 
@@ -118,8 +120,24 @@ func runSetup() error {
 		out.Ln()
 	}
 
-	// --- Step 4: Check/create .env file ---
-	out.Step(style.Config, "Step 4/4: Checking .env file...")
+	// --- Step 4: Configure Snyk MCP for Claude Code ---
+	out.Step(style.Setup, "Step 4/5: Configuring Snyk MCP for Claude Code...")
+	out.Ln()
+
+	if commandExists("snyk") {
+		out.Step(style.Running, "Running snyk mcp configure...")
+		if err := runCmd("snyk", "mcp", "configure", "--tool=claude-cli"); err != nil {
+			out.Warning("snyk mcp configure failed: %v", err)
+		} else {
+			out.Step(style.Check, "Snyk MCP configured for Claude Code")
+		}
+	} else {
+		out.Step(style.Warning, "snyk not found — run mise install first, then rerun crawbl setup")
+	}
+	out.Ln()
+
+	// --- Step 5: Check/create .env file ---
+	out.Step(style.Config, "Step 5/5: Checking .env file...")
 	out.Ln()
 
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {

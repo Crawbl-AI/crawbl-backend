@@ -61,16 +61,16 @@ const maxSessionEvents = 60
 // a Redis backend. Safe for concurrent use — every method takes its own
 // Redis round-trip and does not share mutable state across calls.
 type RedisService struct {
-	client *redis.Client
+	client redis.UniversalClient
 	ttl    time.Duration
 }
 
 // NewRedisService constructs a Redis-backed session service. ttl=0
-// falls back to DefaultSessionTTL. The caller owns the redis.Client
+// falls back to DefaultSessionTTL. The caller owns the redis.UniversalClient
 // lifecycle; Close() here only releases the RedisService's reference,
 // which is the same client — callers that want to keep using Redis
 // after closing the session service should share the handle.
-func NewRedisService(client *redis.Client, ttl time.Duration) *RedisService {
+func NewRedisService(client redis.UniversalClient, ttl time.Duration) *RedisService {
 	if ttl <= 0 {
 		ttl = DefaultSessionTTL
 	}
@@ -127,8 +127,15 @@ func (s *RedisService) Create(ctx context.Context, req *adksession.CreateRequest
 	if err := s.writeSession(ctx, sessKey, &payload); err != nil {
 		return nil, err
 	}
-	// Maintain the per-user session index for List().
-	if err := s.client.SAdd(ctx, userSessionsKey(req.AppName, req.UserID), sid).Err(); err != nil {
+	// Maintain the per-user session index for List(). Apply the same TTL
+	// as session data so the index does not grow unboundedly.
+	idxKey := userSessionsKey(req.AppName, req.UserID)
+	idxPipe := s.client.TxPipeline()
+	idxPipe.SAdd(ctx, idxKey, sid)
+	if s.ttl > 0 {
+		idxPipe.Expire(ctx, idxKey, s.ttl)
+	}
+	if _, err := idxPipe.Exec(ctx); err != nil {
 		return nil, fmt.Errorf("session/redis: index session: %w", err)
 	}
 
@@ -288,6 +295,12 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 	}
 	pipe.Set(ctx, sessK, blob, s.ttl)
 
+	// Refresh TTL on the session index so active conversations extend it.
+	idxKey := userSessionsKey(rs.AppName(), rs.UserID())
+	if s.ttl > 0 {
+		pipe.Expire(ctx, idxKey, s.ttl)
+	}
+
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("session/redis: persist event: %w", err)
 	}
@@ -423,17 +436,20 @@ func (s *RedisService) mergeAppState(ctx context.Context, app string, delta map[
 	if len(delta) == 0 {
 		return nil
 	}
-	return s.mergeHash(ctx, appStateKey(app), delta)
+	// App-scoped state is permanent — no TTL. It carries preferences and
+	// bookkeeping that must survive individual session lifetimes.
+	return s.mergeHash(ctx, appStateKey(app), delta, false)
 }
 
 func (s *RedisService) mergeUserState(ctx context.Context, app, user string, delta map[string]any) error {
 	if len(delta) == 0 {
 		return nil
 	}
-	return s.mergeHash(ctx, userStateKey(app, user), delta)
+	// User-scoped state is permanent — no TTL. Same rationale as app state.
+	return s.mergeHash(ctx, userStateKey(app, user), delta, false)
 }
 
-func (s *RedisService) mergeHash(ctx context.Context, key string, delta map[string]any) error {
+func (s *RedisService) mergeHash(ctx context.Context, key string, delta map[string]any, withTTL bool) error {
 	if len(delta) == 0 {
 		return nil
 	}
@@ -445,7 +461,13 @@ func (s *RedisService) mergeHash(ctx context.Context, key string, delta map[stri
 		}
 		fields[k] = blob
 	}
-	return s.client.HSet(ctx, key, fields).Err()
+	pipe := s.client.TxPipeline()
+	pipe.HSet(ctx, key, fields)
+	if withTTL && s.ttl > 0 {
+		pipe.Expire(ctx, key, s.ttl)
+	}
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // splitStateDeltas partitions a state delta map by scope prefix. The

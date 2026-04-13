@@ -31,11 +31,19 @@ func ConfigFromEnv(prefix string) Config {
 
 // New creates a Redis client from cfg, verifies connectivity with retry logic,
 // and returns a Client. The caller is responsible for calling Close when done.
+// NewUniversalClient is used so the client is compatible with both standalone
+// Redis/Valkey and cluster endpoints (e.g. DO Managed Valkey).
 func New(cfg Config) (Client, error) {
-	rc := goredis.NewClient(&goredis.Options{
-		Addr:     cfg.Addr,
-		Password: cfg.Password,
-		DB:       cfg.DB,
+	rc := goredis.NewUniversalClient(&goredis.UniversalOptions{
+		Addrs:        []string{cfg.Addr},
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     10,
+		MinIdleConns: 3,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolTimeout:  4 * time.Second,
 	})
 
 	if err := pingWithRetry(context.Background(), rc, DefaultPingAttempts, DefaultPingDelay); err != nil {
@@ -48,7 +56,7 @@ func New(cfg Config) (Client, error) {
 
 // Unwrap returns the underlying go-redis client for advanced usage
 // such as the Socket.IO Redis adapter. Use sparingly.
-func Unwrap(c Client) *goredis.Client {
+func Unwrap(c Client) goredis.UniversalClient {
 	r, ok := c.(*redis)
 	if !ok {
 		return nil
@@ -212,7 +220,7 @@ func (r *redis) Close() error {
 //   - nil on successful ping.
 //   - The last error encountered if all attempts fail.
 //   - ctx.Err() if the context is cancelled during a retry delay.
-func pingWithRetry(ctx context.Context, rc *goredis.Client, attempts int, delay time.Duration) error {
+func pingWithRetry(ctx context.Context, rc goredis.UniversalClient, attempts int, delay time.Duration) error {
 	var lastErr error
 
 	for range attempts {

@@ -5,15 +5,28 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
+)
+
+// gRPC server tuning constants. Named to satisfy the mnd linter.
+const (
+	serverMaxConnectionIdle     = 5 * time.Minute
+	serverMaxConnectionAge      = 30 * time.Minute
+	serverMaxConnectionAgeGrace = 10 * time.Second
+	serverKeepaliveTime         = 30 * time.Second
+	serverKeepaliveTimeout      = 10 * time.Second
+	serverMinKeepaliveTime      = 15 * time.Second
+	serverMaxConcurrentStreams  = 32
 )
 
 // Server is the top-level gRPC server wrapper for crawbl-agent-runtime.
@@ -76,6 +89,18 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 	grpcSrv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(unary),
 		grpc.ChainStreamInterceptor(stream),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle:     serverMaxConnectionIdle,
+			MaxConnectionAge:      serverMaxConnectionAge,
+			MaxConnectionAgeGrace: serverMaxConnectionAgeGrace,
+			Time:                  serverKeepaliveTime,
+			Timeout:               serverKeepaliveTimeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             serverMinKeepaliveTime,
+			PermitWithoutStream: true,
+		}),
+		grpc.MaxConcurrentStreams(serverMaxConcurrentStreams),
 	)
 
 	healthSrv := NewHealthServer()

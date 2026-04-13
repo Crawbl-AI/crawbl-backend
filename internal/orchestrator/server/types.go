@@ -26,6 +26,13 @@ const (
 	// DefaultWriteTimeout is the maximum duration before timing out writes of the
 	// response. Set generously to accommodate long-running agent streaming responses.
 	DefaultWriteTimeout = 5 * time.Minute
+
+	// DefaultIdleTimeout is the maximum duration an idle keep-alive connection
+	// stays open before the server closes it. Prevents file descriptor exhaustion.
+	DefaultIdleTimeout = 120 * time.Second
+
+	// DefaultMaxHeaderBytes is the maximum size of request headers in bytes (1 MiB).
+	DefaultMaxHeaderBytes = 1 << 20
 )
 
 var (

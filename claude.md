@@ -21,6 +21,11 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 - Mobile auth uses transport: `X-Token` + device/security headers. `Authorization: Bearer` is only a compatibility path for tooling/dev.
 - `UserSwarm.status` is the source of truth for runtime readiness — don't duplicate swarm phase/readiness into Postgres.
 - Always read `../crawbl-docs/internal-docs/reference/api/endpoints.md` when changing or adding API endpoints.
+- BEFORE declaring task complete: Run snyk_code_scan tool when a significant change has been made in first party code.
+- This should only apply for Snyk-supported coding language
+- If any security issues are found based on newly introduced or modified code or dependencies, attempt to fix the issues using the results context from Snyk.
+- Rescan the code after fixing the issues to ensure that the issues were fixed and that there are no newly introduced issues.
+- Repeat this process until no new issues are found.
 
 ## Issue Tracking
 

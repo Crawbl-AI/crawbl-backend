@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -100,6 +102,7 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 			break
 		}
 		if recvErr != nil {
+			c.dropOnTransportError(recvErr, opts.Runtime)
 			return nil, wrapGRPCError(recvErr, "recv converse event")
 		}
 		if done := event.GetDone(); done != nil {
@@ -193,6 +196,7 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 			event, recvErr := stream.Recv()
 			if recvErr != nil {
 				if !errors.Is(recvErr, io.EOF) {
+					c.dropOnTransportError(recvErr, opts.Runtime)
 					slog.Error("runtime converse stream error",
 						"workspace_id", opts.Runtime.WorkspaceID,
 						"target_agent", agentIDOrManager(opts.AgentID),
@@ -313,6 +317,24 @@ func agentIDOrManager(s string) string {
 		return "<manager>"
 	}
 	return s
+}
+
+// dropOnTransportError evicts the cached gRPC connection for the given
+// runtime when the error indicates a broken transport. This ensures the
+// next dial gets a fresh connection instead of reusing a dead one.
+func (c *userSwarmClient) dropOnTransportError(err error, rt *orchestrator.RuntimeStatus) {
+	if err == nil || rt == nil {
+		return
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return
+	}
+	switch st.Code() {
+	case codes.Unavailable, codes.Internal:
+		target := crawblgrpc.ClusterTarget(rt.ServiceName, rt.RuntimeNamespace, c.config.Port)
+		c.grpcPool.Drop(target)
+	}
 }
 
 // wrapGRPCError converts a gRPC call error into a *merrors.Error the

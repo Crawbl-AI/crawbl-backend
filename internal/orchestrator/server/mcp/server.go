@@ -40,7 +40,9 @@ func NewHandler(deps *Deps) http.Handler {
 
 	handler := sdkmcp.NewStreamableHTTPHandler(
 		func(_ *http.Request) *sdkmcp.Server { return server },
-		nil,
+		&sdkmcp.StreamableHTTPOptions{
+			Stateless: true,
+		},
 	)
 
 	return withAuth(handler, deps)

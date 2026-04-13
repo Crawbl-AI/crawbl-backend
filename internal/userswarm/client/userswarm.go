@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -40,9 +42,11 @@ const readyConditionType = "Ready"
 //
 // The zero value is not usable; always construct via NewUserSwarmClient.
 type userSwarmClient struct {
-	client   k8sclient.Client
-	config   UserSwarmConfig
-	grpcPool *crawblgrpc.Pool
+	client      k8sclient.Client
+	config      UserSwarmConfig
+	grpcPool    *crawblgrpc.Pool
+	cache       *runtimeCache
+	cacheCancel context.CancelFunc
 }
 
 // NewUserSwarmClient constructs the production Kubernetes-backed Client.
@@ -64,6 +68,12 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 		return nil, err
 	}
 
+	// Override the default K8s client rate limiter. The default QPS=5/Burst=10
+	// throttles at ~100 concurrent users calling EnsureRuntime. 50/100 provides
+	// headroom up to ~20K users without overwhelming the API server.
+	restConfig.QPS = 50
+	restConfig.Burst = 100
+
 	k8sClient, err := k8sclient.New(restConfig, k8sclient.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
@@ -83,17 +93,26 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 		userswarmCfg.Port = DefaultRuntimePort
 	}
 
+	cacheCtx, cacheCancel := context.WithCancel(context.Background())
 	return &userSwarmClient{
-		client:   k8sClient,
-		config:   userswarmCfg,
-		grpcPool: crawblgrpc.NewInsecureHMACPool(userswarmCfg.MCPSigningKey),
+		client:      k8sClient,
+		config:      userswarmCfg,
+		grpcPool:    crawblgrpc.NewInsecureHMACPool(userswarmCfg.MCPSigningKey),
+		cache:       newRuntimeCache(cacheCtx),
+		cacheCancel: cacheCancel,
 	}, nil
 }
 
 // Close releases every cached gRPC connection. Safe to call multiple
 // times. The orchestrator's shutdown path invokes it once on SIGTERM.
 func (c *userSwarmClient) Close() error {
-	if c == nil || c.grpcPool == nil {
+	if c == nil {
+		return nil
+	}
+	if c.cacheCancel != nil {
+		c.cacheCancel()
+	}
+	if c.grpcPool == nil {
 		return nil
 	}
 	return c.grpcPool.Close()
@@ -110,6 +129,16 @@ func (c *userSwarmClient) Close() error {
 func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error) {
 	if opts == nil || strings.TrimSpace(opts.WorkspaceID) == "" {
 		return nil, merrors.ErrInvalidInput
+	}
+
+	// Fast path: return cached status if the runtime is already verified
+	// and the cache entry hasn't expired. Reduces K8s API calls by ~95%.
+	if cached, ok := c.cache.get(opts.WorkspaceID); ok {
+		// Shallow copy so concurrent callers don't race on identity fields.
+		cp := *cached
+		cp.UserID = opts.UserID
+		cp.WorkspaceID = opts.WorkspaceID
+		return &cp, nil
 	}
 
 	desired := c.desiredUserSwarm(ctx, opts)
@@ -148,6 +177,7 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 	status.WorkspaceID = opts.WorkspaceID
 
 	if !opts.WaitForVerified || status.Verified {
+		c.cache.set(opts.WorkspaceID, status)
 		return status, nil
 	}
 
@@ -176,6 +206,7 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 		status.UserID = opts.UserID
 		status.WorkspaceID = opts.WorkspaceID
 		if status.Verified {
+			c.cache.set(opts.WorkspaceID, status)
 			return status, nil
 		}
 	}
@@ -228,7 +259,8 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 			Labels: labels,
 		},
 		Spec: crawblv1alpha1.UserSwarmSpec{
-			UserID: opts.UserID,
+			UserID:  opts.UserID,
+			Suspend: false, // Explicit: unsuspend the runtime when EnsureRuntime is called.
 			Placement: crawblv1alpha1.UserSwarmPlacementSpec{
 				RuntimeNamespace: c.config.RuntimeNamespace,
 			},
@@ -242,6 +274,20 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 				DefaultModel:    c.config.DefaultModel,
 			},
 		},
+	}
+
+	// Set default resource limits for agent runtime pods when none are specified.
+	if len(sw.Spec.Runtime.Resources.Requests) == 0 && len(sw.Spec.Runtime.Resources.Limits) == 0 {
+		sw.Spec.Runtime.Resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("50m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+		}
 	}
 
 	if secretName := strings.TrimSpace(c.config.EnvSecretName); secretName != "" {
@@ -292,6 +338,8 @@ func (c *userSwarmClient) DeleteRuntime(ctx context.Context, workspaceID string)
 		target := crawblgrpc.ClusterTarget(swarm.Status.ServiceName, swarm.Status.RuntimeNamespace, c.config.Port)
 		c.grpcPool.Drop(target)
 	}
+
+	c.cache.invalidate(workspaceID)
 
 	return nil
 }

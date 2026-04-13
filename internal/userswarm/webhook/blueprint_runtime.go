@@ -58,13 +58,43 @@ func buildRuntimeDeployment(sw *crawblv1alpha1.UserSwarm, ns string, cfg *runtim
 // volumes (cache + tmp), restricted security context, and no init work.
 func buildRuntimePodSpec(sw *crawblv1alpha1.UserSwarm, port int32, image, secretName string, cfg *runtimeConfig) corev1.PodSpec {
 	return corev1.PodSpec{
-		ServiceAccountName: runtimeServiceAccountName(sw),
+		AutomountServiceAccountToken: ptr.To(false),
+		ServiceAccountName:           runtimeServiceAccountName(sw),
 		SecurityContext: &corev1.PodSecurityContext{
 			RunAsNonRoot:   ptr.To(true),
 			RunAsUser:      ptr.To(runtimeUID),
 			RunAsGroup:     ptr.To(runtimeGID),
 			FSGroup:        ptr.To(runtimeGID),
 			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		// Tolerate the agent node pool taint so pods CAN schedule there.
+		// Affinity prefers agent-labeled nodes but does not require them,
+		// so dev clusters (single pool, no labels) still schedule normally.
+		Tolerations: []corev1.Toleration{
+			{
+				Key:      "crawbl.io/role",
+				Value:    "agent",
+				Effect:   corev1.TaintEffectNoSchedule,
+				Operator: corev1.TolerationOpEqual,
+			},
+		},
+		Affinity: &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+					{
+						Weight: 100,
+						Preference: corev1.NodeSelectorTerm{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "crawbl.io/role",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"agent"},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		Containers: []corev1.Container{buildAgentRuntimeContainer(sw, port, image, secretName, cfg)},
 		Volumes: []corev1.Volume{

@@ -1,0 +1,104 @@
+# Pulumi stack configuration for the "prod" environment.
+#
+# This file defines all infrastructure parameters for the production DigitalOcean
+# Kubernetes cluster. Pulumi reads these values when running:
+#   set -a && source .env && set +a && crawbl infra update
+#
+# The Pulumi program (internal/infra/) uses these to provision:
+#   - A DOKS (DigitalOcean Kubernetes Service) cluster with HA control plane
+#   - A fixed platform node pool for the control plane workloads
+#   - An autoscaling agent node pool for per-user agent runtimes
+#   - ArgoCD installation (via the Helm values in config/helm/argocd.yaml)
+#   - The aws-credentials Secret for External Secrets Operator
+#
+# After Pulumi bootstrap, ArgoCD takes over and manages everything else
+# via the crawbl-argocd-apps repository.
+config:
+  # -- Environment name. Used in AWS Secrets Manager paths (crawbl/prod/...) and
+  # resource naming throughout the platform.
+  crawbl:environment: prod
+
+  # -- DigitalOcean region. fra1 = Frankfurt, Germany.
+  crawbl:region: fra1
+
+  # -- Kubernetes cluster configuration --
+  crawbl:cluster:
+    # Whether Pulumi should create and manage a VPC. Set to false when
+    # using the default VPC or a pre-existing one.
+    manageVPC: false
+    # VPC IP range (only used if manageVPC is true).
+    vpcIPRange: "10.10.0.0/16"
+
+    # Enable automatic minor version upgrades for the K8s cluster.
+    autoUpgrade: true
+    # Allow surge upgrades (provisions new nodes before draining old ones).
+    surgeUpgrade: true
+    # HA control plane: three etcd nodes across zones. DO provides this free.
+    # Required in prod for zero-downtime control-plane upgrades and resilience.
+    highAvailability: true
+    # Safety flag: prevent accidental deletion of load balancers, volumes, etc.
+    # when the cluster is destroyed. Set to false (not true) to avoid blocking
+    # intentional teardowns — the operator must clean up resources manually first.
+    destroyAllAssociatedResources: false
+
+    # Maintenance window: Sunday at 04:00 UTC (low-traffic period).
+    maintenanceDay: sunday
+    maintenanceStartTime: "04:00"
+
+    # -- Platform node pool configuration --
+    # Pool name used in DigitalOcean dashboard. "platform" (no size suffix) is
+    # the stable prod name; dev uses "platform-8gb" to distinguish it clearly.
+    nodePoolName: platform
+    # Droplet size: 4 vCPUs, 8GB RAM. Same as dev — sufficient for the full
+    # platform stack (ArgoCD + ESO + PostgreSQL + Redis + operators + orchestrator).
+    nodeSize: s-4vcpu-8gb
+    # Two fixed platform nodes for redundancy. Not autoscaled — platform
+    # workloads have predictable resource requirements and benefit from stable
+    # scheduling rather than churn from scale-in events.
+    nodeCount: 2
+    # autoScale disabled: platform pool is fixed-size. Agent workloads scale
+    # on the dedicated agent node pool below, not here.
+    autoScale: false
+    # No extra labels on platform nodes (affinity rules use the agent pool labels).
+    nodeLabels: {}
+    # Tags applied to the cluster and nodes in DigitalOcean.
+    tags:
+      - crawbl
+      - prod
+
+    # -- Agent node pool configuration --
+    # Dedicated pool for per-user agent runtime pods. Autoscales between
+    # minNodes and maxNodes based on demand. Isolated from the platform pool
+    # so agent pod churn does not disrupt control-plane workloads.
+    agentNodePool:
+      # Pool name in DigitalOcean dashboard.
+      name: agent
+      # Same droplet size as the platform pool — agent runtimes are memory-bound
+      # and benefit from the 8GB headroom.
+      size: s-4vcpu-8gb
+      # Minimum warm nodes to avoid cold-start latency when users first connect.
+      minNodes: 2
+      # Maximum nodes; increase as user base grows.
+      maxNodes: 5
+      # Node labels used by agent runtime PodSpec nodeSelector / affinity rules
+      # to pin agent pods to this pool and keep them off platform nodes.
+      labels:
+        crawbl.io/role: agent
+      # Tags applied to agent nodes in DigitalOcean.
+      tags:
+        - crawbl
+        - prod
+        - agent
+
+    # -- Container Registry --
+    # Whether Pulumi should create the DO container registry. Set to false
+    # because the "crawbl" registry already exists and is shared across envs.
+    manageRegistry: false
+    # Registry name (used for image pull integration with DOKS).
+    registryName: crawbl
+    # DO registry plan tier.
+    registrySubscriptionTier: starter
+
+    # Whether to create a DigitalOcean Project to group resources.
+    # Set to false because the project already exists.
+    createProject: false
