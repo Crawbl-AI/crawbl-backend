@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gocraft/dbr/v2"
+	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
@@ -246,7 +247,7 @@ func (r *Postgres) SearchHybrid(
 	var results []memory.HybridSearchResult
 	_, err := sess.SelectBySql(
 		hybridSearchSQL,
-		vec, workspaceID, vectorLimit, database.StringArray(terms), limit,
+		vec, workspaceID, vectorLimit, pq.StringArray(terms), limit,
 	).LoadContext(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("drawerrepo: hybrid search: %w", err)

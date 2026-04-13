@@ -7,8 +7,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 // UserRow represents a database row for the users table.
@@ -432,7 +433,7 @@ type AgentSettingsRow struct {
 	AgentID        string               `db:"agent_id"`
 	Model          string               `db:"model"`
 	ResponseLength string               `db:"response_length"`
-	AllowedTools   database.StringArray `db:"allowed_tools"`
+	AllowedTools   pq.StringArray `db:"allowed_tools"`
 	CreatedAt      time.Time            `db:"created_at"`
 	UpdatedAt      time.Time            `db:"updated_at"`
 }
