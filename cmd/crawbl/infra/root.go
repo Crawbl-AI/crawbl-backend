@@ -118,11 +118,11 @@ func NewInfraCommand() *cobra.Command {
 		Use:   "infra",
 		Short: "Manage cloud infrastructure with Pulumi",
 		Long:  "Manage Crawbl infrastructure (Kubernetes cluster, platform services, ArgoCD bootstrap) using Pulumi.",
-		Example: `  crawbl infra init        # Initialize Pulumi stack
-  crawbl infra plan        # Preview infrastructure changes
-  crawbl infra update      # Apply infrastructure changes
-  crawbl infra destroy     # Destroy all infrastructure
-  crawbl infra bootstrap   # Bootstrap cluster end-to-end`,
+		Example: `  crawbl infra init                          # Initialize Pulumi stack
+  crawbl infra plan                          # Preview infrastructure changes
+  crawbl infra update                        # Apply infrastructure changes
+  crawbl infra update --save-kubeconfig      # Apply + configure kubectl + wait for ArgoCD
+  crawbl infra destroy                       # Destroy all infrastructure`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -132,7 +132,6 @@ func NewInfraCommand() *cobra.Command {
 	cmd.AddCommand(newPlanCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newDestroyCommand())
-	cmd.AddCommand(newBootstrapCommand())
 
 	return cmd
 }

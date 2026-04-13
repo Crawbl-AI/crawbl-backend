@@ -23,14 +23,10 @@ config:
 
   # -- Kubernetes cluster configuration --
   crawbl:cluster:
-    # Whether Pulumi should create and manage a dedicated VPC for prod.
-    # Set to true so prod gets its own isolated network (10.20.0.0/16)
-    # separate from the dev VPC (10.10.0.0/16, db5417ad-eec8-44fa-8916-a702777aec9d).
-    # Note: changing this on an existing cluster requires cluster recreation.
-    # Declare it here now; apply during next cluster rebuild.
-    manageVPC: true
-    # Prod VPC IP range — separate from dev (10.10.0.0/16) to avoid overlap.
-    vpcIPRange: "10.20.0.0/16"
+    # Pre-created prod VPC (10.20.0.0/16), separate from dev VPC (10.10.0.0/16).
+    # manageVPC=false means Pulumi uses the existing VPC by ID rather than creating one.
+    manageVPC: false
+    vpcUUID: "e8a6cfa0-45de-47da-9804-1d0a16daf091"
 
     # Enable automatic minor version upgrades for the K8s cluster.
     autoUpgrade: true
