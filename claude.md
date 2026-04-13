@@ -158,8 +158,10 @@ To delete a dev user: remove the user row from the port-forwarded Postgres, then
 
 ## Observability
 
-- VictoriaMetrics at `dev.metrics.crawbl.com` — metrics storage + Prometheus-compatible query API.
-- VictoriaLogs at `dev.logs.crawbl.com` — log storage + query UI. Fluent Bit ships container logs from every namespace.
+The full monitoring stack (VictoriaMetrics, VictoriaLogs, Fluent Bit) is **prod-only** and is not deployed in the dev environment.
+
+- **Dev**: use `kubectl logs -n <namespace> <pod>` for logs and `kubectl top pods -n <namespace>` or the DigitalOcean dashboard for resource usage.
+- **Prod**: VictoriaMetrics, VictoriaLogs, and Fluent Bit are available for metrics and centralised log search.
 
 ## Go Best Practices
 

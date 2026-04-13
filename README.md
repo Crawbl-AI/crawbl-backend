@@ -194,13 +194,17 @@ For agent-runtime and auth-filter, tags use the fork convention `v<upstream>-cra
 
 ## 📊 Observability
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| VictoriaMetrics | [dev.metrics.crawbl.com](https://dev.metrics.crawbl.com) | Metrics storage + Prometheus-compatible query API |
-| VictoriaLogs | [dev.logs.crawbl.com](https://dev.logs.crawbl.com) | Log storage + query UI |
-| Fluent Bit | cluster-internal | Collects all container logs, ships to VictoriaLogs |
+The full monitoring stack (VictoriaMetrics, VictoriaLogs, Fluent Bit) is **prod-only** and is not deployed in the dev environment.
+
+| Service | Environment | Purpose |
+|---------|-------------|---------|
+| VictoriaMetrics | Prod only | Metrics storage + Prometheus-compatible query API |
+| VictoriaLogs | Prod only | Log storage + query UI |
+| Fluent Bit | Prod only | Collects all container logs, ships to VictoriaLogs |
 | ClickHouse | cluster-internal | LLM usage analytics (token counts, costs) |
 | NATS JetStream | cluster-internal | Usage event streaming (orchestrator → ClickHouse) |
+
+In dev, use `kubectl logs` for container output and `kubectl top` for resource usage.
 
 ## 🔗 Related
 
