@@ -11,6 +11,11 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+const (
+	whereWorkspaceAndID = "workspace_id = ? AND id = ?"
+	whereWorkspace      = "workspace_id = ?"
+)
+
 // New creates a new ConversationRepo instance backed by PostgreSQL.
 // The returned repository uses the database session runner pattern for transaction support.
 func New() *conversationRepo {
@@ -29,7 +34,7 @@ func (r *conversationRepo) ListByWorkspaceID(ctx context.Context, sess orchestra
 	var rows []orchestratorrepo.ConversationRow
 	_, err := sess.Select(conversationColumns...).
 		From("conversations").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspace, workspaceID).
 		OrderDesc("updated_at").
 		OrderDesc("created_at").
 		LoadContext(ctx, &rows)
@@ -57,7 +62,7 @@ func (r *conversationRepo) GetByID(ctx context.Context, sess orchestratorrepo.Se
 	var row orchestratorrepo.ConversationRow
 	err := sess.Select(conversationColumns...).
 		From("conversations").
-		Where("workspace_id = ? AND id = ?", workspaceID, conversationID).
+		Where(whereWorkspaceAndID, workspaceID, conversationID).
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
@@ -131,7 +136,7 @@ func (r *conversationRepo) Delete(ctx context.Context, sess orchestratorrepo.Ses
 	}
 
 	result, err := sess.DeleteFrom("conversations").
-		Where("workspace_id = ? AND id = ?", workspaceID, conversationID).
+		Where(whereWorkspaceAndID, workspaceID, conversationID).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "delete conversation")
@@ -188,7 +193,7 @@ func (r *conversationRepo) MarkAsRead(ctx context.Context, sess orchestratorrepo
 	result, err := sess.Update("conversations").
 		Set("unread_count", 0).
 		Set("updated_at", time.Now().UTC()).
-		Where("workspace_id = ? AND id = ?", workspaceID, conversationID).
+		Where(whereWorkspaceAndID, workspaceID, conversationID).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "mark conversation read")

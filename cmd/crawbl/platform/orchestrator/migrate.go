@@ -23,7 +23,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
-const defaultServiceName = "orchestrator"
+const (
+	defaultServiceName = "orchestrator"
+	whereID            = "id = ?"
+)
 
 func newMigrateCommand() *cobra.Command {
 	var serviceName string
@@ -163,7 +166,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	// 2. Models
 	for i, m := range seed.AvailableModels() {
 		var existing modelRow
-		err := tx.Select("id").From("models").Where("id = ?", m.ID).LoadOneContext(ctx, &existing)
+		err := tx.Select("id").From("models").Where(whereID, m.ID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed model %q: %w", m.ID, err)
 		}
@@ -172,7 +175,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 				Set("name", m.Name).
 				Set("description", m.Description).
 				Set("sort_order", i).
-				Where("id = ?", m.ID).
+				Where(whereID, m.ID).
 				ExecContext(ctx)
 		} else {
 			_, err = tx.InsertInto("models").
@@ -192,7 +195,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	for i, c := range agentruntimetools.ToolCategories() {
 		catID := string(c.ID)
 		var existing toolCategoryRow
-		err := tx.Select("id").From("tool_categories").Where("id = ?", catID).LoadOneContext(ctx, &existing)
+		err := tx.Select("id").From("tool_categories").Where(whereID, catID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed tool category %q: %w", catID, err)
 		}
@@ -201,7 +204,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 				Set("name", c.Name).
 				Set("image_url", c.ImageURL).
 				Set("sort_order", i).
-				Where("id = ?", catID).
+				Where(whereID, catID).
 				ExecContext(ctx)
 		} else {
 			_, err = tx.InsertInto("tool_categories").
@@ -220,7 +223,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	// 4. Integration categories
 	for i, c := range seed.IntegrationCategories() {
 		var existing integrationCategoryRow
-		err := tx.Select("id").From("integration_categories").Where("id = ?", c.ID).LoadOneContext(ctx, &existing)
+		err := tx.Select("id").From("integration_categories").Where(whereID, c.ID).LoadOneContext(ctx, &existing)
 		if err != nil && !database.IsRecordNotFoundError(err) {
 			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
 		}
@@ -229,7 +232,7 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 				Set("name", c.Name).
 				Set("image_url", c.ImageURL).
 				Set("sort_order", i).
-				Where("id = ?", c.ID).
+				Where(whereID, c.ID).
 				ExecContext(ctx)
 		} else {
 			_, err = tx.InsertInto("integration_categories").

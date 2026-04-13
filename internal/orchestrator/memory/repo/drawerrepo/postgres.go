@@ -21,6 +21,14 @@ import (
 // BoostImportance / enrichment passes.
 const minBoostImportance = 3.0
 
+const (
+	whereWorkspaceAndID = "workspace_id = ? AND id = ?"
+	whereWorkspace      = "workspace_id = ?"
+	whereWing           = "wing = ?"
+	condStateNotMerged  = "state != 'merged'"
+	condNotSuperseded   = "superseded_by IS NULL"
+)
+
 // Postgres is the memory_drawers repository backed by PostgreSQL with
 // pgvector for embeddings. It implements repo.DrawerRepo; callers hold it
 // through that interface.
@@ -105,7 +113,7 @@ func (r *Postgres) Add(ctx context.Context, sess database.SessionRunner, d *memo
 
 func (r *Postgres) Delete(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error {
 	_, err := sess.DeleteFrom("memory_drawers").
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -378,7 +386,7 @@ func (r *Postgres) Count(ctx context.Context, sess database.SessionRunner, works
 	var count int
 	err := sess.Select("COUNT(*)").
 		From("memory_drawers").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspace, workspaceID).
 		LoadOneContext(ctx, &count)
 	if err != nil {
 		return 0, fmt.Errorf("drawer: count: %w", err)
@@ -390,7 +398,7 @@ func (r *Postgres) ListWings(ctx context.Context, sess database.SessionRunner, w
 	var results []memory.WingCount
 	_, err := sess.Select("wing", "COUNT(*) AS count").
 		From("memory_drawers").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspace, workspaceID).
 		GroupBy("wing").
 		OrderDir("count", false).
 		LoadContext(ctx, &results)
@@ -403,9 +411,9 @@ func (r *Postgres) ListWings(ctx context.Context, sess database.SessionRunner, w
 func (r *Postgres) ListRooms(ctx context.Context, sess database.SessionRunner, workspaceID, wing string) ([]memory.RoomCount, error) {
 	q := sess.Select("wing", "room", "COUNT(*) AS count").
 		From("memory_drawers").
-		Where("workspace_id = ?", workspaceID)
+		Where(whereWorkspace, workspaceID)
 	if wing != "" {
-		q = q.Where("wing = ?", wing)
+		q = q.Where(whereWing, wing)
 	}
 	var results []memory.RoomCount
 	_, err := q.GroupBy("wing", "room").
@@ -424,12 +432,12 @@ func (r *Postgres) GetTopByImportance(ctx context.Context, sess database.Session
 	q := sess.Select("id", "workspace_id", "wing", "room", "hall", "content",
 		"importance", "memory_type", "source_file", "added_by", "filed_at", "created_at").
 		From("memory_drawers").
-		Where("workspace_id = ?", workspaceID)
+		Where(whereWorkspace, workspaceID)
 	if wing != "" {
-		q = q.Where("wing = ?", wing)
+		q = q.Where(whereWing, wing)
 	}
 	var results []memory.Drawer
-	_, err := q.Where("superseded_by IS NULL").Where("state != 'merged'").OrderDir("importance", false).
+	_, err := q.Where(condNotSuperseded).Where(condStateNotMerged).OrderDir("importance", false).
 		Limit(uint64(limit)).
 		LoadContext(ctx, &results)
 	if err != nil {
@@ -449,7 +457,7 @@ func (r *Postgres) ListByWorkspace(ctx context.Context, sess database.SessionRun
 	var rows []memory.Drawer
 	_, err := sess.Select("id", "workspace_id", "wing", "room", "hall", "content", "importance", "memory_type", "source_file", "added_by", "filed_at", "created_at").
 		From("memory_drawers").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspace, workspaceID).
 		OrderBy("filed_at DESC").
 		Limit(uint64(limit)).
 		Offset(uint64(offset)).
@@ -467,15 +475,15 @@ func (r *Postgres) GetByWingRoom(ctx context.Context, sess database.SessionRunne
 	q := sess.Select("id", "workspace_id", "wing", "room", "hall", "content",
 		"importance", "memory_type", "source_file", "added_by", "filed_at", "created_at").
 		From("memory_drawers").
-		Where("workspace_id = ?", workspaceID)
+		Where(whereWorkspace, workspaceID)
 	if wing != "" {
-		q = q.Where("wing = ?", wing)
+		q = q.Where(whereWing, wing)
 	}
 	if room != "" {
 		q = q.Where("room = ?", room)
 	}
 	var results []memory.Drawer
-	_, err := q.Where("superseded_by IS NULL").Where("state != 'merged'").Limit(uint64(limit)).
+	_, err := q.Where(condNotSuperseded).Where(condStateNotMerged).Limit(uint64(limit)).
 		LoadContext(ctx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: get by wing/room: %w", err)
@@ -513,7 +521,7 @@ func (r *Postgres) ListByState(ctx context.Context, sess database.SessionRunner,
 func (r *Postgres) UpdateState(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, state string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("state", state).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -524,7 +532,7 @@ func (r *Postgres) UpdateEmbedding(ctx context.Context, sess database.SessionRun
 	vec := pgvector.NewVector(embedding)
 	_, err := sess.Update("memory_drawers").
 		Set("embedding", vec).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -546,7 +554,7 @@ func (r *Postgres) UpdateClassification(ctx context.Context, sess database.Sessi
 		Set("summary", opts.Summary).
 		Set("room", opts.Room).
 		Set("importance", opts.Importance).
-		Where("workspace_id = ? AND id = ?", opts.WorkspaceID, opts.DrawerID).
+		Where(whereWorkspaceAndID, opts.WorkspaceID, opts.DrawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -554,7 +562,7 @@ func (r *Postgres) UpdateClassification(ctx context.Context, sess database.Sessi
 func (r *Postgres) SetSupersededBy(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, supersededBy string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("superseded_by", supersededBy).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -562,7 +570,7 @@ func (r *Postgres) SetSupersededBy(ctx context.Context, sess database.SessionRun
 func (r *Postgres) SetClusterID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, clusterID string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("cluster_id", clusterID).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -571,7 +579,7 @@ func (r *Postgres) TouchAccess(ctx context.Context, sess database.SessionRunner,
 	_, err := sess.Update("memory_drawers").
 		Set("last_accessed_at", dbr.Expr("NOW()")).
 		Set("access_count", dbr.Expr("access_count + 1")).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -587,7 +595,7 @@ func (r *Postgres) TouchAccessBatch(ctx context.Context, sess database.SessionRu
 	_, err := sess.Update("memory_drawers").
 		Set("last_accessed_at", dbr.Expr("NOW()")).
 		Set("access_count", dbr.Expr("access_count + 1")).
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspace, workspaceID).
 		Where("id IN ?", drawerIDs).
 		ExecContext(ctx)
 	return err
@@ -596,7 +604,7 @@ func (r *Postgres) TouchAccessBatch(ctx context.Context, sess database.SessionRu
 func (r *Postgres) IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error {
 	_, err := sess.Update("memory_drawers").
 		Set("retry_count", dbr.Expr("retry_count + 1")).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -604,7 +612,7 @@ func (r *Postgres) IncrementRetryCount(ctx context.Context, sess database.Sessio
 func (r *Postgres) DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error) {
 	res, err := sess.Update("memory_drawers").
 		Set("importance", dbr.Expr("GREATEST(importance * ?, ?)", factor, floor)).
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspace, workspaceID).
 		Where("state = ?", "processed").
 		Where("importance > ?", floor).
 		Where(dbr.Expr("created_at < NOW() - INTERVAL '1 day' * ?", olderThanDays)).
@@ -653,9 +661,9 @@ func (r *Postgres) GetByID(ctx context.Context, sess database.SessionRunner, wor
 		"state", "summary", "last_accessed_at", "access_count", "superseded_by",
 		"cluster_id", "retry_count", "filed_at", "created_at").
 		From("memory_drawers").
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
-		Where("superseded_by IS NULL").
-		Where("state != 'merged'").
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
+		Where(condNotSuperseded).
+		Where(condStateNotMerged).
 		LoadOneContext(ctx, &d)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: get by id: %w", err)
@@ -666,7 +674,7 @@ func (r *Postgres) GetByID(ctx context.Context, sess database.SessionRunner, wor
 func (r *Postgres) BoostImportance(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, delta, maxImportance float64) error {
 	_, err := sess.Update("memory_drawers").
 		Set("importance", dbr.Expr("LEAST(importance + ?, ?)", delta, maxImportance)).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	return err
 }
@@ -769,7 +777,7 @@ func (r *Postgres) UpdateEnrichment(ctx context.Context, sess database.SessionRu
 	_, err := sess.Update("memory_drawers").
 		Set("entity_count", entityCount).
 		Set("triple_count", tripleCount).
-		Where("workspace_id = ? AND id = ?", workspaceID, drawerID).
+		Where(whereWorkspaceAndID, workspaceID, drawerID).
 		ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("drawer: update enrichment: %w", err)

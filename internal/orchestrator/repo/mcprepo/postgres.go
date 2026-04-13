@@ -9,6 +9,8 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
+const whereID = "id = ?"
+
 type postgres struct{}
 
 // New returns a Postgres-backed MCP repository.
@@ -18,7 +20,7 @@ func (p *postgres) GetUserByID(ctx context.Context, sess *dbr.Session, userID st
 	var row UserRow
 	err := sess.Select("id", "email", "nickname", "name", "surname", "country_code", "created_at").
 		From("users").
-		Where("id = ?", userID).
+		Where(whereID, userID).
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		return nil, fmt.Errorf("mcprepo: get user %s: %w", userID, err)
@@ -91,7 +93,7 @@ func (p *postgres) UpdateAgentMessageCompleted(ctx context.Context, sess *dbr.Se
 		Set("response_text", responseText).
 		Set("duration_ms", durationMs).
 		Set("completed_at", time.Now().UTC()).
-		Where("id = ?", id).
+		Where(whereID, id).
 		ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("mcprepo: complete agent message %s: %w", id, err)
@@ -105,7 +107,7 @@ func (p *postgres) UpdateAgentMessageFailed(ctx context.Context, sess *dbr.Sessi
 		Set("error_message", errMsg).
 		Set("duration_ms", durationMs).
 		Set("completed_at", time.Now().UTC()).
-		Where("id = ?", id).
+		Where(whereID, id).
 		ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("mcprepo: fail agent message %s: %w", id, err)
@@ -130,7 +132,7 @@ func (p *postgres) UpdateArtifactStatus(ctx context.Context, sess *dbr.Session, 
 	_, err := sess.Update("artifacts").
 		Set("status", status).
 		Set("updated_at", time.Now().UTC()).
-		Where("id = ?", artifactID).
+		Where(whereID, artifactID).
 		ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("mcprepo: update artifact %s status to %s: %w", artifactID, status, err)

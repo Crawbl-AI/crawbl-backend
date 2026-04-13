@@ -64,6 +64,9 @@ func addDockerDeployFlags(cmd *cobra.Command, tag *string, platform *string, arg
 	cmd.Flags().StringVar(argocdRepo, "argocd-repo", "", "Path to crawbl-argocd-apps (default: sibling dir)")
 }
 
+// gcFlagDescription is the shared description for the --gc flag on deploy subcommands.
+const gcFlagDescription = "Run registry garbage collection after deploy (keep latest 5 per repo)"
+
 // prodKubeContext is the kubectl context name for the production cluster.
 // Direct CLI deploys to this context are not allowed — use deploy-prod.yml in CI.
 const prodKubeContext = "do-fra1-crawbl-prod"
@@ -177,7 +180,7 @@ func newDeployPlatformCommand() *cobra.Command {
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, gcFlagDescription)
 	cmd.Flags().BoolVar(&scan, "scan", true, "Run SonarQube analysis after deploy")
 	return cmd
 }
@@ -261,7 +264,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 	}
 
 	addDockerDeployFlags(cmd, &tag, &platform, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, gcFlagDescription)
 	return cmd
 }
 
@@ -350,7 +353,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, gcFlagDescription)
 	return cmd
 }
 

@@ -9,6 +9,8 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+const whereID = "id = ?"
+
 // New creates a new workflow Repo instance backed by PostgreSQL.
 func New() *workflowRepo {
 	return &workflowRepo{}
@@ -116,7 +118,7 @@ func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.S
 	var row WorkflowExecutionRow
 	err := sess.Select(executionColumns...).
 		From("workflow_executions").
-		Where("id = ?", executionID).
+		Where(whereID, executionID).
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
@@ -140,7 +142,7 @@ func (r *workflowRepo) UpdateExecution(ctx context.Context, sess orchestratorrep
 		Set("error_message", row.ErrorMessage).
 		Set("started_at", row.StartedAt).
 		Set("completed_at", row.CompletedAt).
-		Where("id = ?", row.ID).
+		Where(whereID, row.ID).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "update workflow execution")
@@ -209,7 +211,7 @@ func (r *workflowRepo) UpdateStepExecution(ctx context.Context, sess orchestrato
 		Set("duration_ms", row.DurationMs).
 		Set("started_at", row.StartedAt).
 		Set("completed_at", row.CompletedAt).
-		Where("id = ?", row.ID).
+		Where(whereID, row.ID).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "update workflow step execution")

@@ -14,6 +14,11 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+const (
+	whereConversation = "conversation_id = ?"
+	whereID           = "id = ?"
+)
+
 // messageStatusOrderingCASE builds the SQL CASE expression for monotonic status ordering.
 // Higher ordinals prevent downgrades to lower-status states.
 var messageStatusOrderingCASE = fmt.Sprintf(
@@ -53,7 +58,7 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 
 	query := sess.Select(messageColumns...).
 		From("messages").
-		Where("conversation_id = ?", opts.ConversationID).
+		Where(whereConversation, opts.ConversationID).
 		OrderDesc("created_at").
 		OrderDesc("id").
 		Limit(uint64(limit + 1))
@@ -129,7 +134,7 @@ func (r *messageRepo) GetLatestByConversationID(ctx context.Context, sess orches
 	var row orchestratorrepo.MessageRow
 	err := sess.Select(messageColumns...).
 		From("messages").
-		Where("conversation_id = ?", conversationID).
+		Where(whereConversation, conversationID).
 		OrderDesc("created_at").
 		OrderDesc("id").
 		LoadOneContext(ctx, &row)
@@ -252,7 +257,7 @@ func (r *messageRepo) UpdateStatus(ctx context.Context, sess orchestratorrepo.Se
 	result, err := sess.Update("messages").
 		Set("status", string(status)).
 		Set("updated_at", time.Now().UTC()).
-		Where("id = ?", messageID).
+		Where(whereID, messageID).
 		Where(messageStatusOrderingCASE+" < ?", newOrd).
 		ExecContext(ctx)
 	if err != nil {
@@ -270,7 +275,7 @@ func (r *messageRepo) DeleteByID(ctx context.Context, sess orchestratorrepo.Sess
 		return merrors.ErrInvalidInput
 	}
 	_, err := sess.DeleteFrom("messages").
-		Where("id = ?", messageID).
+		Where(whereID, messageID).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "delete message by id")
@@ -289,7 +294,7 @@ func (r *messageRepo) GetByID(ctx context.Context, sess orchestratorrepo.Session
 	var row orchestratorrepo.MessageRow
 	err := sess.Select(messageColumns...).
 		From("messages").
-		Where("id = ?", messageID).
+		Where(whereID, messageID).
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {
@@ -318,7 +323,7 @@ func (r *messageRepo) ListRecent(ctx context.Context, sess orchestratorrepo.Sess
 	var rows []orchestratorrepo.MessageRow
 	_, err := sess.Select(messageColumns...).
 		From("messages").
-		Where("conversation_id = ?", conversationID).
+		Where(whereConversation, conversationID).
 		OrderDesc("created_at").
 		Limit(uint64(limit)).
 		LoadContext(ctx, &rows)
@@ -430,7 +435,7 @@ func (r *messageRepo) UpdateToolState(ctx context.Context, sess orchestratorrepo
 	_, err := sess.Update("messages").
 		Set("content", dbr.Expr("jsonb_set(content, '{state}', to_jsonb(?::text))", state)).
 		Set("updated_at", time.Now().UTC()).
-		Where("id = ?", messageID).
+		Where(whereID, messageID).
 		ExecContext(ctx)
 	if err != nil {
 		return merrors.WrapStdServerError(err, "update tool state")

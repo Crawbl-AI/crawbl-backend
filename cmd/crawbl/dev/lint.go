@@ -10,6 +10,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
+const golangciLintBin = "golangci-lint"
+
 func newFmtCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "fmt",
@@ -32,16 +34,16 @@ func newLintCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			// Install golangci-lint if missing.
-			if _, err := exec.LookPath("golangci-lint"); err != nil {
+			if _, err := exec.LookPath(golangciLintBin); err != nil {
 				out.Step(style.Deploy, "Installing golangci-lint...")
 				if err := shellCmd(ctx, "go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"); err != nil {
 					return fmt.Errorf("failed to install golangci-lint: %w", err)
 				}
 			}
 			if fix {
-				return shellCmd(ctx, "golangci-lint", "run", "./...", "--fix")
+				return shellCmd(ctx, golangciLintBin, "run", "./...", "--fix")
 			}
-			return shellCmd(ctx, "golangci-lint", "run", "./...")
+			return shellCmd(ctx, golangciLintBin, "run", "./...")
 		},
 	}
 
@@ -61,7 +63,7 @@ func newVerifyCommand() *cobra.Command {
 				return err
 			}
 			out.Step(style.Lint, "Running the linter...")
-			if err := shellCmd(ctx, "golangci-lint", "run", "./..."); err != nil {
+			if err := shellCmd(ctx, golangciLintBin, "run", "./..."); err != nil {
 				return err
 			}
 			out.Step(style.Test, "Running tests...")

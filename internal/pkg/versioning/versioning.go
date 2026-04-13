@@ -12,6 +12,8 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+const refsTagsPrefix = "refs/tags/"
+
 var (
 	breakingRe = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
 	featRe     = regexp.MustCompile(`^feat(\(.+\))?:`)
@@ -185,7 +187,7 @@ func latestReleaseTag(repoPath string) string {
 // latestRemoteTag finds the highest semver tag matching the pattern on origin.
 // Falls back for repos without GitHub releases.
 func latestRemoteTag(repoPath, pattern string) string {
-	cmd := gitCmd(repoPath, "ls-remote", "--tags", "--sort=-v:refname", "origin", "refs/tags/"+pattern)
+	cmd := gitCmd(repoPath, "ls-remote", "--tags", "--sort=-v:refname", "origin", refsTagsPrefix+pattern)
 	output, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -200,7 +202,7 @@ func latestRemoteTag(repoPath, pattern string) string {
 			continue
 		}
 		ref := parts[1]
-		tag := strings.TrimPrefix(ref, "refs/tags/")
+		tag := strings.TrimPrefix(ref, refsTagsPrefix)
 		return tag
 	}
 	return ""
@@ -209,7 +211,7 @@ func latestRemoteTag(repoPath, pattern string) string {
 // ensureTagFetched makes sure a remote tag is available locally for git log.
 func ensureTagFetched(repoPath, tag string) {
 	// Check if tag exists locally first.
-	checkCmd := gitCmd(repoPath, "rev-parse", "--verify", "refs/tags/"+tag)
+	checkCmd := gitCmd(repoPath, "rev-parse", "--verify", refsTagsPrefix+tag)
 	if err := checkCmd.Run(); err == nil {
 		return
 	}
@@ -244,7 +246,7 @@ func determineBump(repoPath, lastTag string) string {
 
 // tagExistsOnRemote checks if a tag exists on the remote.
 func tagExistsOnRemote(repoPath, tag string) bool {
-	cmd := gitCmd(repoPath, "ls-remote", "--tags", "origin", "refs/tags/"+tag)
+	cmd := gitCmd(repoPath, "ls-remote", "--tags", "origin", refsTagsPrefix+tag)
 	output, err := cmd.Output()
 	if err != nil {
 		return false

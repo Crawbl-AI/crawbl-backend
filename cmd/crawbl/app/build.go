@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
 )
+
+var errTagRequired = errors.New("--tag is required")
 
 var (
 	registryBase = configenv.StringOr("CRAWBL_REGISTRY", "registry.digitalocean.com/crawbl")
@@ -60,7 +63,7 @@ func newBuildPlatformCommand() *cobra.Command {
   crawbl app build platform --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf("--tag is required")
+				return errTagRequired
 			}
 			return runKoBuild(cmd.Context(), koBuildOpts{
 				importPath:   "./cmd/crawbl",
@@ -90,7 +93,7 @@ func newBuildAgentRuntimeCommand() *cobra.Command {
   crawbl app build agent-runtime --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf("--tag is required")
+				return errTagRequired
 			}
 			return runKoBuild(cmd.Context(), koBuildOpts{
 				importPath: "./cmd/crawbl-agent-runtime",
@@ -120,7 +123,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
   crawbl app build auth-filter --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf("--tag is required")
+				return errTagRequired
 			}
 			rootDir, err := gitutil.RootDir()
 			if err != nil {
