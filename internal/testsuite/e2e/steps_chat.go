@@ -182,8 +182,18 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 			{"id": agentID, "name": agentName, "type": "agent"},
 		},
 	}
-	_, err = tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body)
-	return err
+	if _, err = tc.doRequest("POST", "/v1/workspaces/"+state.workspaceID+"/conversations/"+state.currentConversation+"/messages", alias, body); err != nil {
+		return err
+	}
+	if tc.lastStatus != http.StatusOK && tc.lastStatus != http.StatusCreated {
+		return nil
+	}
+	userMsgID := gjson.GetBytes(tc.lastBody, "data.id").String()
+	userMsgCreated := gjson.GetBytes(tc.lastBody, "data.created_at").String()
+	if userMsgID == "" {
+		return fmt.Errorf("mention: response body missing data.id: %s", abbreviatedBody(tc.lastBody))
+	}
+	return tc.pollForAssistantReply(alias, userMsgID, userMsgCreated)
 }
 
 // --- Reply assertions ------------------------------------------------
@@ -191,7 +201,11 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 func (tc *testContext) assistantReplyShouldSucceed() error { return tc.assertStatus(http.StatusOK) }
 
 func (tc *testContext) assistantReplyShouldContainText() error {
-	return tc.assertJSONNotEmpty("data.0.content.text")
+	combined := collectReplyText(tc.lastBody)
+	if combined == "" {
+		return fmt.Errorf("JSON data.0.content.text: expected non-empty value")
+	}
+	return nil
 }
 
 func (tc *testContext) assistantReplyShouldComeFromAgent() error {

@@ -13,7 +13,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/app"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/ci"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/dev"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/generate"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/infra"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/setup"
@@ -105,7 +107,13 @@ func main() {
 	devCmd := dev.NewDevCommand()
 	devCmd.GroupID = groupDevelopment
 
-	rootCmd.AddCommand(platformCmd, infraCmd, appCmd, testCmd, setupCmd, devCmd)
+	generateCmd := generate.NewGenerateCommand()
+	generateCmd.GroupID = groupBuild
+
+	ciCmd := ci.NewCICommand()
+	ciCmd.GroupID = groupBuild
+
+	rootCmd.AddCommand(platformCmd, infraCmd, appCmd, testCmd, setupCmd, devCmd, generateCmd, ciCmd)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		stop()

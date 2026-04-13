@@ -148,6 +148,10 @@ func (m *Model) generateStream(ctx context.Context, req *model.LLMRequest) iter.
 			yield(nil, err)
 			return
 		}
+		// Crawbl patch: request token usage in streaming responses.
+		// Without this, OpenAI does not include usage in streaming chunks
+		// and UsageMetadata is always nil.
+		params.StreamOptions = openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)}
 
 		stream := m.client.Chat.Completions.NewStreaming(ctx, params)
 		acc := openai.ChatCompletionAccumulator{}

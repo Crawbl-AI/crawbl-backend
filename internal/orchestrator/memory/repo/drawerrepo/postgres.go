@@ -120,6 +120,11 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 
 	vec := pgvector.NewVector(queryEmbedding)
 
+	// NOTE: $1 (the embedding) appears twice — in the similarity expression and
+	// ORDER BY — so dbr's SelectBySql would raise "wrong placeholder count".
+	// We use raw db.QueryContext instead (same approach as CheckDuplicate).
+	// pgvector requires OPERATOR(public.<=>) and ::public.vector casts because
+	// search_path is set to the orchestrator schema, not public.
 	where := "workspace_id = $2 AND embedding IS NOT NULL AND (state IN ('raw', 'processed') OR state = '') AND superseded_by IS NULL"
 	args := []any{vec, workspaceID}
 	paramIdx := 3
@@ -136,24 +141,43 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 	}
 
 	args = append(args, limit)
-	// pgvector distance operator <=> and dynamic positional $N parameters
-	// require raw SQL; dbr has no builder support for either.
 	query := fmt.Sprintf(
 		`SELECT id, workspace_id, wing, room, hall, content, importance, memory_type,
 		        source_file, added_by, filed_at, created_at,
 		        state, summary, added_by_agent,
-		        1 - (embedding <=> $1) AS similarity
+		        1 - (embedding OPERATOR(public.<=>) $1::public.vector) AS similarity
 		 FROM memory_drawers
 		 WHERE %s
-		 ORDER BY embedding <=> $1
+		 ORDER BY embedding OPERATOR(public.<=>) $1::public.vector
 		 LIMIT $%d`,
 		where, paramIdx,
 	)
 
-	var results []memory.DrawerSearchResult
-	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &results)
+	db, ok := sess.(*dbr.Session)
+	if !ok || db == nil || db.DB == nil {
+		return nil, fmt.Errorf("drawer: search: session is not a *dbr.Session with a live connection")
+	}
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("drawer: search: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []memory.DrawerSearchResult
+	for rows.Next() {
+		var res memory.DrawerSearchResult
+		if scanErr := rows.Scan(
+			&res.ID, &res.WorkspaceID, &res.Wing, &res.Room, &res.Hall, &res.Content,
+			&res.Importance, &res.MemoryType, &res.SourceFile, &res.AddedBy,
+			&res.FiledAt, &res.CreatedAt, &res.State, &res.Summary, &res.AddedByAgent,
+			&res.Similarity,
+		); scanErr != nil {
+			return nil, fmt.Errorf("drawer: search scan: %w", scanErr)
+		}
+		results = append(results, res)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("drawer: search iterate: %w", rowsErr)
 	}
 	return results, nil
 }
@@ -172,13 +196,13 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 // outer query re-joins memory_drawers to return the full row.
 const hybridSearchSQL = `
 WITH vector_hits AS (
-    SELECT id, 1 - (embedding <=> $1) AS similarity, false AS via_kg
+    SELECT id, 1 - (embedding OPERATOR(public.<=>) $1::public.vector) AS similarity, false AS via_kg
     FROM memory_drawers
     WHERE workspace_id = $2
       AND embedding IS NOT NULL
       AND (state IN ('raw', 'processed') OR state = '')
       AND superseded_by IS NULL
-    ORDER BY embedding <=> $1
+    ORDER BY embedding OPERATOR(public.<=>) $1::public.vector
     LIMIT $3
 ),
 kg_hits AS (
@@ -244,13 +268,35 @@ func (r *Postgres) SearchHybrid(
 	vec := pgvector.NewVector(queryEmbedding)
 	vectorLimit := limit * 2
 
-	var results []memory.HybridSearchResult
-	_, err := sess.SelectBySql(
-		hybridSearchSQL,
-		vec, workspaceID, vectorLimit, pq.StringArray(terms), limit,
-	).LoadContext(ctx, &results)
+	// NOTE: hybridSearchSQL reuses $1 twice and $2 three times, so dbr's
+	// SelectBySql raises "wrong placeholder count". Use raw db.QueryContext
+	// instead (same pattern as CheckDuplicate).
+	db, ok := sess.(*dbr.Session)
+	if !ok || db == nil || db.DB == nil {
+		return nil, fmt.Errorf("drawerrepo: hybrid search: session is not a *dbr.Session with a live connection")
+	}
+	rows, err := db.QueryContext(ctx, hybridSearchSQL, vec, workspaceID, vectorLimit, pq.StringArray(terms), limit)
 	if err != nil {
 		return nil, fmt.Errorf("drawerrepo: hybrid search: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []memory.HybridSearchResult
+	for rows.Next() {
+		var res memory.HybridSearchResult
+		if scanErr := rows.Scan(
+			&res.ID, &res.WorkspaceID, &res.Wing, &res.Room, &res.Hall, &res.Content,
+			&res.Importance, &res.MemoryType, &res.SourceFile, &res.AddedBy, &res.AddedByAgent,
+			&res.FiledAt, &res.CreatedAt, &res.State, &res.Summary, &res.LastAccessedAt,
+			&res.AccessCount, &res.SupersededBy, &res.ClusterID, &res.RetryCount,
+			&res.Similarity, &res.ViaKG,
+		); scanErr != nil {
+			return nil, fmt.Errorf("drawerrepo: hybrid search scan: %w", scanErr)
+		}
+		results = append(results, res)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("drawerrepo: hybrid search iterate: %w", rowsErr)
 	}
 	return results, nil
 }
@@ -671,9 +717,9 @@ func (r *Postgres) ListCentroidTrainingSamples(ctx context.Context, sess databas
 		MemoryType string          `db:"memory_type"`
 		Embedding  pgvector.Vector `db:"embedding"`
 	}
-	// ROW_NUMBER() window function with PARTITION BY and the interval cast
-	// ($1::int || ' days')::interval require raw SQL; dbr has no builder support
-	// for window functions or Postgres-specific interval arithmetic.
+	// ROW_NUMBER() window function with PARTITION BY require raw SQL;
+	// dbr has no builder support for window functions. Uses ? placeholders
+	// (not $N) because dbr's SelectBySql miscounts $N reuse.
 	var rows []row
 	_, err := sess.SelectBySql(
 		`SELECT id, memory_type, embedding FROM (
@@ -687,9 +733,9 @@ func (r *Postgres) ListCentroidTrainingSamples(ctx context.Context, sess databas
 		      AND pipeline_tier = 'llm'
 		      AND embedding IS NOT NULL
 		      AND memory_type <> ''
-		      AND created_at > NOW() - ($1::int || ' days')::interval
+		      AND created_at > NOW() - INTERVAL '1 day' * ?
 		 ) ranked
-		 WHERE rnk <= $2`,
+		 WHERE rnk <= ?`,
 		windowDays, topN,
 	).LoadContext(ctx, &rows)
 	if err != nil {

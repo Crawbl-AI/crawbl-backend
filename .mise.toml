@@ -10,8 +10,10 @@ doctl = "1.152"
 awscli = "2.34.19"
 pulumi = "3.228"
 yq = "4"
+# ko builds container images for Go binaries (platform, agent-runtime).
+# Auth-filter still uses Docker (TinyGo/WASM).
+ko = "0.18"
 # protoc is used for generating gRPC + Protobuf bindings for the crawbl-agent-runtime
 # in internal/agentruntime and proto/agentruntime/v1/*.proto. The Go plugins
-# (protoc-gen-go, protoc-gen-go-grpc) are installed via `go install` in the Makefile
-# `generate` target; they end up in $GOPATH/bin which must be on PATH.
+# (protoc-gen-go, protoc-gen-go-grpc) are installed via `crawbl generate --install-tools`
 protoc = "34.1"

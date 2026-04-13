@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
+
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
@@ -210,13 +212,34 @@ func (g *Postgres) QueryEntity(ctx context.Context, sess database.SessionRunner,
 
 	query := tripleResultQuery + "\n" + whereClause + "\nORDER BY t.extracted_at DESC\nLIMIT 500"
 
-	// Multi-table LEFT JOIN with dynamically built WHERE clause using positional
-	// $N parameters (required when param count varies by direction/asOf); dbr
-	// builder cannot compose these without losing positional index correctness.
-	var rows []tripleRow
-	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &rows)
+	// NOTE: the "both" direction reuses $2 twice (subject = $2 OR object = $2),
+	// and when asOf is set $3 appears twice as well. dbr's SelectBySql counts
+	// $N occurrences instead of unique numbers and raises "wrong placeholder
+	// count". Use raw db.QueryContext instead.
+	db, ok := sess.(*dbr.Session)
+	if !ok || db == nil || db.DB == nil {
+		return nil, fmt.Errorf("kg: query entity %q: session is not a *dbr.Session with a live connection", name)
+	}
+	sqlRows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("kg: query entity %q: %w", name, err)
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	var rows []tripleRow
+	for sqlRows.Next() {
+		var row tripleRow
+		if scanErr := sqlRows.Scan(
+			&row.ID, &row.WorkspaceID, &row.Subject, &row.Predicate, &row.Object,
+			&row.ValidFrom, &row.ValidTo, &row.Confidence, &row.SourceCloset, &row.SourceFile, &row.ExtractedAt,
+			&row.SubjectName, &row.ObjectName,
+		); scanErr != nil {
+			return nil, fmt.Errorf("kg: query entity %q scan: %w", name, scanErr)
+		}
+		rows = append(rows, row)
+	}
+	if rowsErr := sqlRows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("kg: query entity %q iterate: %w", name, rowsErr)
 	}
 
 	results := make([]memory.TripleResult, len(rows))
@@ -246,12 +269,32 @@ LIMIT 500`
 		args = []any{workspaceID, predicate}
 	}
 
-	// Multi-table LEFT JOIN with optional temporal WHERE clause; raw SQL required
-	// for the same reason as QueryEntity — positional $N and conditional branches.
-	var rows []tripleRow
-	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &rows)
+	// NOTE: when asOf is set, $3 appears twice (valid_from <= $3 AND valid_to >= $3);
+	// dbr's SelectBySql raises "wrong placeholder count". Use raw db.QueryContext.
+	db, ok := sess.(*dbr.Session)
+	if !ok || db == nil || db.DB == nil {
+		return nil, fmt.Errorf("kg: query relationship %q: session is not a *dbr.Session with a live connection", predicate)
+	}
+	sqlRows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("kg: query relationship %q: %w", predicate, err)
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	var rows []tripleRow
+	for sqlRows.Next() {
+		var row tripleRow
+		if scanErr := sqlRows.Scan(
+			&row.ID, &row.WorkspaceID, &row.Subject, &row.Predicate, &row.Object,
+			&row.ValidFrom, &row.ValidTo, &row.Confidence, &row.SourceCloset, &row.SourceFile, &row.ExtractedAt,
+			&row.SubjectName, &row.ObjectName,
+		); scanErr != nil {
+			return nil, fmt.Errorf("kg: query relationship %q scan: %w", predicate, scanErr)
+		}
+		rows = append(rows, row)
+	}
+	if rowsErr := sqlRows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("kg: query relationship %q iterate: %w", predicate, rowsErr)
 	}
 
 	results := make([]memory.TripleResult, len(rows))
@@ -280,12 +323,32 @@ LIMIT 100`
 		args = []any{workspaceID}
 	}
 
-	// Multi-table LEFT JOIN with optional entity filter; raw SQL required for
-	// the same positional $N and conditional WHERE reasons as QueryEntity.
-	var rows []tripleRow
-	_, err := sess.SelectBySql(query, args...).LoadContext(ctx, &rows)
+	// NOTE: when entityName is set, $2 appears twice (subject = $2 OR object = $2);
+	// dbr's SelectBySql raises "wrong placeholder count". Use raw db.QueryContext.
+	db, ok := sess.(*dbr.Session)
+	if !ok || db == nil || db.DB == nil {
+		return nil, fmt.Errorf("kg: timeline: session is not a *dbr.Session with a live connection")
+	}
+	sqlRows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("kg: timeline: %w", err)
+	}
+	defer func() { _ = sqlRows.Close() }()
+
+	var rows []tripleRow
+	for sqlRows.Next() {
+		var row tripleRow
+		if scanErr := sqlRows.Scan(
+			&row.ID, &row.WorkspaceID, &row.Subject, &row.Predicate, &row.Object,
+			&row.ValidFrom, &row.ValidTo, &row.Confidence, &row.SourceCloset, &row.SourceFile, &row.ExtractedAt,
+			&row.SubjectName, &row.ObjectName,
+		); scanErr != nil {
+			return nil, fmt.Errorf("kg: timeline scan: %w", scanErr)
+		}
+		rows = append(rows, row)
+	}
+	if rowsErr := sqlRows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("kg: timeline iterate: %w", rowsErr)
 	}
 
 	results := make([]memory.TripleResult, len(rows))

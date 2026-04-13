@@ -100,10 +100,10 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 
 ## Local Development
 
-- Postgres-backed via `docker-compose.yaml` and `dockerfiles/`. Use `make setup` then `make run`.
+- Dev/test happens on the live dev cluster. Use `crawbl setup` to verify your environment, then `crawbl app deploy platform` to build and deploy.
 - Migrations at `migrations/orchestrator/` are embedded and run automatically on orchestrator startup via `golang-migrate` — no manual step.
 - Install toolchain with `mise install` (pins Go, `protoc`, `yq`, k8s, and cloud tooling in `.mise.toml`).
-- Regenerate gRPC bindings from `proto/agentruntime/v1/*.proto` with `make generate`.
+- Regenerate gRPC bindings from `proto/agentruntime/v1/*.proto` with `crawbl generate`.
 
 ## Deploy Workflow
 
@@ -123,7 +123,7 @@ Tag is auto-calculated from conventional commits since the last `v*` tag: `feat:
 
 Backend components (platform, auth-filter) build the image, push to DOCR (`registry.digitalocean.com/crawbl/`), bump the tag in `crawbl-argocd-apps`, and create a GitHub release — ArgoCD auto-syncs. Docs / website skip the Docker path and run `npm run build` + `wrangler pages deploy` instead.
 
-Makefile shortcuts wrap the same logic: `make deploy-dev`, `make deploy-platform`, etc.
+All deploy commands are available via `crawbl app deploy platform`, `crawbl app deploy agent-runtime`, etc.
 
 ## E2E Testing
 

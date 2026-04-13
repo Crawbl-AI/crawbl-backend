@@ -61,42 +61,41 @@ flowchart LR
 
 ```bash
 # 1. Build the repo-local CLI, install hooks, and check your machine:
-make setup
+./crawbl setup
 
-# 2. Source environment and start the stack:
+# 2. Source environment:
 # NOTE: All crawbl CLI commands requiring environment variables (from .env)
 # should be run with: set -a && source .env && set +a <command>
 set -a && source .env && set +a
-./crawbl dev start
 
-# 3. Verify:
-curl http://localhost:7171/v1/health
+# 3. Deploy to dev:
+crawbl app deploy platform
 ```
 
 💡 It builds `bin/crawbl` on first run and rebuilds it when CLI source changes, so you do not need a global install.
 
 ## 🛠️ CLI
 
-Everything is managed through the `./crawbl` launcher or the thin root `Makefile`.
+Everything is managed through the `./crawbl` CLI.
 
 ```
-./crawbl setup                  # Check tools + create .env
-./crawbl dev start              # Start the full local stack
-./crawbl app build <component>              # Build a container image (tag auto-calculated)
+./crawbl setup                              # Check tools, install hooks, create .env
+./crawbl app build <component>              # Build a container image (ko or Docker)
 ./crawbl app deploy <component>             # Build, push, update ArgoCD (tag auto-calculated)
 ./crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
-./crawbl --help                 # Check other commands
+./crawbl generate                           # Regenerate protobuf/gRPC code
+./crawbl ci check                           # Run full CI pipeline (generate + verify + cross-compile)
+./crawbl --help                             # Check other commands
 ```
 
 ## ✅ Local Checks
 
 This repo ships a versioned `pre-push` hook in `.githooks/pre-push`.
 
-- `make setup` installs the hook automatically
-- `make post-clone` runs the one-time post-clone bootstrap (or re-runs it with `--force`)
-- `make hooks` re-installs it if your Git config was reset
-- the hook runs `make ci-check`
-- `make ci-check` runs unit tests plus local and linux/amd64 `crawbl` builds to catch the same local-safe failures CI would catch later
+- `./crawbl setup` installs the hook automatically
+- `./scripts/post-clone.sh` runs the one-time post-clone bootstrap (or re-runs it with `--force`)
+- the hook runs `./crawbl ci check`
+- `crawbl ci check` runs protobuf codegen, formatting, linting, tests, and a linux/amd64 cross-compile to catch the same local-safe failures CI would catch later
 
 The hook does not run the live E2E suite because that depends on the shared dev cluster and takes longer than a normal push gate should. Lint stays available as an explicit manual check with `./crawbl dev lint`.
 
@@ -167,20 +166,6 @@ api/                            # 📐 Kubernetes CRD types
 
 See [`config/README.md`](config/README.md) for the complete reference of every env var and hardcoded default.
 
-## 🐳 Manual Agent Runtime Build
-
-CI is slow — use this to build and push the agent runtime image directly.
-
-```bash
-# From / — build only:
-crawbl app build agent-runtime --tag <tag>
-
-# Build, push, and update ArgoCD in one step:
-crawbl app deploy agent-runtime --tag <tag>
-```
-
-> If you build manually without deploy, update the image tag in `crawbl-argocd-apps` yourself — `deploy` does this automatically.
-
 ## 🚢 Deploy
 
 `crawbl app deploy <component>` is the full local-first deploy workflow. Each call:
@@ -205,17 +190,7 @@ crawbl app deploy <component> --tag v1.0.0  # Override with an explicit tag
 
 > 💡 **Migrations are automatic.** The orchestrator runs pending database migrations on startup — no separate migration step needed after deploy.
 
-For agent-runtime, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
-
-Makefile shortcuts (auto-semver, no manual tag needed):
-
-```bash
-make deploy-dev          # Deploy platform + auth-filter
-make deploy-platform     # Deploy platform only
-make deploy-agent-runtime     # Deploy agent-runtime only
-make deploy-docs         # Deploy docs only
-make deploy-website      # Deploy website only
-```
+For agent-runtime and auth-filter, tags use the fork convention `v<upstream>-crawbl.<N>` and auto-increment.
 
 ## 📊 Observability
 

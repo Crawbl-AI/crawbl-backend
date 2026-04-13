@@ -13,42 +13,34 @@ import (
 var (
 	registryBase = configenv.StringOr("CRAWBL_REGISTRY", "registry.digitalocean.com/crawbl")
 
-	buildPlatformImageRepo  = registryBase + "/crawbl-platform"
-	buildPlatformDockerfile = "dockerfiles/platform-full.dockerfile"
+	buildPlatformImageRepo     = registryBase + "/crawbl-platform"
+	buildAgentRuntimeImageRepo = registryBase + "/crawbl-agent-runtime"
+	buildAuthFilterImageRepo   = registryBase + "/envoy-auth-filter"
+	buildAuthFilterDockerfile  = "dockerfiles/envoy-auth-filter.dockerfile"
+	buildAuthFilterContext     = "cmd/envoy-auth-filter"
 
-	buildAuthFilterImageRepo  = registryBase + "/envoy-auth-filter"
-	buildAuthFilterDockerfile = "dockerfiles/envoy-auth-filter.dockerfile"
-	buildAuthFilterContext    = "cmd/envoy-auth-filter"
-
-	buildDocsRepoDir = "crawbl-docs"
-
+	buildDocsRepoDir    = "crawbl-docs"
 	buildWebsiteRepoDir = "crawbl-website"
-
-	// crawbl-agent-runtime — the Phase 2 in-tree Go replacement for the
-	// Rust agent runtime. Built from the same repo as the platform
-	// image but uses a dedicated, minimal Dockerfile (distroless nonroot,
-	// ~26 MB) so per-workspace pods pull a small image instead of the
-	// full ~200 MB platform binary.
-	buildAgentRuntimeImageRepo  = registryBase + "/crawbl-agent-runtime"
-	buildAgentRuntimeDockerfile = "dockerfiles/agent-runtime.dockerfile"
 )
 
 func newBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build [component]",
-		Short: "Build a component Docker image",
-		Long:  "Build a Docker image for one Crawbl component such as the platform or auth filter.",
-		Example: `  crawbl app build platform     # Build unified platform image (orchestrator + webhook)
-  crawbl app build auth-filter  # Build Envoy auth WASM filter image`,
+		Short: "Build a component container image",
+		Long:  "Build a container image for one Crawbl component. Platform and agent-runtime use ko; auth-filter uses Docker.",
+		Example: `  crawbl app build platform        # Build unified platform image (ko)
+  crawbl app build agent-runtime   # Build agent runtime image (ko)
+  crawbl app build auth-filter     # Build Envoy auth WASM filter image (Docker)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			return fmt.Errorf("unknown component: %s (valid: platform, auth-filter)", args[0])
+			return fmt.Errorf("unknown component: %s (valid: platform, agent-runtime, auth-filter)", args[0])
 		},
 	}
 
 	cmd.AddCommand(newBuildPlatformCommand())
+	cmd.AddCommand(newBuildAgentRuntimeCommand())
 	cmd.AddCommand(newBuildAuthFilterCommand())
 
 	return cmd
@@ -56,37 +48,60 @@ func newBuildCommand() *cobra.Command {
 
 func newBuildPlatformCommand() *cobra.Command {
 	var (
-		tag      string
-		platform string
-		push     bool
+		tag  string
+		push bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "platform",
 		Short: "Build the unified platform image",
-		Long:  "Build the crawbl-platform Docker image containing the orchestrator, webhook, and all supporting subcommands.",
+		Long:  "Build the crawbl-platform container image containing the orchestrator, webhook, and all supporting subcommands.",
 		Example: `  crawbl app build platform --tag v1.0.0
   crawbl app build platform --tag latest --push`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
 				return fmt.Errorf("--tag is required")
 			}
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
+			return runKoBuild(cmd.Context(), koBuildOpts{
+				importPath:   "./cmd/crawbl",
+				imageRepo:    buildPlatformImageRepo,
+				tag:          tag,
+				push:         push,
+				buildVersion: tag,
+			})
+		},
+	}
+
+	addKoBuildFlags(cmd, &tag, &push)
+	return cmd
+}
+
+func newBuildAgentRuntimeCommand() *cobra.Command {
+	var (
+		tag  string
+		push bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "agent-runtime",
+		Short: "Build the agent runtime image",
+		Long:  "Build the crawbl-agent-runtime container image (distroless nonroot, lightweight).",
+		Example: `  crawbl app build agent-runtime --tag v1.0.0
+  crawbl app build agent-runtime --tag latest --push`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if tag == "" {
+				return fmt.Errorf("--tag is required")
 			}
-			return runDockerBuild(buildOpts{
-				imageRepo:  buildPlatformImageRepo,
-				dockerfile: filepath.Join(rootDir, buildPlatformDockerfile),
-				contextDir: rootDir,
+			return runKoBuild(cmd.Context(), koBuildOpts{
+				importPath: "./cmd/crawbl-agent-runtime",
+				imageRepo:  buildAgentRuntimeImageRepo,
 				tag:        tag,
-				platform:   platform,
 				push:       push,
 			})
 		},
 	}
 
-	addBuildFlags(cmd, &tag, &platform, &push)
+	addKoBuildFlags(cmd, &tag, &push)
 	return cmd
 }
 
@@ -103,7 +118,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
 		Long:  "Build the Envoy edge authentication WASM filter as an OCI image using docker buildx.",
 		Example: `  crawbl app build auth-filter --tag v1.0.0
   crawbl app build auth-filter --tag latest --push`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
 				return fmt.Errorf("--tag is required")
 			}
@@ -111,7 +126,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDockerBuild(buildOpts{
+			return runDockerBuild(cmd.Context(), dockerBuildOpts{
 				imageRepo:  buildAuthFilterImageRepo,
 				dockerfile: filepath.Join(rootDir, buildAuthFilterDockerfile),
 				contextDir: filepath.Join(rootDir, buildAuthFilterContext),
@@ -122,6 +137,6 @@ func newBuildAuthFilterCommand() *cobra.Command {
 		},
 	}
 
-	addBuildFlags(cmd, &tag, &platform, &push)
+	addDockerBuildFlags(cmd, &tag, &platform, &push)
 	return cmd
 }

@@ -1,5 +1,5 @@
 // Package e2e — user lifecycle step definitions.
-// All 3 test users (primary, frank, grace) are pre-created at suite level.
+// All 4 test users (primary, frank, grace, zach) are pre-created at suite level.
 // No dynamic user creation — prevents runtime instance explosion.
 package e2e
 
@@ -32,11 +32,11 @@ func (tc *testContext) primaryHasSignedUp() error {
 	return tc.userHasSignedUp("primary")
 }
 
-// useExtraUser references a pre-created suite-level user (frank or grace).
+// useExtraUser references a pre-created suite-level user (frank, grace, or zach).
 // No new users are created — this just verifies the alias exists.
 func (tc *testContext) useExtraUser(alias string) error {
 	if _, ok := tc.users[alias]; !ok {
-		return fmt.Errorf("unknown user %q — only primary, frank, grace are available", alias)
+		return fmt.Errorf("unknown user %q — only primary, frank, grace, zach are available", alias)
 	}
 	return nil
 }

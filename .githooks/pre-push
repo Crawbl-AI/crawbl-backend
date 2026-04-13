@@ -1,21 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Pre-push hook: validate that all commits being pushed use conventional
+# commit format (type(scope): message OR type: message OR type!: message).
+#
+# Allowed types: feat, fix, refactor, test, docs, chore, ci, perf, style, build, revert
+# Breaking changes: type!: or type(scope)!: are valid.
+
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
-# Pre-push hook receives: <remote-name> <remote-url> and then multiple:
-# <local-ref> <local-sha> <remote-ref> <remote-sha> on stdin.
-# We read the first line to extract local and remote SHAs.
-read -r local_ref local_sha remote_ref remote_sha || exit 0
+# Pre-push receives lines on stdin: <local-ref> <local-sha> <remote-ref> <remote-sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip delete pushes.
+  if [[ "$local_sha" == "0000000000000000000000000000000000000000" ]]; then
+    continue
+  fi
 
-# Only run ci-check if proto files were modified in this push.
-# If remote_sha is all zeros, this is a new branch — always check.
-# Use 'proto/' pathspec to match any file under the proto directory.
-if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]] || \
-   git diff --name-only "$remote_sha..$local_sha" -- 'proto/' | grep -q .; then
-  echo "Running backend pre-push checks (proto files detected in push range)..."
-  make ci-check
-else
-  echo "Skipping ci-check: no proto files modified in this push"
-fi
+  # Skip tag pushes — tags don't introduce new commits.
+  if [[ "$local_ref" == refs/tags/* ]]; then
+    continue
+  fi
+
+  # For new branches, check commits not reachable from any remote branch.
+  if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]]; then
+    range="$local_sha --not --remotes=origin"
+  else
+    range="${remote_sha}..${local_sha}"
+  fi
+
+  # Conventional commit pattern.
+  cc_pattern='^(feat|fix|refactor|test|docs|chore|ci|perf|style|build|revert)(\([a-z0-9_-]+\))?!?:'
+
+  commits=$(git log --pretty=format:"%h %s" "$range" 2>/dev/null || true)
+  if [ -z "$commits" ]; then
+    continue
+  fi
+
+  bad_commits=""
+  while IFS= read -r line; do
+    hash="${line%% *}"
+    subject="${line#* }"
+    if ! echo "$subject" | grep -qE "$cc_pattern"; then
+      bad_commits="${bad_commits}\n  ${hash} ${subject}"
+    fi
+  done <<< "$commits"
+
+  if [ -n "$bad_commits" ]; then
+    echo "Conventional commit check failed. These commits don't match the pattern:"
+    echo -e "$bad_commits"
+    echo ""
+    echo "Expected format: type(scope): description"
+    echo "  Types: feat, fix, refactor, test, docs, chore, ci, perf, style, build, revert"
+    echo "  Examples: feat(auth): add OAuth2 flow"
+    echo "            fix: resolve nil pointer in handler"
+    echo "            refactor!: rename UserSwarm to Runtime"
+    exit 1
+  fi
+done
+
+echo "Conventional commit check passed."

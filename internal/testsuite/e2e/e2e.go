@@ -2,10 +2,11 @@
 // for the Crawbl orchestrator. Tests are defined as .feature files
 // in Gherkin syntax and executed against a live environment.
 //
-// The suite uses exactly 3 test users across ALL scenarios:
+// The suite uses exactly 4 test users across ALL scenarios:
 //   - primary: shared across most scenarios (auth, profile, legal, workspaces, chat)
 //   - frank: used for multi-user isolation tests
 //   - grace: used for multi-user isolation tests
+//   - zach: dedicated user for account deletion / cleanup scenarios
 //
 // This prevents runtime instance explosion in the cluster (max 3 runtime instances per run).
 package e2e
@@ -87,11 +88,12 @@ type Results struct {
 	Exit int
 }
 
-// suiteUsers holds the 3 fixed test users created once per suite run.
+// suiteUsers holds the fixed test users created once per suite run.
 type suiteUsers struct {
 	primary *testUser
 	frank   *testUser
 	grace   *testUser
+	zach    *testUser
 }
 
 // Run executes the godog test suite and returns results.
@@ -104,7 +106,7 @@ func Run(cfg *Config) *Results {
 		}
 	}
 
-	// Create exactly 3 test users for the entire suite run.
+	// Create exactly 4 test users for the entire suite run.
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	users := &suiteUsers{
 		primary: &testUser{
@@ -125,6 +127,24 @@ func Run(cfg *Config) *Results {
 			email:   fmt.Sprintf("e2e-grace-%s@crawbl.test", suffix),
 			name:    "E2E Grace",
 		},
+		zach: &testUser{
+			alias:   "zach",
+			subject: fmt.Sprintf("e2e-zach-%s", suffix),
+			email:   fmt.Sprintf("e2e-zach-%s@crawbl.test", suffix),
+			name:    "E2E Zach",
+		},
+	}
+
+	// Auto-exclude @db scenarios when no database connection is available.
+	// DB-dependent scenarios (blueprint reload, usage quota) write directly
+	// to Postgres and cannot run in gateway-only mode.
+	tags := cfg.Tags
+	if cfg.DatabaseDSN == "" {
+		if tags == "" {
+			tags = "~@db"
+		} else {
+			tags += " && ~@db"
+		}
 	}
 
 	opts := godog.Options{
@@ -133,14 +153,14 @@ func Run(cfg *Config) *Results {
 		Output:    colors.Colored(os.Stdout),
 		Strict:    true,
 		Randomize: 0,
-		Tags:      cfg.Tags,
+		Tags:      tags,
 	}
 
 	if !cfg.Verbose {
 		opts.Format = "progress"
 	}
 
-	allUsers := []*testUser{users.primary, users.frank, users.grace}
+	allUsers := []*testUser{users.primary, users.frank, users.grace, users.zach}
 
 	deps := newSuiteDeps(cfg)
 	defer deps.close()
@@ -298,12 +318,11 @@ func newTestContext(cfg *Config, users *suiteUsers, deps *suiteDeps) *testContex
 		resolved:     make(map[string]*resolvedUser),
 	}
 
-	// All 3 users are available in every scenario.
+	// All 4 users are available in every scenario.
 	tc.users["primary"] = users.primary
 	tc.users["frank"] = users.frank
 	tc.users["grace"] = users.grace
-	// Also register "zach" as an alias for "frank" for cleanup scenarios.
-	tc.users["zach"] = users.frank
+	tc.users["zach"] = users.zach
 
 	return tc
 }

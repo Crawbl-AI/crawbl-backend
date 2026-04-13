@@ -41,7 +41,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 )
 
-// version is set by the Makefile build target via -ldflags at link time.
+// version is set via ko ldflags (.ko.yaml) or crawbl ci build at link time.
 // It remains "dev" for local builds that skip the linker flag.
 var version = "dev"
 

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(event_time)
 ORDER BY (user_id, workspace_id, event_time, event_id)
-TTL event_time + INTERVAL 13 MONTH
+TTL toDateTime(event_time) + INTERVAL 13 MONTH
 SETTINGS index_granularity = 8192;
 
 -- Daily rollup materialized view for dashboard queries.
