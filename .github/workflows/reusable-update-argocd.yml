@@ -93,6 +93,10 @@ jobs:
           echo "Updating prod orchestrator image to ${IMAGE_TAG}"
           yq -i '.image.tag = strenv(IMAGE_TAG)' components/orchestrator/chart/values-prod.yaml
 
+          echo "Updating prod agent-runtime image to ${IMAGE_TAG}"
+          yq -i '.config.runtime.agentRuntimeImage = "registry.digitalocean.com/crawbl/crawbl-agent-runtime:" + strenv(IMAGE_TAG)' \
+            components/orchestrator/chart/values-prod.yaml
+
           echo "Updating prod reaper image to ${IMAGE_TAG}"
           sed -i "s|registry.digitalocean.com/crawbl/crawbl-platform:[^ ]*|registry.digitalocean.com/crawbl/crawbl-platform:${IMAGE_TAG}|g" \
             components/metacontroller/resources-prod/e2e-reaper-cronjob.yaml
