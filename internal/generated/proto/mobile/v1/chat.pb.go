@@ -178,7 +178,7 @@ type AttachmentResponse struct {
 	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
 	Size          int64                  `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
 	MimeType      string                 `protobuf:"bytes,6,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	Duration      *int32                 `protobuf:"varint,7,opt,name=duration,proto3,oneof" json:"duration,omitempty"`
+	Duration      *int64                 `protobuf:"varint,7,opt,name=duration,proto3,oneof" json:"duration,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -255,7 +255,7 @@ func (x *AttachmentResponse) GetMimeType() string {
 	return ""
 }
 
-func (x *AttachmentResponse) GetDuration() int32 {
+func (x *AttachmentResponse) GetDuration() int64 {
 	if x != nil && x.Duration != nil {
 		return *x.Duration
 	}
@@ -658,7 +658,7 @@ type ConversationResponse struct {
 	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	UnreadCount   int32                  `protobuf:"varint,6,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	UnreadCount   int64                  `protobuf:"varint,6,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
 	Agent         *AgentResponse         `protobuf:"bytes,7,opt,name=agent,proto3,oneof" json:"agent,omitempty"`
 	LastMessage   *MessageResponse       `protobuf:"bytes,8,opt,name=last_message,json=lastMessage,proto3,oneof" json:"last_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -730,7 +730,7 @@ func (x *ConversationResponse) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *ConversationResponse) GetUnreadCount() int32 {
+func (x *ConversationResponse) GetUnreadCount() int64 {
 	if x != nil {
 		return x.UnreadCount
 	}
@@ -817,8 +817,8 @@ type MentionPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Offset        int32                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length        int32                  `protobuf:"varint,4,opt,name=length,proto3" json:"length,omitempty"`
+	Offset        int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Length        int64                  `protobuf:"varint,4,opt,name=length,proto3" json:"length,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -867,14 +867,14 @@ func (x *MentionPayload) GetAgentName() string {
 	return ""
 }
 
-func (x *MentionPayload) GetOffset() int32 {
+func (x *MentionPayload) GetOffset() int64 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-func (x *MentionPayload) GetLength() int32 {
+func (x *MentionPayload) GetLength() int64 {
 	if x != nil {
 		return x.Length
 	}
@@ -1018,7 +1018,7 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
 	"\x04size\x18\x05 \x01(\x03R\x04size\x12\x1b\n" +
 	"\tmime_type\x18\x06 \x01(\tR\bmimeType\x12\x1f\n" +
-	"\bduration\x18\a \x01(\x05H\x00R\bduration\x88\x01\x01B\v\n" +
+	"\bduration\x18\a \x01(\x03H\x00R\bduration\x88\x01\x01B\v\n" +
 	"\t_duration\"\xa7\x04\n" +
 	"\x15MessageContentPayload\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
@@ -1073,7 +1073,7 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12!\n" +
-	"\funread_count\x18\x06 \x01(\x05R\vunreadCount\x12:\n" +
+	"\funread_count\x18\x06 \x01(\x03R\vunreadCount\x12:\n" +
 	"\x05agent\x18\a \x01(\v2\x1f.crawbl.mobile.v1.AgentResponseH\x00R\x05agent\x88\x01\x01\x12I\n" +
 	"\flast_message\x18\b \x01(\v2!.crawbl.mobile.v1.MessageResponseH\x01R\vlastMessage\x88\x01\x01B\b\n" +
 	"\x06_agentB\x0f\n" +
@@ -1087,8 +1087,8 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x16\n" +
-	"\x06offset\x18\x03 \x01(\x05R\x06offset\x12\x16\n" +
-	"\x06length\x18\x04 \x01(\x05R\x06length\"\xf8\x01\n" +
+	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
+	"\x06length\x18\x04 \x01(\x03R\x06length\"\xf8\x01\n" +
 	"\x12SendMessageRequest\x12\x19\n" +
 	"\blocal_id\x18\x01 \x01(\tR\alocalId\x12A\n" +
 	"\acontent\x18\x02 \x01(\v2'.crawbl.mobile.v1.MessageContentPayloadR\acontent\x12F\n" +

@@ -180,7 +180,7 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 		LocalId: tc.nextLocalID(alias, "mention"),
 		Content: &mobilev1.MessageContentPayload{Type: "text", Text: text},
 		Mentions: []*mobilev1.MentionPayload{
-			{AgentId: agentID, AgentName: agentName, Offset: 0, Length: int32(len(agentName) + 1)},
+			{AgentId: agentID, AgentName: agentName, Offset: 0, Length: int64(len(agentName) + 1)},
 		},
 	}
 	if _, err = tc.doProtoRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {

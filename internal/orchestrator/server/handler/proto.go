@@ -84,6 +84,6 @@ func writeRawEnvelope(w http.ResponseWriter, status int, rawJSON []byte) {
 	w.WriteHeader(status)
 	// Write {"data":<raw>}\n manually to avoid double-encoding.
 	_, _ = w.Write([]byte(`{"data":`))
-	_, _ = w.Write(rawJSON)
+	_, _ = w.Write(rawJSON) // #nosec G705 -- rawJSON is pre-marshaled protojson, not user HTML
 	_, _ = w.Write([]byte("}\n"))
 }

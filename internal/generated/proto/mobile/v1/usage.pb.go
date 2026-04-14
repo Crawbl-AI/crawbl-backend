@@ -28,7 +28,7 @@ type WorkspaceUsageResponse struct {
 	TokensUsed           int64                  `protobuf:"varint,2,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
 	PromptTokensUsed     int64                  `protobuf:"varint,3,opt,name=prompt_tokens_used,json=promptTokensUsed,proto3" json:"prompt_tokens_used,omitempty"`
 	CompletionTokensUsed int64                  `protobuf:"varint,4,opt,name=completion_tokens_used,json=completionTokensUsed,proto3" json:"completion_tokens_used,omitempty"`
-	RequestCount         int32                  `protobuf:"varint,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	RequestCount         int64                  `protobuf:"varint,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
 	TokenLimit           int64                  `protobuf:"varint,6,opt,name=token_limit,json=tokenLimit,proto3" json:"token_limit,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
@@ -92,7 +92,7 @@ func (x *WorkspaceUsageResponse) GetCompletionTokensUsed() int64 {
 	return 0
 }
 
-func (x *WorkspaceUsageResponse) GetRequestCount() int32 {
+func (x *WorkspaceUsageResponse) GetRequestCount() int64 {
 	if x != nil {
 		return x.RequestCount
 	}
@@ -113,7 +113,7 @@ type UserUsageSummaryResponse struct {
 	TokensUsed           int64                  `protobuf:"varint,2,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
 	PromptTokensUsed     int64                  `protobuf:"varint,3,opt,name=prompt_tokens_used,json=promptTokensUsed,proto3" json:"prompt_tokens_used,omitempty"`
 	CompletionTokensUsed int64                  `protobuf:"varint,4,opt,name=completion_tokens_used,json=completionTokensUsed,proto3" json:"completion_tokens_used,omitempty"`
-	RequestCount         int32                  `protobuf:"varint,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	RequestCount         int64                  `protobuf:"varint,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
 	TokenLimit           int64                  `protobuf:"varint,6,opt,name=token_limit,json=tokenLimit,proto3" json:"token_limit,omitempty"`
 	PlanId               string                 `protobuf:"bytes,7,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -178,7 +178,7 @@ func (x *UserUsageSummaryResponse) GetCompletionTokensUsed() int64 {
 	return 0
 }
 
-func (x *UserUsageSummaryResponse) GetRequestCount() int32 {
+func (x *UserUsageSummaryResponse) GetRequestCount() int64 {
 	if x != nil {
 		return x.RequestCount
 	}
@@ -210,7 +210,7 @@ const file_mobile_v1_usage_proto_rawDesc = "" +
 	"tokensUsed\x12,\n" +
 	"\x12prompt_tokens_used\x18\x03 \x01(\x03R\x10promptTokensUsed\x124\n" +
 	"\x16completion_tokens_used\x18\x04 \x01(\x03R\x14completionTokensUsed\x12#\n" +
-	"\rrequest_count\x18\x05 \x01(\x05R\frequestCount\x12\x1f\n" +
+	"\rrequest_count\x18\x05 \x01(\x03R\frequestCount\x12\x1f\n" +
 	"\vtoken_limit\x18\x06 \x01(\x03R\n" +
 	"tokenLimit\"\xa5\x02\n" +
 	"\x18UserUsageSummaryResponse\x12%\n" +
@@ -219,7 +219,7 @@ const file_mobile_v1_usage_proto_rawDesc = "" +
 	"tokensUsed\x12,\n" +
 	"\x12prompt_tokens_used\x18\x03 \x01(\x03R\x10promptTokensUsed\x124\n" +
 	"\x16completion_tokens_used\x18\x04 \x01(\x03R\x14completionTokensUsed\x12#\n" +
-	"\rrequest_count\x18\x05 \x01(\x05R\frequestCount\x12\x1f\n" +
+	"\rrequest_count\x18\x05 \x01(\x03R\frequestCount\x12\x1f\n" +
 	"\vtoken_limit\x18\x06 \x01(\x03R\n" +
 	"tokenLimit\x12\x17\n" +
 	"\aplan_id\x18\a \x01(\tR\x06planIdBQZOgithub.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1b\x06proto3"

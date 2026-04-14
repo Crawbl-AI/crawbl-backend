@@ -197,7 +197,7 @@ type AgentDetailResponse struct {
 	Description   string                 `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
 	AvatarUrl     string                 `protobuf:"bytes,9,opt,name=avatar_url,json=avatarUrl,proto3" json:"avatar_url,omitempty"`
 	Status        string                 `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
-	SortOrder     int32                  `protobuf:"varint,11,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
+	SortOrder     int64                  `protobuf:"varint,11,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
 	Skills        []string               `protobuf:"bytes,12,rep,name=skills,proto3" json:"skills,omitempty"`
 	Stats         *AgentStatsResponse    `protobuf:"bytes,13,opt,name=stats,proto3" json:"stats,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -304,7 +304,7 @@ func (x *AgentDetailResponse) GetStatus() string {
 	return ""
 }
 
-func (x *AgentDetailResponse) GetSortOrder() int32 {
+func (x *AgentDetailResponse) GetSortOrder() int64 {
 	if x != nil {
 		return x.SortOrder
 	}
@@ -1054,7 +1054,7 @@ const file_mobile_v1_agent_proto_rawDesc = "" +
 	"\x06status\x18\n" +
 	" \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +
-	"sort_order\x18\v \x01(\x05R\tsortOrder\x12\x16\n" +
+	"sort_order\x18\v \x01(\x03R\tsortOrder\x12\x16\n" +
 	"\x06skills\x18\f \x03(\tR\x06skills\x12:\n" +
 	"\x05stats\x18\r \x01(\v2$.crawbl.mobile.v1.AgentStatsResponseR\x05statsB\r\n" +
 	"\v_updated_at\"\\\n" +

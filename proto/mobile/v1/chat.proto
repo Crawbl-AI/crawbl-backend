@@ -33,7 +33,7 @@ message AttachmentResponse {
   string type = 4;
   int64 size = 5;
   string mime_type = 6;
-  optional int32 duration = 7;
+  optional int64 duration = 7;
 }
 
 // MessageContentPayload represents the content of a message.
@@ -89,7 +89,7 @@ message ConversationResponse {
   string title = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
-  int32 unread_count = 6;
+  int64 unread_count = 6;
   optional AgentResponse agent = 7;
   optional MessageResponse last_message = 8;
 }
@@ -105,8 +105,8 @@ message CreateConversationRequest {
 message MentionPayload {
   string agent_id = 1;
   string agent_name = 2;
-  int32 offset = 3;
-  int32 length = 4;
+  int64 offset = 3;
+  int64 length = 4;
 }
 
 // SendMessageRequest represents the request body for sending a new message.

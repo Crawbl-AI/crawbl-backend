@@ -22,7 +22,7 @@ func ConversationToProto(conversation *orchestrator.Conversation) *mobilev1.Conv
 		Title:       conversation.Title,
 		CreatedAt:   timestamppb.New(conversation.CreatedAt),
 		UpdatedAt:   timestamppb.New(conversation.UpdatedAt),
-		UnreadCount: int32(conversation.UnreadCount),
+		UnreadCount: int64(conversation.UnreadCount),
 	}
 	if conversation.Agent != nil {
 		resp.Agent = AgentToProto(conversation.Agent)
@@ -124,7 +124,7 @@ func AttachmentsToProto(attachments []orchestrator.Attachment) []*mobilev1.Attac
 			MimeType: a.MIMEType,
 		}
 		if a.Duration != nil {
-			ar.Duration = int32Ptr(int32(*a.Duration))
+			ar.Duration = int64Ptr(int64(*a.Duration))
 		}
 		result = append(result, ar)
 	}
@@ -215,6 +215,6 @@ func MessageContentToDomain(payload *mobilev1.MessageContentPayload) (orchestrat
 	return content, nil
 }
 
-func int32Ptr(v int32) *int32 {
+func int64Ptr(v int64) *int64 {
 	return &v
 }

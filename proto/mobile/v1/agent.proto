@@ -38,7 +38,7 @@ message AgentDetailResponse {
   string description = 8;
   string avatar_url = 9;
   string status = 10;
-  int32 sort_order = 11;
+  int64 sort_order = 11;
   repeated string skills = 12;
   AgentStatsResponse stats = 13;
 }

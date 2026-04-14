@@ -18,7 +18,7 @@ message WorkspaceRuntimeResponse {
   string status = 1;
   string phase = 2;
   bool verified = 3;
-  int32 total_agents = 4;
+  int64 total_agents = 4;
   optional LastMessagePreviewResponse last_message_preview = 5;
 }
 

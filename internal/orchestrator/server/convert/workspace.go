@@ -32,7 +32,7 @@ func EnrichWorkspaceRuntime(resp *mobilev1.WorkspaceResponse, summary *orchestra
 	if resp.Runtime == nil || summary == nil {
 		return
 	}
-	resp.Runtime.TotalAgents = int32(summary.TotalAgents)
+	resp.Runtime.TotalAgents = int64(summary.TotalAgents)
 	if summary.LastMessagePreview != nil {
 		resp.Runtime.LastMessagePreview = &mobilev1.LastMessagePreviewResponse{
 			Text:       summary.LastMessagePreview.Text,

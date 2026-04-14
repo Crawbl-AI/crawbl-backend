@@ -37,7 +37,7 @@ func AgentDetailToProto(d *orchestrator.AgentDetails) *mobilev1.AgentDetailRespo
 		Description: d.Description,
 		AvatarUrl:   d.AvatarURL,
 		Status:      string(d.Status),
-		SortOrder:   int32(d.SortOrder),
+		SortOrder:   int64(d.SortOrder),
 		Skills:      []string{},
 		Stats: &mobilev1.AgentStatsResponse{
 			TotalMessages:         int64(d.Stats.TotalMessages),

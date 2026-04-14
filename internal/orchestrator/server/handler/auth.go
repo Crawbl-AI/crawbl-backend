@@ -262,18 +262,10 @@ func UpdateUser(c *Context) http.HandlerFunc {
 			}
 		}
 
-		var dateOfBirth *time.Time
-		if reqBody.DateOfBirth != nil && *reqBody.DateOfBirth != "" {
-			parsed, parseErr := time.Parse(time.RFC3339, *reqBody.DateOfBirth)
-			if parseErr != nil {
-				parsed, parseErr = time.Parse("2006-01-02T15:04:05.000", *reqBody.DateOfBirth)
-				if parseErr != nil {
-					httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid date_of_birth format")
-					return
-				}
-			}
-			utc := parsed.UTC()
-			dateOfBirth = &utc
+		dateOfBirth, parseErr := parseDateOfBirth(reqBody.DateOfBirth)
+		if parseErr != nil {
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid date_of_birth format")
+			return
 		}
 
 		if _, mErr := c.AuthService.UpdateProfile(r.Context(), &orchestratorservice.UpdateProfileOpts{
@@ -313,6 +305,23 @@ func validateUserUpdateProtoFields(req *mobilev1.UserUpdateRequest) string {
 		}
 	}
 	return ""
+}
+
+// parseDateOfBirth parses an optional date string in RFC3339 or millisecond format.
+// Returns (nil, nil) when the input is nil or empty.
+func parseDateOfBirth(raw *string) (*time.Time, error) {
+	if raw == nil || *raw == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, *raw)
+	if err != nil {
+		parsed, err = time.Parse("2006-01-02T15:04:05.000", *raw)
+		if err != nil {
+			return nil, err
+		}
+	}
+	utc := parsed.UTC()
+	return &utc, nil
 }
 
 // UserLegal retrieves the legal documents along with the user's acceptance status.

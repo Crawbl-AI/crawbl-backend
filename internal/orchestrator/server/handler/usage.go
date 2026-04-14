@@ -40,7 +40,7 @@ func UserUsageSummary(c *Context) http.HandlerFunc {
 			TokensUsed:           tokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
 			CompletionTokensUsed: counters.CompletionTokensUsed,
-			RequestCount:         int32(counters.RequestCount),
+			RequestCount:         int64(counters.RequestCount),
 			TokenLimit:           tokenLimit,
 			PlanId:               counters.PlanID,
 		})
@@ -86,7 +86,7 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 			TokensUsed:           counters.TokensUsed,
 			PromptTokensUsed:     counters.PromptTokensUsed,
 			CompletionTokensUsed: counters.CompletionTokensUsed,
-			RequestCount:         int32(counters.RequestCount),
+			RequestCount:         int64(counters.RequestCount),
 			TokenLimit:           tokenLimit,
 		})
 	}
