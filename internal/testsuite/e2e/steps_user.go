@@ -74,7 +74,7 @@ func (tc *testContext) userHasWorkspaceSaved(alias, key string) error {
 	if err != nil {
 		return err
 	}
-	id := gjsonGet(resp, "data.0.id")
+	id := gjsonGet(resp, jsonPathFirstID)
 	if id == "" {
 		return fmt.Errorf("no workspace found for user %q", alias)
 	}
@@ -91,7 +91,7 @@ func (tc *testContext) userHasConversationSaved(alias, key string) error {
 	if err != nil {
 		return err
 	}
-	id := gjsonGet(resp, "data.0.id")
+	id := gjsonGet(resp, jsonPathFirstID)
 	if id == "" {
 		return fmt.Errorf("no conversation found for user %q", alias)
 	}
@@ -119,7 +119,7 @@ func (tc *testContext) findWorkspaceID(alias string) string {
 	if err != nil {
 		return ""
 	}
-	id := gjsonGet(resp, "data.0.id")
+	id := gjsonGet(resp, jsonPathFirstID)
 	if id != "" {
 		tc.saved["workspace_id"] = id
 	}

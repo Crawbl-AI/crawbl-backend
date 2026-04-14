@@ -22,6 +22,8 @@ const (
 	RepoSlugBackend = "Crawbl-AI/crawbl-backend"
 	RepoSlugDocs    = "Crawbl-AI/crawbl-docs"
 	RepoSlugWebsite = "Crawbl-AI/crawbl-website"
+
+	gcDescription = "Run registry garbage collection after deploy (keep latest 5 per repo)"
 )
 
 func newDeployCommand() *cobra.Command {
@@ -130,7 +132,7 @@ func newDeployPlatformCommand() *cobra.Command {
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, gcDescription)
 	cmd.Flags().BoolVar(&scan, "scan", true, "Run SonarQube analysis after deploy")
 	return cmd
 }
@@ -218,7 +220,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 	}
 
 	addDockerDeployFlags(cmd, &tag, &platform, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, gcDescription)
 	return cmd
 }
 
@@ -295,7 +297,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 	}
 
 	addKoDeployFlags(cmd, &tag, &argocdRepo)
-	cmd.Flags().BoolVar(&gc, "gc", true, "Run registry garbage collection after deploy (keep latest 5 per repo)")
+	cmd.Flags().BoolVar(&gc, "gc", true, gcDescription)
 	return cmd
 }
 

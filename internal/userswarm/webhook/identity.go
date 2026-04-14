@@ -18,6 +18,9 @@ const (
 	// child resource. Used by the selector on Service and Deployment.
 	runtimeAppName = "crawbl-agent-runtime"
 
+	// agentRuntimeFmt is the format string for agent-runtime resource names.
+	agentRuntimeFmt = "agent-runtime-%s"
+
 	// defaultAgentRuntimeImage is the fallback image used when the webhook
 	// cannot derive the agent-runtime image from the userswarm spec. Points
 	// at the dev tag so local clusters work without extra configuration.
@@ -32,15 +35,15 @@ func workspaceIDFromSwarmName(name string) string {
 }
 
 func runtimeServiceAccountName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeServiceName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeDeploymentName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf("agent-runtime-%s", sw.Name), kube.MaxWorkloadNameLen)
+	return kube.TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), kube.MaxWorkloadNameLen)
 }
 
 func runtimeNamespaceFor(sw *crawblv1alpha1.UserSwarm) string {

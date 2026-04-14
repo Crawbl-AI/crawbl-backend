@@ -10,9 +10,11 @@ import (
 	"strings"
 )
 
+const revParse = "rev-parse"
+
 // RootDir returns the git repository root directory.
 func RootDir() (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
+	cmd := exec.CommandContext(context.Background(), "git", revParse, "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get git root: %w", err)
@@ -56,7 +58,7 @@ func EnsureCleanAndPushed() error {
 	}
 
 	// Check that HEAD is pushed to the remote.
-	localCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	localCmd := exec.CommandContext(ctx, "git", revParse, "HEAD")
 	localOutput, err := localCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git rev-parse HEAD failed: %w", err)
@@ -64,14 +66,14 @@ func EnsureCleanAndPushed() error {
 	localSHA := strings.TrimSpace(string(localOutput))
 
 	// Get current branch.
-	branchCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(ctx, "git", revParse, "--abbrev-ref", "HEAD")
 	branchOutput, err := branchCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git rev-parse --abbrev-ref HEAD failed: %w", err)
 	}
 	branch := strings.TrimSpace(string(branchOutput))
 
-	remoteCmd := exec.CommandContext(ctx, "git", "rev-parse", "origin/"+branch) // #nosec G204 -- CLI tool, input from developer
+	remoteCmd := exec.CommandContext(ctx, "git", revParse, "origin/"+branch) // #nosec G204 -- CLI tool, input from developer
 	remoteOutput, err := remoteCmd.Output()
 	if err != nil {
 		return fmt.Errorf("branch %q not found on remote — push before deploying: %w", branch, err)

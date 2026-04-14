@@ -23,7 +23,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
-const defaultServiceName = "orchestrator"
+const (
+	defaultServiceName = "orchestrator"
+	seedErrFmt         = "seed %s %q: %w"
+)
 
 func newMigrateCommand() *cobra.Command {
 	var serviceName string
@@ -407,7 +410,7 @@ func upsertSortedByID(ctx context.Context, tx *dbr.Tx, s idKeyedSeed) error {
 	var existingID string
 	err := tx.Select("id").From(s.Table).Where("id = ?", s.ID).LoadOneContext(ctx, &existingID)
 	if err != nil && !database.IsRecordNotFoundError(err) {
-		return fmt.Errorf("seed %s %q: %w", s.Label, s.ID, err)
+		return fmt.Errorf(seedErrFmt, s.Label, s.ID, err)
 	}
 
 	if existingID != "" {
@@ -416,7 +419,7 @@ func upsertSortedByID(ctx context.Context, tx *dbr.Tx, s idKeyedSeed) error {
 			upd = upd.Set(col, v)
 		}
 		if _, err := upd.Where("id = ?", s.ID).ExecContext(ctx); err != nil {
-			return fmt.Errorf("seed %s %q: %w", s.Label, s.ID, err)
+			return fmt.Errorf(seedErrFmt, s.Label, s.ID, err)
 		}
 		return nil
 	}
@@ -429,7 +432,7 @@ func upsertSortedByID(ctx context.Context, tx *dbr.Tx, s idKeyedSeed) error {
 		ins = ins.Pair(col, v)
 	}
 	if _, err := ins.ExecContext(ctx); err != nil {
-		return fmt.Errorf("seed %s %q: %w", s.Label, s.ID, err)
+		return fmt.Errorf(seedErrFmt, s.Label, s.ID, err)
 	}
 	return nil
 }
