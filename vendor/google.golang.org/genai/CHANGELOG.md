@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.54.0](https://github.com/googleapis/go-genai/compare/v1.53.0...v1.54.0) (2026-04-13)
+
+
+### Features
+
+* Add "eu" as a supported service location for Vertex AI platform. ([9245aba](https://github.com/googleapis/go-genai/commit/9245aba251afea99b1560fae07b93498ed5b5d8e))
+* Add Live Avatar new fields ([2ae252c](https://github.com/googleapis/go-genai/commit/2ae252caaf0d5273d5656d32858e54c354326248))
+* Add webhook_config to batches.create() and models.generate_videos() ([4790027](https://github.com/googleapis/go-genai/commit/4790027b553d401d5cc99f21776dcfa49cbda16d))
+
+## [1.53.0](https://github.com/googleapis/go-genai/compare/v1.52.1...v1.53.0) (2026-04-08)
+
+
+### Miscellaneous Chores
+
+* release 1.53.0 ([07f38c9](https://github.com/googleapis/go-genai/commit/07f38c926798eb5f4d9ef3af531ee3f4d91c6fd6))
+
 ## [1.52.1](https://github.com/googleapis/go-genai/compare/v1.52.0...v1.52.1) (2026-03-31)
 
 

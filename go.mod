@@ -46,7 +46,7 @@ require (
 	golang.org/x/sync v0.20.0
 	google.golang.org/adk v1.1.0
 	google.golang.org/api v0.275.0
-	google.golang.org/genai v1.52.1
+	google.golang.org/genai v1.54.0
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
