@@ -23,6 +23,8 @@ var (
 	buildWebsiteRepoDir = "crawbl-website"
 )
 
+const errTagRequired = "--tag is required"
+
 func newBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build [component]",
@@ -60,7 +62,7 @@ func newBuildPlatformCommand() *cobra.Command {
   crawbl app build platform --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf("--tag is required")
+				return fmt.Errorf(errTagRequired)
 			}
 			return runKoBuild(cmd.Context(), koBuildOpts{
 				importPath:   "./cmd/crawbl",
@@ -90,7 +92,7 @@ func newBuildAgentRuntimeCommand() *cobra.Command {
   crawbl app build agent-runtime --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf("--tag is required")
+				return fmt.Errorf(errTagRequired)
 			}
 			return runKoBuild(cmd.Context(), koBuildOpts{
 				importPath: "./cmd/crawbl-agent-runtime",
@@ -120,7 +122,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
   crawbl app build auth-filter --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf("--tag is required")
+				return fmt.Errorf(errTagRequired)
 			}
 			rootDir, err := gitutil.RootDir()
 			if err != nil {

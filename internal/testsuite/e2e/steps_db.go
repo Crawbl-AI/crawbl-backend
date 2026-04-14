@@ -74,7 +74,7 @@ func (tc *testContext) dbHasUserWithSubject(alias string) error {
 	s := tc.sess()
 	var count int
 	if err := s.Select("COUNT(*)").From("users").Where("subject = ?", subject).LoadOneContext(context.Background(), &count); err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return fmt.Errorf(errDBQueryFailed, err)
 	}
 	if count == 0 {
 		return fmt.Errorf("no user with subject %q in database", subject)
@@ -171,7 +171,7 @@ func (tc *testContext) dbHasPushToken(token, alias string) error {
 		SELECT COUNT(*) FROM user_push_tokens
 		JOIN users ON users.id = user_push_tokens.user_id
 		WHERE users.subject = $1 AND user_push_tokens.push_token = $2`, subject, token).Scan(&count); err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return fmt.Errorf(errDBQueryFailed, err)
 	}
 	if count == 0 {
 		return fmt.Errorf("no push token %q for subject %q", token, alias)
@@ -188,7 +188,7 @@ func (tc *testContext) dbUserHasNickname(alias, expected string) error {
 	var got string
 	row := s.QueryRowContext(context.Background(), "SELECT nickname FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&got); err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return fmt.Errorf(errDBQueryFailed, err)
 	}
 	if got != expected {
 		return fmt.Errorf("expected nickname %q for %q, got %q", expected, alias, got)
@@ -205,7 +205,7 @@ func (tc *testContext) dbUserHasCountryCode(alias, expected string) error {
 	var got sql.NullString
 	row := s.QueryRowContext(context.Background(), "SELECT country_code FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&got); err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return fmt.Errorf(errDBQueryFailed, err)
 	}
 	if !got.Valid || got.String != expected {
 		return fmt.Errorf("expected country_code %q for %q, got %v", expected, alias, got)
@@ -222,7 +222,7 @@ func (tc *testContext) dbUserHasDeletedAt(alias string) error {
 	var hasDeletedAt bool
 	row := s.QueryRowContext(context.Background(), "SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&hasDeletedAt); err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return fmt.Errorf(errDBQueryFailed, err)
 	}
 	if !hasDeletedAt {
 		return fmt.Errorf("expected deleted_at to be set for %q", alias)
@@ -239,7 +239,7 @@ func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
 	var isDeleted bool
 	row := s.QueryRowContext(context.Background(), "SELECT deleted_at IS NOT NULL FROM users WHERE subject = $1", subject)
 	if err := row.Scan(&isDeleted); err != nil {
-		return fmt.Errorf("DB query failed: %w", err)
+		return fmt.Errorf(errDBQueryFailed, err)
 	}
 	got := fmt.Sprintf("%v", isDeleted)
 	if got != expected {

@@ -65,13 +65,13 @@ func (tc *testContext) hardDeleteUserBySubject(subject string) bool {
 	if len(workspaceIDs) > 0 {
 		for _, table := range memoryWorkspaceTables {
 			if _, err := sess.DeleteFrom(table).
-				Where("workspace_id IN ?", workspaceIDs).
+				Where(whereWorkspaceIDIn, workspaceIDs).
 				ExecContext(ctx); err != nil {
 				log.Printf("e2e hardDelete: wipe %s for %q: %v", table, subject, err)
 			}
 		}
 		if _, err := sess.DeleteFrom("mcp_audit_logs").
-			Where("workspace_id IN ?", workspaceIDs).
+			Where(whereWorkspaceIDIn, workspaceIDs).
 			ExecContext(ctx); err != nil {
 			log.Printf("e2e hardDelete: wipe mcp_audit_logs for %q: %v", subject, err)
 		}
@@ -131,7 +131,7 @@ func wipeE2EResidue(deps *suiteDeps) {
 	if len(workspaceIDs) > 0 {
 		for _, table := range memoryWorkspaceTables {
 			if _, err := sess.DeleteFrom(table).
-				Where("workspace_id IN ?", workspaceIDs).
+				Where(whereWorkspaceIDIn, workspaceIDs).
 				ExecContext(ctx); err != nil {
 				log.Printf("e2e cleanup: wipe %s: %v", table, err)
 			}
@@ -141,7 +141,7 @@ func wipeE2EResidue(deps *suiteDeps) {
 		// keeps orphaned audit rows around. Drop them explicitly so
 		// repeated runs do not pile up audit residue.
 		if _, err := sess.DeleteFrom("mcp_audit_logs").
-			Where("workspace_id IN ?", workspaceIDs).
+			Where(whereWorkspaceIDIn, workspaceIDs).
 			ExecContext(ctx); err != nil {
 			log.Printf("e2e cleanup: wipe mcp_audit_logs: %v", err)
 		}

@@ -42,7 +42,7 @@ func (tc *testContext) auditToolRecordedSuccessWithin(seconds int) error {
 				r.UserID,
 			)
 			if err := row.Scan(&count); err != nil {
-				return fmt.Errorf("DB query failed: %w", err)
+				return fmt.Errorf(errDBQueryFailed, err)
 			}
 			if count == 0 {
 				return fmt.Errorf("no successful save-memory tool use record found for %q", r.Subject)
@@ -72,7 +72,7 @@ func (tc *testContext) auditToolDurationNonZero() error {
 			r.UserID,
 		)
 		if err := row.Scan(&durationMs); err != nil {
-			return fmt.Errorf("DB query failed: %w", err)
+			return fmt.Errorf(errDBQueryFailed, err)
 		}
 		if !durationMs.Valid || durationMs.Int64 == 0 {
 			return fmt.Errorf("save-memory tool use record has zero or null duration for %q", r.Subject)
@@ -104,7 +104,7 @@ func (tc *testContext) auditToolSharedSession() error {
 				r.UserID,
 			)
 			if err := row.Scan(&distinctSessions); err != nil {
-				return fmt.Errorf("DB query failed: %w", err)
+				return fmt.Errorf(errDBQueryFailed, err)
 			}
 			if distinctSessions > 1 {
 				return fmt.Errorf("expected all recent tool uses to share one session, found %d distinct sessions for %q", distinctSessions, r.Subject)
