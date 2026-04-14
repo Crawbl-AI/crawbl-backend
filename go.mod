@@ -44,7 +44,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	golang.org/x/mod v0.35.0
 	golang.org/x/sync v0.20.0
-	google.golang.org/adk v1.0.0
+	google.golang.org/adk v1.1.0
 	google.golang.org/api v0.252.0
 	google.golang.org/genai v1.52.1
 	google.golang.org/grpc v1.80.0

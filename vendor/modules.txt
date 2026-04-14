@@ -1593,7 +1593,7 @@ golang.org/x/tools/internal/stdlib
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
-# google.golang.org/adk v1.0.0
+# google.golang.org/adk v1.1.0
 ## explicit; go 1.25.0
 google.golang.org/adk/agent
 google.golang.org/adk/agent/llmagent
