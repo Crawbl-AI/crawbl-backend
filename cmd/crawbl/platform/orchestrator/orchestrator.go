@@ -154,7 +154,16 @@ func runServer(ctx context.Context) error {
 	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
-	riverClient, err := buildAndStartRiver(ctx, logger, db, memRepos, embedder, repos.Message, pricingCache, llmUsageRepo)
+	riverClient, err := buildAndStartRiver(riverOpts{
+		ctx:          ctx,
+		logger:       logger,
+		db:           db,
+		mem:          memRepos,
+		embedder:     embedder,
+		messageRepo:  repos.Message,
+		pricingCache: pricingCache,
+		llmUsageRepo: llmUsageRepo,
+	})
 	if err != nil {
 		return err
 	}
@@ -332,18 +341,29 @@ func buildNATS(ctx context.Context, logger *slog.Logger) (*crawblnats.Client, fu
 	return natsClient, func() { _ = natsClient.Close() }
 }
 
+// riverOpts groups the dependencies needed to build and start River.
+type riverOpts struct {
+	ctx          context.Context
+	logger       *slog.Logger
+	db           *dbr.Connection
+	mem          memoryRepoBundle
+	embedder     embed.Embedder
+	messageRepo  coreMessageRepo
+	pricingCache *pricing.Cache
+	llmUsageRepo llmusagerepo.Repo
+}
+
 // buildAndStartRiver creates the River config, constructs the client, runs
 // schema migrations, and starts the background workers.
-func buildAndStartRiver(
-	ctx context.Context,
-	logger *slog.Logger,
-	db *dbr.Connection,
-	mem memoryRepoBundle,
-	embedder embed.Embedder,
-	messageRepo coreMessageRepo,
-	pricingCache *pricing.Cache,
-	llmUsageRepo llmusagerepo.Repo,
-) (*pkgriver.Client, error) {
+func buildAndStartRiver(opts riverOpts) (*pkgriver.Client, error) {
+	ctx := opts.ctx
+	logger := opts.logger
+	db := opts.db
+	mem := opts.mem
+	embedder := opts.embedder
+	messageRepo := opts.messageRepo
+	pricingCache := opts.pricingCache
+	llmUsageRepo := opts.llmUsageRepo
 	riverCfg, err := queue.NewConfig(queue.Deps{
 		DB:               db,
 		Logger:           logger,
