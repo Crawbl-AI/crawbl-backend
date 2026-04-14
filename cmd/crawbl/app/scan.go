@@ -83,7 +83,7 @@ func runScan(ctx context.Context) error {
 	out.Step(style.Lint, "Running SonarQube analysis")
 	out.Infof("Server: %s", sonarURL)
 
-	sonarCmd := exec.CommandContext(ctx, "sonar-scanner",
+	sonarCmd := exec.CommandContext(ctx, "sonar-scanner", // #nosec G204 -- CLI tool, input from developer
 		"-Dsonar.host.url="+sonarURL,
 		"-Dsonar.token="+token,
 	)

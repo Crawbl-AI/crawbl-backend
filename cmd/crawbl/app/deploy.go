@@ -490,7 +490,7 @@ func runNpmBuild(dir string) error {
 // runWranglerDeploy deploys a static site to Cloudflare Pages using wrangler.
 func runWranglerDeploy(dir, outputDir, projectName string) error {
 	out.Step(style.Deploy, "Deploying %s to Cloudflare Pages", projectName)
-	cmd := exec.CommandContext(context.Background(), "wrangler", "pages", "deploy", outputDir, "--project-name", projectName)
+	cmd := exec.CommandContext(context.Background(), "wrangler", "pages", "deploy", outputDir, "--project-name", projectName) // #nosec G204 -- CLI tool, input from developer
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

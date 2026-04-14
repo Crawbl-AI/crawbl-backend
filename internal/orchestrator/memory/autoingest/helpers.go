@@ -1,7 +1,7 @@
 package autoingest
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strings"
@@ -163,6 +163,6 @@ func hardSplit(text string, maxSize, overlap, minChunk int) []string {
 // autoIngestDrawerID returns a deterministic drawer ID so repeated
 // ingests of the same content are idempotent at the row level.
 func autoIngestDrawerID(room, content string) string {
-	hash := md5.Sum([]byte(content))
+	hash := sha256.Sum256([]byte(content))
 	return fmt.Sprintf("drawer_%s_%s_%x", memory.AutoIngestWing, room, hash[:8])
 }

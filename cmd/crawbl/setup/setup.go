@@ -180,7 +180,7 @@ type toolCheck struct {
 
 // checkTool runs the check command via sh so shell operators (||, redirects) work.
 func checkTool(t toolCheck) bool {
-	cmd := exec.CommandContext(context.Background(), "sh", "-c", t.checkCmd)
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", t.checkCmd) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
@@ -197,18 +197,18 @@ func fileExists(path string) bool {
 }
 
 func runCmd(name string, args ...string) error {
-	cmd := exec.CommandContext(context.Background(), name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
 func copyFile(src, dst string) error {
-	data, err := os.ReadFile(filepath.Clean(src))
+	data, err := os.ReadFile(filepath.Clean(src)) // #nosec G304 -- CLI tool, paths from developer config
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, configFileMode)
+	return os.WriteFile(dst, data, configFileMode) // #nosec G703 -- CLI tool, paths from developer config
 }
 
 // executableMode is the permission bits for executable files (rwxr-xr-x).

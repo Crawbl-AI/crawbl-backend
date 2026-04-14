@@ -13,7 +13,7 @@ import (
 // and unmarshals it into the provided target struct.
 func LoadStackConfig(env, key string, target any) error {
 	filename := fmt.Sprintf("Pulumi.%s.yaml", env)
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) // #nosec G304 -- CLI tool, paths from developer config
 	if err != nil {
 		return fmt.Errorf("read %s: %w", filename, err)
 	}
@@ -42,7 +42,7 @@ func LoadStackConfig(env, key string, target any) error {
 
 // Load reads a YAML values file from the given directory and returns it as map[string]interface{}.
 func Load(dir, name string) (map[string]any, error) {
-	data, err := os.ReadFile(filepath.Join(dir, name))
+	data, err := os.ReadFile(filepath.Join(dir, name)) // #nosec G304 -- CLI tool, paths from developer config
 	if err != nil {
 		return nil, fmt.Errorf("read values file %s: %w", name, err)
 	}

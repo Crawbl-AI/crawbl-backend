@@ -35,7 +35,7 @@ func runKoBuild(ctx context.Context, opts koBuildOpts) error {
 		args = append(args, "--local")
 	}
 
-	cmd := exec.CommandContext(ctx, "ko", args...)
+	cmd := exec.CommandContext(ctx, "ko", args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Env = append(os.Environ(),
 		"KO_DOCKER_REPO="+opts.imageRepo,
 	)
@@ -90,7 +90,7 @@ func runDockerBuild(ctx context.Context, opts dockerBuildOpts) error {
 
 	args = append(args, opts.contextDir)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

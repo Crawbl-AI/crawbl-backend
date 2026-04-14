@@ -37,7 +37,7 @@ const (
 // E2E auth header constants.
 const (
 	// XE2ETokenHeader carries the shared secret for e2e test auth bypass.
-	XE2ETokenHeader = "X-E2E-Token"
+	XE2ETokenHeader = "X-E2E-Token" // #nosec G101 -- not a credential, this is a header name constant
 	// XE2EUIDHeader carries the test user's UID when using e2e auth.
 	XE2EUIDHeader = "X-E2E-UID"
 	// XE2EEmailHeader carries the test user's email when using e2e auth.

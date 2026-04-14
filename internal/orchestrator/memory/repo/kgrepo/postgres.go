@@ -7,7 +7,6 @@ package kgrepo
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/sha256"
 	"fmt"
 	"strings"
@@ -52,7 +51,7 @@ func sanitizeForID(s string) string {
 // tripleID derives a unique triple ID from its components and a nanosecond timestamp.
 func tripleID(subID, pred, objID string) string {
 	raw := fmt.Sprintf("%s_%s_%s_%d", subID, pred, objID, time.Now().UnixNano())
-	hash := md5.Sum([]byte(raw))
+	hash := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("t_%s_%s_%s_%x", subID, pred, objID, hash[:4])
 }
 

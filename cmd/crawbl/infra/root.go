@@ -57,7 +57,7 @@ func buildConfig(env, region string) (infra.Config, error) {
 	if key := os.Getenv("ARGOCD_SSH_PRIVATE_KEY"); key != "" {
 		platformConfig.ArgoCDRepoSSHPrivateKey = key
 	} else if keyPath := os.Getenv("ARGOCD_SSH_KEY_PATH"); keyPath != "" {
-		if data, err := os.ReadFile(keyPath); err == nil {
+		if data, err := os.ReadFile(keyPath); err == nil { // #nosec G304,G703 -- CLI tool, paths from developer config
 			platformConfig.ArgoCDRepoSSHPrivateKey = string(data)
 		}
 	}

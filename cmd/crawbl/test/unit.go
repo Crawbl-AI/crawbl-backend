@@ -39,7 +39,7 @@ func newUnitCommand() *cobra.Command {
 func runFormattedGoTests(ctx context.Context, formatterPath string, formatterArgs ...string) error {
 	reader, writer := io.Pipe()
 
-	formatter := exec.CommandContext(ctx, formatterPath, formatterArgs...)
+	formatter := exec.CommandContext(ctx, formatterPath, formatterArgs...) // #nosec G204 -- CLI tool, input from developer
 	formatter.Stdin = reader
 	formatter.Stdout = os.Stdout
 	formatter.Stderr = os.Stderr
@@ -87,7 +87,7 @@ func ensureGoTool(ctx context.Context, binaryName, installTarget string) (string
 	}
 
 	out.Step(style.Deploy, "Installing %s...", binaryName)
-	install := exec.CommandContext(ctx, "go", "install", installTarget)
+	install := exec.CommandContext(ctx, "go", "install", installTarget) // #nosec G204 -- CLI tool, input from developer
 	install.Stdout = os.Stdout
 	install.Stderr = os.Stderr
 	if err := install.Run(); err != nil {
@@ -129,7 +129,7 @@ func goToolCandidates(ctx context.Context, binaryName string) []string {
 }
 
 func goEnv(ctx context.Context, key string) string {
-	cmd := exec.CommandContext(ctx, "go", "env", key)
+	cmd := exec.CommandContext(ctx, "go", "env", key) // #nosec G204 -- CLI tool, input from developer
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

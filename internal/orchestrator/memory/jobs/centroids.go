@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -171,7 +171,7 @@ func hashSampleIDs(rows []memory.CentroidTrainingSample) string {
 		ids[i] = rows[i].ID
 	}
 	sort.Strings(ids)
-	h := md5.New()
+	h := sha256.New()
 	for _, id := range ids {
 		_, _ = h.Write([]byte(id))
 		_, _ = h.Write([]byte{0})

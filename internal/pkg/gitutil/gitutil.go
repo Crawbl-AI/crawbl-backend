@@ -71,7 +71,7 @@ func EnsureCleanAndPushed() error {
 	}
 	branch := strings.TrimSpace(string(branchOutput))
 
-	remoteCmd := exec.CommandContext(ctx, "git", "rev-parse", "origin/"+branch)
+	remoteCmd := exec.CommandContext(ctx, "git", "rev-parse", "origin/"+branch) // #nosec G204 -- CLI tool, input from developer
 	remoteOutput, err := remoteCmd.Output()
 	if err != nil {
 		return fmt.Errorf("branch %q not found on remote — push before deploying: %w", branch, err)

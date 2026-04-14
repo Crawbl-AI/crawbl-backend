@@ -43,7 +43,7 @@ func gitCmd(repoPath string, args ...string) *exec.Cmd {
 	if repoPath != "" {
 		args = append([]string{"-C", repoPath}, args...)
 	}
-	return exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // args are constructed internally
+	return exec.CommandContext(context.Background(), "git", args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
 }
 
 // bumpVersion increments the major, minor, or patch component of a canonical

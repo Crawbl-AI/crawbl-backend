@@ -29,7 +29,7 @@ type Update struct {
 // RunYQ executes yq -i with the given expression against a file path (relative to RepoPath).
 func (u *Update) RunYQ(ctx context.Context, expr, relPath string) error {
 	absPath := filepath.Join(u.RepoPath, relPath)
-	cmd := exec.CommandContext(ctx, "yq", "-i", expr, absPath)
+	cmd := exec.CommandContext(ctx, "yq", "-i", expr, absPath) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -55,7 +55,7 @@ func (u *Update) UpdatePlatform(ctx context.Context) error {
 	}
 
 	for _, f := range files {
-		data, err := os.ReadFile(f)
+		data, err := os.ReadFile(f) // #nosec G304 -- CLI tool, paths from developer config
 		if err != nil {
 			return fmt.Errorf("read %s: %w", f, err)
 		}
@@ -63,7 +63,7 @@ func (u *Update) UpdatePlatform(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("replace image tag in %s: %w", f, err)
 		}
-		if err := os.WriteFile(f, []byte(updated), fileMode); err != nil {
+		if err := os.WriteFile(f, []byte(updated), fileMode); err != nil { // #nosec G703 -- CLI tool, paths from developer config
 			return fmt.Errorf("write %s: %w", f, err)
 		}
 	}
@@ -77,7 +77,7 @@ func (u *Update) UpdateAuthFilter(ctx context.Context) error {
 	imageBase := RegistryBase + "/envoy-auth-filter"
 	f := filepath.Join(u.RepoPath, "components", "envoy-gateway", "resources", "envoy-extension-policy.yaml")
 
-	data, err := os.ReadFile(f)
+	data, err := os.ReadFile(f) // #nosec G304 -- CLI tool, paths from developer config
 	if err != nil {
 		return fmt.Errorf("read %s: %w", f, err)
 	}
@@ -85,7 +85,7 @@ func (u *Update) UpdateAuthFilter(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("replace image tag in %s: %w", f, err)
 	}
-	return os.WriteFile(f, []byte(updated), fileMode)
+	return os.WriteFile(f, []byte(updated), fileMode) // #nosec G703 -- CLI tool, paths from developer config
 }
 
 // UpdateAgentRuntime updates the crawbl-agent-runtime image tag in the
@@ -119,7 +119,7 @@ func (u *Update) UpdateAgentRuntime(ctx context.Context) error {
 	}
 
 	webhookPath := filepath.Join(u.RepoPath, "components", "metacontroller", "resources", "userswarm-webhook.yaml")
-	data, err := os.ReadFile(webhookPath)
+	data, err := os.ReadFile(webhookPath) // #nosec G304 -- CLI tool, paths from developer config
 	if err != nil {
 		return fmt.Errorf("read userswarm-webhook.yaml: %w", err)
 	}
@@ -128,13 +128,13 @@ func (u *Update) UpdateAgentRuntime(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("replace image tag in userswarm-webhook.yaml: %w", err)
 	}
-	return os.WriteFile(webhookPath, []byte(updated), fileMode)
+	return os.WriteFile(webhookPath, []byte(updated), fileMode) // #nosec G703 -- CLI tool, paths from developer config
 }
 
 // PullLatest pulls the latest changes from remote before making modifications.
 func (u *Update) PullLatest(ctx context.Context) error {
 	out.Step(style.Deploy, "Pulling latest changes from argocd repo")
-	cmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "pull", "--rebase")
+	cmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "pull", "--rebase") // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -147,7 +147,7 @@ func (u *Update) PullLatest(ctx context.Context) error {
 // It is a no-op if there are no staged changes.
 func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	// Stage all changes.
-	addCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "add", "-A")
+	addCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "add", "-A") // #nosec G204 -- CLI tool, input from developer
 	addCmd.Stdout = os.Stdout
 	addCmd.Stderr = os.Stderr
 	if err := addCmd.Run(); err != nil {
@@ -155,7 +155,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	}
 
 	// Check whether there is anything to commit.
-	diffCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "diff", "--cached", "--quiet")
+	diffCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "diff", "--cached", "--quiet") // #nosec G204 -- CLI tool, input from developer
 	if err := diffCmd.Run(); err == nil {
 		out.Step(style.Deploy, "No changes to commit for %s", component)
 		return nil
@@ -164,7 +164,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	// Commit.
 	message := fmt.Sprintf("deploy: update %s to %s", component, u.Tag)
 	out.Step(style.Deploy, "Committing: %s", message)
-	commitCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "commit", "-m", message)
+	commitCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "commit", "-m", message) // #nosec G204 -- CLI tool, input from developer
 	commitCmd.Stdout = os.Stdout
 	commitCmd.Stderr = os.Stderr
 	if err := commitCmd.Run(); err != nil {
@@ -172,7 +172,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	}
 
 	// Pull with rebase to incorporate any remote changes before pushing.
-	rebaseCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "pull", "--rebase")
+	rebaseCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "pull", "--rebase") // #nosec G204 -- CLI tool, input from developer
 	rebaseCmd.Stdout = os.Stdout
 	rebaseCmd.Stderr = os.Stderr
 	if err := rebaseCmd.Run(); err != nil {
@@ -181,7 +181,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 
 	// Push.
 	out.Step(style.Deploy, "Pushing changes")
-	pushCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "push")
+	pushCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "push") // #nosec G204 -- CLI tool, input from developer
 	pushCmd.Stdout = os.Stdout
 	pushCmd.Stderr = os.Stderr
 	if err := pushCmd.Run(); err != nil {
