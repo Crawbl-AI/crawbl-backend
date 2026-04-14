@@ -69,18 +69,46 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 		return nil, err
 	}
 
+	stream, err := c.openConverseStream(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	turns, recvErr := c.drainConverseTurns(stream, opts.Runtime)
+	if recvErr != nil {
+		return nil, recvErr
+	}
+	if len(turns) == 0 {
+		return nil, merrors.NewServerErrorText("runtime returned no turns")
+	}
+	return turns, nil
+}
+
+// openConverseStream dials the runtime, opens the Converse bidi stream, and
+// sends the single ConverseRequest. The returned stream is half-closed on the
+// send side so the caller only needs to drain Recv.
+func (c *userSwarmClient) openConverseStream(ctx context.Context, opts *SendTextOpts) (runtimev1.AgentRuntime_ConverseClient, *merrors.Error) {
 	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
 	if dialErr != nil {
 		return nil, dialErr
 	}
-
 	client := runtimev1.NewAgentRuntimeClient(conn)
 	stream, err := client.Converse(authedCtx)
 	if err != nil {
 		return nil, wrapGRPCError(err, "open converse stream")
 	}
+	req := buildConverseRequest(opts)
+	if sendErr := stream.Send(req); sendErr != nil {
+		return nil, wrapGRPCError(sendErr, "send converse request")
+	}
+	if closeErr := stream.CloseSend(); closeErr != nil {
+		return nil, wrapGRPCError(closeErr, "close send")
+	}
+	return stream, nil
+}
 
-	req := &runtimev1.ConverseRequest{
+func buildConverseRequest(opts *SendTextOpts) *runtimev1.ConverseRequest {
+	return &runtimev1.ConverseRequest{
 		SessionId:    opts.SessionID,
 		Message:      opts.Message,
 		AgentId:      opts.AgentID,
@@ -88,44 +116,41 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 		WorkspaceId:  opts.Runtime.WorkspaceID,
 		UserId:       opts.Runtime.UserID,
 	}
-	if sendErr := stream.Send(req); sendErr != nil {
-		return nil, wrapGRPCError(sendErr, "send converse request")
-	}
-	if closeErr := stream.CloseSend(); closeErr != nil {
-		return nil, wrapGRPCError(closeErr, "close send")
-	}
+}
 
+// drainConverseTurns reads events until the terminal DoneEvent (or EOF) and
+// returns the collected non-empty turns. Chunk / Thinking / ToolCall /
+// ToolResult events are dropped — they belong to SendTextStream.
+func (c *userSwarmClient) drainConverseTurns(stream runtimev1.AgentRuntime_ConverseClient, rt *orchestrator.RuntimeStatus) ([]AgentTurn, *merrors.Error) {
 	var turns []AgentTurn
 	for {
 		event, recvErr := stream.Recv()
 		if errors.Is(recvErr, io.EOF) {
-			break
+			return turns, nil
 		}
 		if recvErr != nil {
-			c.dropOnTransportError(recvErr, opts.Runtime)
+			c.dropOnTransportError(recvErr, rt)
 			return nil, wrapGRPCError(recvErr, "recv converse event")
 		}
-		if done := event.GetDone(); done != nil {
-			for _, t := range done.GetTurns() {
-				if strings.TrimSpace(t.GetText()) == "" {
-					continue
-				}
-				turns = append(turns, AgentTurn{
-					AgentID: t.GetAgentId(),
-					Text:    t.GetText(),
-				})
-			}
-			break
+		done := event.GetDone()
+		if done == nil {
+			continue
 		}
-		// Chunk / Thinking / ToolCall / ToolResult events are dropped in
-		// the unary SendText path. SendTextStream surfaces them for
-		// live streaming consumers.
+		return appendDoneTurns(turns, done), nil
 	}
+}
 
-	if len(turns) == 0 {
-		return nil, merrors.NewServerErrorText("runtime returned no turns")
+func appendDoneTurns(turns []AgentTurn, done *runtimev1.DoneEvent) []AgentTurn {
+	for _, t := range done.GetTurns() {
+		if strings.TrimSpace(t.GetText()) == "" {
+			continue
+		}
+		turns = append(turns, AgentTurn{
+			AgentID: t.GetAgentId(),
+			Text:    t.GetText(),
+		})
 	}
-	return turns, nil
+	return turns
 }
 
 // SendTextStream opens a Converse bidi stream and returns a channel of
@@ -136,30 +161,9 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 		return nil, err
 	}
 
-	conn, authedCtx, dialErr := c.dialRuntime(ctx, opts.Runtime)
-	if dialErr != nil {
-		return nil, dialErr
-	}
-
-	client := runtimev1.NewAgentRuntimeClient(conn)
-	stream, err := client.Converse(authedCtx)
+	stream, err := c.openConverseStream(ctx, opts)
 	if err != nil {
-		return nil, wrapGRPCError(err, "open converse stream")
-	}
-
-	req := &runtimev1.ConverseRequest{
-		SessionId:    opts.SessionID,
-		Message:      opts.Message,
-		AgentId:      opts.AgentID,
-		SystemPrompt: opts.SystemPrompt,
-		WorkspaceId:  opts.Runtime.WorkspaceID,
-		UserId:       opts.Runtime.UserID,
-	}
-	if sendErr := stream.Send(req); sendErr != nil {
-		return nil, wrapGRPCError(sendErr, "send converse request")
-	}
-	if closeErr := stream.CloseSend(); closeErr != nil {
-		return nil, wrapGRPCError(closeErr, "close send")
+		return nil, err
 	}
 
 	// Structured logging policy for this stream: one INFO at close time
@@ -167,14 +171,12 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 	// Stream open is DEBUG so long-lived sessions don't flood the log
 	// with noise. Errors log at WARN/ERROR with enough context to tell
 	// which workspace + agent combination failed.
-	streamStart := time.Now()
 	slog.Debug("runtime converse stream opened",
 		"workspace_id", opts.Runtime.WorkspaceID,
 		"target_agent", agentIDOrManager(opts.AgentID),
 		"service", opts.Runtime.ServiceName,
 	)
 
-	const streamChunkBufSize = 16
 	ch := make(chan StreamChunk, streamChunkBufSize)
 	// The receive goroutine exits via two paths:
 	//  1. recvErr != nil — upstream stream error, EOF, or the server closed
@@ -188,62 +190,91 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 	// forever if the caller drops the channel without draining it. A dropped
 	// channel will eventually expire via context cancellation or server-side
 	// stream deadline.
-	go func() {
-		defer close(ch)
-		var chunkCount int
-		var doneSeen bool
-		for {
-			event, recvErr := stream.Recv()
-			if recvErr != nil {
-				if !errors.Is(recvErr, io.EOF) {
-					c.dropOnTransportError(recvErr, opts.Runtime)
-					slog.Error("runtime converse stream error",
-						"workspace_id", opts.Runtime.WorkspaceID,
-						"target_agent", agentIDOrManager(opts.AgentID),
-						"chunks_received", chunkCount,
-						"duration_ms", time.Since(streamStart).Milliseconds(),
-						"error", recvErr.Error(),
-					)
-				} else if !doneSeen {
-					slog.Warn("runtime converse stream closed before DoneEvent",
-						"workspace_id", opts.Runtime.WorkspaceID,
-						"target_agent", agentIDOrManager(opts.AgentID),
-						"chunks_received", chunkCount,
-						"duration_ms", time.Since(streamStart).Milliseconds(),
-					)
-				}
-				return
-			}
-			chunk, ok := translateEvent(event)
-			if !ok {
-				continue
-			}
-			chunkCount++
-			select {
-			case ch <- chunk:
-			case <-ctx.Done():
-				slog.Warn("runtime converse stream context cancelled",
-					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", agentIDOrManager(opts.AgentID),
-					"chunks_delivered", chunkCount,
-					"duration_ms", time.Since(streamStart).Milliseconds(),
-				)
-				return
-			}
-			if chunk.Type == StreamEventDone {
-				slog.Info("runtime converse turn complete",
-					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", agentIDOrManager(opts.AgentID),
-					"chunks_delivered", chunkCount,
-					"model", chunk.Model,
-					"duration_ms", time.Since(streamStart).Milliseconds(),
-				)
-				doneSeen = true
-			}
-		}
-	}()
-
+	go c.runStreamLoop(ctx, stream, opts, ch)
 	return ch, nil
+}
+
+// streamChunkBufSize is the default size of the buffered StreamChunk channel
+// returned by SendTextStream. Keep it small — larger values paper over
+// back-pressure bugs in consumers.
+const streamChunkBufSize = 16
+
+// runStreamLoop is the receive goroutine body for SendTextStream. It pumps
+// translated StreamChunks onto ch and terminates on stream error, EOF, or
+// context cancellation.
+func (c *userSwarmClient) runStreamLoop(ctx context.Context, stream runtimev1.AgentRuntime_ConverseClient, opts *SendTextOpts, ch chan<- StreamChunk) {
+	defer close(ch)
+	streamStart := time.Now()
+	var chunkCount int
+	var doneSeen bool
+	for {
+		event, recvErr := stream.Recv()
+		if recvErr != nil {
+			c.logStreamClose(recvErr, opts, chunkCount, doneSeen, streamStart)
+			return
+		}
+		chunk, ok := translateEvent(event)
+		if !ok {
+			continue
+		}
+		chunkCount++
+		if !forwardStreamChunk(ctx, ch, chunk) {
+			slog.Warn("runtime converse stream context cancelled",
+				"workspace_id", opts.Runtime.WorkspaceID,
+				"target_agent", agentIDOrManager(opts.AgentID),
+				"chunks_delivered", chunkCount,
+				"duration_ms", time.Since(streamStart).Milliseconds(),
+			)
+			return
+		}
+		if chunk.Type == StreamEventDone {
+			slog.Info("runtime converse turn complete",
+				"workspace_id", opts.Runtime.WorkspaceID,
+				"target_agent", agentIDOrManager(opts.AgentID),
+				"chunks_delivered", chunkCount,
+				"model", chunk.Model,
+				"duration_ms", time.Since(streamStart).Milliseconds(),
+			)
+			doneSeen = true
+		}
+	}
+}
+
+// logStreamClose emits the terminal log for the receive goroutine and, on
+// transport errors, evicts the cached gRPC connection so the next dial gets
+// a fresh one.
+func (c *userSwarmClient) logStreamClose(recvErr error, opts *SendTextOpts, chunkCount int, doneSeen bool, streamStart time.Time) {
+	if !errors.Is(recvErr, io.EOF) {
+		c.dropOnTransportError(recvErr, opts.Runtime)
+		slog.Error("runtime converse stream error",
+			"workspace_id", opts.Runtime.WorkspaceID,
+			"target_agent", agentIDOrManager(opts.AgentID),
+			"chunks_received", chunkCount,
+			"duration_ms", time.Since(streamStart).Milliseconds(),
+			"error", recvErr.Error(),
+		)
+		return
+	}
+	if doneSeen {
+		return
+	}
+	slog.Warn("runtime converse stream closed before DoneEvent",
+		"workspace_id", opts.Runtime.WorkspaceID,
+		"target_agent", agentIDOrManager(opts.AgentID),
+		"chunks_received", chunkCount,
+		"duration_ms", time.Since(streamStart).Milliseconds(),
+	)
+}
+
+// forwardStreamChunk sends chunk on ch unless ctx is cancelled. Returns
+// false when the context cancel raced the send — callers should bail.
+func forwardStreamChunk(ctx context.Context, ch chan<- StreamChunk, chunk StreamChunk) bool {
+	select {
+	case ch <- chunk:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // translateEvent maps a runtimev1.ConverseEvent oneof into the

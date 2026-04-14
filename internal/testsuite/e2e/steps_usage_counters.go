@@ -135,57 +135,77 @@ func (tc *testContext) usageCaptureBaselineForAgent(slug string) error {
 // it for general messages. If a different agent replied the scenario will
 // pass as long as any captured baseline was exceeded — the polling covers all
 // agents whose baselines were captured in this scenario.
+// baselineEntry is one captured (alias, slug, tokens) tuple against which
+// usageAssertIncreasedFromBaseline polls for progress.
+type baselineEntry struct {
+	alias    string
+	slug     string
+	baseline int64
+}
+
 func (tc *testContext) usageAssertIncreasedFromBaseline(seconds int) error {
 	return tc.withDB(func(_ *dbr.Session) error {
-		// Collect all baselines captured in this scenario.
-		type baselineEntry struct {
-			alias    string
-			slug     string
-			baseline int64
-		}
-		var entries []baselineEntry
-
-		// We only capture baselines for "primary" + "manager" in the scenario
-		// but iterate over all saved keys to be forward-compatible.
-		for key, val := range tc.saved {
-			// Keys written by usageCaptureBaselineForAgent are "<alias>:<slug>".
-			// Skip any tc.saved entries that are not in this format.
-			alias, slug, ok := strings.Cut(key, ":")
-			if !ok || alias == "" || slug == "" {
-				continue
-			}
-			var baseline int64
-			if _, err := fmt.Sscanf(val, "%d", &baseline); err != nil {
-				continue
-			}
-			entries = append(entries, baselineEntry{alias: alias, slug: slug, baseline: baseline})
-		}
-
+		entries := collectBaselineEntries(tc.saved)
 		if len(entries) == 0 {
 			// No baseline was captured — treat as a configuration error so the
 			// scenario surfaces a meaningful failure rather than silently passing.
 			return fmt.Errorf("no usage baseline captured; call 'the assistant's usage counter for agent X should be captured as the baseline' before this step")
 		}
-
 		return tc.pollFor(time.Duration(seconds)*time.Second, func() error {
-			for _, e := range entries {
-				current, err := tc.usageTokensForAgent(e.alias, e.slug)
-				if err != nil {
-					return fmt.Errorf("polling usage for agent %q: %w", e.slug, err)
-				}
-				if current > e.baseline {
-					return nil
-				}
-			}
-			// Build a summary for the timeout error message.
-			var summary string
-			for _, e := range entries {
-				current, _ := tc.usageTokensForAgent(e.alias, e.slug)
-				summary += fmt.Sprintf(" agent=%q baseline=%d current=%d;", e.slug, e.baseline, current)
-			}
-			return fmt.Errorf("token count has not increased from baseline:%s", summary)
+			return tc.assertAnyBaselineIncreased(entries)
 		})
 	})
+}
+
+// collectBaselineEntries parses baselines saved by usageCaptureBaselineForAgent.
+// Keys are "<alias>:<slug>"; invalid entries are skipped silently.
+func collectBaselineEntries(saved map[string]string) []baselineEntry {
+	entries := make([]baselineEntry, 0, len(saved))
+	for key, val := range saved {
+		entry, ok := parseBaselineEntry(key, val)
+		if !ok {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func parseBaselineEntry(key, val string) (baselineEntry, bool) {
+	alias, slug, ok := strings.Cut(key, ":")
+	if !ok || alias == "" || slug == "" {
+		return baselineEntry{}, false
+	}
+	var baseline int64
+	if _, err := fmt.Sscanf(val, "%d", &baseline); err != nil {
+		return baselineEntry{}, false
+	}
+	return baselineEntry{alias: alias, slug: slug, baseline: baseline}, true
+}
+
+// assertAnyBaselineIncreased returns nil as soon as any agent's current token
+// count exceeds its baseline. On timeout the returned error carries a summary
+// of the per-agent progress so the scenario output is actionable.
+func (tc *testContext) assertAnyBaselineIncreased(entries []baselineEntry) error {
+	for _, e := range entries {
+		current, err := tc.usageTokensForAgent(e.alias, e.slug)
+		if err != nil {
+			return fmt.Errorf("polling usage for agent %q: %w", e.slug, err)
+		}
+		if current > e.baseline {
+			return nil
+		}
+	}
+	return fmt.Errorf("token count has not increased from baseline:%s", tc.baselineSummary(entries))
+}
+
+func (tc *testContext) baselineSummary(entries []baselineEntry) string {
+	var summary string
+	for _, e := range entries {
+		current, _ := tc.usageTokensForAgent(e.alias, e.slug)
+		summary += fmt.Sprintf(" agent=%q baseline=%d current=%d;", e.slug, e.baseline, current)
+	}
+	return summary
 }
 
 // usageWorkspaceSummaryShowsActivity calls GET /v1/workspaces/{id}/usage and

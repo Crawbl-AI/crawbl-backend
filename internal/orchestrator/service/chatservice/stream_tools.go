@@ -47,59 +47,81 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 
 // handleToolResult processes a StreamEventToolResult: emits completion and delegation status.
 func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
-	var matched pendingToolCall
-	if chunk.CallID != "" {
-		if info, ok := ss.pending[chunk.CallID]; ok {
-			matched = info
-			delete(ss.pending, chunk.CallID)
-		}
-	}
-
-	toolAgentID := ss.primary.ID
-	if matched.agentSlug != "" {
-		if ta := ss.lookups.bySlug[matched.agentSlug]; ta != nil {
-			toolAgentID = ta.ID
-		}
-	} else if chunk.AgentID != "" {
-		if ta := ss.lookups.bySlug[chunk.AgentID]; ta != nil {
-			toolAgentID = ta.ID
-		}
-	}
+	matched := ss.consumePendingCall(chunk.CallID)
+	toolAgentID := ss.resolveToolResultAgentID(matched, chunk)
 
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
 	})
 
-	// Update persisted tool_status message to completed.
 	if matched.messageID != "" {
 		_ = ss.svc.messageRepo.UpdateToolState(ss.ctx, ss.sess, matched.messageID, string(orchestrator.ToolStateCompleted))
 	}
 
 	if matched.tool == agentruntimetools.ToolTransferToAgent {
-		slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
-		if del := ss.lookups.bySlug[slug]; del != nil {
-			ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
-			triggerMsgID := ss.placeholder.ID
-			delegateAgentID := del.ID
-			userID := ss.userID
-			convID := ss.convID
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("completeDelegation goroutine panic",
-							"panic", r,
-							"user_id", userID,
-							"conv_id", convID,
-							"trigger_message_id", triggerMsgID,
-							"delegate_agent_id", delegateAgentID,
-						)
-					}
-				}()
-				ss.svc.completeDelegation("", convID, triggerMsgID, delegateAgentID)
-			}()
+		ss.startDelegationCompletion(matched)
+	}
+}
+
+// consumePendingCall removes and returns the pending tool-call metadata for
+// callID (or the zero value when callID is empty / not tracked).
+func (ss *streamSession) consumePendingCall(callID string) pendingToolCall {
+	if callID == "" {
+		return pendingToolCall{}
+	}
+	info, ok := ss.pending[callID]
+	if !ok {
+		return pendingToolCall{}
+	}
+	delete(ss.pending, callID)
+	return info
+}
+
+// resolveToolResultAgentID picks the agent DB id to attribute the tool-done
+// event to. Prefers the slug captured at tool-call time, then the chunk's
+// slug, falling back to the primary agent.
+func (ss *streamSession) resolveToolResultAgentID(matched pendingToolCall, chunk userswarmclient.StreamChunk) string {
+	if matched.agentSlug != "" {
+		if ta := ss.lookups.bySlug[matched.agentSlug]; ta != nil {
+			return ta.ID
 		}
 	}
+	if chunk.AgentID != "" {
+		if ta := ss.lookups.bySlug[chunk.AgentID]; ta != nil {
+			return ta.ID
+		}
+	}
+	return ss.primary.ID
+}
+
+// startDelegationCompletion fans out a background goroutine that finalizes
+// delegation bookkeeping once the transfer_to_agent tool call resolves.
+func (ss *streamSession) startDelegationCompletion(matched pendingToolCall) {
+	slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
+	del := ss.lookups.bySlug[slug]
+	if del == nil {
+		return
+	}
+	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	triggerMsgID := ss.placeholder.ID
+	delegateAgentID := del.ID
+	userID := ss.userID
+	convID := ss.convID
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("completeDelegation goroutine panic",
+					"panic", r,
+					"user_id", userID,
+					"conv_id", convID,
+					"trigger_message_id", triggerMsgID,
+					"delegate_agent_id", delegateAgentID,
+				)
+			}
+		}()
+		ss.svc.completeDelegation("", convID, triggerMsgID, delegateAgentID)
+	}()
 }
 
 // newToolStatusMessage creates a tool_status message for persistence.

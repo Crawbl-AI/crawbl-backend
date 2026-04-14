@@ -86,48 +86,16 @@ func NewPool(dial DialFunc) *Pool {
 // via singleflight: the first caller pays the dial cost, every
 // subsequent caller waits and receives the same connection.
 func (p *Pool) Get(ctx context.Context, target string) (*grpc.ClientConn, error) {
-	if p == nil || p.dial == nil {
-		return nil, errors.New("grpc: pool not initialized")
-	}
-	if p.closed.Load() {
-		return nil, ErrPoolClosed
-	}
-	if target == "" {
-		return nil, errors.New("grpc: empty target")
+	if err := p.preflight(target); err != nil {
+		return nil, err
 	}
 
-	// Fast path: cached conn.
-	if v, ok := p.conns.Load(target); ok {
-		if conn, okCast := v.(*grpc.ClientConn); okCast && conn != nil {
-			return conn, nil
-		}
-	}
-
-	// Slow path: single-flight dial.
-	v, err, _ := p.group.Do(target, func() (any, error) {
-		// Double-check after acquiring the singleflight slot — another
-		// goroutine may have finished dialing while we were waiting.
-		if v, ok := p.conns.Load(target); ok {
-			if conn, okCast := v.(*grpc.ClientConn); okCast && conn != nil {
-				return conn, nil
-			}
-		}
-		if p.closed.Load() {
-			return nil, ErrPoolClosed
-		}
-		conn, dialErr := p.dial(ctx, target)
-		if dialErr != nil {
-			return nil, fmt.Errorf("grpc: dial %s: %w", target, dialErr)
-		}
-		// Store atomically. If Close ran in parallel, it may have
-		// flipped `closed` between our check above and this Store;
-		// defensively re-check and abort if so.
-		if p.closed.Load() {
-			_ = conn.Close()
-			return nil, ErrPoolClosed
-		}
-		p.conns.Store(target, conn)
+	if conn, ok := p.loadCachedConn(target); ok {
 		return conn, nil
+	}
+
+	v, err, _ := p.group.Do(target, func() (any, error) {
+		return p.singleFlightDial(ctx, target)
 	})
 	if err != nil {
 		return nil, err
@@ -136,6 +104,57 @@ func (p *Pool) Get(ctx context.Context, target string) (*grpc.ClientConn, error)
 	if !ok || conn == nil {
 		return nil, errors.New("grpc: nil conn from dial")
 	}
+	return conn, nil
+}
+
+// preflight rejects calls made against an unusable pool: nil receiver,
+// unset DialFunc, closed pool, or an empty target.
+func (p *Pool) preflight(target string) error {
+	if p == nil || p.dial == nil {
+		return errors.New("grpc: pool not initialized")
+	}
+	if p.closed.Load() {
+		return ErrPoolClosed
+	}
+	if target == "" {
+		return errors.New("grpc: empty target")
+	}
+	return nil
+}
+
+// loadCachedConn returns the cached connection for target, or (nil, false)
+// on cache miss / nil-entry so the caller falls through to the dial path.
+func (p *Pool) loadCachedConn(target string) (*grpc.ClientConn, bool) {
+	v, ok := p.conns.Load(target)
+	if !ok {
+		return nil, false
+	}
+	conn, okCast := v.(*grpc.ClientConn)
+	if !okCast || conn == nil {
+		return nil, false
+	}
+	return conn, true
+}
+
+// singleFlightDial is the slow-path body executed by singleflight.Group.Do.
+// It double-checks the cache, dials a fresh connection, and handles the
+// race where Close() fires between the pre-dial check and the Store.
+func (p *Pool) singleFlightDial(ctx context.Context, target string) (any, error) {
+	if conn, ok := p.loadCachedConn(target); ok {
+		return conn, nil
+	}
+	if p.closed.Load() {
+		return nil, ErrPoolClosed
+	}
+	conn, dialErr := p.dial(ctx, target)
+	if dialErr != nil {
+		return nil, fmt.Errorf("grpc: dial %s: %w", target, dialErr)
+	}
+	if p.closed.Load() {
+		_ = conn.Close()
+		return nil, ErrPoolClosed
+	}
+	p.conns.Store(target, conn)
 	return conn, nil
 }
 

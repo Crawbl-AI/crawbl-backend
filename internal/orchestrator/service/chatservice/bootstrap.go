@@ -82,68 +82,79 @@ func (s *Service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 	if mErr != nil {
 		return nil, mErr
 	}
-
-	agentsBySlug := make(map[string]*orchestrator.Agent, len(agents))
-	for _, agent := range agents {
-		agentsBySlug[agent.Slug] = agent
-	}
-
-	missing := false
-	for _, blueprint := range s.defaultAgents {
-		if agentsBySlug[blueprint.Slug] == nil {
-			missing = true
-			break
-		}
-	}
-	if !missing {
+	if s.hasAllDefaultAgents(agents) {
 		return agents, nil
 	}
-
 	return database.WithTransaction(sess, "ensure default agents", func(tx *dbr.Tx) ([]*orchestrator.Agent, *merrors.Error) {
-		freshAgents, mErr := s.agentRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
-		if mErr != nil {
+		return s.upsertDefaultAgents(ctx, tx, workspace.ID)
+	})
+}
+
+// hasAllDefaultAgents returns true when every configured default agent already
+// exists in the current agent list (keyed by slug).
+func (s *Service) hasAllDefaultAgents(agents []*orchestrator.Agent) bool {
+	bySlug := agentsBySlug(agents)
+	for _, blueprint := range s.defaultAgents {
+		if bySlug[blueprint.Slug] == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func agentsBySlug(agents []*orchestrator.Agent) map[string]*orchestrator.Agent {
+	out := make(map[string]*orchestrator.Agent, len(agents))
+	for _, agent := range agents {
+		out[agent.Slug] = agent
+	}
+	return out
+}
+
+// upsertDefaultAgents creates missing default agents and updates existing ones
+// inside the provided transaction, then returns the refreshed agent list.
+func (s *Service) upsertDefaultAgents(ctx context.Context, tx *dbr.Tx, workspaceID string) ([]*orchestrator.Agent, *merrors.Error) {
+	freshAgents, mErr := s.agentRepo.ListByWorkspaceID(ctx, tx, workspaceID)
+	if mErr != nil {
+		return nil, mErr
+	}
+	freshBySlug := agentsBySlug(freshAgents)
+
+	now := time.Now().UTC()
+	for idx, blueprint := range s.defaultAgents {
+		agent := applyAgentBlueprint(freshBySlug[blueprint.Slug], blueprint, workspaceID, now)
+		if mErr := s.agentRepo.Save(ctx, tx, agent, idx); mErr != nil {
 			return nil, mErr
 		}
+		freshBySlug[blueprint.Slug] = agent
+	}
+	return s.agentRepo.ListByWorkspaceID(ctx, tx, workspaceID)
+}
 
-		freshBySlug := make(map[string]*orchestrator.Agent, len(freshAgents))
-		for _, agent := range freshAgents {
-			freshBySlug[agent.Slug] = agent
+// applyAgentBlueprint creates a new Agent from the blueprint when agent is nil
+// or updates the existing agent in place. Callers persist the returned value.
+func applyAgentBlueprint(agent *orchestrator.Agent, blueprint orchestrator.DefaultAgentBlueprint, workspaceID string, now time.Time) *orchestrator.Agent {
+	if agent == nil {
+		return &orchestrator.Agent{
+			ID:           uuid.NewString(),
+			WorkspaceID:  workspaceID,
+			Name:         blueprint.Name,
+			Role:         blueprint.Role,
+			Slug:         blueprint.Slug,
+			SystemPrompt: blueprint.SystemPrompt,
+			Description:  blueprint.Description,
+			AvatarURL:    orchestrator.DefaultAgentAvatarURL,
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
-
-		now := time.Now().UTC()
-		for idx, blueprint := range s.defaultAgents {
-			agent := freshBySlug[blueprint.Slug]
-			if agent == nil {
-				agent = &orchestrator.Agent{
-					ID:           uuid.NewString(),
-					WorkspaceID:  workspace.ID,
-					Name:         blueprint.Name,
-					Role:         blueprint.Role,
-					Slug:         blueprint.Slug,
-					SystemPrompt: blueprint.SystemPrompt,
-					Description:  blueprint.Description,
-					AvatarURL:    orchestrator.DefaultAgentAvatarURL,
-					CreatedAt:    now,
-					UpdatedAt:    now,
-				}
-			} else {
-				agent.Name = blueprint.Name
-				agent.Role = blueprint.Role
-				agent.Slug = blueprint.Slug
-				agent.SystemPrompt = blueprint.SystemPrompt
-				agent.Description = blueprint.Description
-				agent.AvatarURL = orchestrator.DefaultAgentAvatarURL
-				agent.UpdatedAt = now
-			}
-
-			if mErr := s.agentRepo.Save(ctx, tx, agent, idx); mErr != nil {
-				return nil, mErr
-			}
-			freshBySlug[blueprint.Slug] = agent
-		}
-
-		return s.agentRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
-	})
+	}
+	agent.Name = blueprint.Name
+	agent.Role = blueprint.Role
+	agent.Slug = blueprint.Slug
+	agent.SystemPrompt = blueprint.SystemPrompt
+	agent.Description = blueprint.Description
+	agent.AvatarURL = orchestrator.DefaultAgentAvatarURL
+	agent.UpdatedAt = now
+	return agent
 }
 
 // ensureDefaultConversations ensures swarm + per-agent conversations exist.
@@ -153,8 +164,29 @@ func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 		return nil, mErr
 	}
 
-	hasSwarm := false
-	agentConvs := make(map[string]bool)
+	hasSwarm, agentConvs := summarizeConversations(conversations)
+	if allDefaultConversationsPresent(hasSwarm, agentConvs, agents) {
+		return conversations, nil
+	}
+
+	return database.WithTransaction(sess, "ensure default conversations", func(tx *dbr.Tx) ([]*orchestrator.Conversation, *merrors.Error) {
+		now := time.Now().UTC()
+		if !hasSwarm {
+			if mErr := s.createSwarmConversation(ctx, tx, workspace.ID, now); mErr != nil {
+				return nil, mErr
+			}
+		}
+		if mErr := s.createMissingAgentConversations(ctx, tx, workspace.ID, agents, agentConvs, now); mErr != nil {
+			return nil, mErr
+		}
+		return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
+	})
+}
+
+// summarizeConversations reports whether the swarm conversation exists and
+// which agent IDs already have a dedicated conversation.
+func summarizeConversations(conversations []*orchestrator.Conversation) (hasSwarm bool, agentConvs map[string]bool) {
+	agentConvs = make(map[string]bool)
 	for _, c := range conversations {
 		if c.Type == orchestrator.ConversationTypeSwarm {
 			hasSwarm = true
@@ -163,64 +195,74 @@ func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 			agentConvs[*c.AgentID] = true
 		}
 	}
+	return hasSwarm, agentConvs
+}
 
-	allPresent := hasSwarm
+// allDefaultConversationsPresent reports whether the swarm conversation plus
+// every non-manager agent already has a matching conversation row.
+func allDefaultConversationsPresent(hasSwarm bool, agentConvs map[string]bool, agents []*orchestrator.Agent) bool {
+	if !hasSwarm {
+		return false
+	}
 	for _, agent := range agents {
 		if agent.Role == orchestrator.AgentRoleManager {
 			continue
 		}
 		if !agentConvs[agent.ID] {
-			allPresent = false
-			break
+			return false
 		}
 	}
-	if allPresent {
-		return conversations, nil
+	return true
+}
+
+// createSwarmConversation inserts the workspace's default swarm conversation
+// when one does not already exist. Treats "not found" as a green light.
+func (s *Service) createSwarmConversation(ctx context.Context, tx *dbr.Tx, workspaceID string, now time.Time) *merrors.Error {
+	if _, findErr := s.conversationRepo.FindDefaultSwarm(ctx, tx, workspaceID); findErr != nil {
+		if !merrors.IsCode(findErr, merrors.ErrCodeConversationNotFound) {
+			return findErr
+		}
+	} else {
+		return nil // already present
 	}
+	return s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
+		ID:          uuid.NewString(),
+		WorkspaceID: workspaceID,
+		Type:        orchestrator.ConversationTypeSwarm,
+		Title:       orchestrator.DefaultSwarmTitle,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+}
 
-	return database.WithTransaction(sess, "ensure default conversations", func(tx *dbr.Tx) ([]*orchestrator.Conversation, *merrors.Error) {
-		now := time.Now().UTC()
-
-		if !hasSwarm {
-			if _, findErr := s.conversationRepo.FindDefaultSwarm(ctx, tx, workspace.ID); findErr != nil {
-				if !merrors.IsCode(findErr, merrors.ErrCodeConversationNotFound) {
-					return nil, findErr
-				}
-				if mErr := s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
-					ID:          uuid.NewString(),
-					WorkspaceID: workspace.ID,
-					Type:        orchestrator.ConversationTypeSwarm,
-					Title:       orchestrator.DefaultSwarmTitle,
-					CreatedAt:   now,
-					UpdatedAt:   now,
-				}); mErr != nil {
-					return nil, mErr
-				}
-			}
+// createMissingAgentConversations saves a dedicated conversation for each
+// non-manager agent that does not yet have one. Manager agents share the
+// swarm conversation so they are skipped.
+func (s *Service) createMissingAgentConversations(ctx context.Context, tx *dbr.Tx, workspaceID string, agents []*orchestrator.Agent, existing map[string]bool, now time.Time) *merrors.Error {
+	for _, agent := range agents {
+		if agent.Role == orchestrator.AgentRoleManager {
+			continue
 		}
-
-		for _, agent := range agents {
-			if agent.Role == orchestrator.AgentRoleManager {
-				continue // Manager uses the swarm conversation, not a dedicated one
-			}
-			if agentConvs[agent.ID] {
-				continue
-			}
-			agentID := agent.ID
-			if mErr := s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
-				ID:          uuid.NewString(),
-				WorkspaceID: workspace.ID,
-				AgentID:     &agentID,
-				Type:        orchestrator.ConversationTypeAgent,
-				Title:       agent.Name,
-				CreatedAt:   now,
-				UpdatedAt:   now,
-			}); mErr != nil {
-				return nil, mErr
-			}
+		if existing[agent.ID] {
+			continue
 		}
+		if mErr := s.saveAgentConversation(ctx, tx, workspaceID, agent, now); mErr != nil {
+			return mErr
+		}
+	}
+	return nil
+}
 
-		return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
+func (s *Service) saveAgentConversation(ctx context.Context, tx *dbr.Tx, workspaceID string, agent *orchestrator.Agent, now time.Time) *merrors.Error {
+	agentID := agent.ID
+	return s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
+		ID:          uuid.NewString(),
+		WorkspaceID: workspaceID,
+		AgentID:     &agentID,
+		Type:        orchestrator.ConversationTypeAgent,
+		Title:       agent.Name,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	})
 }
 

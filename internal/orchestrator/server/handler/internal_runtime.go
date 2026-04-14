@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
@@ -44,12 +46,7 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Query-string workspace_id overrides for routing only; identity
-		// from the token is authoritative. If the caller passes a
-		// mismatching workspace_id we reject it to make drift loud
-		// instead of silent.
-		requestedWorkspace := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
-		if requestedWorkspace != "" && requestedWorkspace != workspaceID {
+		if !matchingWorkspaceQuery(r, workspaceID) {
 			http.Error(w, "workspace_id in query does not match bearer token", http.StatusForbidden)
 			return
 		}
@@ -64,48 +61,65 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Enrich each agent with its settings (model + allowed tools).
-		// Fall through on per-agent settings errors: log once and return
-		// the agent with default values so a partial settings outage
-		// doesn't prevent the runtime from booting.
-		blueprints := make([]internalAgentBlueprint, 0, len(agents))
-		for _, agent := range agents {
-			b := internalAgentBlueprint{
-				Slug:         agent.Slug,
-				Role:         agent.Role,
-				SystemPrompt: agent.SystemPrompt,
-				Description:  agent.Description,
-			}
-			settings, settingsErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
-				UserID:  userID,
-				AgentID: agent.ID,
-			})
-			if settingsErr != nil {
-				c.Logger.Warn("blueprint: failed to load agent settings, using defaults",
-					"workspace_id", workspaceID,
-					"agent_id", agent.ID,
-					"error", settingsErr,
-				)
-			} else if settings != nil {
-				b.Model = settings.Model.ID
-				// AllowedTools comes from agent_settings.allowed_tools
-				// in Postgres. When the column is empty the runtime
-				// falls back to each agent's hardcoded default toolset
-				// (e.g. Wally's web_fetch + web_search_tool pair).
-				// Forwarding the slice verbatim — the runtime decides
-				// enforcement policy, not the orchestrator.
-				if len(settings.AllowedTools) > 0 {
-					b.AllowedTools = settings.AllowedTools
-				}
-			}
-			blueprints = append(blueprints, b)
-		}
+		blueprints := buildAgentBlueprints(c, r.Context(), userID, workspaceID, agents)
 
 		WriteJSON(w, http.StatusOK, internalWorkspaceBlueprint{
 			WorkspaceID: workspaceID,
 			Agents:      blueprints,
 		})
 	}
+}
+
+// matchingWorkspaceQuery reports whether the optional workspace_id query
+// parameter matches the workspaceID embedded in the bearer token. An empty
+// query value is treated as "no override requested" and passes.
+func matchingWorkspaceQuery(r *http.Request, workspaceID string) bool {
+	requested := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	return requested == "" || requested == workspaceID
+}
+
+// buildAgentBlueprints enriches each agent with its stored settings. A
+// partial settings outage is tolerated: on per-agent lookup failure we log
+// and return the agent with default values so the runtime can still boot.
+func buildAgentBlueprints(c *Context, ctx context.Context, userID, workspaceID string, agents []*orchestrator.Agent) []internalAgentBlueprint {
+	blueprints := make([]internalAgentBlueprint, 0, len(agents))
+	for _, agent := range agents {
+		blueprints = append(blueprints, buildOneBlueprint(c, ctx, userID, workspaceID, agent))
+	}
+	return blueprints
+}
+
+func buildOneBlueprint(c *Context, ctx context.Context, userID, workspaceID string, agent *orchestrator.Agent) internalAgentBlueprint {
+	b := internalAgentBlueprint{
+		Slug:         agent.Slug,
+		Role:         agent.Role,
+		SystemPrompt: agent.SystemPrompt,
+		Description:  agent.Description,
+	}
+	settings, settingsErr := c.AgentService.GetAgentSettings(ctx, &orchestratorservice.GetAgentSettingsOpts{
+		UserID:  userID,
+		AgentID: agent.ID,
+	})
+	if settingsErr != nil {
+		c.Logger.Warn("blueprint: failed to load agent settings, using defaults",
+			"workspace_id", workspaceID,
+			"agent_id", agent.ID,
+			"error", settingsErr,
+		)
+		return b
+	}
+	if settings == nil {
+		return b
+	}
+	b.Model = settings.Model.ID
+	// AllowedTools comes from agent_settings.allowed_tools in Postgres.
+	// When the column is empty the runtime falls back to each agent's
+	// hardcoded default toolset. Forwarding the slice verbatim — the
+	// runtime decides enforcement policy, not the orchestrator.
+	if len(settings.AllowedTools) > 0 {
+		b.AllowedTools = settings.AllowedTools
+	}
+	return b
 }
 
 // internalWorkspaceBlueprint is the wire shape returned by

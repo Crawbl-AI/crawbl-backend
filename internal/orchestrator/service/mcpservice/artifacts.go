@@ -94,43 +94,12 @@ func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID,
 		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
-	var ver *artifactrepo.ArtifactVersionRow
-	if version > 0 {
-		versions, mErr := s.repos.Artifact.ListVersions(ctx, sess, artifactID)
-		if mErr != nil {
-			return nil, fmt.Errorf("list versions: %s", mErr.Error())
-		}
-		for i := range versions {
-			if versions[i].Version == version {
-				ver = &versions[i]
-				break
-			}
-		}
-		if ver == nil {
-			return nil, fmt.Errorf("version %d not found", version)
-		}
-	} else {
-		v, mErr := s.repos.Artifact.GetLatestVersion(ctx, sess, artifactID)
-		if mErr != nil {
-			return nil, fmt.Errorf("no versions found for artifact")
-		}
-		ver = v
+	ver, err := s.loadArtifactVersion(ctx, sess, artifactID, version)
+	if err != nil {
+		return nil, err
 	}
 
-	reviewRows, mErr := s.repos.Artifact.ListReviews(ctx, sess, artifactID, ver.Version)
-	if mErr != nil {
-		reviewRows = nil
-	}
-
-	reviews := make([]ArtifactReviewBrief, 0, len(reviewRows))
-	for _, r := range reviewRows {
-		reviews = append(reviews, ArtifactReviewBrief{
-			ReviewerAgentSlug: r.ReviewerAgentSlug,
-			Outcome:           r.Outcome,
-			Comments:          r.Comments,
-			CreatedAt:         r.CreatedAt,
-		})
-	}
+	reviews := s.loadArtifactReviews(ctx, sess, artifactID, ver.Version)
 
 	return &ReadArtifactResult{
 		ArtifactID:  artifact.ID,
@@ -141,6 +110,47 @@ func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID,
 		Status:      artifact.Status,
 		Reviews:     reviews,
 	}, nil
+}
+
+// loadArtifactVersion returns the requested artifact version, or the latest
+// when version <= 0.
+func (s *service) loadArtifactVersion(ctx contextT, sess sessionT, artifactID string, version int) (*artifactrepo.ArtifactVersionRow, error) {
+	if version <= 0 {
+		v, mErr := s.repos.Artifact.GetLatestVersion(ctx, sess, artifactID)
+		if mErr != nil {
+			return nil, fmt.Errorf("no versions found for artifact")
+		}
+		return v, nil
+	}
+	versions, mErr := s.repos.Artifact.ListVersions(ctx, sess, artifactID)
+	if mErr != nil {
+		return nil, fmt.Errorf("list versions: %s", mErr.Error())
+	}
+	for i := range versions {
+		if versions[i].Version == version {
+			return &versions[i], nil
+		}
+	}
+	return nil, fmt.Errorf("version %d not found", version)
+}
+
+// loadArtifactReviews returns the review briefs for an artifact version.
+// Errors are swallowed so a partial review outage does not mask the payload.
+func (s *service) loadArtifactReviews(ctx contextT, sess sessionT, artifactID string, version int) []ArtifactReviewBrief {
+	reviewRows, mErr := s.repos.Artifact.ListReviews(ctx, sess, artifactID, version)
+	if mErr != nil {
+		reviewRows = nil
+	}
+	reviews := make([]ArtifactReviewBrief, 0, len(reviewRows))
+	for _, r := range reviewRows {
+		reviews = append(reviews, ArtifactReviewBrief{
+			ReviewerAgentSlug: r.ReviewerAgentSlug,
+			Outcome:           r.Outcome,
+			Comments:          r.Comments,
+			CreatedAt:         r.CreatedAt,
+		})
+	}
+	return reviews
 }
 
 func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceID string, params *UpdateArtifactParams) (*UpdateArtifactResult, error) {

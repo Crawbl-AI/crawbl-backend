@@ -85,15 +85,44 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 	// handler (registered once at connection time) can cancel this goroutine when
 	// the client disconnects. setCancelFunc also cancels any previous in-flight
 	// dispatch for this socket, which can happen when a client sends rapid messages.
-	if sd, ok := s.Data().(*socketData); ok && sd != nil && sd.Session != nil {
-		sd.Session.setCancelFunc(cancel)
-	}
+	registerDispatchCancel(s, cancel)
 
 	localID := strings.TrimSpace(payload.LocalID)
 	sess := h.db.NewSession(nil)
 	ctx = database.ContextWithSession(ctx, sess)
 
-	// Resolve the user from the principal subject.
+	user, ok := h.resolveUser(ctx, s, principal, localID, payload.ConversationID)
+	if !ok {
+		return
+	}
+	if !h.authorizeWorkspace(ctx, s, user.ID, payload, localID) {
+		return
+	}
+
+	opts := h.buildSendMessageOpts(s, user.ID, payload, localID)
+	if _, mErr := h.chatService.SendMessage(ctx, opts); mErr != nil {
+		h.logger.Error("socketio: message.send failed",
+			"user_id", user.ID,
+			"workspace_id", payload.WorkspaceID,
+			"error", mErr.Error(),
+		)
+		h.emitError(s, localID, payload.ConversationID, "message send failed")
+	}
+}
+
+// registerDispatchCancel wires the per-socket cancel func so the disconnect
+// handler can stop the in-flight dispatch when the client disconnects.
+func registerDispatchCancel(s *socket.Socket, cancel context.CancelFunc) {
+	sd, ok := s.Data().(*socketData)
+	if !ok || sd == nil || sd.Session == nil {
+		return
+	}
+	sd.Session.setCancelFunc(cancel)
+}
+
+// resolveUser fetches the internal user for the authenticated principal.
+// Emits a message.send.error event and returns ok=false on lookup failure.
+func (h *messageHandler) resolveUser(ctx context.Context, s *socket.Socket, principal *orchestrator.Principal, localID, conversationID string) (*orchestrator.User, bool) {
 	user, mErr := h.authService.GetBySubject(ctx, &orchestratorservice.GetUserBySubjectOpts{
 		Subject: principal.Subject,
 	})
@@ -102,64 +131,44 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 			"subject", principal.Subject,
 			"error", mErr.Error(),
 		)
-		h.emitError(s, localID, payload.ConversationID, "user not found")
-		return
+		h.emitError(s, localID, conversationID, "user not found")
+		return nil, false
 	}
+	return user, true
+}
 
-	// Verify the authenticated user owns the workspace supplied in the payload.
-	// Defense-in-depth: the client-supplied workspace_id must not route messages
-	// to a workspace owned by another user.
+// authorizeWorkspace ensures the authenticated user owns the workspace the
+// client supplied in the payload. Defense-in-depth: the client-supplied
+// workspace_id must not route messages to another user's workspace.
+func (h *messageHandler) authorizeWorkspace(ctx context.Context, s *socket.Socket, userID string, payload messageSendPayload, localID string) bool {
 	if _, mErr := h.workspaceService.GetByID(ctx, &orchestratorservice.GetWorkspaceOpts{
-		UserID:      user.ID,
+		UserID:      userID,
 		WorkspaceID: payload.WorkspaceID,
 	}); mErr != nil {
 		h.logger.Warn("socketio: message.send workspace ownership check failed",
-			"user_id", user.ID,
+			"user_id", userID,
 			"workspace_id", payload.WorkspaceID,
 		)
 		h.emitError(s, localID, payload.ConversationID, "unauthorized")
-		return
+		return false
 	}
+	return true
+}
 
-	// Convert payload to domain types.
+// buildSendMessageOpts converts the wire payload to the service-layer opts.
+func (h *messageHandler) buildSendMessageOpts(s *socket.Socket, userID string, payload messageSendPayload, localID string) *orchestratorservice.SendMessageOpts {
 	content := orchestrator.MessageContent{
 		Type: orchestrator.MessageContentType(payload.Content.Type),
 		Text: payload.Content.Text,
 	}
-
-	mentions := make([]orchestrator.Mention, 0, len(payload.Mentions))
-	for _, m := range payload.Mentions {
-		mentions = append(mentions, orchestrator.Mention{
-			AgentID:   m.AgentID,
-			AgentName: m.AgentName,
-			Offset:    m.Offset,
-			Length:    m.Length,
-		})
-	}
-
-	attachments := make([]orchestrator.Attachment, 0, len(payload.Attachments))
-	for _, a := range payload.Attachments {
-		attachments = append(attachments, orchestrator.Attachment{
-			ID:       a.ID,
-			Name:     a.Name,
-			URL:      a.URL,
-			Type:     orchestrator.AttachmentType(a.Type),
-			Size:     a.Size,
-			MIMEType: a.MIMEType,
-		})
-	}
-
-	// Call ChatService — replies are broadcast via message.new events.
-	// OnPersisted fires the ack immediately when the user message is saved to DB,
-	// so the client gets "sent" status without waiting for agent processing.
-	msgs, mErr := h.chatService.SendMessage(ctx, &orchestratorservice.SendMessageOpts{
-		UserID:         user.ID,
+	return &orchestratorservice.SendMessageOpts{
+		UserID:         userID,
 		WorkspaceID:    payload.WorkspaceID,
 		ConversationID: payload.ConversationID,
 		LocalID:        localID,
 		Content:        content,
-		Attachments:    attachments,
-		Mentions:       mentions,
+		Attachments:    payloadAttachments(payload.Attachments),
+		Mentions:       payloadMentions(payload.Mentions),
 		OnPersisted: func(userMsg *orchestrator.Message) {
 			_ = s.Emit(eventMessageSendAck, messageSendAckPayload{
 				LocalID:        localID,
@@ -168,20 +177,35 @@ func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 				Status:         string(orchestrator.MessageStatusSent),
 			})
 		},
-	})
-	if mErr != nil {
-		h.logger.Error("socketio: message.send failed",
-			"user_id", user.ID,
-			"workspace_id", payload.WorkspaceID,
-			"error", mErr.Error(),
-		)
-		h.emitError(s, localID, payload.ConversationID, "message send failed")
-		return
 	}
+}
 
-	// Agent replies were broadcast via message.new/message.chunk/message.done events.
-	// The ack was already sent via OnPersisted when the user message was saved.
-	_ = msgs
+func payloadMentions(src []messageSendMention) []orchestrator.Mention {
+	out := make([]orchestrator.Mention, 0, len(src))
+	for _, m := range src {
+		out = append(out, orchestrator.Mention{
+			AgentID:   m.AgentID,
+			AgentName: m.AgentName,
+			Offset:    m.Offset,
+			Length:    m.Length,
+		})
+	}
+	return out
+}
+
+func payloadAttachments(src []messageSendAttachment) []orchestrator.Attachment {
+	out := make([]orchestrator.Attachment, 0, len(src))
+	for _, a := range src {
+		out = append(out, orchestrator.Attachment{
+			ID:       a.ID,
+			Name:     a.Name,
+			URL:      a.URL,
+			Type:     orchestrator.AttachmentType(a.Type),
+			Size:     a.Size,
+			MIMEType: a.MIMEType,
+		})
+	}
+	return out
 }
 
 // emitError sends a message.send.error event to the sender socket.

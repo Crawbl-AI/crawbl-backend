@@ -148,16 +148,7 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 		if !ok {
 			return
 		}
-
-		// Auth middleware stored a *Principal in Data(). Wrap it alongside a fresh
-		// socketSession so downstream handlers can access both via *socketData.
-		principal, _ := s.Data().(*orchestrator.Principal)
-		sd := &socketData{
-			Principal: principal,
-			Session:   &socketSession{},
-		}
-		s.SetData(sd)
-
+		sd := initSocketData(s)
 		subject := principalSubjectFromSocket(s)
 
 		logger.Info("socketio: client connected",
@@ -165,121 +156,181 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			"subject", subject,
 		)
 
-		// workspace.subscribe — verify ownership then join rooms and acknowledge.
+		deps := &subscribeDeps{
+			logger:        logger,
+			db:            db,
+			workspaceRepo: workspaceRepo,
+			authService:   authService,
+			shutdownCtx:   shutdownCtx,
+		}
+
 		_ = s.On(eventWorkspaceSubscribe, func(args ...any) {
-			ids := parseWorkspaceIDs(args)
-			if len(ids) == 0 {
-				return
-			}
-
-			// Determine the authenticated user's subject. Reject the subscribe
-			// entirely when no principal is present (should not happen after auth
-			// middleware, but guard defensively).
-			if sd.Principal == nil || strings.TrimSpace(sd.Principal.Subject) == "" {
-				logger.Warn("socketio: workspace subscribe rejected — no principal",
-					"socket_id", string(s.Id()),
-				)
-				return
-			}
-			userSubject := sd.Principal.Subject
-
-			// When DB + repo are available, verify each requested workspace is
-			// owned by the authenticated user before joining its room.
-			// IDs that fail the check are silently dropped — we do not reveal
-			// whether the workspace exists to prevent enumeration attacks.
-			authorised := ids
-			if db != nil && workspaceRepo != nil {
-				authorised = make([]string, 0, len(ids))
-				sess := db.NewSession(nil)
-				ctx := database.ContextWithSession(shutdownCtx, sess)
-
-				// Resolve Firebase subject → internal user.ID. The workspace repo
-				// queries by the internal PK (user_id column), not the subject.
-				// On failure, drop all requested IDs and bail early.
-				var userID string
-				if authService != nil {
-					user, mErr := authService.GetBySubject(ctx, &orchestratorservice.GetUserBySubjectOpts{
-						Subject: userSubject,
-					})
-					if mErr != nil {
-						logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
-							"socket_id", string(s.Id()),
-							"subject", userSubject,
-							"error", mErr.Error(),
-						)
-						return
-					}
-					userID = user.ID
-				} else {
-					// authService unavailable (dev/test): fall back to subject as-is.
-					userID = userSubject
-				}
-
-				owned, mErr := workspaceRepo.ListOwnedByUser(ctx, sess, userID, ids)
-				if mErr != nil {
-					logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
-						"socket_id", string(s.Id()),
-						"subject", userSubject,
-						"error", mErr.Error(),
-					)
-					return
-				}
-				for _, id := range ids {
-					if _, ok := owned[id]; ok {
-						authorised = append(authorised, id)
-					}
-				}
-			}
-
-			if len(authorised) == 0 {
-				return
-			}
-
-			for _, id := range authorised {
-				s.Join(socket.Room(workspaceRoomPrefix + id))
-			}
-			logger.Info("socketio: workspace subscribe",
-				"socket_id", string(s.Id()),
-				"subject", subject,
-				"workspace_ids", authorised,
-			)
-			_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
+			handleWorkspaceSubscribe(s, sd, deps, args)
 		})
-
-		// workspace.unsubscribe — leave rooms.
 		_ = s.On(eventWorkspaceUnsubscribe, func(args ...any) {
-			ids := parseWorkspaceIDs(args)
-			if len(ids) == 0 {
-				return
-			}
-			for _, id := range ids {
-				s.Leave(socket.Room(workspaceRoomPrefix + id))
-			}
-			logger.Info("socketio: workspace unsubscribe",
-				"socket_id", string(s.Id()),
-				"subject", subject,
-				"workspace_ids", ids,
-			)
+			handleWorkspaceUnsubscribe(s, subject, logger, args)
 		})
-
-		// Registered once per socket. Cancels any in-flight dispatch goroutine so
-		// agent-runtime requests are stopped and LLM tokens are not wasted for
-		// clients that have already disconnected.
 		_ = s.On("disconnect", func(args ...any) {
-			reason := ""
-			if len(args) > 0 {
-				if r, ok := args[0].(string); ok {
-					reason = r
-				}
-			}
-			sd.Session.cancelCurrent()
-			logger.Info("socketio: client disconnected",
-				"socket_id", string(s.Id()),
-				"subject", subject,
-				"reason", reason,
-			)
+			handleDisconnect(s, sd, subject, logger, args)
 		})
 	})
+}
+
+// initSocketData upgrades s.Data() from *Principal to *socketData (adding a
+// per-socket socketSession) so downstream handlers can reach both.
+func initSocketData(s *socket.Socket) *socketData {
+	principal, _ := s.Data().(*orchestrator.Principal)
+	sd := &socketData{
+		Principal: principal,
+		Session:   &socketSession{},
+	}
+	s.SetData(sd)
+	return sd
+}
+
+// subscribeDeps bundles the dependencies the subscribe handler needs so the
+// outer connection closure can pass them without a long parameter list.
+type subscribeDeps struct {
+	logger        *slog.Logger
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
+	shutdownCtx   context.Context
+}
+
+// handleWorkspaceSubscribe authorises each requested workspace and joins the
+// socket into the corresponding rooms. IDs that fail ownership are silently
+// dropped so the response never reveals whether a workspace exists.
+func handleWorkspaceSubscribe(s *socket.Socket, sd *socketData, deps *subscribeDeps, args []any) {
+	ids := parseWorkspaceIDs(args)
+	if len(ids) == 0 {
+		return
+	}
+	userSubject, ok := socketUserSubject(sd)
+	if !ok {
+		deps.logger.Warn("socketio: workspace subscribe rejected — no principal",
+			"socket_id", string(s.Id()),
+		)
+		return
+	}
+	authorised, ok := authorizeWorkspaceIDs(s, deps, userSubject, ids)
+	if !ok || len(authorised) == 0 {
+		return
+	}
+	joinWorkspaceRooms(s, authorised)
+	deps.logger.Info("socketio: workspace subscribe",
+		"socket_id", string(s.Id()),
+		"subject", userSubject,
+		"workspace_ids", authorised,
+	)
+	_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
+}
+
+// socketUserSubject returns the principal subject from the socket data, or
+// ok=false when no principal is present (should not happen post-auth).
+func socketUserSubject(sd *socketData) (string, bool) {
+	if sd.Principal == nil {
+		return "", false
+	}
+	subject := strings.TrimSpace(sd.Principal.Subject)
+	if subject == "" {
+		return "", false
+	}
+	return subject, true
+}
+
+// authorizeWorkspaceIDs filters the requested IDs down to the ones the caller
+// owns. When the DB/repo dependency is absent (dev/test) every ID is accepted.
+// Returns ok=false only when the ownership lookup itself fails.
+func authorizeWorkspaceIDs(s *socket.Socket, deps *subscribeDeps, userSubject string, ids []string) ([]string, bool) {
+	if deps.db == nil || deps.workspaceRepo == nil {
+		return ids, true
+	}
+	sess := deps.db.NewSession(nil)
+	ctx := database.ContextWithSession(deps.shutdownCtx, sess)
+
+	userID, ok := resolveUserID(ctx, deps, s, userSubject)
+	if !ok {
+		return nil, false
+	}
+	owned, mErr := deps.workspaceRepo.ListOwnedByUser(ctx, sess, userID, ids)
+	if mErr != nil {
+		deps.logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
+			"socket_id", string(s.Id()),
+			"subject", userSubject,
+			"error", mErr.Error(),
+		)
+		return nil, false
+	}
+	authorised := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := owned[id]; ok {
+			authorised = append(authorised, id)
+		}
+	}
+	return authorised, true
+}
+
+// resolveUserID converts the Firebase subject into the internal user.ID the
+// workspace repo expects. Falls back to the subject as-is when authService is
+// unavailable (dev/test only).
+func resolveUserID(ctx context.Context, deps *subscribeDeps, s *socket.Socket, userSubject string) (string, bool) {
+	if deps.authService == nil {
+		return userSubject, true
+	}
+	user, mErr := deps.authService.GetBySubject(ctx, &orchestratorservice.GetUserBySubjectOpts{
+		Subject: userSubject,
+	})
+	if mErr != nil {
+		deps.logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
+			"socket_id", string(s.Id()),
+			"subject", userSubject,
+			"error", mErr.Error(),
+		)
+		return "", false
+	}
+	return user.ID, true
+}
+
+func joinWorkspaceRooms(s *socket.Socket, ids []string) {
+	for _, id := range ids {
+		s.Join(socket.Room(workspaceRoomPrefix + id))
+	}
+}
+
+func handleWorkspaceUnsubscribe(s *socket.Socket, subject string, logger *slog.Logger, args []any) {
+	ids := parseWorkspaceIDs(args)
+	if len(ids) == 0 {
+		return
+	}
+	for _, id := range ids {
+		s.Leave(socket.Room(workspaceRoomPrefix + id))
+	}
+	logger.Info("socketio: workspace unsubscribe",
+		"socket_id", string(s.Id()),
+		"subject", subject,
+		"workspace_ids", ids,
+	)
+}
+
+// handleDisconnect cancels any in-flight dispatch goroutine so agent-runtime
+// requests stop and LLM tokens are not wasted for clients that already left.
+func handleDisconnect(s *socket.Socket, sd *socketData, subject string, logger *slog.Logger, args []any) {
+	reason := disconnectReason(args)
+	sd.Session.cancelCurrent()
+	logger.Info("socketio: client disconnected",
+		"socket_id", string(s.Id()),
+		"subject", subject,
+		"reason", reason,
+	)
+}
+
+func disconnectReason(args []any) string {
+	if len(args) == 0 {
+		return ""
+	}
+	r, _ := args[0].(string)
+	return r
 }
 
 // RegisterMessageHandler adds the message.send event handler to the Socket.IO server.

@@ -131,65 +131,89 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 		return nil, merrors.ErrInvalidInput
 	}
 
-	// Fast path: return cached status if the runtime is already verified
-	// and the cache entry hasn't expired. Reduces K8s API calls by ~95%.
-	if cached, ok := c.cache.get(opts.WorkspaceID); ok {
-		// Shallow copy so concurrent callers don't race on identity fields.
-		cp := *cached
-		cp.UserID = opts.UserID
-		cp.WorkspaceID = opts.WorkspaceID
-		return &cp, nil
+	if status, ok := c.cachedRuntime(opts); ok {
+		return status, nil
 	}
 
 	desired := c.desiredUserSwarm(ctx, opts)
-
-	// Look up existing CR (if any) before deciding create vs update.
-	var existing crawblv1alpha1.UserSwarm
-	err := c.client.Get(ctx, k8sclient.ObjectKey{Name: desired.Name}, &existing)
-	switch {
-	case err == nil:
-		// Update the spec in place when it has drifted.
-		if !reflect.DeepEqual(existing.Spec, desired.Spec) || !reflect.DeepEqual(existing.Labels, desired.Labels) {
-			existing.Spec = desired.Spec
-			existing.Labels = desired.Labels
-			if err := c.client.Update(ctx, &existing); err != nil {
-				return nil, merrors.WrapStdServerError(err, "update userswarm")
-			}
-		}
-	case k8sclient.IgnoreNotFound(err) == nil:
-		// CR does not exist yet — create it.
-		if err := c.client.Create(ctx, desired); err != nil {
-			return nil, merrors.WrapStdServerError(err, "create userswarm")
-		}
-	default:
-		return nil, merrors.WrapStdServerError(err, "get userswarm")
+	if mErr := c.reconcileUserSwarmCR(ctx, desired); mErr != nil {
+		return nil, mErr
 	}
 
-	// Fetch the current state (reads the status subresource populated
-	// by the UserSwarm webhook).
-	status, mErr := c.getRuntimeState(ctx, desired.Name)
+	status, mErr := c.fetchStampedRuntimeState(ctx, desired.Name, opts)
 	if mErr != nil {
 		return nil, mErr
 	}
-	// Stamp identity into the returned RuntimeStatus so the gRPC client
-	// half of this package can sign HMAC bearer tokens on every call.
-	status.UserID = opts.UserID
-	status.WorkspaceID = opts.WorkspaceID
 
 	if !opts.WaitForVerified || status.Verified {
 		c.cache.set(opts.WorkspaceID, status)
 		return status, nil
 	}
 
-	// Poll until Verified=true, PollTimeout, or ctx cancellation.
-	timeout := c.config.PollTimeout
-	if timeout <= 0 {
-		timeout = DefaultPollTimeout
+	return c.pollUntilVerified(ctx, desired.Name, opts, status)
+}
+
+// cachedRuntime returns the cached RuntimeStatus with identity stamped onto
+// a shallow copy so concurrent callers don't race on shared fields.
+func (c *userSwarmClient) cachedRuntime(opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, bool) {
+	cached, ok := c.cache.get(opts.WorkspaceID)
+	if !ok {
+		return nil, false
 	}
-	interval := c.config.PollInterval
-	if interval <= 0 {
-		interval = DefaultPollInterval
+	cp := *cached
+	cp.UserID = opts.UserID
+	cp.WorkspaceID = opts.WorkspaceID
+	return &cp, true
+}
+
+// reconcileUserSwarmCR creates the UserSwarm CR when missing and updates it
+// in place when its spec or labels have drifted from the desired shape.
+func (c *userSwarmClient) reconcileUserSwarmCR(ctx context.Context, desired *crawblv1alpha1.UserSwarm) *merrors.Error {
+	var existing crawblv1alpha1.UserSwarm
+	err := c.client.Get(ctx, k8sclient.ObjectKey{Name: desired.Name}, &existing)
+	switch {
+	case err == nil:
+		return c.updateIfDrifted(ctx, &existing, desired)
+	case k8sclient.IgnoreNotFound(err) == nil:
+		if createErr := c.client.Create(ctx, desired); createErr != nil {
+			return merrors.WrapStdServerError(createErr, "create userswarm")
+		}
+		return nil
+	default:
+		return merrors.WrapStdServerError(err, "get userswarm")
 	}
+}
+
+func (c *userSwarmClient) updateIfDrifted(ctx context.Context, existing, desired *crawblv1alpha1.UserSwarm) *merrors.Error {
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && reflect.DeepEqual(existing.Labels, desired.Labels) {
+		return nil
+	}
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	if err := c.client.Update(ctx, existing); err != nil {
+		return merrors.WrapStdServerError(err, "update userswarm")
+	}
+	return nil
+}
+
+// fetchStampedRuntimeState reads the runtime status subresource and stamps
+// the caller's identity onto the returned value so downstream gRPC calls can
+// sign HMAC bearer tokens without another lookup.
+func (c *userSwarmClient) fetchStampedRuntimeState(ctx context.Context, swarmName string, opts *EnsureRuntimeOpts) (*orchestrator.RuntimeStatus, *merrors.Error) {
+	status, mErr := c.getRuntimeState(ctx, swarmName)
+	if mErr != nil {
+		return nil, mErr
+	}
+	status.UserID = opts.UserID
+	status.WorkspaceID = opts.WorkspaceID
+	return status, nil
+}
+
+// pollUntilVerified waits for the UserSwarm webhook to flip Verified=true,
+// the PollTimeout to elapse, or ctx to cancel. The last observed status is
+// returned on timeout alongside ErrRuntimeNotReady.
+func (c *userSwarmClient) pollUntilVerified(ctx context.Context, swarmName string, opts *EnsureRuntimeOpts, status *orchestrator.RuntimeStatus) (*orchestrator.RuntimeStatus, *merrors.Error) {
+	timeout, interval := c.resolvePollDurations()
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -199,18 +223,29 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 			return nil, merrors.WrapStdServerError(ctx.Err(), "ensure runtime canceled")
 		case <-ticker.C:
 		}
-		status, mErr = c.getRuntimeState(ctx, desired.Name)
+		next, mErr := c.fetchStampedRuntimeState(ctx, swarmName, opts)
 		if mErr != nil {
 			return nil, mErr
 		}
-		status.UserID = opts.UserID
-		status.WorkspaceID = opts.WorkspaceID
+		status = next
 		if status.Verified {
 			c.cache.set(opts.WorkspaceID, status)
 			return status, nil
 		}
 	}
 	return status, merrors.ErrRuntimeNotReady
+}
+
+func (c *userSwarmClient) resolvePollDurations() (timeout, interval time.Duration) {
+	timeout = c.config.PollTimeout
+	if timeout <= 0 {
+		timeout = DefaultPollTimeout
+	}
+	interval = c.config.PollInterval
+	if interval <= 0 {
+		interval = DefaultPollInterval
+	}
+	return timeout, interval
 }
 
 // getRuntimeState reads the UserSwarm CR and converts its status into

@@ -474,74 +474,30 @@ func newMemoryGraphStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGraphSta
 
 // --- Write tool handlers ---
 
+// defaultMemoryType is the memoryType stamped when no classifier is wired
+// in or no class crosses the minimum confidence threshold.
+const defaultMemoryType = "general"
+
+// reinforcementSearchLimit caps the similar-drawer sweep used to boost
+// related memories after a new drawer is filed.
+const reinforcementSearchLimit = 5
+
 func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawerInput, memoryAddDrawerOutput] {
 	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryAddDrawerInput) (*sdkmcp.CallToolResult, memoryAddDrawerOutput, error) {
-		if input.Wing == "" || input.Room == "" || input.Content == "" {
-			return nil, memoryAddDrawerOutput{Info: "wing, room, and content are required"}, nil
-		}
-		if len(input.Content) > memory.MaxContentLength {
-			return nil, memoryAddDrawerOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxContentLength)}, nil
+		if msg := validateAddDrawerInput(input); msg != "" {
+			return nil, memoryAddDrawerOutput{Info: msg}, nil
 		}
 
-		// Generate drawer ID.
-		hash := sha256.Sum256([]byte(input.Content))
-		drawerID := fmt.Sprintf("drawer_%s_%s_%x", input.Wing, input.Room, hash[:8])
+		drawerID := newDrawerID(input)
+		memoryType, importance := classifyDrawer(deps, input.Content)
+		embedding := embedDrawer(ctx, deps, input.Content)
 
-		// Classify memory type and derive importance.
-		memoryType := "general"
-		importance := defaultImportance
-		if deps.Classifier != nil {
-			classified := deps.Classifier.Classify(input.Content, classifierMinConfidence)
-			if len(classified) > 0 {
-				memoryType = classified[0].MemoryType
-				for _, c := range classified {
-					if c.Confidence*importanceScale > importance {
-						importance = c.Confidence * importanceScale
-					}
-				}
-			}
-		}
-
-		// Generate embedding (best-effort).
-		var embedding []float32
-		if deps.Embedder != nil {
-			emb, err := deps.Embedder.Embed(ctx, input.Content)
-			if err != nil {
-				deps.Logger.WarnContext(ctx, "embedding failed for drawer, storing without embedding", "error", err)
-			} else {
-				embedding = emb
-			}
-		}
-
-		d := &memory.Drawer{
-			ID:           drawerID,
-			WorkspaceID:  workspaceID,
-			Wing:         input.Wing,
-			Room:         input.Room,
-			Content:      input.Content,
-			MemoryType:   memoryType,
-			Importance:   importance,
-			SourceFile:   input.SourceFile,
-			AddedBy:      input.AddedBy,
-			PipelineTier: memory.PipelineTierLLM,
-			FiledAt:      time.Now().UTC(),
-			CreatedAt:    time.Now().UTC(),
-		}
-
+		d := buildDrawer(drawerID, workspaceID, input, memoryType, importance)
 		if err := deps.DrawerRepo.AddIdempotent(ctx, sess, d, embedding); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to store drawer", "error", err)
 			return nil, memoryAddDrawerOutput{Info: "failed to store memory"}, nil
 		}
-
-		// Reinforce similar memories.
-		if len(embedding) > 0 {
-			similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", 5)
-			for i := range similar {
-				if similar[i].ID != drawerID && similar[i].Similarity > memory.ReinforcementThreshold {
-					_ = deps.DrawerRepo.BoostImportance(ctx, sess, workspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
-				}
-			}
-		}
+		reinforceSimilarDrawers(ctx, deps, sess, workspaceID, drawerID, embedding)
 
 		return nil, memoryAddDrawerOutput{
 			DrawerID:   drawerID,
@@ -549,6 +505,90 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			Info:       "drawer added",
 		}, nil
 	})
+}
+
+// validateAddDrawerInput returns the user-facing error for a rejected add,
+// or empty string when the input is acceptable.
+func validateAddDrawerInput(input memoryAddDrawerInput) string {
+	if input.Wing == "" || input.Room == "" || input.Content == "" {
+		return "wing, room, and content are required"
+	}
+	if len(input.Content) > memory.MaxContentLength {
+		return fmt.Sprintf("content exceeds max length of %d", memory.MaxContentLength)
+	}
+	return ""
+}
+
+func newDrawerID(input memoryAddDrawerInput) string {
+	hash := sha256.Sum256([]byte(input.Content))
+	return fmt.Sprintf("drawer_%s_%s_%x", input.Wing, input.Room, hash[:8])
+}
+
+// classifyDrawer runs the optional classifier, returning the derived memory
+// type and importance. Falls back to (defaultMemoryType, defaultImportance)
+// when no classifier is wired in or no class crosses the threshold.
+func classifyDrawer(deps *Deps, content string) (string, float64) {
+	if deps.Classifier == nil {
+		return defaultMemoryType, defaultImportance
+	}
+	classified := deps.Classifier.Classify(content, classifierMinConfidence)
+	if len(classified) == 0 {
+		return defaultMemoryType, defaultImportance
+	}
+	memoryType := classified[0].MemoryType
+	importance := defaultImportance
+	for _, c := range classified {
+		if scaled := c.Confidence * importanceScale; scaled > importance {
+			importance = scaled
+		}
+	}
+	return memoryType, importance
+}
+
+func embedDrawer(ctx context.Context, deps *Deps, content string) []float32 {
+	if deps.Embedder == nil {
+		return nil
+	}
+	emb, err := deps.Embedder.Embed(ctx, content)
+	if err != nil {
+		deps.Logger.WarnContext(ctx, "embedding failed for drawer, storing without embedding", "error", err)
+		return nil
+	}
+	return emb
+}
+
+func buildDrawer(drawerID, workspaceID string, input memoryAddDrawerInput, memoryType string, importance float64) *memory.Drawer {
+	now := time.Now().UTC()
+	return &memory.Drawer{
+		ID:           drawerID,
+		WorkspaceID:  workspaceID,
+		Wing:         input.Wing,
+		Room:         input.Room,
+		Content:      input.Content,
+		MemoryType:   memoryType,
+		Importance:   importance,
+		SourceFile:   input.SourceFile,
+		AddedBy:      input.AddedBy,
+		PipelineTier: memory.PipelineTierLLM,
+		FiledAt:      now,
+		CreatedAt:    now,
+	}
+}
+
+// reinforceSimilarDrawers boosts the importance of other drawers that are
+// semantically close to the freshly added one. Best-effort — any repo error
+// is swallowed so the primary add never fails on reinforcement issues.
+func reinforceSimilarDrawers(ctx context.Context, deps *Deps, sess *dbr.Session, workspaceID, drawerID string, embedding []float32) {
+	if len(embedding) == 0 {
+		return
+	}
+	similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", reinforcementSearchLimit)
+	for i := range similar {
+		if similar[i].ID == drawerID || similar[i].Similarity <= memory.ReinforcementThreshold {
+			continue
+		}
+		_ = deps.DrawerRepo.BoostImportance(ctx, sess, workspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
+	}
 }
 
 func newMemoryDeleteDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDeleteDrawerInput, memoryDeleteDrawerOutput] {

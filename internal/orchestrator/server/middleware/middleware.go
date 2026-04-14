@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/subtle"
 	"fmt"
 	"log/slog"
@@ -96,85 +97,125 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// In local/test environments, inject a default principal and skip auth.
 			env := strings.ToLower(strings.TrimSpace(cfg.Environment))
-			if env == EnvironmentLocal || env == "test" {
-				ctx := ContextWithPrincipal(r.Context(), &orchestrator.Principal{
-					Subject: "local-dev-user",
-					Email:   "dev@crawbl.local",
-					Name:    "Local Dev",
-				})
+
+			if ctx, ok := localDevContext(r.Context(), env); ok {
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			// E2E test auth bypass: when CRAWBL_E2E_TOKEN is set and the environment
-			// is NOT production, allow requests with a matching X-E2E-Token header
-			// to authenticate via X-E2E-UID/Email/Name instead of Firebase JWT.
-			// This is disabled in production even if the env var is accidentally set.
-			if cfg.E2EToken != "" && (env == EnvironmentLocal || env == "dev") {
-				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(cfg.E2EToken)) == 1 {
-					e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
-					if e2eUID == "" {
-						httpserver.WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
-						return
-					}
-
-					principal := &orchestrator.Principal{
-						Subject: e2eUID,
-						Email:   strings.TrimSpace(r.Header.Get(XE2EEmailHeader)),
-						Name:    strings.TrimSpace(r.Header.Get(XE2ENameHeader)),
-					}
-
-					logger.Info("e2e auth bypass",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"subject", principal.Subject,
-					)
-
-					ctx := ContextWithPrincipal(r.Context(), principal)
-					ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
-						TokenSource: AuthTokenSourceXToken,
-						DeviceInfo:  "e2e-test",
-						DeviceID:    "e2e-device",
-						Version:     "e2e",
-						Timezone:    "UTC",
-					})
-
+			if ctx, handled := applyE2EBypass(w, r, cfg, env, logger); handled {
+				if ctx != nil {
 					next.ServeHTTP(w, r.WithContext(ctx))
-					return
 				}
-			}
-
-			// Read gateway-verified claims from Envoy-forwarded headers.
-			uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
-			if uid == "" {
-				httpserver.WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 
-			principal := &orchestrator.Principal{
-				Subject: uid,
-				Email:   strings.TrimSpace(r.Header.Get(XFirebaseEmailHeader)),
-				Name:    strings.TrimSpace(r.Header.Get(XFirebaseNameHeader)),
+			ctx, ok := applyFirebaseAuth(w, r, logger)
+			if !ok {
+				return
 			}
-
-			logger.Info("auth middleware succeeded",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"subject", principal.Subject,
-			)
-
-			ctx := ContextWithPrincipal(r.Context(), principal)
-			ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
-				TokenSource: AuthTokenSourceXToken,
-				DeviceInfo:  strings.TrimSpace(r.Header.Get(XDeviceInfoHeader)),
-				DeviceID:    strings.TrimSpace(r.Header.Get(XDeviceIDHeader)),
-				Version:     strings.TrimSpace(r.Header.Get(XVersionHeader)),
-				Timezone:    strings.TrimSpace(r.Header.Get(XTimezoneHeader)),
-			})
-
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// envTest is the environment identifier for automated-test deployments.
+const envTest = "test"
+
+// envDev is the environment identifier for shared development clusters.
+const envDev = "dev"
+
+// localDevContext returns a context carrying the stubbed local principal when
+// the environment is local or test, and reports whether the short-circuit
+// applied. Production paths always take the caller-supplied auth flow.
+func localDevContext(ctx context.Context, env string) (context.Context, bool) {
+	if env != EnvironmentLocal && env != envTest {
+		return nil, false
+	}
+	return ContextWithPrincipal(ctx, &orchestrator.Principal{
+		Subject: "local-dev-user",
+		Email:   "dev@crawbl.local",
+		Name:    "Local Dev",
+	}), true
+}
+
+// applyE2EBypass handles the CRAWBL_E2E_TOKEN auth-override flow used by the
+// e2e suite. Returns the enriched context together with `handled=true` when
+// the request matched the bypass path (either the enriched ctx or a nil ctx
+// meaning the handler already wrote the response).
+func applyE2EBypass(w http.ResponseWriter, r *http.Request, cfg *MiddlewareConfig, env string, logger *slog.Logger) (context.Context, bool) {
+	if !e2eBypassAllowed(cfg, env) {
+		return nil, false
+	}
+	token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader))
+	if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(cfg.E2EToken)) != 1 {
+		return nil, false
+	}
+	e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
+	if e2eUID == "" {
+		httpserver.WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
+		return nil, true
+	}
+
+	principal := &orchestrator.Principal{
+		Subject: e2eUID,
+		Email:   strings.TrimSpace(r.Header.Get(XE2EEmailHeader)),
+		Name:    strings.TrimSpace(r.Header.Get(XE2ENameHeader)),
+	}
+	logger.Info("e2e auth bypass",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"subject", principal.Subject,
+	)
+
+	ctx := ContextWithPrincipal(r.Context(), principal)
+	ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
+		TokenSource: AuthTokenSourceXToken,
+		DeviceInfo:  "e2e-test",
+		DeviceID:    "e2e-device",
+		Version:     "e2e",
+		Timezone:    "UTC",
+	})
+	return ctx, true
+}
+
+func e2eBypassAllowed(cfg *MiddlewareConfig, env string) bool {
+	if cfg.E2EToken == "" {
+		return false
+	}
+	return env == EnvironmentLocal || env == envDev
+}
+
+// applyFirebaseAuth reads the Envoy-forwarded Firebase claim headers and
+// returns the enriched request context. On missing identity it writes a 401
+// and returns ok=false so the caller short-circuits.
+func applyFirebaseAuth(w http.ResponseWriter, r *http.Request, logger *slog.Logger) (context.Context, bool) {
+	uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
+	if uid == "" {
+		httpserver.WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
+		return nil, false
+	}
+
+	principal := &orchestrator.Principal{
+		Subject: uid,
+		Email:   strings.TrimSpace(r.Header.Get(XFirebaseEmailHeader)),
+		Name:    strings.TrimSpace(r.Header.Get(XFirebaseNameHeader)),
+	}
+
+	logger.Info("auth middleware succeeded",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"subject", principal.Subject,
+	)
+
+	ctx := ContextWithPrincipal(r.Context(), principal)
+	ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
+		TokenSource: AuthTokenSourceXToken,
+		DeviceInfo:  strings.TrimSpace(r.Header.Get(XDeviceInfoHeader)),
+		DeviceID:    strings.TrimSpace(r.Header.Get(XDeviceIDHeader)),
+		Version:     strings.TrimSpace(r.Header.Get(XVersionHeader)),
+		Timezone:    strings.TrimSpace(r.Header.Get(XTimezoneHeader)),
+	})
+	return ctx, true
 }

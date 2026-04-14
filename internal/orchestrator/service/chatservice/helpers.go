@@ -111,48 +111,62 @@ func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) st
 	}
 
 	runes := []rune(message)
-	drop := make([]bool, len(runes))
-
-	for _, mention := range mentions {
-		if mention.Offset < 0 || mention.Length <= 0 || mention.Offset >= len(runes) {
-			continue
-		}
-
-		end := mention.Offset + mention.Length
-		if end > len(runes) {
-			end = len(runes)
-		}
-		for i := mention.Offset; i < end; i++ {
-			drop[i] = true
-		}
+	drop := mentionDropMask(runes, mentions)
+	normalized := strings.TrimSpace(collapseKeptRunes(runes, drop))
+	if normalized == "" {
+		return trimmed
 	}
+	return normalized
+}
 
+// mentionDropMask marks every rune covered by a mention span as drop=true.
+// Mentions with out-of-range offsets or non-positive lengths are skipped.
+func mentionDropMask(runes []rune, mentions []orchestrator.Mention) []bool {
+	drop := make([]bool, len(runes))
+	for _, mention := range mentions {
+		markMentionSpan(drop, mention, len(runes))
+	}
+	return drop
+}
+
+func markMentionSpan(drop []bool, mention orchestrator.Mention, total int) {
+	if mention.Offset < 0 || mention.Length <= 0 || mention.Offset >= total {
+		return
+	}
+	end := mention.Offset + mention.Length
+	if end > total {
+		end = total
+	}
+	for i := mention.Offset; i < end; i++ {
+		drop[i] = true
+	}
+}
+
+// collapseKeptRunes returns the kept runes with runs of whitespace collapsed
+// to a single space so removed @mention spans do not leave double spaces.
+func collapseKeptRunes(runes []rune, drop []bool) string {
 	var out []rune
 	lastWasSpace := false
 	for i, r := range runes {
 		if drop[i] {
 			continue
 		}
-		if r == '\t' || r == '\n' || r == '\r' {
-			r = ' '
-		}
-		if r == ' ' {
-			if lastWasSpace || len(out) == 0 {
-				continue
-			}
-			lastWasSpace = true
-			out = append(out, r)
-			continue
-		}
-		lastWasSpace = false
-		out = append(out, r)
+		lastWasSpace, out = appendNormalizedRune(out, r, lastWasSpace)
 	}
+	return string(out)
+}
 
-	normalized := strings.TrimSpace(string(out))
-	if normalized == "" {
-		return trimmed
+func appendNormalizedRune(out []rune, r rune, lastWasSpace bool) (bool, []rune) {
+	if r == '\t' || r == '\n' || r == '\r' {
+		r = ' '
 	}
-	return normalized
+	if r != ' ' {
+		return false, append(out, r)
+	}
+	if lastWasSpace || len(out) == 0 {
+		return lastWasSpace, out
+	}
+	return true, append(out, r)
 }
 
 // The runtime treats an empty agent_id as "use the default manager entrypoint".

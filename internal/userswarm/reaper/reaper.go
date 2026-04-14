@@ -47,22 +47,25 @@ import (
 // Errors in individual per-user or per-swarm operations are counted and
 // logged but do not abort the run. This means a single bad record cannot
 // block cleanup of the remaining resources.
+// reaperMaxOpenConns caps the DB pool used by the short-lived reaper job.
+const reaperMaxOpenConns = 2
+
+// reaperMaxIdleConns caps the idle pool for the reaper's short-lived job.
+const reaperMaxIdleConns = 1
+
+// e2eUserSubjectPrefix identifies e2e test users whose stale swarms phase 1
+// is allowed to clean up.
+const e2eUserSubjectPrefix = "e2e-"
+
 func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	logger := slog.Default()
 	result := &Result{}
 
-	// Open a connection pool to Postgres. We cap connections to 2 because the
-	// reaper runs as a short-lived job and does not need high concurrency. The
-	// pool is closed with defer so it is released even if we return early on
-	// an error.
-	conn, err := dbr.Open("pgx", cfg.DatabaseDSN, nil)
+	conn, err := openReaperDB(cfg.DatabaseDSN)
 	if err != nil {
-		return nil, fmt.Errorf("connect to database: %w", err)
+		return nil, err
 	}
 	defer func() { _ = conn.Close() }()
-	conn.Dialect = dialect.PostgreSQL
-	conn.SetMaxOpenConns(2)
-	conn.SetMaxIdleConns(1)
 	sess := conn.NewSession(nil)
 
 	// Build a controller-runtime client scoped to the UserSwarm CRD scheme.
@@ -73,25 +76,45 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 		return nil, fmt.Errorf("build k8s client: %w", err)
 	}
 
-	// Calculate the cutoff timestamp. Any UserSwarm CR whose Kubernetes
-	// CreationTimestamp is older than this moment is considered stale and
-	// eligible for reaping. CRs created after the cutoff are still within the
-	// MaxAge window and are left alone (they may belong to a test run that is
-	// still in progress).
+	// Cutoff: any CR whose CreationTimestamp is older than this moment is
+	// stale. Younger CRs may belong to an in-progress test and are skipped.
 	cutoff := time.Now().UTC().Add(-cfg.MaxAge)
 	repo := reaperrepo.New()
 
-	// Phase 1: list every UserSwarm CR in the cluster and drive cleanup off
-	// its own CreationTimestamp. We used to iterate the users table instead,
-	// which meant a CR could outlive its row indefinitely — once the user was
-	// soft-deleted out of band, phase 1 stopped seeing it and phase 2's
-	// user-existence check was the only thing keeping the CR in scope. By
-	// looking at CR age directly we catch stale swarms regardless of DB state.
-	var swarmList crawblv1alpha1.UserSwarmList
-	if err := k8sClient.List(ctx, &swarmList); err != nil {
-		return nil, fmt.Errorf("list userswarms: %w", err)
+	if err := runStaleSwarmPhase(ctx, k8sClient, sess, repo, logger, cfg, cutoff, result); err != nil {
+		return nil, err
 	}
 
+	// Phase 2 orphan sweep: scan all UserSwarm CRs in the cluster and remove
+	// any that are no longer backed by an active user. Catches out-of-band
+	// user deletions and partial reaps from earlier runs.
+	orphaned, errs := reapOrphanedSwarms(ctx, k8sClient, sess, repo, logger, cfg.DryRun)
+	result.SwarmsReaped += orphaned
+	result.Errors += errs
+
+	return result, nil
+}
+
+// openReaperDB opens the Postgres pool the reaper uses for its single run.
+// Connection count is intentionally tiny — this is a CronJob.
+func openReaperDB(dsn string) (*dbr.Connection, error) {
+	conn, err := dbr.Open("pgx", dsn, nil)
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
+	}
+	conn.Dialect = dialect.PostgreSQL
+	conn.SetMaxOpenConns(reaperMaxOpenConns)
+	conn.SetMaxIdleConns(reaperMaxIdleConns)
+	return conn, nil
+}
+
+// runStaleSwarmPhase is phase 1: list all UserSwarm CRs and reap the ones
+// older than cutoff whose owning user is an e2e test user.
+func runStaleSwarmPhase(ctx context.Context, k8sClient client.Client, sess *dbr.Session, repo *reaperrepo.Repo, logger *slog.Logger, cfg *Config, cutoff time.Time, result *Result) error {
+	var swarmList crawblv1alpha1.UserSwarmList
+	if err := k8sClient.List(ctx, &swarmList); err != nil {
+		return fmt.Errorf("list userswarms: %w", err)
+	}
 	logger.Info("scanning userswarm CRs for staleness",
 		"total", len(swarmList.Items),
 		"cutoff", cutoff.Format(time.RFC3339),
@@ -102,108 +125,140 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	// don't issue a redundant UPDATE when the same e2e user owns multiple
 	// stale CRs (one per workspace).
 	softDeletedUsers := make(map[string]struct{})
-
 	for i := range swarmList.Items {
-		swarm := &swarmList.Items[i]
+		reapStaleSwarm(ctx, &staleSwarmCtx{
+			k8sClient:        k8sClient,
+			sess:             sess,
+			repo:             repo,
+			logger:           logger,
+			cfg:              cfg,
+			cutoff:           cutoff,
+			result:           result,
+			softDeletedUsers: softDeletedUsers,
+			swarm:            &swarmList.Items[i],
+		})
+	}
+	return nil
+}
 
-		// Skip CRs that have not yet aged past the cutoff.
-		if swarm.CreationTimestamp.After(cutoff) {
-			continue
-		}
+// staleSwarmCtx bundles the per-swarm inputs so the loop body doesn't need a
+// nine-parameter function signature.
+type staleSwarmCtx struct {
+	k8sClient        client.Client
+	sess             *dbr.Session
+	repo             *reaperrepo.Repo
+	logger           *slog.Logger
+	cfg              *Config
+	cutoff           time.Time
+	result           *Result
+	softDeletedUsers map[string]struct{}
+	swarm            *crawblv1alpha1.UserSwarm
+}
 
-		age := time.Since(swarm.CreationTimestamp.Time).Truncate(time.Minute)
-		userID := swarm.Spec.UserID
-
-		// Look up the owning user (including soft-deleted rows) so we can
-		// decide whether this is an e2e swarm worth reaping in phase 1, and
-		// so we can log a meaningful subject. Orphans (no user row at all)
-		// are left to phase 2, which is the dedicated orphan sweep.
-		userRow, err := repo.FindUserByID(ctx, sess, userID)
-		if err != nil {
-			logger.Error("failed to look up user for stale swarm",
-				"swarm", swarm.Name,
-				"user_id", userID,
-				"error", err,
-			)
-			result.Errors++
-			continue
-		}
-		if userRow == nil {
-			// No user row at all — leave it to phase 2's orphan sweep so the
-			// log output cleanly separates "stale e2e" from "orphaned".
-			continue
-		}
-
-		// Phase 1 is scoped to e2e users. Stale CRs for real users are a
-		// different class of problem (possibly a bug in the teardown path)
-		// and should not be silently deleted here.
-		if !strings.HasPrefix(userRow.Subject, "e2e-") {
-			continue
-		}
-
-		result.UsersFound++
-		logger.Info("processing stale userswarm",
-			"swarm", swarm.Name,
-			"subject", userRow.Subject,
-			"email", userRow.Email,
-			"age", age,
-			"dry_run", cfg.DryRun,
-		)
-
-		if cfg.DryRun {
-			result.SwarmsReaped++
-			if _, seen := softDeletedUsers[userRow.ID]; !seen {
-				softDeletedUsers[userRow.ID] = struct{}{}
-				result.UsersReaped++
-			}
-			continue
-		}
-
-		if err := k8sClient.Delete(ctx, swarm); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				logger.Error("failed to delete stale userswarm", "name", swarm.Name, "error", err)
-				result.Errors++
-				continue
-			}
-		}
-		logger.Info("deleted stale userswarm", "name", swarm.Name, "user", userRow.Subject)
-		result.SwarmsReaped++
-
-		// Soft-delete the user row once, even if multiple CRs map back to
-		// the same user. The deleted_at IS NULL guard inside SoftDeleteUser
-		// is a second line of defence against double-writes.
-		if _, seen := softDeletedUsers[userRow.ID]; seen {
-			continue
-		}
-		softDeletedUsers[userRow.ID] = struct{}{}
-		if userRow.DeletedAt != nil {
-			// User was already soft-deleted out of band (e.g. by an earlier
-			// reaper run that failed after the DB update but before the CR
-			// delete). Count it as reaped for visibility, but skip the
-			// UPDATE since there's nothing to do.
-			result.UsersReaped++
-			continue
-		}
-		if err := repo.SoftDeleteUser(ctx, sess, userRow.ID); err != nil {
-			logger.Error("failed to soft-delete user", "subject", userRow.Subject, "error", err)
-			result.Errors++
-			continue
-		}
-		result.UsersReaped++
-		logger.Info("reaped user", "subject", userRow.Subject)
+// reapStaleSwarm processes a single CR from phase 1. Work is split into small
+// helpers so the outer loop body stays a straight list of guard-clauses.
+func reapStaleSwarm(ctx context.Context, sc *staleSwarmCtx) {
+	if sc.swarm.CreationTimestamp.After(sc.cutoff) {
+		return
 	}
 
-	// Phase 2: orphan sweep. Scan all UserSwarm CRs in the cluster and remove
-	// any that are no longer backed by an active user. This catches cases where:
-	//   - A user was deleted directly in the database without going through the
-	//     normal reaper flow (e.g. a manual admin action).
-	//   - A previous reaper run soft-deleted the user but failed to delete the
-	//     corresponding swarm CR.
-	orphaned, errs := reapOrphanedSwarms(ctx, k8sClient, sess, repo, logger, cfg.DryRun)
-	result.SwarmsReaped += orphaned
-	result.Errors += errs
+	userRow, ok := lookupSwarmUser(ctx, sc)
+	if !ok {
+		return
+	}
+	if !strings.HasPrefix(userRow.Subject, e2eUserSubjectPrefix) {
+		return
+	}
 
-	return result, nil
+	age := time.Since(sc.swarm.CreationTimestamp.Time).Truncate(time.Minute)
+	sc.result.UsersFound++
+	sc.logger.Info("processing stale userswarm",
+		"swarm", sc.swarm.Name,
+		"subject", userRow.Subject,
+		"email", userRow.Email,
+		"age", age,
+		"dry_run", sc.cfg.DryRun,
+	)
+
+	if sc.cfg.DryRun {
+		reapStaleSwarmDryRun(sc, userRow.ID)
+		return
+	}
+
+	if !deleteStaleSwarmCR(ctx, sc) {
+		return
+	}
+	softDeleteStaleUser(ctx, sc, userRow)
+}
+
+// lookupSwarmUser resolves the owning user row for a stale swarm. Returns
+// ok=false when the swarm should be skipped (DB error or user missing).
+// Orphans (no user row) are deferred to phase 2 so the log clearly separates
+// "stale e2e" from "orphaned".
+func lookupSwarmUser(ctx context.Context, sc *staleSwarmCtx) (*reaperrepo.UserRow, bool) {
+	userRow, err := sc.repo.FindUserByID(ctx, sc.sess, sc.swarm.Spec.UserID)
+	if err != nil {
+		sc.logger.Error("failed to look up user for stale swarm",
+			"swarm", sc.swarm.Name,
+			"user_id", sc.swarm.Spec.UserID,
+			"error", err,
+		)
+		sc.result.Errors++
+		return nil, false
+	}
+	if userRow == nil {
+		return nil, false
+	}
+	return userRow, true
+}
+
+func reapStaleSwarmDryRun(sc *staleSwarmCtx, userID string) {
+	sc.result.SwarmsReaped++
+	if _, seen := sc.softDeletedUsers[userID]; seen {
+		return
+	}
+	sc.softDeletedUsers[userID] = struct{}{}
+	sc.result.UsersReaped++
+}
+
+// deleteStaleSwarmCR deletes the CR from the cluster. Returns false when a
+// real error occurred and the caller must not proceed to user soft-delete.
+func deleteStaleSwarmCR(ctx context.Context, sc *staleSwarmCtx) bool {
+	if err := sc.k8sClient.Delete(ctx, sc.swarm); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			sc.logger.Error("failed to delete stale userswarm", "name", sc.swarm.Name, "error", err)
+			sc.result.Errors++
+			return false
+		}
+	}
+	sc.logger.Info("deleted stale userswarm", "name", sc.swarm.Name)
+	sc.result.SwarmsReaped++
+	return true
+}
+
+// softDeleteStaleUser soft-deletes the owning user row exactly once per run,
+// even when multiple CRs belong to the same user. The deleted_at IS NULL
+// guard inside SoftDeleteUser is a second line of defence.
+func softDeleteStaleUser(ctx context.Context, sc *staleSwarmCtx, userRow *reaperrepo.UserRow) {
+	if _, seen := sc.softDeletedUsers[userRow.ID]; seen {
+		return
+	}
+	sc.softDeletedUsers[userRow.ID] = struct{}{}
+
+	if userRow.DeletedAt != nil {
+		// Already soft-deleted out of band (e.g. a previous reaper run that
+		// failed after the DB update but before the CR delete). Count as
+		// reaped for visibility; skip the UPDATE.
+		sc.result.UsersReaped++
+		return
+	}
+	if err := sc.repo.SoftDeleteUser(ctx, sc.sess, userRow.ID); err != nil {
+		sc.logger.Error("failed to soft-delete user", "subject", userRow.Subject, "error", err)
+		sc.result.Errors++
+		return
+	}
+	sc.result.UsersReaped++
+	sc.logger.Info("reaped user", "subject", userRow.Subject)
 }
 
 // reapOrphanedSwarms is the second cleanup phase. It lists every UserSwarm CR
