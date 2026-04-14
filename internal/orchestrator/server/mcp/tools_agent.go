@@ -30,6 +30,13 @@ func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentH
 
 		RecordAPICall(ctx, "DB:INSERT agent_history")
 
+		// Fall back to the runtime-propagated conversation ID so the
+		// LLM does not have to remember it; the runtime stamps it on
+		// every per-turn ctx via WithConversationID.
+		if input.ConversationID == "" {
+			input.ConversationID = conversationIDFromContext(ctx)
+		}
+
 		err := deps.MCPService.CreateAgentHistory(ctx, sess, workspaceID, &mcpservice.CreateAgentHistoryParams{
 			AgentID:        input.AgentID,
 			AgentSlug:      input.AgentSlug,

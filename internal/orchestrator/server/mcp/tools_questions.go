@@ -11,10 +11,10 @@ import (
 )
 
 type askQuestionsInput struct {
-	AgentID        string             `json:"agent_id,omitempty"   jsonschema:"UUID of the asking agent (fast path)"`
-	AgentSlug      string             `json:"agent_slug,omitempty" jsonschema:"slug of the asking agent"`
-	ConversationID string             `json:"conversation_id"      jsonschema:"conversation this card belongs to"`
-	Turns          []askQuestionsTurn `json:"turns"                jsonschema:"ordered list of turn groups"`
+	AgentID        string             `json:"agent_id,omitempty"        jsonschema:"UUID of the asking agent (fast path)"`
+	AgentSlug      string             `json:"agent_slug,omitempty"      jsonschema:"slug of the asking agent"`
+	ConversationID string             `json:"conversation_id,omitempty" jsonschema:"optional; defaults to the current conversation if the runtime provided it — agents should not set this"`
+	Turns          []askQuestionsTurn `json:"turns"                     jsonschema:"ordered list of turn groups"`
 }
 
 type askQuestionsTurn struct {
@@ -44,8 +44,15 @@ func newAskQuestionsHandler(deps *Deps) sdkmcp.ToolHandlerFor[askQuestionsInput,
 		if input.AgentID == "" && input.AgentSlug == "" {
 			return nil, askQuestionsOutput{Info: errAgentIDOrSlugRequired}, nil
 		}
+		// Prefer the runtime-supplied conversation ID over any value
+		// the LLM may have hallucinated into the tool input. The
+		// runtime is the authoritative source — it processed the
+		// message that triggered this turn and knows the real ID.
 		if input.ConversationID == "" {
-			return nil, askQuestionsOutput{Info: "conversation_id is required"}, nil
+			input.ConversationID = conversationIDFromContext(ctx)
+		}
+		if input.ConversationID == "" {
+			return nil, askQuestionsOutput{Info: "conversation_id not available; runtime did not propagate it and none provided"}, nil
 		}
 		if len(input.Turns) == 0 {
 			return nil, askQuestionsOutput{Info: "at least one turn is required"}, nil

@@ -13,6 +13,8 @@ import (
 	adkrunner "google.golang.org/adk/runner"
 	adksession "google.golang.org/adk/session"
 	adktool "google.golang.org/adk/tool"
+
+	mcpbridge "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/mcp"
 )
 
 // AppName is the ADK runner's AppName parameter. ADK uses it as a
@@ -209,6 +211,12 @@ func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, t
 		// semantics the ConverseEvent oneof expects.
 		StreamingMode: adkagent.StreamingMode("sse"),
 	}
+	// Stamp the conversation ID onto the per-turn ctx so any MCP tool
+	// the LLM invokes during this turn carries it through to the
+	// orchestrator via the X-Conversation-Id header. The runtime
+	// treats sessionID as the conversation ID — there is one ADK
+	// session row per Crawbl conversation.
+	ctx = mcpbridge.WithConversationID(ctx, sessionID)
 	return inner.Run(ctx, userID, sessionID, content, runCfg)
 }
 
