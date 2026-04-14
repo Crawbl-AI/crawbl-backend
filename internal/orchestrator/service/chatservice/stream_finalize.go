@@ -21,36 +21,9 @@ func (ss *streamSession) finalize() []*orchestrator.Message {
 
 	// Primary agent first when delegation occurred.
 	if primarySt := ss.streams[ss.primary.ID]; primarySt != nil && len(ss.streams) > 1 {
-		text := strings.TrimSpace(primarySt.accumulated.String())
-
-		// Find a sub-agent that was delegated to. In multi-delegation scenarios
-		// pick the one with the lexicographically smallest ID for determinism.
-		var delegatee *orchestrator.Agent
-		streamIDs := make([]string, 0, len(ss.streams))
-		for id := range ss.streams {
-			streamIDs = append(streamIDs, id)
-		}
-		sort.Strings(streamIDs)
-		for _, id := range streamIDs {
-			if id != ss.primary.ID {
-				delegatee = ss.streams[id].agent
-				break
-			}
-		}
-
-		primarySt.placeholder.Content = orchestrator.MessageContent{
-			Type:        orchestrator.MessageContentTypeDelegation,
-			Text:        text,
-			From:        orchestrator.ContentAgentFromAgent(ss.primary),
-			To:          orchestrator.ContentAgentFromAgent(delegatee),
-			Status:      realtime.AgentDelegationStatusCompleted,
-			TaskPreview: truncateText(text, taskPreviewMaxRunes),
-		}
-		if reply := ss.finalizeMessage(primarySt.placeholder, text, orchestrator.MessageStatusDelegated); reply != nil {
+		if reply := ss.finalizePrimaryDelegation(primarySt); reply != nil {
 			replies = append(replies, reply)
 		}
-		ss.svc.updateDelegationSummary(ss.placeholder.ID, text)
-		ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, ss.primary.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 	}
 
 	// Remaining streams.
@@ -63,19 +36,62 @@ func (ss *streamSession) finalize() []*orchestrator.Message {
 		}
 	}
 
-	// Safety sweep: emit delegation completion for all sub-agents.
-	for _, st := range ss.streams {
-		if st.agent.ID != ss.primary.ID {
-			ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, realtime.AgentDelegationPayload{
-				From:           delegationAgent(ss.primary),
-				To:             delegationAgent(st.agent),
-				ConversationID: ss.convID, Status: realtime.AgentDelegationStatusCompleted,
-				MessageID: st.placeholder.ID,
-			})
+	ss.emitSubAgentDelegationDone()
+	return replies
+}
+
+// finalizePrimaryDelegation finalizes the primary agent's delegation message,
+// updates the summary, and emits the agent-online status event.
+// Returns the persisted reply, or nil if nothing was emitted.
+func (ss *streamSession) finalizePrimaryDelegation(primarySt *subAgentStream) *orchestrator.Message {
+	text := strings.TrimSpace(primarySt.accumulated.String())
+	delegatee := ss.firstSubAgent()
+
+	primarySt.placeholder.Content = orchestrator.MessageContent{
+		Type:        orchestrator.MessageContentTypeDelegation,
+		Text:        text,
+		From:        orchestrator.ContentAgentFromAgent(ss.primary),
+		To:          orchestrator.ContentAgentFromAgent(delegatee),
+		Status:      realtime.AgentDelegationStatusCompleted,
+		TaskPreview: truncateText(text, taskPreviewMaxRunes),
+	}
+	reply := ss.finalizeMessage(primarySt.placeholder, text, orchestrator.MessageStatusDelegated)
+	ss.svc.updateDelegationSummary(ss.placeholder.ID, text)
+	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, ss.primary.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	return reply
+}
+
+// firstSubAgent returns the sub-agent with the lexicographically smallest ID
+// among all non-primary streams. Used for deterministic delegation targeting in
+// multi-delegation scenarios.
+func (ss *streamSession) firstSubAgent() *orchestrator.Agent {
+	streamIDs := make([]string, 0, len(ss.streams))
+	for id := range ss.streams {
+		streamIDs = append(streamIDs, id)
+	}
+	sort.Strings(streamIDs)
+	for _, id := range streamIDs {
+		if id != ss.primary.ID {
+			return ss.streams[id].agent
 		}
 	}
+	return nil
+}
 
-	return replies
+// emitSubAgentDelegationDone emits delegation-completion events for all sub-agents.
+func (ss *streamSession) emitSubAgentDelegationDone() {
+	for _, st := range ss.streams {
+		if st.agent.ID == ss.primary.ID {
+			continue
+		}
+		ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, realtime.AgentDelegationPayload{
+			From:           delegationAgent(ss.primary),
+			To:             delegationAgent(st.agent),
+			ConversationID: ss.convID,
+			Status:         realtime.AgentDelegationStatusCompleted,
+			MessageID:      st.placeholder.ID,
+		})
+	}
 }
 
 // finalizeStream handles finalization for a single non-primary agent stream.

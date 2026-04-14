@@ -165,73 +165,90 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			"subject", subject,
 		)
 
-		// workspace.subscribe — verify ownership then join rooms and acknowledge.
-		_ = s.On(eventWorkspaceSubscribe, func(args ...any) {
-			ids := parseWorkspaceIDs(args)
-			if len(ids) == 0 {
-				return
-			}
+		registerWorkspaceSubscribeHandler(s, sd, logger, subject, shutdownCtx, db, workspaceRepo, authService)
+		registerWorkspaceUnsubscribeHandler(s, logger, subject)
+		registerDisconnectHandler(s, sd, logger, subject)
+	})
+}
 
-			// Guard: reject subscribe when no principal is present.
-			if sd.Principal == nil || strings.TrimSpace(sd.Principal.Subject) == "" {
-				logger.Warn("socketio: workspace subscribe rejected — no principal",
-					"socket_id", string(s.Id()),
-				)
-				return
-			}
+// registerWorkspaceSubscribeHandler wires the workspace.subscribe event on a socket.
+// It verifies ownership then joins the authorised workspace rooms.
+func registerWorkspaceSubscribeHandler(
+	s *socket.Socket,
+	sd *socketData,
+	logger *slog.Logger,
+	subject string,
+	shutdownCtx context.Context,
+	db *dbr.Connection,
+	workspaceRepo workspaceOwnerChecker,
+	authService authResolver,
+) {
+	_ = s.On(eventWorkspaceSubscribe, func(args ...any) {
+		ids := parseWorkspaceIDs(args)
+		if len(ids) == 0 {
+			return
+		}
 
-			authorised, ok := resolveAuthorisedWorkspaces(shutdownCtx, logger, s, sd.Principal.Subject, ids, db, workspaceRepo, authService)
-			if !ok {
-				return
-			}
-			if len(authorised) == 0 {
-				return
-			}
-
-			for _, id := range authorised {
-				s.Join(socket.Room(workspaceRoomPrefix + id))
-			}
-			logger.Info("socketio: workspace subscribe",
+		// Guard: reject subscribe when no principal is present.
+		if sd.Principal == nil || strings.TrimSpace(sd.Principal.Subject) == "" {
+			logger.Warn("socketio: workspace subscribe rejected — no principal",
 				"socket_id", string(s.Id()),
-				"subject", subject,
-				"workspace_ids", authorised,
 			)
-			_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
-		})
+			return
+		}
 
-		// workspace.unsubscribe — leave rooms.
-		_ = s.On(eventWorkspaceUnsubscribe, func(args ...any) {
-			ids := parseWorkspaceIDs(args)
-			if len(ids) == 0 {
-				return
-			}
-			for _, id := range ids {
-				s.Leave(socket.Room(workspaceRoomPrefix + id))
-			}
-			logger.Info("socketio: workspace unsubscribe",
-				"socket_id", string(s.Id()),
-				"subject", subject,
-				"workspace_ids", ids,
-			)
-		})
+		authorised, ok := resolveAuthorisedWorkspaces(shutdownCtx, logger, s, sd.Principal.Subject, ids, db, workspaceRepo, authService)
+		if !ok || len(authorised) == 0 {
+			return
+		}
 
-		// Registered once per socket. Cancels any in-flight dispatch goroutine so
-		// agent-runtime requests are stopped and LLM tokens are not wasted for
-		// clients that have already disconnected.
-		_ = s.On("disconnect", func(args ...any) {
-			reason := ""
-			if len(args) > 0 {
-				if r, ok := args[0].(string); ok {
-					reason = r
-				}
+		for _, id := range authorised {
+			s.Join(socket.Room(workspaceRoomPrefix + id))
+		}
+		logger.Info("socketio: workspace subscribe",
+			"socket_id", string(s.Id()),
+			"subject", subject,
+			"workspace_ids", authorised,
+		)
+		_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
+	})
+}
+
+// registerWorkspaceUnsubscribeHandler wires the workspace.unsubscribe event on a socket.
+func registerWorkspaceUnsubscribeHandler(s *socket.Socket, logger *slog.Logger, subject string) {
+	_ = s.On(eventWorkspaceUnsubscribe, func(args ...any) {
+		ids := parseWorkspaceIDs(args)
+		if len(ids) == 0 {
+			return
+		}
+		for _, id := range ids {
+			s.Leave(socket.Room(workspaceRoomPrefix + id))
+		}
+		logger.Info("socketio: workspace unsubscribe",
+			"socket_id", string(s.Id()),
+			"subject", subject,
+			"workspace_ids", ids,
+		)
+	})
+}
+
+// registerDisconnectHandler wires the disconnect event on a socket.
+// It cancels any in-flight dispatch goroutine so agent-runtime requests are
+// stopped and LLM tokens are not wasted for clients that have already disconnected.
+func registerDisconnectHandler(s *socket.Socket, sd *socketData, logger *slog.Logger, subject string) {
+	_ = s.On("disconnect", func(args ...any) {
+		reason := ""
+		if len(args) > 0 {
+			if r, ok := args[0].(string); ok {
+				reason = r
 			}
-			sd.Session.cancelCurrent()
-			logger.Info("socketio: client disconnected",
-				"socket_id", string(s.Id()),
-				"subject", subject,
-				"reason", reason,
-			)
-		})
+		}
+		sd.Session.cancelCurrent()
+		logger.Info("socketio: client disconnected",
+			"socket_id", string(s.Id()),
+			"subject", subject,
+			"reason", reason,
+		)
 	})
 }
 

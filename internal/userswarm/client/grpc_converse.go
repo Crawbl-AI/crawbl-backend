@@ -74,12 +74,33 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 		return nil, dialErr
 	}
 
+	stream, mErr := c.openConverseStream(authedCtx, conn, opts)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	turns, mErr := c.drainConverseEvents(stream, opts.Runtime)
+	if mErr != nil {
+		return nil, mErr
+	}
+	if len(turns) == 0 {
+		return nil, merrors.NewServerErrorText("runtime returned no turns")
+	}
+	return turns, nil
+}
+
+// openConverseStream dials a Converse bidi stream, sends the single request,
+// and closes the send side. Returns the open receive-only stream on success.
+func (c *userSwarmClient) openConverseStream(
+	ctx context.Context,
+	conn *grpc.ClientConn,
+	opts *SendTextOpts,
+) (runtimev1.AgentRuntime_ConverseClient, *merrors.Error) {
 	client := runtimev1.NewAgentRuntimeClient(conn)
-	stream, err := client.Converse(authedCtx)
+	stream, err := client.Converse(ctx)
 	if err != nil {
 		return nil, wrapGRPCError(err, "open converse stream")
 	}
-
 	req := &runtimev1.ConverseRequest{
 		SessionId:    opts.SessionID,
 		Message:      opts.Message,
@@ -94,38 +115,43 @@ func (c *userSwarmClient) SendText(ctx context.Context, opts *SendTextOpts) ([]A
 	if closeErr := stream.CloseSend(); closeErr != nil {
 		return nil, wrapGRPCError(closeErr, "close send")
 	}
+	return stream, nil
+}
 
+// drainConverseEvents reads events from a Converse stream until the terminal
+// DoneEvent or an error. Returns collected AgentTurns from the DoneEvent.
+func (c *userSwarmClient) drainConverseEvents(
+	stream runtimev1.AgentRuntime_ConverseClient,
+	rt *orchestrator.RuntimeStatus,
+) ([]AgentTurn, *merrors.Error) {
 	var turns []AgentTurn
 	for {
 		event, recvErr := stream.Recv()
 		if errors.Is(recvErr, io.EOF) {
-			break
+			return turns, nil
 		}
 		if recvErr != nil {
-			c.dropOnTransportError(recvErr, opts.Runtime)
+			c.dropOnTransportError(recvErr, rt)
 			return nil, wrapGRPCError(recvErr, "recv converse event")
 		}
-		if done := event.GetDone(); done != nil {
-			for _, t := range done.GetTurns() {
-				if strings.TrimSpace(t.GetText()) == "" {
-					continue
-				}
-				turns = append(turns, AgentTurn{
-					AgentID: t.GetAgentId(),
-					Text:    t.GetText(),
-				})
-			}
-			break
+		done := event.GetDone()
+		if done == nil {
+			// Chunk / Thinking / ToolCall / ToolResult events are dropped in
+			// the unary SendText path. SendTextStream surfaces them for
+			// live streaming consumers.
+			continue
 		}
-		// Chunk / Thinking / ToolCall / ToolResult events are dropped in
-		// the unary SendText path. SendTextStream surfaces them for
-		// live streaming consumers.
+		for _, t := range done.GetTurns() {
+			if strings.TrimSpace(t.GetText()) == "" {
+				continue
+			}
+			turns = append(turns, AgentTurn{
+				AgentID: t.GetAgentId(),
+				Text:    t.GetText(),
+			})
+		}
+		return turns, nil
 	}
-
-	if len(turns) == 0 {
-		return nil, merrors.NewServerErrorText("runtime returned no turns")
-	}
-	return turns, nil
 }
 
 // SendTextStream opens a Converse bidi stream and returns a channel of
@@ -141,25 +167,9 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 		return nil, dialErr
 	}
 
-	client := runtimev1.NewAgentRuntimeClient(conn)
-	stream, err := client.Converse(authedCtx)
-	if err != nil {
-		return nil, wrapGRPCError(err, "open converse stream")
-	}
-
-	req := &runtimev1.ConverseRequest{
-		SessionId:    opts.SessionID,
-		Message:      opts.Message,
-		AgentId:      opts.AgentID,
-		SystemPrompt: opts.SystemPrompt,
-		WorkspaceId:  opts.Runtime.WorkspaceID,
-		UserId:       opts.Runtime.UserID,
-	}
-	if sendErr := stream.Send(req); sendErr != nil {
-		return nil, wrapGRPCError(sendErr, "send converse request")
-	}
-	if closeErr := stream.CloseSend(); closeErr != nil {
-		return nil, wrapGRPCError(closeErr, "close send")
+	stream, mErr := c.openConverseStream(authedCtx, conn, opts)
+	if mErr != nil {
+		return nil, mErr
 	}
 
 	// Structured logging policy for this stream: one INFO at close time
@@ -190,60 +200,79 @@ func (c *userSwarmClient) SendTextStream(ctx context.Context, opts *SendTextOpts
 	// stream deadline.
 	go func() {
 		defer close(ch)
-		var chunkCount int
-		var doneSeen bool
-		for {
-			event, recvErr := stream.Recv()
-			if recvErr != nil {
-				if !errors.Is(recvErr, io.EOF) {
-					c.dropOnTransportError(recvErr, opts.Runtime)
-					slog.Error("runtime converse stream error",
-						"workspace_id", opts.Runtime.WorkspaceID,
-						"target_agent", agentIDOrManager(opts.AgentID),
-						"chunks_received", chunkCount,
-						"duration_ms", time.Since(streamStart).Milliseconds(),
-						"error", recvErr.Error(),
-					)
-				} else if !doneSeen {
-					slog.Warn("runtime converse stream closed before DoneEvent",
-						"workspace_id", opts.Runtime.WorkspaceID,
-						"target_agent", agentIDOrManager(opts.AgentID),
-						"chunks_received", chunkCount,
-						"duration_ms", time.Since(streamStart).Milliseconds(),
-					)
-				}
-				return
-			}
-			chunk, ok := translateEvent(event)
-			if !ok {
-				continue
-			}
-			chunkCount++
-			select {
-			case ch <- chunk:
-			case <-ctx.Done():
-				slog.Warn("runtime converse stream context cancelled",
-					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", agentIDOrManager(opts.AgentID),
-					"chunks_delivered", chunkCount,
-					"duration_ms", time.Since(streamStart).Milliseconds(),
-				)
-				return
-			}
-			if chunk.Type == StreamEventDone {
-				slog.Info("runtime converse turn complete",
-					"workspace_id", opts.Runtime.WorkspaceID,
-					"target_agent", agentIDOrManager(opts.AgentID),
-					"chunks_delivered", chunkCount,
-					"model", chunk.Model,
-					"duration_ms", time.Since(streamStart).Milliseconds(),
-				)
-				doneSeen = true
-			}
-		}
+		c.receiveStreamChunks(ctx, stream, ch, opts, streamStart)
 	}()
 
 	return ch, nil
+}
+
+// receiveStreamChunks reads events from stream, translates them to StreamChunks,
+// and forwards them on ch. Exits on error, EOF, ctx cancellation, or DoneEvent.
+func (c *userSwarmClient) receiveStreamChunks(
+	ctx context.Context,
+	stream runtimev1.AgentRuntime_ConverseClient,
+	ch chan<- StreamChunk,
+	opts *SendTextOpts,
+	streamStart time.Time,
+) {
+	var chunkCount int
+	var doneSeen bool
+	for {
+		event, recvErr := stream.Recv()
+		if recvErr != nil {
+			c.logStreamClose(recvErr, opts, chunkCount, doneSeen, streamStart)
+			return
+		}
+		chunk, ok := translateEvent(event)
+		if !ok {
+			continue
+		}
+		chunkCount++
+		select {
+		case ch <- chunk:
+		case <-ctx.Done():
+			slog.Warn("runtime converse stream context cancelled",
+				"workspace_id", opts.Runtime.WorkspaceID,
+				"target_agent", agentIDOrManager(opts.AgentID),
+				"chunks_delivered", chunkCount,
+				"duration_ms", time.Since(streamStart).Milliseconds(),
+			)
+			return
+		}
+		if chunk.Type == StreamEventDone {
+			slog.Info("runtime converse turn complete",
+				"workspace_id", opts.Runtime.WorkspaceID,
+				"target_agent", agentIDOrManager(opts.AgentID),
+				"chunks_delivered", chunkCount,
+				"model", chunk.Model,
+				"duration_ms", time.Since(streamStart).Milliseconds(),
+			)
+			doneSeen = true
+		}
+	}
+}
+
+// logStreamClose logs the appropriate message when a stream receive returns an error.
+func (c *userSwarmClient) logStreamClose(recvErr error, opts *SendTextOpts, chunkCount int, doneSeen bool, streamStart time.Time) {
+	if !errors.Is(recvErr, io.EOF) {
+		c.dropOnTransportError(recvErr, opts.Runtime)
+		slog.Error("runtime converse stream error",
+			"workspace_id", opts.Runtime.WorkspaceID,
+			"target_agent", agentIDOrManager(opts.AgentID),
+			"chunks_received", chunkCount,
+			"duration_ms", time.Since(streamStart).Milliseconds(),
+			"error", recvErr.Error(),
+		)
+		return
+	}
+	if !doneSeen {
+		slog.Warn("runtime converse stream closed before DoneEvent",
+			"workspace_id", opts.Runtime.WorkspaceID,
+			"target_agent", agentIDOrManager(opts.AgentID),
+			"chunks_received", chunkCount,
+			"duration_ms", time.Since(streamStart).Milliseconds(),
+		)
+	}
 }
 
 // translateEvent maps a runtimev1.ConverseEvent oneof into the

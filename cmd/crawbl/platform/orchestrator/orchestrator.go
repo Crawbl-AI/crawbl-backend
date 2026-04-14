@@ -97,17 +97,23 @@ func NewOrchestratorCommand() *cobra.Command {
 	return cmd
 }
 
-func runServer(ctx context.Context) error {
-	logLevel := slog.LevelInfo
+// resolveLogLevel maps the LOG_LEVEL environment variable to a slog.Level.
+// Unrecognised values default to Info.
+func resolveLogLevel() slog.Level {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
 	case "debug":
-		logLevel = slog.LevelDebug
+		return slog.LevelDebug
 	case "warn", "warning":
-		logLevel = slog.LevelWarn
+		return slog.LevelWarn
 	case "error":
-		logLevel = slog.LevelError
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+}
+
+func runServer(ctx context.Context) error {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: resolveLogLevel()}))
 	slog.SetDefault(logger)
 
 	// Telemetry: wire the OpenTelemetry meter provider up to
@@ -155,19 +161,7 @@ func runServer(ctx context.Context) error {
 	var centroidRepo mcpCentroidRepoRaw = centroidrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
-	var memoryStack layers.Stack
-	var embedder embed.Embedder
-	if baseURL := os.Getenv("CRAWBL_EMBED_BASE_URL"); baseURL != "" {
-		embedder = embed.NewProvider(embed.ProviderConfig{
-			BaseURL: baseURL,
-			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
-			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
-		})
-		memoryStack = layers.NewStack(drawerRepo, identityRepo, embedder)
-		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
-	} else {
-		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
-	}
+	memoryStack, embedder := buildMemoryStack(logger, drawerRepo, identityRepo)
 
 	// River schema migration — runs after app migrations, before HTTP server.
 	// Fatal on error: River is load-bearing; a failed migration must block boot.
@@ -658,6 +652,24 @@ func buildMCPHandler(deps mcpHandlerDeps) http.Handler {
 	})
 	logger.Info("MCP server enabled at /mcp/v1")
 	return handler
+}
+
+// buildMemoryStack constructs the embedder and memory stack when
+// CRAWBL_EMBED_BASE_URL is set. Returns (nil, nil) when the env var is absent
+// so downstream services degrade gracefully to messages-only context.
+func buildMemoryStack(logger *slog.Logger, drawerRepo mcpDrawerRepoRaw, identityRepo mcpIdentityRepoRaw) (layers.Stack, embed.Embedder) {
+	baseURL := strings.TrimSpace(os.Getenv("CRAWBL_EMBED_BASE_URL"))
+	if baseURL == "" {
+		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
+		return nil, nil
+	}
+	embedder := embed.NewProvider(embed.ProviderConfig{
+		BaseURL: baseURL,
+		APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
+		Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
+	})
+	logger.Info("memory stack enabled", slog.String("base_url", baseURL))
+	return layers.NewStack(drawerRepo, identityRepo, embedder), embedder
 }
 
 // buildSharedRedis creates the single Redis client used by realtime and the

@@ -214,18 +214,7 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 		return nil
 	}
 
-	// Strip temp-scoped state keys so they don't persist past the
-	// current invocation. KeyPrefixTemp is explicitly defined in ADK
-	// as "discarded after the invocation completes".
-	if len(event.Actions.StateDelta) > 0 {
-		filtered := make(map[string]any, len(event.Actions.StateDelta))
-		for k, v := range event.Actions.StateDelta {
-			if !strings.HasPrefix(k, adksession.KeyPrefixTemp) {
-				filtered[k] = v
-			}
-		}
-		event.Actions.StateDelta = filtered
-	}
+	stripTempStateKeys(event)
 
 	rs, ok := cur.(*redisSession)
 	if !ok {
@@ -351,6 +340,22 @@ func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, n
 		events:    events,
 		updatedAt: payload.UpdatedAt,
 	}, nil
+}
+
+// stripTempStateKeys removes temp-prefixed keys from event.Actions.StateDelta
+// in-place. ADK defines KeyPrefixTemp as "discarded after the invocation
+// completes", so we never persist them to Redis.
+func stripTempStateKeys(event *adksession.Event) {
+	if len(event.Actions.StateDelta) == 0 {
+		return
+	}
+	filtered := make(map[string]any, len(event.Actions.StateDelta))
+	for k, v := range event.Actions.StateDelta {
+		if !strings.HasPrefix(k, adksession.KeyPrefixTemp) {
+			filtered[k] = v
+		}
+	}
+	event.Actions.StateDelta = filtered
 }
 
 // applyStateDelta writes session-scoped keys from a state delta into rs.state.
