@@ -225,31 +225,15 @@ func UpdateUser(c *Context) http.HandlerFunc {
 			return
 		}
 
-		const maxProfileNameLength = 64
-
 		var reqBody dto.UserUpdateRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if reqBody.Nickname != nil && len(*reqBody.Nickname) > maxProfileNameLength {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "nickname exceeds maximum allowed length")
+
+		if errMsg := validateUserUpdateFields(reqBody); errMsg != "" {
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errMsg)
 			return
-		}
-		if reqBody.Name != nil && len(*reqBody.Name) > maxProfileNameLength {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "name exceeds maximum allowed length")
-			return
-		}
-		if reqBody.Surname != nil && len(*reqBody.Surname) > maxProfileNameLength {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "surname exceeds maximum allowed length")
-			return
-		}
-		if reqBody.CountryCode != nil && *reqBody.CountryCode != "" {
-			cc := *reqBody.CountryCode
-			if len(cc) != 2 || cc[0] < 'A' || cc[0] > 'Z' || cc[1] < 'A' || cc[1] > 'Z' {
-				httpserver.WriteErrorMessage(w, http.StatusBadRequest, "country_code must be a 2-letter uppercase ISO 3166-1 alpha-2 code")
-				return
-			}
 		}
 
 		var preferences *orchestrator.UserPreferences
@@ -282,6 +266,28 @@ func UpdateUser(c *Context) http.HandlerFunc {
 
 		httpserver.WriteNoContent(w)
 	}
+}
+
+// validateUserUpdateFields checks profile field lengths and formats.
+// Returns an error message string on failure, or "" on success.
+func validateUserUpdateFields(req dto.UserUpdateRequest) string {
+	const maxProfileNameLength = 64
+	if req.Nickname != nil && len(*req.Nickname) > maxProfileNameLength {
+		return "nickname exceeds maximum allowed length"
+	}
+	if req.Name != nil && len(*req.Name) > maxProfileNameLength {
+		return "name exceeds maximum allowed length"
+	}
+	if req.Surname != nil && len(*req.Surname) > maxProfileNameLength {
+		return "surname exceeds maximum allowed length"
+	}
+	if req.CountryCode != nil && *req.CountryCode != "" {
+		cc := *req.CountryCode
+		if len(cc) != 2 || cc[0] < 'A' || cc[0] > 'Z' || cc[1] < 'A' || cc[1] > 'Z' {
+			return "country_code must be a 2-letter uppercase ISO 3166-1 alpha-2 code"
+		}
+	}
+	return ""
 }
 
 // UserLegal retrieves the legal documents along with the user's acceptance status.

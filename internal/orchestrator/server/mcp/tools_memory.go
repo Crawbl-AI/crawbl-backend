@@ -488,19 +488,7 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 		drawerID := fmt.Sprintf("drawer_%s_%s_%x", input.Wing, input.Room, hash[:8])
 
 		// Classify memory type and derive importance.
-		memoryType := "general"
-		importance := defaultImportance
-		if deps.Classifier != nil {
-			classified := deps.Classifier.Classify(input.Content, classifierMinConfidence)
-			if len(classified) > 0 {
-				memoryType = classified[0].MemoryType
-				for _, c := range classified {
-					if c.Confidence*importanceScale > importance {
-						importance = c.Confidence * importanceScale
-					}
-				}
-			}
-		}
+		memoryType, importance := classifyAndScore(deps, input.Content)
 
 		// Generate embedding (best-effort).
 		var embedding []float32
@@ -534,14 +522,7 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 		}
 
 		// Reinforce similar memories.
-		if len(embedding) > 0 {
-			similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", 5)
-			for i := range similar {
-				if similar[i].ID != drawerID && similar[i].Similarity > memory.ReinforcementThreshold {
-					_ = deps.DrawerRepo.BoostImportance(ctx, sess, workspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
-				}
-			}
-		}
+		reinforceSimilar(ctx, sess, deps, workspaceID, drawerID, embedding)
 
 		return nil, memoryAddDrawerOutput{
 			DrawerID:   drawerID,
@@ -549,6 +530,41 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			Info:       "drawer added",
 		}, nil
 	})
+}
+
+// classifyAndScore returns the memory type and importance score for content.
+// Falls back to "general" / defaultImportance when no classifier is configured.
+func classifyAndScore(deps *Deps, content string) (memoryType string, importance float64) {
+	memoryType = "general"
+	importance = defaultImportance
+	if deps.Classifier == nil {
+		return memoryType, importance
+	}
+	classified := deps.Classifier.Classify(content, classifierMinConfidence)
+	if len(classified) == 0 {
+		return memoryType, importance
+	}
+	memoryType = classified[0].MemoryType
+	for _, c := range classified {
+		if c.Confidence*importanceScale > importance {
+			importance = c.Confidence * importanceScale
+		}
+	}
+	return memoryType, importance
+}
+
+// reinforceSimilar boosts the importance of existing drawers that are
+// semantically similar to the newly-filed drawer. No-op when embedding is empty.
+func reinforceSimilar(ctx context.Context, sess *dbr.Session, deps *Deps, workspaceID, drawerID string, embedding []float32) {
+	if len(embedding) == 0 {
+		return
+	}
+	similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", 5)
+	for i := range similar {
+		if similar[i].ID != drawerID && similar[i].Similarity > memory.ReinforcementThreshold {
+			_ = deps.DrawerRepo.BoostImportance(ctx, sess, workspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
+		}
+	}
 }
 
 func newMemoryDeleteDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDeleteDrawerInput, memoryDeleteDrawerOutput] {

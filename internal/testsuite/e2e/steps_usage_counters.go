@@ -135,14 +135,15 @@ func (tc *testContext) usageCaptureBaselineForAgent(slug string) error {
 // it for general messages. If a different agent replied the scenario will
 // pass as long as any captured baseline was exceeded — the polling covers all
 // agents whose baselines were captured in this scenario.
+// baselineEntry pairs an alias + agent slug with a captured token baseline.
+type baselineEntry struct {
+	alias    string
+	slug     string
+	baseline int64
+}
+
 func (tc *testContext) usageAssertIncreasedFromBaseline(seconds int) error {
 	return tc.withDB(func(_ *dbr.Session) error {
-		// Collect all baselines captured in this scenario.
-		type baselineEntry struct {
-			alias    string
-			slug     string
-			baseline int64
-		}
 		var entries []baselineEntry
 
 		// We only capture baselines for "primary" + "manager" in the scenario
@@ -168,24 +169,29 @@ func (tc *testContext) usageAssertIncreasedFromBaseline(seconds int) error {
 		}
 
 		return tc.pollFor(time.Duration(seconds)*time.Second, func() error {
-			for _, e := range entries {
-				current, err := tc.usageTokensForAgent(e.alias, e.slug)
-				if err != nil {
-					return fmt.Errorf("polling usage for agent %q: %w", e.slug, err)
-				}
-				if current > e.baseline {
-					return nil
-				}
-			}
-			// Build a summary for the timeout error message.
-			var summary string
-			for _, e := range entries {
-				current, _ := tc.usageTokensForAgent(e.alias, e.slug)
-				summary += fmt.Sprintf(" agent=%q baseline=%d current=%d;", e.slug, e.baseline, current)
-			}
-			return fmt.Errorf("token count has not increased from baseline:%s", summary)
+			return tc.checkUsageIncreasedFromBaseline(entries)
 		})
 	})
+}
+
+// checkUsageIncreasedFromBaseline checks whether at least one entry's current
+// token count exceeds its baseline. Returns a summary error when none have increased.
+func (tc *testContext) checkUsageIncreasedFromBaseline(entries []baselineEntry) error {
+	for _, e := range entries {
+		current, err := tc.usageTokensForAgent(e.alias, e.slug)
+		if err != nil {
+			return fmt.Errorf("polling usage for agent %q: %w", e.slug, err)
+		}
+		if current > e.baseline {
+			return nil
+		}
+	}
+	var summary string
+	for _, e := range entries {
+		current, _ := tc.usageTokensForAgent(e.alias, e.slug)
+		summary += fmt.Sprintf(" agent=%q baseline=%d current=%d;", e.slug, e.baseline, current)
+	}
+	return fmt.Errorf("token count has not increased from baseline:%s", summary)
 }
 
 // usageWorkspaceSummaryShowsActivity calls GET /v1/workspaces/{id}/usage and

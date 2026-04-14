@@ -55,16 +55,7 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 		}
 	}
 
-	toolAgentID := ss.primary.ID
-	if matched.agentSlug != "" {
-		if ta := ss.lookups.bySlug[matched.agentSlug]; ta != nil {
-			toolAgentID = ta.ID
-		}
-	} else if chunk.AgentID != "" {
-		if ta := ss.lookups.bySlug[chunk.AgentID]; ta != nil {
-			toolAgentID = ta.ID
-		}
-	}
+	toolAgentID := ss.resolveToolResultAgentID(matched, chunk.AgentID)
 
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
@@ -77,29 +68,52 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	}
 
 	if matched.tool == agentruntimetools.ToolTransferToAgent {
-		slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
-		if del := ss.lookups.bySlug[slug]; del != nil {
-			ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
-			triggerMsgID := ss.placeholder.ID
-			delegateAgentID := del.ID
-			userID := ss.userID
-			convID := ss.convID
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("completeDelegation goroutine panic",
-							"panic", r,
-							"user_id", userID,
-							"conv_id", convID,
-							"trigger_message_id", triggerMsgID,
-							"delegate_agent_id", delegateAgentID,
-						)
-					}
-				}()
-				ss.svc.completeDelegation("", convID, triggerMsgID, delegateAgentID)
-			}()
+		ss.handleTransferToAgent(matched)
+	}
+}
+
+// resolveToolResultAgentID returns the agent DB ID for a tool result event.
+// Prefers the calling agent's slug from the matched pending call, then the chunk's agent slug.
+func (ss *streamSession) resolveToolResultAgentID(matched pendingToolCall, chunkAgentID string) string {
+	if matched.agentSlug != "" {
+		if ta := ss.lookups.bySlug[matched.agentSlug]; ta != nil {
+			return ta.ID
 		}
 	}
+	if chunkAgentID != "" {
+		if ta := ss.lookups.bySlug[chunkAgentID]; ta != nil {
+			return ta.ID
+		}
+	}
+	return ss.primary.ID
+}
+
+// handleTransferToAgent fires the delegation goroutine when a transfer_to_agent tool completes.
+func (ss *streamSession) handleTransferToAgent(matched pendingToolCall) {
+	slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
+	del := ss.lookups.bySlug[slug]
+	if del == nil {
+		return
+	}
+	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	triggerMsgID := ss.placeholder.ID
+	delegateAgentID := del.ID
+	userID := ss.userID
+	convID := ss.convID
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("completeDelegation goroutine panic",
+					"panic", r,
+					"user_id", userID,
+					"conv_id", convID,
+					"trigger_message_id", triggerMsgID,
+					"delegate_agent_id", delegateAgentID,
+				)
+			}
+		}()
+		ss.svc.completeDelegation("", convID, triggerMsgID, delegateAgentID)
+	}()
 }
 
 // newToolStatusMessage creates a tool_status message for persistence.

@@ -105,29 +105,7 @@ func (p *Pool) Get(ctx context.Context, target string) (*grpc.ClientConn, error)
 
 	// Slow path: single-flight dial.
 	v, err, _ := p.group.Do(target, func() (any, error) {
-		// Double-check after acquiring the singleflight slot — another
-		// goroutine may have finished dialing while we were waiting.
-		if v, ok := p.conns.Load(target); ok {
-			if conn, okCast := v.(*grpc.ClientConn); okCast && conn != nil {
-				return conn, nil
-			}
-		}
-		if p.closed.Load() {
-			return nil, ErrPoolClosed
-		}
-		conn, dialErr := p.dial(ctx, target)
-		if dialErr != nil {
-			return nil, fmt.Errorf("grpc: dial %s: %w", target, dialErr)
-		}
-		// Store atomically. If Close ran in parallel, it may have
-		// flipped `closed` between our check above and this Store;
-		// defensively re-check and abort if so.
-		if p.closed.Load() {
-			_ = conn.Close()
-			return nil, ErrPoolClosed
-		}
-		p.conns.Store(target, conn)
-		return conn, nil
+		return p.dialOnce(ctx, target)
 	})
 	if err != nil {
 		return nil, err
@@ -136,6 +114,35 @@ func (p *Pool) Get(ctx context.Context, target string) (*grpc.ClientConn, error)
 	if !ok || conn == nil {
 		return nil, errors.New("grpc: nil conn from dial")
 	}
+	return conn, nil
+}
+
+// dialOnce is the singleflight body for Get. It double-checks the cache,
+// dials if needed, and stores the connection atomically. Returns ErrPoolClosed
+// if the pool was closed concurrently with the dial.
+func (p *Pool) dialOnce(ctx context.Context, target string) (any, error) {
+	// Double-check after acquiring the singleflight slot — another
+	// goroutine may have finished dialing while we were waiting.
+	if v, ok := p.conns.Load(target); ok {
+		if conn, okCast := v.(*grpc.ClientConn); okCast && conn != nil {
+			return conn, nil
+		}
+	}
+	if p.closed.Load() {
+		return nil, ErrPoolClosed
+	}
+	conn, dialErr := p.dial(ctx, target)
+	if dialErr != nil {
+		return nil, fmt.Errorf("grpc: dial %s: %w", target, dialErr)
+	}
+	// Store atomically. If Close ran in parallel, it may have
+	// flipped `closed` between our check above and this Store;
+	// defensively re-check and abort if so.
+	if p.closed.Load() {
+		_ = conn.Close()
+		return nil, ErrPoolClosed
+	}
+	p.conns.Store(target, conn)
 	return conn, nil
 }
 

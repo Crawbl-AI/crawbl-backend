@@ -46,35 +46,9 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 		return &SendAgentMessageResult{Error: "failed to list agents: " + mErr.Error()}, nil
 	}
 
-	var targetAgent, fromAgent *orchestrator.Agent
-	callingSlug := ""
-	if parts := strings.SplitN(params.SessionID, ":", 2); len(parts) == 2 {
-		callingSlug = parts[1]
-	}
-
-	for _, a := range agents {
-		if a.Slug == slug {
-			targetAgent = a
-		}
-		if callingSlug != "" && a.Slug == callingSlug {
-			fromAgent = a
-		}
-	}
-
-	if targetAgent == nil {
-		available := make([]string, 0, len(agents))
-		for _, a := range agents {
-			if a.Role != "manager" {
-				available = append(available, a.Slug)
-			}
-		}
-		return &SendAgentMessageResult{
-			Error: fmt.Sprintf("unknown agent '%s'. Available: %s", slug, strings.Join(available, ", ")),
-		}, nil
-	}
-
-	if callingSlug == slug {
-		return &SendAgentMessageResult{Error: "an agent cannot send a message to itself"}, nil
+	targetAgent, fromAgent, callingSlug, resolveErr := resolveAgents(agents, slug, params.SessionID)
+	if resolveErr != "" {
+		return &SendAgentMessageResult{Error: resolveErr}, nil
 	}
 
 	// 2. Check depth limit.
@@ -137,10 +111,7 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	})
 	if rErr != nil {
 		duration := time.Since(startTime).Milliseconds()
-		if failErr := s.repos.MCP.UpdateAgentMessageFailed(ctx, sess, msgID, rErr.Error(), duration); failErr != nil {
-			s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
-		}
-		s.emitDelegationDone(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
+		s.failAgentMessage(ctx, sess, msgID, rErr.Error(), duration, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID)
 		return &SendAgentMessageResult{
 			AgentSlug: slug,
 			Error:     "runtime not ready: " + rErr.Error(),
@@ -159,10 +130,7 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 
 	// 6. Handle result.
 	if callErr != nil {
-		if failErr := s.repos.MCP.UpdateAgentMessageFailed(ctx, sess, msgID, callErr.Error(), duration); failErr != nil {
-			s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
-		}
-		s.emitDelegationDone(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, realtime.AgentDelegationStatusFailed)
+		s.failAgentMessage(ctx, sess, msgID, callErr.Error(), duration, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID)
 		return &SendAgentMessageResult{
 			AgentSlug: slug,
 			Error:     callErr.Error(),
@@ -203,6 +171,43 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 		Response:  responseText,
 		MessageID: msgID,
 	}, nil
+}
+
+// resolveAgents resolves the target and calling agents from a workspace agent list.
+// Returns (target, from, callingSlug, errorMsg). errorMsg is non-empty on failure.
+func resolveAgents(agents []*orchestrator.Agent, slug, sessionID string) (target, from *orchestrator.Agent, callingSlug, errMsg string) {
+	if parts := strings.SplitN(sessionID, ":", 2); len(parts) == 2 {
+		callingSlug = parts[1]
+	}
+	for _, a := range agents {
+		if a.Slug == slug {
+			target = a
+		}
+		if callingSlug != "" && a.Slug == callingSlug {
+			from = a
+		}
+	}
+	if target == nil {
+		available := make([]string, 0, len(agents))
+		for _, a := range agents {
+			if a.Role != "manager" {
+				available = append(available, a.Slug)
+			}
+		}
+		return nil, nil, callingSlug, fmt.Sprintf("unknown agent '%s'. Available: %s", slug, strings.Join(available, ", "))
+	}
+	if callingSlug == slug {
+		return nil, nil, callingSlug, "an agent cannot send a message to itself"
+	}
+	return target, from, callingSlug, ""
+}
+
+// failAgentMessage marks an agent_messages row as failed and emits a delegation-done event.
+func (s *service) failAgentMessage(ctx contextT, sess sessionT, msgID, errText string, durationMs int64, workspaceID string, from, to *orchestrator.Agent, conversationID string) {
+	if failErr := s.repos.MCP.UpdateAgentMessageFailed(ctx, sess, msgID, errText, durationMs); failErr != nil {
+		s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
+	}
+	s.emitDelegationDone(ctx, workspaceID, from, to, conversationID, msgID, realtime.AgentDelegationStatusFailed)
 }
 
 func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, to *orchestrator.Agent, conversationID, msgID, message string) {

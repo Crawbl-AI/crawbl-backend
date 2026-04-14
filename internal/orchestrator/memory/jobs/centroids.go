@@ -76,9 +76,26 @@ func RunCentroidRecompute(ctx context.Context, deps CentroidRecomputeDeps) (*Cen
 		existingHash[existing[i].MemoryType] = existing[i].SourceHash
 	}
 
-	// Iterate memory types in sorted order so upsert sequence, log
-	// ordering, and partial-failure recovery are deterministic across
-	// runs. Go's map iteration order is randomized.
+	result, toUpsert := buildCentroidsToUpsert(grouped, existingHash)
+
+	if len(toUpsert) == 0 {
+		return result, nil
+	}
+	if err := deps.CentroidRepo.Upsert(ctx, sess, toUpsert); err != nil {
+		return nil, fmt.Errorf("upsert centroids: %w", err)
+	}
+	result.Updated = len(toUpsert)
+	return result, nil
+}
+
+// buildCentroidsToUpsert iterates grouped samples in sorted order, skips types
+// with too few samples or unchanged cohorts, and returns the result counters
+// alongside the slice of centroids ready for upsert.
+func buildCentroidsToUpsert(
+	grouped map[string][]memory.CentroidTrainingSample,
+	existingHash map[string]string,
+) (*CentroidRecomputeResult, []memory.MemoryTypeCentroid) {
+	// Iterate in sorted order for determinism.
 	memTypes := make([]string, 0, len(grouped))
 	for memType := range grouped {
 		memTypes = append(memTypes, memType)
@@ -111,15 +128,7 @@ func RunCentroidRecompute(ctx context.Context, deps CentroidRecomputeDeps) (*Cen
 			SourceHash:  hash,
 		})
 	}
-
-	if len(toUpsert) == 0 {
-		return result, nil
-	}
-	if err := deps.CentroidRepo.Upsert(ctx, sess, toUpsert); err != nil {
-		return nil, fmt.Errorf("upsert centroids: %w", err)
-	}
-	result.Updated = len(toUpsert)
-	return result, nil
+	return result, toUpsert
 }
 
 // groupCentroidSamples buckets samples by memory type so callers can

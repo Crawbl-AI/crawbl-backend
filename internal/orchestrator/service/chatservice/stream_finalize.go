@@ -58,40 +58,9 @@ func (ss *streamSession) finalize() []*orchestrator.Message {
 		if st.agent.ID == ss.primary.ID && len(ss.streams) > 1 {
 			continue
 		}
-		text := strings.TrimSpace(st.accumulated.String())
-		cleanDone := st.done || ss.globalDone
-
-		// Empty -- delete placeholder.
-		if text == "" {
-			if mErr := ss.svc.messageRepo.DeleteByID(ss.ctx, ss.sess, st.placeholder.ID); mErr != nil {
-				slog.Warn("delete empty placeholder", "id", st.placeholder.ID, "error", mErr.Error())
-			}
-			ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, realtime.MessageDonePayload{
-				MessageID: st.placeholder.ID, ConversationID: ss.convID,
-				AgentID: st.agent.ID, Status: string(orchestrator.MessageStatusSilent),
-			})
-			ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
-			continue
-		}
-
-		// Determine status.
-		status := orchestrator.MessageStatusDelivered
-		switch {
-		case text == agentSilentResponse:
-			status = orchestrator.MessageStatusSilent
-			text = ""
-		case !cleanDone:
-			status = orchestrator.MessageStatusIncomplete
-		}
-
-		if reply := ss.finalizeMessage(st.placeholder, text, status); reply != nil {
+		if reply := ss.finalizeStream(st); reply != nil {
 			replies = append(replies, reply)
 		}
-		ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, realtime.MessageDonePayload{
-			MessageID: st.placeholder.ID, ConversationID: ss.convID,
-			AgentID: st.agent.ID, Status: string(status),
-		})
-		ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 	}
 
 	// Safety sweep: emit delegation completion for all sub-agents.
@@ -107,6 +76,44 @@ func (ss *streamSession) finalize() []*orchestrator.Message {
 	}
 
 	return replies
+}
+
+// finalizeStream handles finalization for a single non-primary agent stream.
+// Returns the persisted reply message, or nil if the placeholder was deleted (empty/silent).
+func (ss *streamSession) finalizeStream(st *subAgentStream) *orchestrator.Message {
+	text := strings.TrimSpace(st.accumulated.String())
+	cleanDone := st.done || ss.globalDone
+
+	// Empty — delete placeholder and emit silent done.
+	if text == "" {
+		if mErr := ss.svc.messageRepo.DeleteByID(ss.ctx, ss.sess, st.placeholder.ID); mErr != nil {
+			slog.Warn("delete empty placeholder", "id", st.placeholder.ID, "error", mErr.Error())
+		}
+		ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, realtime.MessageDonePayload{
+			MessageID: st.placeholder.ID, ConversationID: ss.convID,
+			AgentID: st.agent.ID, Status: string(orchestrator.MessageStatusSilent),
+		})
+		ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+		return nil
+	}
+
+	// Determine status.
+	status := orchestrator.MessageStatusDelivered
+	switch {
+	case text == agentSilentResponse:
+		status = orchestrator.MessageStatusSilent
+		text = ""
+	case !cleanDone:
+		status = orchestrator.MessageStatusIncomplete
+	}
+
+	reply := ss.finalizeMessage(st.placeholder, text, status)
+	ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, realtime.MessageDonePayload{
+		MessageID: st.placeholder.ID, ConversationID: ss.convID,
+		AgentID: st.agent.ID, Status: string(status),
+	})
+	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	return reply
 }
 
 // finalizeMessage updates the placeholder message with final text and status,

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocraft/dbr/v2"
 	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -171,135 +172,10 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		if ctx.Err() != nil {
 			break
 		}
-
-		// Build prompt from template with context substitution.
-		prompt := step.PromptTemplate
-		for k, v := range workflowCtx {
-			prompt = strings.ReplaceAll(prompt, "{{"+k+"}}", v)
-		}
-
-		// Create step execution row.
-		stepNow := time.Now().UTC()
-		stepExec := &workflowrepo.WorkflowStepExecutionRow{
-			ID:          uuid.NewString(),
-			ExecutionID: executionID,
-			StepIndex:   i,
-			StepName:    step.Name,
-			AgentSlug:   step.AgentSlug,
-			Status:      string(workflowrepo.WorkflowStatusRunning),
-			InputText:   prompt,
-			StartedAt:   &stepNow,
-			CreatedAt:   stepNow,
-		}
-		if mErr := s.workflowRepo.CreateStepExecution(ctx, sess, stepExec); mErr != nil {
-			slog.Warn("ExecuteWorkflow: failed to create step execution", "execution_id", executionID, "step", i, "error", mErr.Error())
-		}
-
-		emitter.StepStarted(ctx, i, step.Name, step.AgentSlug)
-
-		// Check if step requires approval.
-		if step.RequiresApproval {
-			stepExec.Status = string(workflowrepo.WorkflowStatusWaitingApproval)
-			if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
-				slog.Warn("ExecuteWorkflow: failed to set step waiting_approval", "execution_id", executionID, "step", i, "error", mErr.Error())
-			}
-
-			emitter.WaitingApproval(ctx, i, step.Name, step.AgentSlug)
-
-			// TODO: Wait for approval via channel/polling. For now, auto-approve.
-			stepExec.Status = string(workflowrepo.WorkflowStatusApproved)
-			if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
-				slog.Warn("ExecuteWorkflow: failed to set step approved", "execution_id", executionID, "step", i, "error", mErr.Error())
-			}
-		}
-
-		// Execute step: call the agent runtime with the agent.
-		startTime := time.Now()
-		timeout := time.Duration(step.TimeoutSecs) * time.Second
-		if timeout == 0 {
-			timeout = 5 * time.Minute
-		}
-
-		stepCtx, cancel := context.WithTimeout(ctx, timeout)
-		turns, callErr := s.runtimeClient.SendText(stepCtx, &userswarmclient.SendTextOpts{
-			Runtime:   runtime,
-			Message:   prompt,
-			SessionID: fmt.Sprintf("workflow:%s:step:%d", executionID, i),
-			AgentID:   step.AgentSlug,
-		})
-		cancel()
-
-		durationMs := int(time.Since(startTime).Milliseconds())
-		completedAt := time.Now().UTC()
-
-		if callErr != nil {
-			stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
-			errMsg := callErr.Error()
-			stepExec.OutputText = &errMsg
-			stepExec.DurationMs = &durationMs
-			stepExec.CompletedAt = &completedAt
-			if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
-				slog.Warn("ExecuteWorkflow: failed to mark step as failed", "execution_id", executionID, "step", i, "error", mErr.Error())
-			}
-
-			// Handle on_failure policy.
-			if step.OnFailure == string(workflowrepo.WorkflowOnFailureSkip) {
-				continue
-			}
-			// WorkflowOnFailureStop (default) — fail the whole workflow.
-			execution.Status = string(workflowrepo.WorkflowStatusFailed)
-			execution.ErrorMessage = &errMsg
-			execution.CompletedAt = &completedAt
-
-			// Use a fresh context for cleanup writes: the workflow context may
-			// already be cancelled (timeout or shutdown), but we still need to
-			// persist the failed status so the execution row doesn't stay "running".
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), WorkflowCleanupTimeout)
-
-			if mErr := s.workflowRepo.UpdateExecution(cleanupCtx, sess, execution); mErr != nil {
-				slog.Warn("ExecuteWorkflow: failed to mark execution as failed", "execution_id", executionID, "error", mErr.Error())
-			}
-
-			emitter.Failed(cleanupCtx, i, step.Name, errMsg)
-			cleanupCancel()
+		done := s.executeWorkflowStep(ctx, sess, executionID, i, step, workflowCtx, execution, emitter, runtime)
+		if done {
 			return
 		}
-
-		// Concatenate all agent turn texts into a single response string.
-		var responseParts []string
-		for _, turn := range turns {
-			if turn.Text != "" {
-				responseParts = append(responseParts, turn.Text)
-			}
-		}
-		response := strings.Join(responseParts, "\n")
-
-		// Step succeeded.
-		stepExec.Status = string(workflowrepo.WorkflowStatusCompleted)
-		stepExec.OutputText = &response
-		stepExec.DurationMs = &durationMs
-		stepExec.CompletedAt = &completedAt
-		if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
-			slog.Warn("ExecuteWorkflow: failed to mark step as completed", "execution_id", executionID, "step", i, "error", mErr.Error())
-		}
-
-		// Store output in workflow context.
-		if step.OutputKey != "" {
-			workflowCtx[step.OutputKey] = response
-		}
-
-		// Update execution context.
-		contextJSON, err := json.Marshal(workflowCtx)
-		if err != nil {
-			slog.Warn("ExecuteWorkflow: failed to marshal workflow context", "execution_id", executionID, "error", err.Error())
-		}
-		execution.Context = contextJSON
-		execution.CurrentStep = i + 1
-		if mErr := s.workflowRepo.UpdateExecution(ctx, sess, execution); mErr != nil {
-			slog.Warn("ExecuteWorkflow: failed to update execution progress", "execution_id", executionID, "step", i, "error", mErr.Error())
-		}
-
-		emitter.StepCompleted(ctx, i, step.Name, step.AgentSlug)
 	}
 
 	// Workflow completed successfully.
@@ -311,4 +187,180 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 	}
 
 	emitter.Completed(ctx)
+}
+
+// executeWorkflowStep runs a single workflow step and updates state in-place.
+// Returns true when the caller should stop the loop (fatal failure handled internally).
+func (s *service) executeWorkflowStep(
+	ctx context.Context,
+	sess *dbr.Session,
+	executionID string,
+	i int,
+	step workflowrepo.WorkflowStep,
+	workflowCtx map[string]string,
+	execution *workflowrepo.WorkflowExecutionRow,
+	emitter *workflowEmitter,
+	runtime *orchestrator.RuntimeStatus,
+) bool {
+	// Build prompt from template with context substitution.
+	prompt := step.PromptTemplate
+	for k, v := range workflowCtx {
+		prompt = strings.ReplaceAll(prompt, "{{"+k+"}}", v)
+	}
+
+	// Create step execution row.
+	stepNow := time.Now().UTC()
+	stepExec := &workflowrepo.WorkflowStepExecutionRow{
+		ID:          uuid.NewString(),
+		ExecutionID: executionID,
+		StepIndex:   i,
+		StepName:    step.Name,
+		AgentSlug:   step.AgentSlug,
+		Status:      string(workflowrepo.WorkflowStatusRunning),
+		InputText:   prompt,
+		StartedAt:   &stepNow,
+		CreatedAt:   stepNow,
+	}
+	if mErr := s.workflowRepo.CreateStepExecution(ctx, sess, stepExec); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to create step execution", "execution_id", executionID, "step", i, "error", mErr.Error())
+	}
+
+	emitter.StepStarted(ctx, i, step.Name, step.AgentSlug)
+
+	// Check if step requires approval.
+	if step.RequiresApproval {
+		s.handleStepApproval(ctx, sess, executionID, i, step, stepExec, emitter)
+	}
+
+	// Execute step: call the agent runtime with the agent.
+	startTime := time.Now()
+	timeout := time.Duration(step.TimeoutSecs) * time.Second
+	if timeout == 0 {
+		timeout = 5 * time.Minute
+	}
+
+	stepCtx, cancel := context.WithTimeout(ctx, timeout)
+	turns, callErr := s.runtimeClient.SendText(stepCtx, &userswarmclient.SendTextOpts{
+		Runtime:   runtime,
+		Message:   prompt,
+		SessionID: fmt.Sprintf("workflow:%s:step:%d", executionID, i),
+		AgentID:   step.AgentSlug,
+	})
+	cancel()
+
+	durationMs := int(time.Since(startTime).Milliseconds())
+	completedAt := time.Now().UTC()
+
+	if callErr != nil {
+		return s.handleStepFailure(ctx, sess, executionID, i, step, stepExec, execution, emitter, callErr, durationMs, completedAt)
+	}
+
+	// Concatenate all agent turn texts into a single response string.
+	var responseParts []string
+	for _, turn := range turns {
+		if turn.Text != "" {
+			responseParts = append(responseParts, turn.Text)
+		}
+	}
+	response := strings.Join(responseParts, "\n")
+
+	// Step succeeded.
+	stepExec.Status = string(workflowrepo.WorkflowStatusCompleted)
+	stepExec.OutputText = &response
+	stepExec.DurationMs = &durationMs
+	stepExec.CompletedAt = &completedAt
+	if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to mark step as completed", "execution_id", executionID, "step", i, "error", mErr.Error())
+	}
+
+	// Store output in workflow context.
+	if step.OutputKey != "" {
+		workflowCtx[step.OutputKey] = response
+	}
+
+	// Update execution context.
+	contextJSON, err := json.Marshal(workflowCtx)
+	if err != nil {
+		slog.Warn("ExecuteWorkflow: failed to marshal workflow context", "execution_id", executionID, "error", err.Error())
+	}
+	execution.Context = contextJSON
+	execution.CurrentStep = i + 1
+	if mErr := s.workflowRepo.UpdateExecution(ctx, sess, execution); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to update execution progress", "execution_id", executionID, "step", i, "error", mErr.Error())
+	}
+
+	emitter.StepCompleted(ctx, i, step.Name, step.AgentSlug)
+	return false
+}
+
+// handleStepApproval sets a step to waiting_approval, emits the event, then auto-approves.
+func (s *service) handleStepApproval(
+	ctx context.Context,
+	sess *dbr.Session,
+	executionID string,
+	i int,
+	step workflowrepo.WorkflowStep,
+	stepExec *workflowrepo.WorkflowStepExecutionRow,
+	emitter *workflowEmitter,
+) {
+	stepExec.Status = string(workflowrepo.WorkflowStatusWaitingApproval)
+	if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to set step waiting_approval", "execution_id", executionID, "step", i, "error", mErr.Error())
+	}
+
+	emitter.WaitingApproval(ctx, i, step.Name, step.AgentSlug)
+
+	// TODO(team): Wait for approval via channel/polling. For now, auto-approve.
+	stepExec.Status = string(workflowrepo.WorkflowStatusApproved)
+	if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to set step approved", "execution_id", executionID, "step", i, "error", mErr.Error())
+	}
+}
+
+// handleStepFailure updates state after a step runtime call fails.
+// Returns true when the workflow loop should stop (OnFailureStop policy).
+func (s *service) handleStepFailure(
+	ctx context.Context,
+	sess *dbr.Session,
+	executionID string,
+	i int,
+	step workflowrepo.WorkflowStep,
+	stepExec *workflowrepo.WorkflowStepExecutionRow,
+	execution *workflowrepo.WorkflowExecutionRow,
+	emitter *workflowEmitter,
+	callErr error,
+	durationMs int,
+	completedAt time.Time,
+) bool {
+	errMsg := callErr.Error()
+	stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
+	stepExec.OutputText = &errMsg
+	stepExec.DurationMs = &durationMs
+	stepExec.CompletedAt = &completedAt
+	if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to mark step as failed", "execution_id", executionID, "step", i, "error", mErr.Error())
+	}
+
+	// Skip policy — continue with the next step.
+	if step.OnFailure == string(workflowrepo.WorkflowOnFailureSkip) {
+		return false
+	}
+
+	// Stop policy (default) — fail the whole workflow.
+	execution.Status = string(workflowrepo.WorkflowStatusFailed)
+	execution.ErrorMessage = &errMsg
+	execution.CompletedAt = &completedAt
+
+	// Use a fresh context for cleanup writes: the workflow context may already be
+	// cancelled (timeout or shutdown), but we still need to persist the failed
+	// status so the execution row doesn't stay "running".
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), WorkflowCleanupTimeout)
+	defer cleanupCancel()
+
+	if mErr := s.workflowRepo.UpdateExecution(cleanupCtx, sess, execution); mErr != nil {
+		slog.Warn("ExecuteWorkflow: failed to mark execution as failed", "execution_id", executionID, "error", mErr.Error())
+	}
+
+	emitter.Failed(cleanupCtx, i, step.Name, errMsg)
+	return true
 }

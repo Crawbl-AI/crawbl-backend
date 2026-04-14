@@ -114,6 +114,29 @@ func waitForPort(ctx context.Context, port int) error {
 	}
 }
 
+// applyPortForwards sets up kubectl port-forwards and adjusts the provided
+// baseURL and databaseDSN pointers based on the active ports. Returns a
+// cleanup function that kills all port-forward processes.
+func applyPortForwards(baseURL, databaseDSN *string) (func(), error) {
+	log.Println("setting up port-forwards...")
+	orchPort, pgPort, redisPort, cleanup, err := startPortForwards()
+	if err != nil {
+		return func() {}, fmt.Errorf("port-forward setup failed: %w", err)
+	}
+	if *baseURL == "http://localhost:7171" || *baseURL == "" {
+		*baseURL = fmt.Sprintf("http://localhost:%d", orchPort)
+	}
+	if os.Getenv("CRAWBL_E2E_REDIS_ADDR") == "" {
+		_ = os.Setenv("CRAWBL_E2E_REDIS_ADDR", fmt.Sprintf("localhost:%d", redisPort))
+	}
+	if *databaseDSN == "" {
+		if pgPass := os.Getenv("CRAWBL_E2E_PG_PASSWORD"); pgPass != "" {
+			*databaseDSN = fmt.Sprintf("postgres://postgres:%s@localhost:%d/crawbl?sslmode=disable&search_path=orchestrator", pgPass, pgPort)
+		}
+	}
+	return cleanup, nil
+}
+
 func newE2ECommand() *cobra.Command {
 	var (
 		baseURL             string
@@ -153,34 +176,12 @@ runs only test-features/chat/).`,
   # Gateway mode (CI) — no port-forward needed
   crawbl test e2e --base-url https://api-dev.crawbl.com --e2e-token $CRAWBL_E2E_TOKEN`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var pfCleanup func()
 			if portForwardFlag {
-				log.Println("setting up port-forwards...")
-				orchPort, pgPort, redisPort, cleanup, err := startPortForwards()
+				cleanup, err := applyPortForwards(&baseURL, &databaseDSN)
 				if err != nil {
-					return fmt.Errorf("port-forward setup failed: %w", err)
+					return err
 				}
-				pfCleanup = cleanup
-				defer pfCleanup()
-
-				// Override base-url if still default and port-forward is active.
-				if baseURL == "http://localhost:7171" || baseURL == "" {
-					baseURL = fmt.Sprintf("http://localhost:%d", orchPort)
-				}
-
-				// Auto-configure infra clients from cluster secrets when
-				// port-forward is active and env vars are not already set.
-				if os.Getenv("CRAWBL_E2E_REDIS_ADDR") == "" {
-					_ = os.Setenv("CRAWBL_E2E_REDIS_ADDR", fmt.Sprintf("localhost:%d", redisPort))
-				}
-
-				// Build DSN if not provided and the PG password env is set.
-				if databaseDSN == "" {
-					pgPass := os.Getenv("CRAWBL_E2E_PG_PASSWORD")
-					if pgPass != "" {
-						databaseDSN = fmt.Sprintf("postgres://postgres:%s@localhost:%d/crawbl?sslmode=disable&search_path=orchestrator", pgPass, pgPort)
-					}
-				}
+				defer cleanup()
 			}
 
 			cfg := &e2e.Config{

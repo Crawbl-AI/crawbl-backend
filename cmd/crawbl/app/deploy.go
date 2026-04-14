@@ -94,6 +94,21 @@ func checkAllTools() error {
 	return argocd.CheckTools()
 }
 
+// tagAndRelease tags the backend repo and creates a GitHub release.
+// Uses gitutil.RootDir to locate the repo root automatically.
+func tagAndRelease(repoSlug, tag, prevTag string) error {
+	rootDir, err := gitutil.RootDir()
+	if err != nil {
+		return err
+	}
+	return release.TagAndRelease(release.Config{
+		RepoPath: rootDir,
+		RepoSlug: repoSlug,
+		Tag:      tag,
+		PrevTag:  prevTag,
+	})
+}
+
 func newDeployPlatformCommand() *cobra.Command {
 	var (
 		tag        string
@@ -151,16 +166,7 @@ func newDeployPlatformCommand() *cobra.Command {
 				return err
 			}
 
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: RepoSlugBackend,
-				Tag:      tag,
-				PrevTag:  resolved.PrevTag,
-			}); err != nil {
+			if err := tagAndRelease(RepoSlugBackend, tag, resolved.PrevTag); err != nil {
 				return err
 			}
 
@@ -244,12 +250,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
 				return err
 			}
 
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: RepoSlugBackend,
-				Tag:      gitTag,
-				PrevTag:  resolved.PrevTag,
-			}); err != nil {
+			if err := tagAndRelease(RepoSlugBackend, gitTag, resolved.PrevTag); err != nil {
 				return err
 			}
 
@@ -329,16 +330,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 				return err
 			}
 
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: RepoSlugBackend,
-				Tag:      gitTag,
-				PrevTag:  resolved.PrevTag,
-			}); err != nil {
+			if err := tagAndRelease(RepoSlugBackend, gitTag, resolved.PrevTag); err != nil {
 				return err
 			}
 

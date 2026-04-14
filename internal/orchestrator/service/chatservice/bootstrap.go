@@ -182,46 +182,62 @@ func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 		now := time.Now().UTC()
 
 		if !hasSwarm {
-			if _, findErr := s.conversationRepo.FindDefaultSwarm(ctx, tx, workspace.ID); findErr != nil {
-				if !merrors.IsCode(findErr, merrors.ErrCodeConversationNotFound) {
-					return nil, findErr
-				}
-				if mErr := s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
-					ID:          uuid.NewString(),
-					WorkspaceID: workspace.ID,
-					Type:        orchestrator.ConversationTypeSwarm,
-					Title:       orchestrator.DefaultSwarmTitle,
-					CreatedAt:   now,
-					UpdatedAt:   now,
-				}); mErr != nil {
-					return nil, mErr
-				}
-			}
-		}
-
-		for _, agent := range agents {
-			if agent.Role == orchestrator.AgentRoleManager {
-				continue // Manager uses the swarm conversation, not a dedicated one
-			}
-			if agentConvs[agent.ID] {
-				continue
-			}
-			agentID := agent.ID
-			if mErr := s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
-				ID:          uuid.NewString(),
-				WorkspaceID: workspace.ID,
-				AgentID:     &agentID,
-				Type:        orchestrator.ConversationTypeAgent,
-				Title:       agent.Name,
-				CreatedAt:   now,
-				UpdatedAt:   now,
-			}); mErr != nil {
+			if mErr := s.createMissingSwarmConv(ctx, tx, workspace.ID, now); mErr != nil {
 				return nil, mErr
 			}
 		}
 
+		if mErr := s.createMissingAgentConvs(ctx, tx, workspace.ID, agents, agentConvs, now); mErr != nil {
+			return nil, mErr
+		}
+
 		return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
 	})
+}
+
+// createMissingSwarmConv creates the default swarm conversation if it doesn't exist.
+func (s *Service) createMissingSwarmConv(ctx context.Context, tx *dbr.Tx, workspaceID string, now time.Time) *merrors.Error {
+	_, findErr := s.conversationRepo.FindDefaultSwarm(ctx, tx, workspaceID)
+	if findErr == nil {
+		return nil
+	}
+	if !merrors.IsCode(findErr, merrors.ErrCodeConversationNotFound) {
+		return findErr
+	}
+	return s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
+		ID:          uuid.NewString(),
+		WorkspaceID: workspaceID,
+		Type:        orchestrator.ConversationTypeSwarm,
+		Title:       orchestrator.DefaultSwarmTitle,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+}
+
+// createMissingAgentConvs creates per-agent conversations for agents that don't have one.
+// Manager agents are skipped — they use the swarm conversation.
+func (s *Service) createMissingAgentConvs(ctx context.Context, tx *dbr.Tx, workspaceID string, agents []*orchestrator.Agent, existing map[string]bool, now time.Time) *merrors.Error {
+	for _, agent := range agents {
+		if agent.Role == orchestrator.AgentRoleManager {
+			continue
+		}
+		if existing[agent.ID] {
+			continue
+		}
+		agentID := agent.ID
+		if mErr := s.conversationRepo.Save(ctx, tx, &orchestrator.Conversation{
+			ID:          uuid.NewString(),
+			WorkspaceID: workspaceID,
+			AgentID:     &agentID,
+			Type:        orchestrator.ConversationTypeAgent,
+			Title:       agent.Name,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); mErr != nil {
+			return mErr
+		}
+	}
+	return nil
 }
 
 // ensureDefaultTools seeds the tool catalog from the crawbl-agent-runtime

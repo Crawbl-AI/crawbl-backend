@@ -111,21 +111,7 @@ func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) st
 	}
 
 	runes := []rune(message)
-	drop := make([]bool, len(runes))
-
-	for _, mention := range mentions {
-		if mention.Offset < 0 || mention.Length <= 0 || mention.Offset >= len(runes) {
-			continue
-		}
-
-		end := mention.Offset + mention.Length
-		if end > len(runes) {
-			end = len(runes)
-		}
-		for i := mention.Offset; i < end; i++ {
-			drop[i] = true
-		}
-	}
+	drop := computeDropSet(runes, mentions)
 
 	var out []rune
 	lastWasSpace := false
@@ -153,6 +139,25 @@ func normalizeRuntimeMessage(message string, mentions []orchestrator.Mention) st
 		return trimmed
 	}
 	return normalized
+}
+
+// computeDropSet builds a boolean mask over runes where true means the rune
+// falls inside a mention span and should be dropped during normalization.
+func computeDropSet(runes []rune, mentions []orchestrator.Mention) []bool {
+	drop := make([]bool, len(runes))
+	for _, mention := range mentions {
+		if mention.Offset < 0 || mention.Length <= 0 || mention.Offset >= len(runes) {
+			continue
+		}
+		end := mention.Offset + mention.Length
+		if end > len(runes) {
+			end = len(runes)
+		}
+		for i := mention.Offset; i < end; i++ {
+			drop[i] = true
+		}
+	}
+	return drop
 }
 
 // The runtime treats an empty agent_id as "use the default manager entrypoint".

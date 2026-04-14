@@ -96,85 +96,105 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// In local/test environments, inject a default principal and skip auth.
 			env := strings.ToLower(strings.TrimSpace(cfg.Environment))
+
+			// Local/test: inject a default principal and skip auth.
 			if env == EnvironmentLocal || env == "test" {
-				ctx := ContextWithPrincipal(r.Context(), &orchestrator.Principal{
-					Subject: "local-dev-user",
-					Email:   "dev@crawbl.local",
-					Name:    "Local Dev",
-				})
-				next.ServeHTTP(w, r.WithContext(ctx))
+				injectLocalPrincipal(next, w, r)
 				return
 			}
 
-			// E2E test auth bypass: when CRAWBL_E2E_TOKEN is set and the environment
-			// is NOT production, allow requests with a matching X-E2E-Token header
-			// to authenticate via X-E2E-UID/Email/Name instead of Firebase JWT.
-			// This is disabled in production even if the env var is accidentally set.
+			// E2E bypass: only active when token is configured and env is dev/local.
 			if cfg.E2EToken != "" && (env == EnvironmentLocal || env == "dev") {
-				if token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader)); token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(cfg.E2EToken)) == 1 {
-					e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
-					if e2eUID == "" {
-						httpserver.WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
-						return
-					}
-
-					principal := &orchestrator.Principal{
-						Subject: e2eUID,
-						Email:   strings.TrimSpace(r.Header.Get(XE2EEmailHeader)),
-						Name:    strings.TrimSpace(r.Header.Get(XE2ENameHeader)),
-					}
-
-					logger.Info("e2e auth bypass",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"subject", principal.Subject,
-					)
-
-					ctx := ContextWithPrincipal(r.Context(), principal)
-					ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
-						TokenSource: AuthTokenSourceXToken,
-						DeviceInfo:  "e2e-test",
-						DeviceID:    "e2e-device",
-						Version:     "e2e",
-						Timezone:    "UTC",
-					})
-
-					next.ServeHTTP(w, r.WithContext(ctx))
+				if handled := injectE2EPrincipal(next, w, r, cfg.E2EToken, logger); handled {
 					return
 				}
 			}
 
-			// Read gateway-verified claims from Envoy-forwarded headers.
-			uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
-			if uid == "" {
-				httpserver.WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
-				return
-			}
-
-			principal := &orchestrator.Principal{
-				Subject: uid,
-				Email:   strings.TrimSpace(r.Header.Get(XFirebaseEmailHeader)),
-				Name:    strings.TrimSpace(r.Header.Get(XFirebaseNameHeader)),
-			}
-
-			logger.Info("auth middleware succeeded",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"subject", principal.Subject,
-			)
-
-			ctx := ContextWithPrincipal(r.Context(), principal)
-			ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
-				TokenSource: AuthTokenSourceXToken,
-				DeviceInfo:  strings.TrimSpace(r.Header.Get(XDeviceInfoHeader)),
-				DeviceID:    strings.TrimSpace(r.Header.Get(XDeviceIDHeader)),
-				Version:     strings.TrimSpace(r.Header.Get(XVersionHeader)),
-				Timezone:    strings.TrimSpace(r.Header.Get(XTimezoneHeader)),
-			})
-
-			next.ServeHTTP(w, r.WithContext(ctx))
+			// Production: read gateway-verified claims from Envoy-forwarded headers.
+			injectFirebasePrincipal(next, w, r, logger)
 		})
 	}
+}
+
+// injectLocalPrincipal serves local/test requests with a fixed dev identity.
+func injectLocalPrincipal(next http.Handler, w http.ResponseWriter, r *http.Request) {
+	ctx := ContextWithPrincipal(r.Context(), &orchestrator.Principal{
+		Subject: "local-dev-user",
+		Email:   "dev@crawbl.local",
+		Name:    "Local Dev",
+	})
+	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// injectE2EPrincipal processes the E2E token bypass path.
+// Returns true when the request was handled (either authenticated or rejected),
+// false when no E2E token header was present (caller should fall through).
+func injectE2EPrincipal(next http.Handler, w http.ResponseWriter, r *http.Request, e2eToken string, logger *slog.Logger) bool {
+	token := strings.TrimSpace(r.Header.Get(XE2ETokenHeader))
+	if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(e2eToken)) != 1 {
+		return false
+	}
+
+	e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
+	if e2eUID == "" {
+		httpserver.WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
+		return true
+	}
+
+	principal := &orchestrator.Principal{
+		Subject: e2eUID,
+		Email:   strings.TrimSpace(r.Header.Get(XE2EEmailHeader)),
+		Name:    strings.TrimSpace(r.Header.Get(XE2ENameHeader)),
+	}
+
+	logger.Info("e2e auth bypass",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"subject", principal.Subject,
+	)
+
+	ctx := ContextWithPrincipal(r.Context(), principal)
+	ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
+		TokenSource: AuthTokenSourceXToken,
+		DeviceInfo:  "e2e-test",
+		DeviceID:    "e2e-device",
+		Version:     "e2e",
+		Timezone:    "UTC",
+	})
+	next.ServeHTTP(w, r.WithContext(ctx))
+	return true
+}
+
+// injectFirebasePrincipal reads Envoy-forwarded Firebase claim headers.
+// Responds 401 when the UID header is absent.
+func injectFirebasePrincipal(next http.Handler, w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+	uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
+	if uid == "" {
+		httpserver.WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	principal := &orchestrator.Principal{
+		Subject: uid,
+		Email:   strings.TrimSpace(r.Header.Get(XFirebaseEmailHeader)),
+		Name:    strings.TrimSpace(r.Header.Get(XFirebaseNameHeader)),
+	}
+
+	logger.Info("auth middleware succeeded",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"subject", principal.Subject,
+	)
+
+	ctx := ContextWithPrincipal(r.Context(), principal)
+	ctx = ContextWithRequestMetadata(ctx, &RequestMetadata{
+		TokenSource: AuthTokenSourceXToken,
+		DeviceInfo:  strings.TrimSpace(r.Header.Get(XDeviceInfoHeader)),
+		DeviceID:    strings.TrimSpace(r.Header.Get(XDeviceIDHeader)),
+		Version:     strings.TrimSpace(r.Header.Get(XVersionHeader)),
+		Timezone:    strings.TrimSpace(r.Header.Get(XTimezoneHeader)),
+	})
+
+	next.ServeHTTP(w, r.WithContext(ctx))
 }

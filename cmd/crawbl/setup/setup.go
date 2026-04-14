@@ -63,31 +63,61 @@ func runSetup() error {
 	out.Ln()
 
 	// --- Step 2: Install repo-managed tools ---
-	out.Step(style.Setup, "Step 2/5: Installing repo-managed tools...")
-	out.Ln()
-
-	if fileExists(".mise.toml") {
-		if commandExists("mise") {
-			out.Step(style.Running, "Running mise install...")
-			if err := runCmd("mise", "install"); err != nil {
-				out.Warning("mise install failed: %v", err)
-			} else {
-				out.Step(style.Check, "Installed tool versions from .mise.toml")
-			}
-		} else {
-			out.Step(style.Warning, "mise not found — repo-managed tools skipped")
-			out.Infof("Install: https://mise.jdx.dev  then rerun: ./crawbl setup")
-		}
-	} else {
-		out.Step(style.Check, "No .mise.toml found, skipping")
-	}
-	out.Ln()
+	setupStep2MiseInstall()
 
 	// --- Step 3: Check required tools ---
-	out.Step(style.Setup, "Step 3/5: Checking required tools...")
+	setupStep3RequiredTools()
+
+	// --- Step 4: Configure Snyk MCP for Claude Code ---
+	setupStep4Snyk()
+
+	// --- Step 5: Check/create .env file ---
+	if err := setupStep5Env(); err != nil {
+		return err
+	}
+
+	// --- Done ---
+	out.Step(style.Celebrate, "Ready! Next steps:")
+	out.Infof("1. Source your environment:")
+	out.Infof("   set -a && source .env && set +a")
+	out.Infof("2. Deploy to dev:")
+	out.Infof("   crawbl app deploy platform")
+	out.Infof("3. Run e2e tests:")
+	out.Infof("   crawbl test e2e --base-url https://api-dev.crawbl.com")
+	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")
 	out.Ln()
 
-	allFound := true
+	return nil
+}
+
+// setupStep2MiseInstall runs mise install when .mise.toml is present.
+func setupStep2MiseInstall() {
+	out.Step(style.Setup, "Step 2/5: Installing repo-managed tools...")
+	out.Ln()
+	if !fileExists(".mise.toml") {
+		out.Step(style.Check, "No .mise.toml found, skipping")
+		out.Ln()
+		return
+	}
+	if !commandExists("mise") {
+		out.Step(style.Warning, "mise not found — repo-managed tools skipped")
+		out.Infof("Install: https://mise.jdx.dev  then rerun: ./crawbl setup")
+		out.Ln()
+		return
+	}
+	out.Step(style.Running, "Running mise install...")
+	if err := runCmd("mise", "install"); err != nil {
+		out.Warning("mise install failed: %v", err)
+	} else {
+		out.Step(style.Check, "Installed tool versions from .mise.toml")
+	}
+	out.Ln()
+}
+
+// setupStep3RequiredTools checks for required CLI tools and prints install hints.
+func setupStep3RequiredTools() {
+	out.Step(style.Setup, "Step 3/5: Checking required tools...")
+	out.Ln()
 	tools := []toolCheck{
 		{"go", "go version", "https://go.dev/dl/ or: mise install go"},
 		{"ko", "ko version", "go install github.com/google/ko@latest"},
@@ -102,7 +132,7 @@ func runSetup() error {
 		{"sonar-scanner", "sonar-scanner --version", "mise install  (sonar-scanner-cli in .mise.toml)"},
 		{"docker (auth-filter only)", "docker --version", "https://docs.docker.com/get-docker/ (only needed for auth-filter WASM builds)"},
 	}
-
+	allFound := true
 	for _, t := range tools {
 		if checkTool(t) {
 			out.Step(style.Check, "%s", t.name)
@@ -112,7 +142,6 @@ func runSetup() error {
 		}
 	}
 	out.Ln()
-
 	if !allFound {
 		out.Step(style.Tip, "Install all tools at once with mise:")
 		out.Infof("curl https://mise.run | sh")
@@ -120,52 +149,45 @@ func runSetup() error {
 		out.Infof("mise install")
 		out.Ln()
 	}
+}
 
-	// --- Step 4: Configure Snyk MCP for Claude Code ---
+// setupStep4Snyk configures Snyk MCP for Claude Code.
+func setupStep4Snyk() {
 	out.Step(style.Setup, "Step 4/5: Configuring Snyk MCP for Claude Code...")
 	out.Ln()
-
-	if commandExists("snyk") {
-		out.Step(style.Running, "Running snyk mcp configure...")
-		if err := runCmd("snyk", "mcp", "configure", "--tool=claude-cli"); err != nil {
-			out.Warning("snyk mcp configure failed: %v", err)
-		} else {
-			out.Step(style.Check, "Snyk MCP configured for Claude Code")
-		}
-	} else {
+	if !commandExists("snyk") {
 		out.Step(style.Warning, "snyk not found — run mise install first, then rerun crawbl setup")
+		out.Ln()
+		return
+	}
+	out.Step(style.Running, "Running snyk mcp configure...")
+	if err := runCmd("snyk", "mcp", "configure", "--tool=claude-cli"); err != nil {
+		out.Warning("snyk mcp configure failed: %v", err)
+	} else {
+		out.Step(style.Check, "Snyk MCP configured for Claude Code")
 	}
 	out.Ln()
+}
 
-	// --- Step 5: Check/create .env file ---
+// setupStep5Env creates .env from .env.example when it doesn't yet exist.
+func setupStep5Env() error {
 	out.Step(style.Config, "Step 5/5: Checking .env file...")
 	out.Ln()
-
-	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		if _, err := os.Stat(".env.example"); err == nil {
-			if err := copyFile(".env.example", ".env"); err != nil {
-				return fmt.Errorf("failed to create .env: %w", err)
-			}
-			out.Step(style.Check, "Created .env from .env.example")
-		} else {
-			out.Warning("No .env.example found — create .env manually")
-		}
-	} else {
+	if _, err := os.Stat(".env"); !os.IsNotExist(err) {
 		out.Step(style.Check, ".env already exists")
+		out.Ln()
+		return nil
 	}
+	if _, err := os.Stat(".env.example"); err != nil {
+		out.Warning("No .env.example found — create .env manually")
+		out.Ln()
+		return nil
+	}
+	if err := copyFile(".env.example", ".env"); err != nil {
+		return fmt.Errorf("failed to create .env: %w", err)
+	}
+	out.Step(style.Check, "Created .env from .env.example")
 	out.Ln()
-
-	// --- Done ---
-	out.Step(style.Celebrate, "Ready! Next steps:")
-	out.Infof("1. Source your environment:")
-	out.Infof("   set -a && source .env && set +a")
-	out.Infof("2. Deploy to dev:")
-	out.Infof("   crawbl app deploy platform")
-	out.Infof("3. Run e2e tests:")
-	out.Infof("   crawbl test e2e --base-url https://api-dev.crawbl.com")
-	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")
-	out.Ln()
-
 	return nil
 }
 

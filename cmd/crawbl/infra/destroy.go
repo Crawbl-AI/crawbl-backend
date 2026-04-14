@@ -151,51 +151,58 @@ func deleteLoadBalancerServices(ctx context.Context) error {
 		return err
 	}
 
-	// List all Services across all namespaces.
 	svcs, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("list services: %w", err)
 	}
 
-	var lbCount int
-	for i := range svcs.Items {
-		svc := &svcs.Items[i]
-		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
-			continue
-		}
-
-		out.Infof("Deleting LoadBalancer service %s/%s...", svc.Namespace, svc.Name)
-		if err := clientset.CoreV1().Services(svc.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{}); err != nil {
-			out.Warning("Failed to delete %s/%s: %v", svc.Namespace, svc.Name, err)
-			continue
-		}
-		lbCount++
-	}
-
+	lbCount := deleteLBServices(ctx, clientset, svcs.Items)
 	if lbCount == 0 {
 		out.Infof("No LoadBalancer services found")
 		return nil
 	}
 
 	out.Step(style.Waiting, "Waiting for %d LoadBalancer(s) to terminate...", lbCount)
-	err = waitForResourceDeletion(ctx, "LoadBalancer(s)", func(c context.Context) (int, error) {
-		list, listErr := clientset.CoreV1().Services("").List(c, metav1.ListOptions{})
-		if listErr != nil {
-			return 0, fmt.Errorf("list services: %w", listErr)
-		}
-		count := 0
-		for i := range list.Items {
-			if list.Items[i].Spec.Type == corev1.ServiceTypeLoadBalancer {
-				count++
-			}
-		}
-		return count, nil
-	}, 5*time.Minute, 5*time.Second)
-	if err != nil {
+	if err := waitForResourceDeletion(ctx, "LoadBalancer(s)", func(c context.Context) (int, error) {
+		return countLBServices(c, clientset)
+	}, 5*time.Minute, 5*time.Second); err != nil {
 		return err
 	}
 	out.Success("All LoadBalancers terminated")
 	return nil
+}
+
+// deleteLBServices deletes each LoadBalancer-type Service and returns the count deleted.
+func deleteLBServices(ctx context.Context, clientset *kubernetes.Clientset, items []corev1.Service) int {
+	count := 0
+	for i := range items {
+		svc := &items[i]
+		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+			continue
+		}
+		out.Infof("Deleting LoadBalancer service %s/%s...", svc.Namespace, svc.Name)
+		if err := clientset.CoreV1().Services(svc.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{}); err != nil {
+			out.Warning("Failed to delete %s/%s: %v", svc.Namespace, svc.Name, err)
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+// countLBServices returns the number of LoadBalancer-type Services currently in the cluster.
+func countLBServices(ctx context.Context, clientset *kubernetes.Clientset) (int, error) {
+	list, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("list services: %w", err)
+	}
+	count := 0
+	for i := range list.Items {
+		if list.Items[i].Spec.Type == corev1.ServiceTypeLoadBalancer {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // deletePersistentVolumeClaims finds and deletes all PVCs across all namespaces,
