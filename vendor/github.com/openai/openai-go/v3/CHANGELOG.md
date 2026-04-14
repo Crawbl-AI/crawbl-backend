@@ -1,5 +1,306 @@
 # Changelog
 
+## 3.31.0 (2026-04-08)
+
+Full Changelog: [v3.30.0...v3.31.0](https://github.com/openai/openai-go/compare/v3.30.0...v3.31.0)
+
+### Features
+
+* **api:** add phase field to conversation messages ([563d747](https://github.com/openai/openai-go/commit/563d747fff0370d16e5cffff5a11e8e02e17bb8b))
+* **api:** add web_search_call.results to ResponseIncludable ([6ef5b20](https://github.com/openai/openai-go/commit/6ef5b20a234ebdc85bd580539989a3933f06b5df))
+* **client:** add support for short-lived tokens ([#799](https://github.com/openai/openai-go/issues/799)) ([038871e](https://github.com/openai/openai-go/commit/038871ef135200279e45bd8920b0d142c58e51c0))
+* **internal:** support comma format in multipart form encoding ([905b473](https://github.com/openai/openai-go/commit/905b473d7bfb14ffd1db7c7b48efc1fdb84d1750))
+
+
+### Bug Fixes
+
+* fix issue with unmarshaling in some cases ([a017bc6](https://github.com/openai/openai-go/commit/a017bc6b810fcb01558736cd742f180dce342e49))
+* prevent duplicate ? in query params ([cbb2c75](https://github.com/openai/openai-go/commit/cbb2c754223558d6fd19f34642a0aa89adba42e7))
+* **types:** remove web_search_call.results from ResponseIncludable ([180597f](https://github.com/openai/openai-go/commit/180597fddba09d631a2fdc786116b3ad4f2e5418))
+
+
+### Chores
+
+* **ci:** support opting out of skipping builds on metadata-only commits ([12e3a5a](https://github.com/openai/openai-go/commit/12e3a5afdbacd2fad57640ba5486226898d6df71))
+* remove unnecessary error check for url parsing ([cfe9c41](https://github.com/openai/openai-go/commit/cfe9c411d11b6f097d6e0563767bf231abb9975a))
+* **tests:** bump steady to v0.20.1 ([8e4ef11](https://github.com/openai/openai-go/commit/8e4ef117bdec78698d72a00b0a14d12cf0482561))
+* **tests:** bump steady to v0.20.2 ([ad31f81](https://github.com/openai/openai-go/commit/ad31f81e22e4f2cc931e11625755f92978a18be9))
+* update docs for api:"required" ([2d16ebc](https://github.com/openai/openai-go/commit/2d16ebc57c3eca70c5bcb421ee8592549722e7f4))
+
+
+### Documentation
+
+* **api:** add multi-file ingestion guidance to vectorstorefile/filebatch params ([dbba33f](https://github.com/openai/openai-go/commit/dbba33f751ffa7e7a36678c4305a3e7630a4494f))
+
+## 3.30.0 (2026-03-25)
+
+Full Changelog: [v3.29.0...v3.30.0](https://github.com/openai/openai-go/compare/v3.29.0...v3.30.0)
+
+### Features
+
+* **api:** add keys field to computer action types ([7abb3c4](https://github.com/openai/openai-go/commit/7abb3c4b4d1fb3d2757dd70c5a201de4190f298a))
+
+
+### Bug Fixes
+
+* **api:** align SDK response types with expanded item schemas ([324c584](https://github.com/openai/openai-go/commit/324c584ec31315ec18c169918e524741e74d395a))
+* **types:** generate shared enum types that are not referenced by other schemas ([e2f2920](https://github.com/openai/openai-go/commit/e2f2920f510348ea8b7e26e6b2460f802d34998c))
+* **types:** make Type required, correct enum in ResponseInputMessageItem ([8c2c7a5](https://github.com/openai/openai-go/commit/8c2c7a59329e95da117ffdde7b36f43e1fbdbacb))
+
+
+### Chores
+
+* **ci:** skip lint on metadata-only changes ([40cf884](https://github.com/openai/openai-go/commit/40cf884295e1631dc637f6e3e1316e8665e5e694))
+* **client:** fix multipart serialisation of Default() fields ([06c04ae](https://github.com/openai/openai-go/commit/06c04aeca47e7348de94573eefbfaf2e110c4573))
+* **internal:** support default value struct tag ([f1afb2a](https://github.com/openai/openai-go/commit/f1afb2ab20307c50da7ec421ac5cd3e5a9c33fe3))
+* **internal:** update gitignore ([bde0a0d](https://github.com/openai/openai-go/commit/bde0a0d3e4a8b63e2ce28fae207f9546abac0722))
+* **tests:** bump steady to v0.19.4 ([a0561c3](https://github.com/openai/openai-go/commit/a0561c3014b5d5fbeee9d7de58dad3f9be9e2d9f))
+* **tests:** bump steady to v0.19.5 ([56c5c36](https://github.com/openai/openai-go/commit/56c5c3631cb1dec68b8cb68c1e03d62e69fe3a70))
+* **tests:** bump steady to v0.19.6 ([44ebe37](https://github.com/openai/openai-go/commit/44ebe3744e70460f2cacd94ccf21957e30d697a1))
+* **tests:** bump steady to v0.19.7 ([1b04072](https://github.com/openai/openai-go/commit/1b04072ef94542b2a0007e4088ef09d4f5387dcf))
+
+
+### Refactors
+
+* **tests:** switch from prism to steady ([2185358](https://github.com/openai/openai-go/commit/21853589203e202637f9ebc7f7be5d4c73f2a471))
+
+## 3.29.0 (2026-03-17)
+
+Full Changelog: [v3.28.0...v3.29.0](https://github.com/openai/openai-go/compare/v3.28.0...v3.29.0)
+
+### Features
+
+* **api:** 5.4 nano and mini model slugs ([c4ebb48](https://github.com/openai/openai-go/commit/c4ebb48b3314d41ae1ca8006ccf7d5b9facad61e))
+* **api:** add in and nin values to comparison filter type ([d060d44](https://github.com/openai/openai-go/commit/d060d4473d6ca87e0427eea709f87d5edd0e7c78))
+
+
+### Chores
+
+* **internal:** tweak CI branches ([6379626](https://github.com/openai/openai-go/commit/63796269b563770b6cbb24144edade0e57051e50))
+
+## 3.28.0 (2026-03-14)
+
+Full Changelog: [v3.27.0...v3.28.0](https://github.com/openai/openai-go/compare/v3.27.0...v3.28.0)
+
+### Features
+
+* **api:** add /v1/videos endpoint option to batch ([7b2d67e](https://github.com/openai/openai-go/commit/7b2d67e3d65737572d89536d16ed81a3ce39688f))
+* **api:** add defer_loading field to function tools ([6d4b683](https://github.com/openai/openai-go/commit/6d4b6833e5b0b29a9b1d0c99062a231290e8b93f))
+* **api:** custom voices ([d00b782](https://github.com/openai/openai-go/commit/d00b782c32db4c953b8e39edc5a77504693c70f3))
+
+### ⚠ BREAKING CHANGES
+
+* **api:** The `voice` param and resouce has changed from a `string` to a `string | {id: string}`. This is a breaking change for Go.
+
+## 3.27.0 (2026-03-13)
+
+Full Changelog: [v3.26.0...v3.27.0](https://github.com/openai/openai-go/compare/v3.26.0...v3.27.0)
+
+### Features
+
+* **api:** add video character/edit/extend, remove Azure/webhook/polling/accumulator ([20da043](https://github.com/openai/openai-go/commit/20da043643286aa444450f4bf4ab6f68c5401455))
+* **api:** add video edits/extensions/character, remove Azure/webhook/polling helpers ([fa9413f](https://github.com/openai/openai-go/commit/fa9413f9b7c00ec36b124c4b3714daf2b2cd978d))
+* **api:** api update ([c88c6c9](https://github.com/openai/openai-go/commit/c88c6c9732f7b7a8cd739b8006a56d564ab59183))
+* **api:** sora api improvements: character api, video extensions/edits, higher resolution exports. ([93f6779](https://github.com/openai/openai-go/commit/93f6779c0c2a1beb7f68b570c61aae8fda52fd1f))
+
+
+### Chores
+
+* **internal:** codegen related update ([d531232](https://github.com/openai/openai-go/commit/d5312325255bcac5934636d320653c338bb9622e))
+* **internal:** codegen related update ([1748c11](https://github.com/openai/openai-go/commit/1748c114b2d642b38fdacfef7823cbd4130c29c5))
+* **internal:** codegen related update ([531ece1](https://github.com/openai/openai-go/commit/531ece1703028189ba6081a168f3a979481dcf0c))
+* **internal:** codegen related update ([ce9f435](https://github.com/openai/openai-go/commit/ce9f4357c22b533fff0d3385058dbadc033928e8))
+
+## 3.26.0 (2026-03-05)
+
+Full Changelog: [v3.25.0...v3.26.0](https://github.com/openai/openai-go/compare/v3.25.0...v3.26.0)
+
+### Features
+
+* **api:** The GA ComputerTool now uses the CompuerTool class. The 'computer_use_preview' tool is moved to ComputerUsePreview ([347418b](https://github.com/openai/openai-go/commit/347418be8d4fa33881d9ac30f6c7132f2f545f2b))
+
+## 3.25.0 (2026-03-05)
+
+Full Changelog: [v3.24.0...v3.25.0](https://github.com/openai/openai-go/compare/v3.24.0...v3.25.0)
+
+### Features
+
+* **api:** gpt-5.4, tool search tool, and new computer tool ([101826d](https://github.com/openai/openai-go/commit/101826dd757a0213aecb4eaa6332866657b9aa83))
+* **api:** remove Phase from input/output messages, PromptCacheKey from responses ([961b8ca](https://github.com/openai/openai-go/commit/961b8ca27923beca8aa08d4a8e3382c2da9d61db))
+
+
+### Bug Fixes
+
+* **api:** internal schema fixes ([fe5f7cd](https://github.com/openai/openai-go/commit/fe5f7cdb34d11dd18caa503716cae1512b245053))
+* **api:** manual updates ([70b02c8](https://github.com/openai/openai-go/commit/70b02c8f63c98a17813dc6cb7f7707fb2bba81c5))
+* **api:** readd phase ([548aff8](https://github.com/openai/openai-go/commit/548aff8ad8b96518f5549ec3bc98da71e9b7f540))
+
+
+### Chores
+
+* **internal:** codegen related update ([ab733b9](https://github.com/openai/openai-go/commit/ab733b91db39e99e292696530340333c065e04b9))
+* **internal:** codegen related update ([23d1831](https://github.com/openai/openai-go/commit/23d1831cb5ca6f61ca8575737cec17e2f347818b))
+* **internal:** reduce warnings ([2963312](https://github.com/openai/openai-go/commit/2963312c075fa9a30abad32b1e90813229b22129))
+
+## 3.24.0 (2026-02-24)
+
+Full Changelog: [v3.23.0...v3.24.0](https://github.com/openai/openai-go/compare/v3.23.0...v3.24.0)
+
+### Features
+
+* **api:** add phase ([72366d8](https://github.com/openai/openai-go/commit/72366d895c78b5188a590ee7f9b572b567447b32))
+
+
+### Bug Fixes
+
+* **api:** fix phase enum ([5712ebf](https://github.com/openai/openai-go/commit/5712ebf1f30e63d148a72c451f1df48620b14a2d))
+* **api:** phase docs ([b67dd66](https://github.com/openai/openai-go/commit/b67dd6680110c013c1660c37dde5467e2cd50030))
+
+
+### Chores
+
+* **internal:** move custom custom `json` tags to `api` ([0735303](https://github.com/openai/openai-go/commit/0735303849ece03c57adbb0f899d7f3a0b60bc50))
+* **internal:** refactor sse event parsing ([45dc6bb](https://github.com/openai/openai-go/commit/45dc6bb18120330de4470739a07b13f08d7f7666))
+
+## 3.24.0 (2026-02-24)
+
+Full Changelog: [v3.23.0...v3.24.0](https://github.com/openai/openai-go/compare/v3.23.0...v3.24.0)
+
+### Features
+
+* **api:** add phase ([72366d8](https://github.com/openai/openai-go/commit/72366d895c78b5188a590ee7f9b572b567447b32))
+
+
+### Bug Fixes
+
+* **api:** fix phase enum ([5712ebf](https://github.com/openai/openai-go/commit/5712ebf1f30e63d148a72c451f1df48620b14a2d))
+* **api:** phase docs ([b67dd66](https://github.com/openai/openai-go/commit/b67dd6680110c013c1660c37dde5467e2cd50030))
+
+
+### Chores
+
+* **internal:** move custom custom `json` tags to `api` ([0735303](https://github.com/openai/openai-go/commit/0735303849ece03c57adbb0f899d7f3a0b60bc50))
+* **internal:** refactor sse event parsing ([45dc6bb](https://github.com/openai/openai-go/commit/45dc6bb18120330de4470739a07b13f08d7f7666))
+
+## 3.23.0 (2026-02-24)
+
+Full Changelog: [v3.22.1...v3.23.0](https://github.com/openai/openai-go/compare/v3.22.1...v3.23.0)
+
+### Features
+
+* **api:** add gpt-realtime-1.5 and gpt-audio-1.5 models to realtime session ([9076e2f](https://github.com/openai/openai-go/commit/9076e2f2fab882d5a8ba9992096e5997902c5589))
+
+## 3.22.1 (2026-02-23)
+
+Full Changelog: [v3.22.0...v3.22.1](https://github.com/openai/openai-go/compare/v3.22.0...v3.22.1)
+
+### Bug Fixes
+
+* allow canceling a request while it is waiting to retry ([54672cf](https://github.com/openai/openai-go/commit/54672cf6b2c21a0e2ac0d2a7d7bed8680eee3e44))
+
+
+### Chores
+
+* update mock server docs ([3ac84dd](https://github.com/openai/openai-go/commit/3ac84dd90e21d9374c0141d86c07d21e0914c6b0))
+
+
+### Documentation
+
+* **api:** add batch size limit to vector store file batch parameters ([f751c40](https://github.com/openai/openai-go/commit/f751c40c522d6fba5c4eb244fd25f28c2317ca33))
+* **api:** clarify safety_identifier max length in chat completions and responses ([8257f9b](https://github.com/openai/openai-go/commit/8257f9b0e4d63038f2b088a42399e3a80e9c9bb6))
+* **api:** enhance method docstrings across audio/chat/completion/skill/upload/video APIs ([38b8f63](https://github.com/openai/openai-go/commit/38b8f63a16f9a50bb176561f7842baf976e88316))
+
+## 3.22.0 (2026-02-13)
+
+Full Changelog: [v3.21.0...v3.22.0](https://github.com/openai/openai-go/compare/v3.21.0...v3.22.0)
+
+### Features
+
+* **api:** container network_policy and skills ([8e5ea23](https://github.com/openai/openai-go/commit/8e5ea2344580eefa186040cae3583dacf459e0b9))
+
+
+### Bug Fixes
+
+* **encoder:** correctly serialize NullStruct ([a6cb49e](https://github.com/openai/openai-go/commit/a6cb49ef3743b1c0b58d24f8dbc5e16e1a5f5852))
+
+
+### Documentation
+
+* update comment ([bc316d7](https://github.com/openai/openai-go/commit/bc316d7b10fa928289e0560123b0de16099edfb7))
+
+## 3.21.0 (2026-02-10)
+
+Full Changelog: [v3.20.0...v3.21.0](https://github.com/openai/openai-go/compare/v3.20.0...v3.21.0)
+
+### Features
+
+* **api:** support for images in batch api ([e23aeb1](https://github.com/openai/openai-go/commit/e23aeb1b13bfd089cc73d3097c9635b687446f82))
+
+## 3.20.0 (2026-02-10)
+
+Full Changelog: [v3.19.0...v3.20.0](https://github.com/openai/openai-go/compare/v3.19.0...v3.20.0)
+
+### Features
+
+* **api:** skills and hosted shell ([9e191de](https://github.com/openai/openai-go/commit/9e191de75f67a6a693c8b25ac9ab1b9288673993))
+
+## 3.19.0 (2026-02-09)
+
+Full Changelog: [v3.18.0...v3.19.0](https://github.com/openai/openai-go/compare/v3.18.0...v3.19.0)
+
+### Features
+
+* **api:** responses context_management ([199f230](https://github.com/openai/openai-go/commit/199f23025ab098f2ac0ac9a99dee37235613c287))
+
+## 3.18.0 (2026-02-05)
+
+Full Changelog: [v3.17.0...v3.18.0](https://github.com/openai/openai-go/compare/v3.17.0...v3.18.0)
+
+### Features
+
+* **api:** add shell_call_output status field ([67a75d7](https://github.com/openai/openai-go/commit/67a75d755e815f6d6fdf4ac48314472a94c8613f))
+* **api:** image generation actions for responses; ResponseFunctionCallArgumentsDoneEvent.name ([2c57016](https://github.com/openai/openai-go/commit/2c57016b7c7f45072c59f193e567a55ecbda21fd))
+
+
+### Bug Fixes
+
+* **client:** undo change to web search Find action ([e340256](https://github.com/openai/openai-go/commit/e340256509214ee386de32b993f5ec4ebba43d38))
+* **client:** update type for `find_in_page` action ([4b5d499](https://github.com/openai/openai-go/commit/4b5d4993e82ada68276bb5560bb2cd8b457aa3da))
+
+
+### Chores
+
+* **client:** improve example values ([c86a65c](https://github.com/openai/openai-go/commit/c86a65cefd55eb18568f4b7d2660c82dc90af4ad))
+
+
+### Documentation
+
+* split `api.md` by standalone resources ([aeed37b](https://github.com/openai/openai-go/commit/aeed37b814d37ad3d59111b7665d48bf220cbf9e))
+
+## 3.17.0 (2026-01-27)
+
+Full Changelog: [v3.16.0...v3.17.0](https://github.com/openai/openai-go/compare/v3.16.0...v3.17.0)
+
+### Features
+
+* **api:** api update ([a456c60](https://github.com/openai/openai-go/commit/a456c60498b33b7da048cc64bdff76c49a904117))
+* **api:** api updates ([21fd4a9](https://github.com/openai/openai-go/commit/21fd4a9534d5ef531c6a9bc497b90c14b68ebda3))
+* **client:** add a convenient param.SetJSON helper ([1b35ece](https://github.com/openai/openai-go/commit/1b35ece947934982609557e6acacfd3526289de1))
+* **client:** add a StreamError type to access raw events from sse streams ([fd14b30](https://github.com/openai/openai-go/commit/fd14b30e3cc2d14438a100be12627692e8ea045a))
+
+
+### Bug Fixes
+
+* **api:** mark assistants as deprecated ([9a8c9af](https://github.com/openai/openai-go/commit/9a8c9af8cf988069e543487c09a0897806408d67))
+* **client:** retain streaming when user sets request body ([3a7a22e](https://github.com/openai/openai-go/commit/3a7a22ec90c5ff44203321bbff94f9541a80601f))
+* **docs:** add missing pointer prefix to api.md return types ([dd641d9](https://github.com/openai/openai-go/commit/dd641d924ead979b4369b952f99387880879938d))
+
+
+### Chores
+
+* **internal:** codegen related update ([74d3989](https://github.com/openai/openai-go/commit/74d3989139a94407020f7bf43c8351c4dffe412c))
+* **internal:** update `actions/checkout` version ([2db54a5](https://github.com/openai/openai-go/commit/2db54a5d05e3240c415cb91320ede5704331828a))
+
 ## 3.16.0 (2026-01-09)
 
 Full Changelog: [v3.15.0...v3.16.0](https://github.com/openai/openai-go/compare/v3.15.0...v3.16.0)

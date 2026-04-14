@@ -20,6 +20,8 @@ import (
 	"github.com/openai/openai-go/v3/shared/constant"
 )
 
+// Use Uploads to upload large files in multiple parts.
+//
 // UploadPartService contains methods and other services that help with interacting
 // with the openai API.
 //
@@ -54,23 +56,23 @@ func (r *UploadPartService) New(ctx context.Context, uploadID string, body Uploa
 	opts = slices.Concat(r.Options, opts)
 	if uploadID == "" {
 		err = errors.New("missing required upload_id parameter")
-		return
+		return nil, err
 	}
 	path := fmt.Sprintf("uploads/%s/parts", uploadID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
-	return
+	return res, err
 }
 
 // The upload Part represents a chunk of bytes we can add to an Upload object.
 type UploadPart struct {
 	// The upload Part unique identifier, which can be referenced in API endpoints.
-	ID string `json:"id,required"`
+	ID string `json:"id" api:"required"`
 	// The Unix timestamp (in seconds) for when the Part was created.
-	CreatedAt int64 `json:"created_at,required"`
+	CreatedAt int64 `json:"created_at" api:"required"`
 	// The object type, which is always `upload.part`.
-	Object constant.UploadPart `json:"object,required"`
+	Object constant.UploadPart `json:"object" default:"upload.part"`
 	// The ID of the Upload object that this Part was added to.
-	UploadID string `json:"upload_id,required"`
+	UploadID string `json:"upload_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID          respjson.Field
@@ -90,7 +92,7 @@ func (r *UploadPart) UnmarshalJSON(data []byte) error {
 
 type UploadPartNewParams struct {
 	// The chunk of bytes for this Part.
-	Data io.Reader `json:"data,omitzero,required" format:"binary"`
+	Data io.Reader `json:"data,omitzero" api:"required" format:"binary"`
 	paramObj
 }
 

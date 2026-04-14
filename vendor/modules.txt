@@ -838,9 +838,10 @@ github.com/nats-io/nuid
 github.com/nxadm/tail/util
 github.com/nxadm/tail/watch
 github.com/nxadm/tail/winfile
-# github.com/openai/openai-go/v3 v3.16.0
+# github.com/openai/openai-go/v3 v3.31.0
 ## explicit; go 1.22
 github.com/openai/openai-go/v3
+github.com/openai/openai-go/v3/auth
 github.com/openai/openai-go/v3/conversations
 github.com/openai/openai-go/v3/internal
 github.com/openai/openai-go/v3/internal/apierror
