@@ -19,8 +19,8 @@ func RunUntilSignal(run func() error, stop func(context.Context) error, timeout 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ctx, stop_ := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGHUP)
-	defer stop_()
+	ctx, stopNotify := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGHUP)
+	defer stopNotify()
 
 	g, _ := errgroup.WithContext(ctx)
 

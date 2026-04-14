@@ -97,6 +97,27 @@ type suiteUsers struct {
 	zach    *testUser
 }
 
+// buildTags assembles the godog tag expression, always excluding @wip and
+// @llm-flaky unless the caller's expression already mentions them. It also
+// excludes @db scenarios when no database DSN is configured.
+func buildTags(cfg *Config) string {
+	tags := cfg.Tags
+	if tags == "" {
+		tags = "~@wip && ~@llm-flaky"
+	} else {
+		if !strings.Contains(tags, "@wip") {
+			tags += " && ~@wip"
+		}
+		if !strings.Contains(tags, "@llm-flaky") {
+			tags += " && ~@llm-flaky"
+		}
+	}
+	if cfg.DatabaseDSN == "" {
+		tags += " && ~@db"
+	}
+	return tags
+}
+
 // Run executes the godog test suite and returns results.
 func Run(cfg *Config) *Results {
 	featuresDir := findFeaturesDir()
@@ -136,27 +157,7 @@ func Run(cfg *Config) *Results {
 		},
 	}
 
-	// Always exclude @wip and @llm-flaky scenarios by default.
-	// @wip: known-broken tests needing fixture/config changes.
-	// @llm-flaky: tests that depend on non-deterministic LLM behavior.
-	tags := cfg.Tags
-	if tags == "" {
-		tags = "~@wip && ~@llm-flaky"
-	} else {
-		if !strings.Contains(tags, "@wip") {
-			tags += " && ~@wip"
-		}
-		if !strings.Contains(tags, "@llm-flaky") {
-			tags += " && ~@llm-flaky"
-		}
-	}
-
-	// Auto-exclude @db scenarios when no database connection is available.
-	// DB-dependent scenarios (blueprint reload, usage quota) write directly
-	// to Postgres and cannot run in gateway-only mode.
-	if cfg.DatabaseDSN == "" {
-		tags += " && ~@db"
-	}
+	tags := buildTags(cfg)
 
 	opts := godog.Options{
 		Format:    "pretty",

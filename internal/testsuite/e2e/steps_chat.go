@@ -224,45 +224,53 @@ func (tc *testContext) assistantReplyShouldComeFromSpecificAgent(role string) er
 	const retryDelay = 2 * time.Second
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Check all reply turns, not just the first — the delegated
-		// agent's reply may appear after the manager's acknowledgment.
-		replies := gjson.GetBytes(tc.lastBody, "data").Array()
-		for _, r := range replies {
-			if r.Get("agent.slug").String() == expected {
-				return nil
-			}
+		if replyContainsAgent(tc.lastBody, expected) {
+			return nil
 		}
-
 		if attempt == maxAttempts {
 			got := gjson.GetBytes(tc.lastBody, "data.0.agent.slug").String()
 			return fmt.Errorf("JSON data.*.agent.slug: expected %q in any reply turn, got first=%q after %d attempts", expected, got, maxAttempts)
 		}
+		if err := tc.refetchReplies(retryDelay); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-		// Re-fetch the conversation messages for the next attempt.
-		time.Sleep(retryDelay)
-		state := tc.userState("primary")
-		listURL := pathWorkspaces + state.workspaceID + pathConversations + state.currentConversation + pathMessages
-		if _, err := tc.doRequest("GET", listURL, "primary", nil); err != nil {
-			return fmt.Errorf("retry fetch messages: %w", err)
+// replyContainsAgent checks whether any reply turn was produced by the named agent.
+func replyContainsAgent(body []byte, slug string) bool {
+	for _, r := range gjson.GetBytes(body, "data").Array() {
+		if r.Get("agent.slug").String() == slug {
+			return true
 		}
-		// Rebuild tc.lastBody in the synthesized reply shape so
-		// downstream assertions keep working.
-		msgs := gjson.GetBytes(tc.lastBody, "data.messages").Array()
-		var assistantReplies []gjson.Result
-		for _, m := range msgs {
-			r := m.Get("role").String()
-			if r != "" && r != "user" {
-				assistantReplies = append(assistantReplies, m)
-			}
+	}
+	return false
+}
+
+// refetchReplies re-fetches conversation messages after a delay and rebuilds
+// tc.lastBody in the synthesized reply shape for downstream assertions.
+func (tc *testContext) refetchReplies(delay time.Duration) error {
+	time.Sleep(delay)
+	state := tc.userState("primary")
+	listURL := pathWorkspaces + state.workspaceID + pathConversations + state.currentConversation + pathMessages
+	if _, err := tc.doRequest("GET", listURL, "primary", nil); err != nil {
+		return fmt.Errorf("retry fetch messages: %w", err)
+	}
+	msgs := gjson.GetBytes(tc.lastBody, "data.messages").Array()
+	var assistantReplies []gjson.Result
+	for _, m := range msgs {
+		if r := m.Get("role").String(); r != "" && r != "user" {
+			assistantReplies = append(assistantReplies, m)
 		}
-		if len(assistantReplies) > 0 {
-			synthesized, err := synthesizeRepliesBody(assistantReplies)
-			if err != nil {
-				return fmt.Errorf("retry synthesize: %w", err)
-			}
-			tc.lastBody = synthesized
-			tc.lastStatus = http.StatusOK
+	}
+	if len(assistantReplies) > 0 {
+		synthesized, err := synthesizeRepliesBody(assistantReplies)
+		if err != nil {
+			return fmt.Errorf("retry synthesize: %w", err)
 		}
+		tc.lastBody = synthesized
+		tc.lastStatus = http.StatusOK
 	}
 	return nil
 }

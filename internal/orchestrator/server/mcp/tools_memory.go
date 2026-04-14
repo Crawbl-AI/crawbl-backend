@@ -472,6 +472,20 @@ func newMemoryGraphStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGraphSta
 	})
 }
 
+// bestEffortEmbed generates an embedding vector for content, returning nil on
+// failure or when no embedder is configured.
+func bestEffortEmbed(ctx context.Context, deps *Deps, content string) []float32 {
+	if deps.Embedder == nil {
+		return nil
+	}
+	emb, err := deps.Embedder.Embed(ctx, content)
+	if err != nil {
+		deps.Logger.WarnContext(ctx, "embedding failed for drawer, storing without embedding", "error", err)
+		return nil
+	}
+	return emb
+}
+
 // --- Write tool handlers ---
 
 func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawerInput, memoryAddDrawerOutput] {
@@ -495,16 +509,7 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 		// Classify memory type and derive importance.
 		memoryType, importance := classifyAndScore(deps, input.Content)
 
-		// Generate embedding (best-effort).
-		var embedding []float32
-		if deps.Embedder != nil {
-			emb, err := deps.Embedder.Embed(ctx, input.Content)
-			if err != nil {
-				deps.Logger.WarnContext(ctx, "embedding failed for drawer, storing without embedding", "error", err)
-			} else {
-				embedding = emb
-			}
-		}
+		embedding := bestEffortEmbed(ctx, deps, input.Content)
 
 		d := &memory.Drawer{
 			ID:           drawerID,
