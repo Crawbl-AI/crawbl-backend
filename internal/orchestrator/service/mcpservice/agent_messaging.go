@@ -52,7 +52,14 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	}
 
 	// 2. Check depth limit.
-	msgID, depthErr := s.prepareAgentMessage(ctx, sess, params, slug, fromAgent, targetAgent, callingSlug, message)
+	msgID, depthErr := s.prepareAgentMessage(ctx, sess, prepareOpts{
+		params:      params,
+		slug:        slug,
+		fromAgent:   fromAgent,
+		targetAgent: targetAgent,
+		callingSlug: callingSlug,
+		message:     message,
+	})
 	if depthErr != nil {
 		return &SendAgentMessageResult{Error: depthErr.Error()}, nil
 	}
@@ -60,19 +67,31 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	// 3. Emit Socket.IO delegation event then call agent runtime.
 	s.emitDelegationStarted(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, message)
 
-	return s.callAgentRuntime(ctx, sess, params, slug, fromAgent, targetAgent, callingSlug, message, msgID)
+	return s.callAgentRuntime(ctx, sess, callRuntimeOpts{
+		params:      params,
+		slug:        slug,
+		fromAgent:   fromAgent,
+		targetAgent: targetAgent,
+		callingSlug: callingSlug,
+		message:     message,
+		msgID:       msgID,
+	})
+}
+
+// prepareOpts groups the inputs for prepareAgentMessage.
+type prepareOpts struct {
+	params      *SendAgentMessageParams
+	slug        string
+	fromAgent   *orchestrator.Agent
+	targetAgent *orchestrator.Agent
+	callingSlug string
+	message     string
 }
 
 // prepareAgentMessage checks the depth limit and inserts the agent_messages row.
 // Returns the new message ID, or an error when the depth limit is exceeded.
-func (s *service) prepareAgentMessage(
-	ctx contextT,
-	sess sessionT,
-	params *SendAgentMessageParams,
-	slug string,
-	fromAgent, targetAgent *orchestrator.Agent,
-	callingSlug, message string,
-) (string, error) {
+func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareOpts) (string, error) {
+	params := opts.params
 	currentDepth, err := s.repos.MCP.GetMaxAgentMessageDepth(ctx, sess, params.WorkspaceID, params.ConversationID)
 	if err != nil {
 		currentDepth = -1
@@ -84,18 +103,18 @@ func (s *service) prepareAgentMessage(
 
 	msgID := uuid.NewString()
 	fromAgentID := ""
-	if fromAgent != nil {
-		fromAgentID = fromAgent.ID
+	if opts.fromAgent != nil {
+		fromAgentID = opts.fromAgent.ID
 	}
 	if insertErr := s.repos.MCP.CreateAgentMessage(ctx, sess, &mcprepo.AgentMessageRow{
 		ID:             msgID,
 		WorkspaceID:    params.WorkspaceID,
 		ConversationID: params.ConversationID,
 		FromAgentID:    fromAgentID,
-		FromAgentSlug:  callingSlug,
-		ToAgentID:      targetAgent.ID,
-		ToAgentSlug:    targetAgent.Slug,
-		RequestText:    message,
+		FromAgentSlug:  opts.callingSlug,
+		ToAgentID:      opts.targetAgent.ID,
+		ToAgentSlug:    opts.targetAgent.Slug,
+		RequestText:    opts.message,
 		Status:         realtime.AgentDelegationStatusRunning,
 		Depth:          newDepth,
 	}); insertErr != nil {
@@ -107,19 +126,24 @@ func (s *service) prepareAgentMessage(
 	return msgID, nil
 }
 
+// callRuntimeOpts groups the inputs for callAgentRuntime.
+type callRuntimeOpts struct {
+	params      *SendAgentMessageParams
+	slug        string
+	fromAgent   *orchestrator.Agent
+	targetAgent *orchestrator.Agent
+	callingSlug string
+	message     string
+	msgID       string
+}
+
 // callAgentRuntime ensures the runtime is ready, sends the message, and handles
 // success/failure result recording and event emission.
-func (s *service) callAgentRuntime(
-	ctx contextT,
-	sess sessionT,
-	params *SendAgentMessageParams,
-	slug string,
-	fromAgent, targetAgent *orchestrator.Agent,
-	callingSlug, message, msgID string,
-) (*SendAgentMessageResult, error) {
+func (s *service) callAgentRuntime(ctx contextT, sess sessionT, opts callRuntimeOpts) (*SendAgentMessageResult, error) {
+	params := opts.params
 	startTime := time.Now()
 
-	fullMessage := s.buildFullMessage(ctx, sess, params, message)
+	fullMessage := s.buildFullMessage(ctx, sess, params, opts.message)
 
 	runtimeState, rErr := s.infra.RuntimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
 		UserID:          params.UserID,
@@ -129,28 +153,28 @@ func (s *service) callAgentRuntime(
 	if rErr != nil {
 		duration := time.Since(startTime).Milliseconds()
 		s.failAgentMessage(failAgentMessageOpts{
-			ctx: ctx, sess: sess, msgID: msgID, errText: rErr.Error(),
+			ctx: ctx, sess: sess, msgID: opts.msgID, errText: rErr.Error(),
 			durationMs: duration, workspaceID: params.WorkspaceID,
-			from: fromAgent, to: targetAgent, conversationID: params.ConversationID,
+			from: opts.fromAgent, to: opts.targetAgent, conversationID: params.ConversationID,
 		})
-		return &SendAgentMessageResult{AgentSlug: slug, Error: "runtime not ready: " + rErr.Error(), MessageID: msgID}, nil
+		return &SendAgentMessageResult{AgentSlug: opts.slug, Error: "runtime not ready: " + rErr.Error(), MessageID: opts.msgID}, nil
 	}
 
 	turns, callErr := s.infra.RuntimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   fullMessage,
 		SessionID: params.ConversationID,
-		AgentID:   slug,
+		AgentID:   opts.slug,
 	})
 	duration := time.Since(startTime).Milliseconds()
 
 	if callErr != nil {
 		s.failAgentMessage(failAgentMessageOpts{
-			ctx: ctx, sess: sess, msgID: msgID, errText: callErr.Error(),
+			ctx: ctx, sess: sess, msgID: opts.msgID, errText: callErr.Error(),
 			durationMs: duration, workspaceID: params.WorkspaceID,
-			from: fromAgent, to: targetAgent, conversationID: params.ConversationID,
+			from: opts.fromAgent, to: opts.targetAgent, conversationID: params.ConversationID,
 		})
-		return &SendAgentMessageResult{AgentSlug: slug, Error: callErr.Error(), MessageID: msgID}, nil
+		return &SendAgentMessageResult{AgentSlug: opts.slug, Error: callErr.Error(), MessageID: opts.msgID}, nil
 	}
 
 	responseText := joinTurns(turns)
@@ -158,17 +182,17 @@ func (s *service) callAgentRuntime(
 	if len(storedText) > agentMessageMaxStoredBytes {
 		storedText = storedText[:agentMessageMaxStoredBytes] + agentMessageTruncatedMarker
 	}
-	if completeErr := s.repos.MCP.UpdateAgentMessageCompleted(ctx, sess, msgID, storedText, duration); completeErr != nil {
+	if completeErr := s.repos.MCP.UpdateAgentMessageCompleted(ctx, sess, opts.msgID, storedText, duration); completeErr != nil {
 		s.infra.Logger.Warn("failed to mark agent message as completed", "error", completeErr.Error())
 	}
-	s.emitDelegationDone(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, realtime.AgentDelegationStatusCompleted)
+	s.emitDelegationDone(ctx, params.WorkspaceID, opts.fromAgent, opts.targetAgent, params.ConversationID, opts.msgID, realtime.AgentDelegationStatusCompleted)
 	s.infra.Logger.Info("send_message_to_agent: completed",
-		slog.String("from_slug", callingSlug),
-		slog.String("to_slug", slug),
+		slog.String("from_slug", opts.callingSlug),
+		slog.String("to_slug", opts.slug),
 		slog.Int64("duration_ms", duration),
 		slog.Int("response_len", len(responseText)),
 	)
-	return &SendAgentMessageResult{Success: true, AgentSlug: slug, Response: responseText, MessageID: msgID}, nil
+	return &SendAgentMessageResult{Success: true, AgentSlug: opts.slug, Response: responseText, MessageID: opts.msgID}, nil
 }
 
 // buildFullMessage prepends conversation context to the message when available.

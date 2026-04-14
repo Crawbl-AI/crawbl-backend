@@ -112,30 +112,7 @@ func (s *Service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 
 		now := time.Now().UTC()
 		for idx, blueprint := range s.defaultAgents {
-			agent := freshBySlug[blueprint.Slug]
-			if agent == nil {
-				agent = &orchestrator.Agent{
-					ID:           uuid.NewString(),
-					WorkspaceID:  workspace.ID,
-					Name:         blueprint.Name,
-					Role:         blueprint.Role,
-					Slug:         blueprint.Slug,
-					SystemPrompt: blueprint.SystemPrompt,
-					Description:  blueprint.Description,
-					AvatarURL:    orchestrator.DefaultAgentAvatarURL,
-					CreatedAt:    now,
-					UpdatedAt:    now,
-				}
-			} else {
-				agent.Name = blueprint.Name
-				agent.Role = blueprint.Role
-				agent.Slug = blueprint.Slug
-				agent.SystemPrompt = blueprint.SystemPrompt
-				agent.Description = blueprint.Description
-				agent.AvatarURL = orchestrator.DefaultAgentAvatarURL
-				agent.UpdatedAt = now
-			}
-
+			agent := applyBlueprint(freshBySlug[blueprint.Slug], blueprint, workspace.ID, now)
 			if mErr := s.agentRepo.Save(ctx, tx, agent, idx); mErr != nil {
 				return nil, mErr
 			}
@@ -146,6 +123,34 @@ func (s *Service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, wo
 	})
 }
 
+// applyBlueprint returns an agent struct with the blueprint fields applied.
+// If existing is nil a new agent is created; otherwise the existing agent is
+// updated in place.
+func applyBlueprint(existing *orchestrator.Agent, bp orchestrator.DefaultAgentBlueprint, workspaceID string, now time.Time) *orchestrator.Agent {
+	if existing == nil {
+		return &orchestrator.Agent{
+			ID:           uuid.NewString(),
+			WorkspaceID:  workspaceID,
+			Name:         bp.Name,
+			Role:         bp.Role,
+			Slug:         bp.Slug,
+			SystemPrompt: bp.SystemPrompt,
+			Description:  bp.Description,
+			AvatarURL:    orchestrator.DefaultAgentAvatarURL,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+	}
+	existing.Name = bp.Name
+	existing.Role = bp.Role
+	existing.Slug = bp.Slug
+	existing.SystemPrompt = bp.SystemPrompt
+	existing.Description = bp.Description
+	existing.AvatarURL = orchestrator.DefaultAgentAvatarURL
+	existing.UpdatedAt = now
+	return existing
+}
+
 // ensureDefaultConversations ensures swarm + per-agent conversations exist.
 func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace, agents []*orchestrator.Agent) ([]*orchestrator.Conversation, *merrors.Error) {
 	conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
@@ -153,28 +158,9 @@ func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 		return nil, mErr
 	}
 
-	hasSwarm := false
-	agentConvs := make(map[string]bool)
-	for _, c := range conversations {
-		if c.Type == orchestrator.ConversationTypeSwarm {
-			hasSwarm = true
-		}
-		if c.AgentID != nil {
-			agentConvs[*c.AgentID] = true
-		}
-	}
+	hasSwarm, agentConvs := classifyConversations(conversations)
 
-	allPresent := hasSwarm
-	for _, agent := range agents {
-		if agent.Role == orchestrator.AgentRoleManager {
-			continue
-		}
-		if !agentConvs[agent.ID] {
-			allPresent = false
-			break
-		}
-	}
-	if allPresent {
+	if allConvsPresent(hasSwarm, agents, agentConvs) {
 		return conversations, nil
 	}
 
@@ -193,6 +179,39 @@ func (s *Service) ensureDefaultConversations(ctx context.Context, sess *dbr.Sess
 
 		return s.conversationRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
 	})
+}
+
+// classifyConversations scans the conversation list and returns whether a
+// swarm conversation exists and a set of agent IDs that already have a
+// dedicated conversation.
+func classifyConversations(conversations []*orchestrator.Conversation) (hasSwarm bool, agentConvs map[string]bool) {
+	agentConvs = make(map[string]bool)
+	for _, c := range conversations {
+		if c.Type == orchestrator.ConversationTypeSwarm {
+			hasSwarm = true
+		}
+		if c.AgentID != nil {
+			agentConvs[*c.AgentID] = true
+		}
+	}
+	return hasSwarm, agentConvs
+}
+
+// allConvsPresent returns true when the swarm conversation exists and every
+// non-manager agent already has a dedicated conversation.
+func allConvsPresent(hasSwarm bool, agents []*orchestrator.Agent, agentConvs map[string]bool) bool {
+	if !hasSwarm {
+		return false
+	}
+	for _, agent := range agents {
+		if agent.Role == orchestrator.AgentRoleManager {
+			continue
+		}
+		if !agentConvs[agent.ID] {
+			return false
+		}
+	}
+	return true
 }
 
 // createMissingSwarmConv creates the default swarm conversation if it doesn't exist.

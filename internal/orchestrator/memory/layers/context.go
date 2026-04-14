@@ -54,12 +54,6 @@ type BuildContextParams struct {
 // The returned string does NOT include a leading "\n\n" separator — callers
 // that need one must prepend it themselves.
 func BuildContextForConversation(ctx context.Context, sess database.SessionRunner, params BuildContextParams) string {
-	stack := params.Stack
-	messages := params.Messages
-	namer := params.Namer
-	workspaceID := params.WorkspaceID
-	conversationID := params.ConversationID
-	limit := params.Limit
 	opts := params.Opts
 	maxTextLen := opts.MaxTextLen
 	if maxTextLen <= 0 {
@@ -70,46 +64,61 @@ func BuildContextForConversation(ctx context.Context, sess database.SessionRunne
 		header = "## Conversation Context\nRecent messages (oldest first):\n\n"
 	}
 
-	var memoryText string
-	if stack != nil {
-		wakeUp, err := stack.WakeUp(ctx, sess, workspaceID, "")
-		if err == nil {
-			memoryText = wakeUp
-		}
-	}
+	memoryText := wakeUpMemory(ctx, sess, params.Stack, params.WorkspaceID)
 
-	msgs, listErr := messages.ListRecent(ctx, sess, conversationID, limit)
-	messagesText := formatMessages(ctx, sess, msgs, listErr, header, maxTextLen, namer)
+	msgs, listErr := params.Messages.ListRecent(ctx, sess, params.ConversationID, params.Limit)
+	messagesText := formatMessages(ctx, sess, msgs, listErr, header, maxTextLen, params.Namer)
 
 	if memoryText == "" && messagesText == "" {
 		return ""
 	}
 
+	result := assembleContext(memoryText, messagesText)
+	return capToRunes(result, memory.TokenBudgetTotal)
+}
+
+// wakeUpMemory runs the memory stack WakeUp and returns the result text,
+// or "" when the stack is nil or WakeUp fails.
+func wakeUpMemory(ctx context.Context, sess database.SessionRunner, stack Stack, workspaceID string) string {
+	if stack == nil {
+		return ""
+	}
+	text, err := stack.WakeUp(ctx, sess, workspaceID, "")
+	if err != nil {
+		return ""
+	}
+	return text
+}
+
+// assembleContext joins the memory text and messages text under the total
+// token budget, truncating messages when necessary.
+func assembleContext(memoryText, messagesText string) string {
 	var sb strings.Builder
 	if memoryText != "" {
 		sb.WriteString(memoryText)
 	}
-	if messagesText != "" {
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		// Fill remaining budget with recent messages.
-		remaining := memory.TokenBudgetTotal - sb.Len()
-		if remaining > 0 {
-			runes := []rune(messagesText)
-			if len(runes) > remaining {
-				messagesText = string(runes[:remaining])
-			}
-			sb.WriteString(messagesText)
-		}
+	if messagesText == "" {
+		return sb.String()
 	}
+	if sb.Len() > 0 {
+		sb.WriteString("\n\n")
+	}
+	remaining := memory.TokenBudgetTotal - sb.Len()
+	if remaining <= 0 {
+		return sb.String()
+	}
+	sb.WriteString(capToRunes(messagesText, remaining))
+	return sb.String()
+}
 
-	// Hard cap on total output.
-	result := sb.String()
-	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
-		result = string(resultRunes[:memory.TokenBudgetTotal])
+// capToRunes truncates s to at most maxRunes runes, returning s unchanged
+// when it already fits.
+func capToRunes(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
 	}
-	return result
+	return string(runes[:maxRunes])
 }
 
 // formatMessages renders the recent message list as a formatted string block.
