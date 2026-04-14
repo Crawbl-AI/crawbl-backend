@@ -214,32 +214,30 @@ func (tc *testContext) fetchWorkspaceList(alias string) error {
 	return tc.captureDefaultWorkspace(alias)
 }
 
-func (tc *testContext) fetchAgents(alias string) error {
+// fetchWorkspaceChild issues a GET against a workspace sub-resource
+// (agents, conversations, ...), asserts 200, and hands the response off to
+// the caller-supplied capture func. Shared scaffolding for fetchAgents and
+// fetchConversations.
+func (tc *testContext) fetchWorkspaceChild(alias, subpath string, capture func(alias string) error) error {
 	if err := tc.ensureDefaultWorkspace(alias); err != nil {
 		return err
 	}
 	state := tc.userState(alias)
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/agents", alias, nil); err != nil {
+	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/"+subpath, alias, nil); err != nil {
 		return err
 	}
 	if err := tc.assertStatus(http.StatusOK); err != nil {
 		return err
 	}
-	return tc.captureAgents(alias)
+	return capture(alias)
+}
+
+func (tc *testContext) fetchAgents(alias string) error {
+	return tc.fetchWorkspaceChild(alias, "agents", tc.captureAgents)
 }
 
 func (tc *testContext) fetchConversations(alias string) error {
-	if err := tc.ensureDefaultWorkspace(alias); err != nil {
-		return err
-	}
-	state := tc.userState(alias)
-	if _, err := tc.doRequest("GET", "/v1/workspaces/"+state.workspaceID+"/conversations", alias, nil); err != nil {
-		return err
-	}
-	if err := tc.assertStatus(http.StatusOK); err != nil {
-		return err
-	}
-	return tc.captureConversations(alias)
+	return tc.fetchWorkspaceChild(alias, "conversations", tc.captureConversations)
 }
 
 func (tc *testContext) captureDefaultWorkspace(alias string) error {

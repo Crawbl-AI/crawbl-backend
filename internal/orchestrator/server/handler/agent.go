@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -19,34 +20,50 @@ const (
 	MaxAgentMemoryCategoryLength = 128
 )
 
+// agentByIDFetcher wires a handler that looks up an agent by URL :id,
+// calls the caller-supplied service method with {UserID, AgentID}, and
+// converts the domain result to a response DTO. Collapses the shared
+// GetAgent / GetAgentDetails scaffolding into one helper parameterised
+// over domain and response types.
+func agentByIDFetcher[Domain any, Response any](
+	c *Context,
+	fetch func(ctx context.Context, userID, agentID string) (Domain, *merrors.Error),
+	toResponse func(Domain) Response,
+) http.HandlerFunc {
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (Response, *merrors.Error) {
+		var zero Response
+		domain, mErr := fetch(r.Context(), deps.User.ID, chi.URLParam(r, "id"))
+		if mErr != nil {
+			return zero, mErr
+		}
+		return toResponse(domain), nil
+	})
+}
+
 // GetAgent retrieves a single agent by ID.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgent(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentResponse, *merrors.Error) {
-		agent, mErr := c.AgentService.GetAgent(r.Context(), &orchestratorservice.GetAgentOpts{
-			UserID:  deps.User.ID,
-			AgentID: chi.URLParam(r, "id"),
-		})
-		if mErr != nil {
-			return dto.AgentResponse{}, mErr
-		}
-		return dto.ToAgentResponse(agent), nil
-	})
+	return agentByIDFetcher(c,
+		func(ctx context.Context, userID, agentID string) (*orchestrator.Agent, *merrors.Error) {
+			return c.AgentService.GetAgent(ctx, &orchestratorservice.GetAgentOpts{
+				UserID: userID, AgentID: agentID,
+			})
+		},
+		dto.ToAgentResponse,
+	)
 }
 
 // GetAgentDetails retrieves full agent profile including stats.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgentDetails(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentDetailResponse, *merrors.Error) {
-		details, mErr := c.AgentService.GetAgentDetails(r.Context(), &orchestratorservice.GetAgentDetailsOpts{
-			UserID:  deps.User.ID,
-			AgentID: chi.URLParam(r, "id"),
-		})
-		if mErr != nil {
-			return dto.AgentDetailResponse{}, mErr
-		}
-		return dto.ToAgentDetailResponse(details), nil
-	})
+	return agentByIDFetcher(c,
+		func(ctx context.Context, userID, agentID string) (*orchestrator.AgentDetails, *merrors.Error) {
+			return c.AgentService.GetAgentDetails(ctx, &orchestratorservice.GetAgentDetailsOpts{
+				UserID: userID, AgentID: agentID,
+			})
+		},
+		dto.ToAgentDetailResponse,
+	)
 }
 
 // GetAgentHistory retrieves paginated conversation history for an agent.

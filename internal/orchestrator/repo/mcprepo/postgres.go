@@ -85,32 +85,47 @@ func (p *postgres) CreateAgentMessage(ctx context.Context, sess *dbr.Session, ro
 	return nil
 }
 
-func (p *postgres) UpdateAgentMessageCompleted(ctx context.Context, sess *dbr.Session, id, responseText string, durationMs int64) error {
+// agentMessageFinaliseOpts captures the variable bits between
+// UpdateAgentMessageCompleted and UpdateAgentMessageFailed.
+// FinalCol is either "response_text" or "error_message".
+type agentMessageFinaliseOpts struct {
+	ID         string
+	Status     string
+	FinalCol   string
+	FinalVal   string
+	OpLabel    string
+	DurationMs int64
+}
+
+// finaliseAgentMessage is the shared implementation for terminal-state
+// transitions on agent_messages. Keeps the UPDATE shape — status /
+// duration_ms / completed_at — identical across both paths.
+func (p *postgres) finaliseAgentMessage(ctx context.Context, sess *dbr.Session, opts agentMessageFinaliseOpts) error {
 	_, err := sess.Update("agent_messages").
-		Set("status", "completed").
-		Set("response_text", responseText).
-		Set("duration_ms", durationMs).
+		Set("status", opts.Status).
+		Set(opts.FinalCol, opts.FinalVal).
+		Set("duration_ms", opts.DurationMs).
 		Set("completed_at", time.Now().UTC()).
-		Where("id = ?", id).
+		Where("id = ?", opts.ID).
 		ExecContext(ctx)
 	if err != nil {
-		return fmt.Errorf("mcprepo: complete agent message %s: %w", id, err)
+		return fmt.Errorf("mcprepo: %s %s: %w", opts.OpLabel, opts.ID, err)
 	}
 	return nil
 }
 
+func (p *postgres) UpdateAgentMessageCompleted(ctx context.Context, sess *dbr.Session, id, responseText string, durationMs int64) error {
+	return p.finaliseAgentMessage(ctx, sess, agentMessageFinaliseOpts{
+		ID: id, Status: "completed", FinalCol: "response_text",
+		FinalVal: responseText, OpLabel: "complete agent message", DurationMs: durationMs,
+	})
+}
+
 func (p *postgres) UpdateAgentMessageFailed(ctx context.Context, sess *dbr.Session, id, errMsg string, durationMs int64) error {
-	_, err := sess.Update("agent_messages").
-		Set("status", "failed").
-		Set("error_message", errMsg).
-		Set("duration_ms", durationMs).
-		Set("completed_at", time.Now().UTC()).
-		Where("id = ?", id).
-		ExecContext(ctx)
-	if err != nil {
-		return fmt.Errorf("mcprepo: fail agent message %s: %w", id, err)
-	}
-	return nil
+	return p.finaliseAgentMessage(ctx, sess, agentMessageFinaliseOpts{
+		ID: id, Status: "failed", FinalCol: "error_message",
+		FinalVal: errMsg, OpLabel: "fail agent message", DurationMs: durationMs,
+	})
 }
 
 func (p *postgres) GetMaxAgentMessageDepth(ctx context.Context, sess *dbr.Session, workspaceID, conversationID string) (int, error) {

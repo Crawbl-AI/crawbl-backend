@@ -10,6 +10,39 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 )
 
+// runMemoryWork is the shared scaffolding behind every memory River
+// worker. It logs start, runs the caller-supplied pipeline, wraps any
+// error with opLabel and errVerb, and logs completion using the
+// caller-supplied result fields. Keeps one copy of the log-format /
+// error-wrap rules for all four workers.
+func runMemoryWork[Result any, Args river.JobArgs](
+	ctx context.Context,
+	logger *slog.Logger,
+	opLabel string,
+	errVerb string,
+	job *river.Job[Args],
+	run func(ctx context.Context) (Result, error),
+	completeFields func(Result) []any,
+) error {
+	logger.InfoContext(ctx, opLabel+": start",
+		slog.Int64("job_id", job.ID),
+		slog.String("kind", job.Kind),
+		slog.String("queue", job.Queue),
+		slog.Int("attempt", job.Attempt),
+	)
+	result, err := run(ctx)
+	if err != nil {
+		logger.ErrorContext(ctx, opLabel+": failed",
+			slog.Int64("job_id", job.ID),
+			slog.String("error", err.Error()),
+		)
+		return fmt.Errorf("%s: %w", errVerb, err)
+	}
+	attrs := append([]any{slog.Int64("job_id", job.ID)}, completeFields(result)...)
+	logger.InfoContext(ctx, opLabel+": complete", attrs...)
+	return nil
+}
+
 // NewMemoryProcessWorker constructs a memory_process worker bound to
 // the given dependencies. Thin adapter over jobs.RunProcess.
 func NewMemoryProcessWorker(deps Deps) *MemoryProcessWorker {
@@ -18,32 +51,20 @@ func NewMemoryProcessWorker(deps Deps) *MemoryProcessWorker {
 
 // Work executes one sweep of the memory processing pipeline.
 func (w *MemoryProcessWorker) Work(ctx context.Context, job *river.Job[MemoryProcessArgs]) error {
-	w.deps.Logger.InfoContext(ctx, "memory-process: start",
-		slog.Int64("job_id", job.ID),
-		slog.String("kind", job.Kind),
-		slog.String("queue", job.Queue),
-		slog.Int("attempt", job.Attempt),
+	return runMemoryWork(ctx, w.deps.Logger, "memory-process", "run process", job,
+		func(ctx context.Context) (*jobs.ProcessResult, error) {
+			return jobs.RunProcess(ctx, jobs.ProcessDeps{
+				DB:            w.deps.DB,
+				DrawerRepo:    w.deps.DrawerRepo,
+				KGRepo:        w.deps.KGRepo,
+				LLMClassifier: w.deps.LLMClassifier,
+				Embedder:      w.deps.Embedder,
+			})
+		},
+		func(r *jobs.ProcessResult) []any {
+			return []any{slog.Int("processed", r.Processed), slog.Int("failed", r.Failed)}
+		},
 	)
-	result, err := jobs.RunProcess(ctx, jobs.ProcessDeps{
-		DB:            w.deps.DB,
-		DrawerRepo:    w.deps.DrawerRepo,
-		KGRepo:        w.deps.KGRepo,
-		LLMClassifier: w.deps.LLMClassifier,
-		Embedder:      w.deps.Embedder,
-	})
-	if err != nil {
-		w.deps.Logger.ErrorContext(ctx, "memory-process: failed",
-			slog.Int64("job_id", job.ID),
-			slog.String("error", err.Error()),
-		)
-		return fmt.Errorf("run process: %w", err)
-	}
-	w.deps.Logger.InfoContext(ctx, "memory-process: complete",
-		slog.Int64("job_id", job.ID),
-		slog.Int("processed", result.Processed),
-		slog.Int("failed", result.Failed),
-	)
-	return nil
 }
 
 // NewMemoryMaintainWorker constructs a memory_maintain worker bound to
@@ -54,30 +75,21 @@ func NewMemoryMaintainWorker(deps Deps) *MemoryMaintainWorker {
 
 // Work executes one sweep of the memory maintenance pipeline.
 func (w *MemoryMaintainWorker) Work(ctx context.Context, job *river.Job[MemoryMaintainArgs]) error {
-	w.deps.Logger.InfoContext(ctx, "memory-maintain: start",
-		slog.Int64("job_id", job.ID),
-		slog.String("kind", job.Kind),
-		slog.String("queue", job.Queue),
-		slog.Int("attempt", job.Attempt),
+	return runMemoryWork(ctx, w.deps.Logger, "memory-maintain", "run maintain", job,
+		func(ctx context.Context) (*jobs.MaintainResult, error) {
+			return jobs.RunMaintain(ctx, jobs.MaintainDeps{
+				DB:         w.deps.DB,
+				DrawerRepo: w.deps.DrawerRepo,
+			})
+		},
+		func(r *jobs.MaintainResult) []any {
+			return []any{
+				slog.Int("workspaces", r.Workspaces),
+				slog.Int("decayed", r.Decayed),
+				slog.Int("pruned", r.Pruned),
+			}
+		},
 	)
-	result, err := jobs.RunMaintain(ctx, jobs.MaintainDeps{
-		DB:         w.deps.DB,
-		DrawerRepo: w.deps.DrawerRepo,
-	})
-	if err != nil {
-		w.deps.Logger.ErrorContext(ctx, "memory-maintain: failed",
-			slog.Int64("job_id", job.ID),
-			slog.String("error", err.Error()),
-		)
-		return fmt.Errorf("run maintain: %w", err)
-	}
-	w.deps.Logger.InfoContext(ctx, "memory-maintain: complete",
-		slog.Int64("job_id", job.ID),
-		slog.Int("workspaces", result.Workspaces),
-		slog.Int("decayed", result.Decayed),
-		slog.Int("pruned", result.Pruned),
-	)
-	return nil
 }
 
 // NewMemoryEnrichWorker constructs a memory_enrich worker bound to the
@@ -91,32 +103,20 @@ func NewMemoryEnrichWorker(deps Deps) *MemoryEnrichWorker {
 // entity_count / triple_count so the partial index loses interest in
 // the row.
 func (w *MemoryEnrichWorker) Work(ctx context.Context, job *river.Job[MemoryEnrichArgs]) error {
-	w.deps.Logger.InfoContext(ctx, "memory-enrich: start",
-		slog.Int64("job_id", job.ID),
-		slog.String("kind", job.Kind),
-		slog.String("queue", job.Queue),
-		slog.Int("attempt", job.Attempt),
+	return runMemoryWork(ctx, w.deps.Logger, "memory-enrich", "run enrich", job,
+		func(ctx context.Context) (*jobs.EnrichResult, error) {
+			return jobs.RunEnrich(ctx, jobs.EnrichDeps{
+				DB:            w.deps.DB,
+				DrawerRepo:    w.deps.DrawerRepo,
+				KGRepo:        w.deps.KGRepo,
+				LLMClassifier: w.deps.LLMClassifier,
+				Logger:        w.deps.Logger,
+			})
+		},
+		func(r *jobs.EnrichResult) []any {
+			return []any{slog.Int("processed", r.Processed), slog.Int("skipped", r.Skipped)}
+		},
 	)
-	result, err := jobs.RunEnrich(ctx, jobs.EnrichDeps{
-		DB:            w.deps.DB,
-		DrawerRepo:    w.deps.DrawerRepo,
-		KGRepo:        w.deps.KGRepo,
-		LLMClassifier: w.deps.LLMClassifier,
-		Logger:        w.deps.Logger,
-	})
-	if err != nil {
-		w.deps.Logger.ErrorContext(ctx, "memory-enrich: failed",
-			slog.Int64("job_id", job.ID),
-			slog.String("error", err.Error()),
-		)
-		return fmt.Errorf("run enrich: %w", err)
-	}
-	w.deps.Logger.InfoContext(ctx, "memory-enrich: complete",
-		slog.Int64("job_id", job.ID),
-		slog.Int("processed", result.Processed),
-		slog.Int("skipped", result.Skipped),
-	)
-	return nil
 }
 
 // NewMemoryCentroidRecomputeWorker constructs a centroid_recompute
@@ -130,30 +130,21 @@ func NewMemoryCentroidRecomputeWorker(deps Deps) *MemoryCentroidRecomputeWorker 
 // computes the element-wise average embedding, and upserts the centroid
 // row when its source hash has changed since the previous run.
 func (w *MemoryCentroidRecomputeWorker) Work(ctx context.Context, job *river.Job[MemoryCentroidRecomputeArgs]) error {
-	w.deps.Logger.InfoContext(ctx, "memory-centroid-recompute: start",
-		slog.Int64("job_id", job.ID),
-		slog.String("kind", job.Kind),
-		slog.String("queue", job.Queue),
-		slog.Int("attempt", job.Attempt),
+	return runMemoryWork(ctx, w.deps.Logger, "memory-centroid-recompute", "run centroid recompute", job,
+		func(ctx context.Context) (*jobs.CentroidRecomputeResult, error) {
+			return jobs.RunCentroidRecompute(ctx, jobs.CentroidRecomputeDeps{
+				DB:           w.deps.DB,
+				DrawerRepo:   w.deps.DrawerRepo,
+				CentroidRepo: w.deps.CentroidRepo,
+				Logger:       w.deps.Logger,
+			})
+		},
+		func(r *jobs.CentroidRecomputeResult) []any {
+			return []any{
+				slog.Int("types_updated", r.Updated),
+				slog.Int("types_unchanged", r.Unchanged),
+				slog.Int("types_skipped", r.Skipped),
+			}
+		},
 	)
-	result, err := jobs.RunCentroidRecompute(ctx, jobs.CentroidRecomputeDeps{
-		DB:           w.deps.DB,
-		DrawerRepo:   w.deps.DrawerRepo,
-		CentroidRepo: w.deps.CentroidRepo,
-		Logger:       w.deps.Logger,
-	})
-	if err != nil {
-		w.deps.Logger.ErrorContext(ctx, "memory-centroid-recompute: failed",
-			slog.Int64("job_id", job.ID),
-			slog.String("error", err.Error()),
-		)
-		return fmt.Errorf("run centroid recompute: %w", err)
-	}
-	w.deps.Logger.InfoContext(ctx, "memory-centroid-recompute: complete",
-		slog.Int64("job_id", job.ID),
-		slog.Int("types_updated", result.Updated),
-		slog.Int("types_unchanged", result.Unchanged),
-		slog.Int("types_skipped", result.Skipped),
-	)
-	return nil
 }

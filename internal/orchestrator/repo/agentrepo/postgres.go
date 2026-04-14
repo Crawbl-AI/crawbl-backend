@@ -43,6 +43,24 @@ func (r *agentRepo) ListByWorkspaceID(ctx context.Context, sess orchestratorrepo
 	return agents, nil
 }
 
+// loadAgentWhere loads a single agent row matching the given WHERE clause.
+// Translates record-not-found into ErrAgentNotFound and wraps every other
+// driver error with the caller-supplied operation label.
+func loadAgentWhere(ctx context.Context, sess orchestratorrepo.SessionRunner, opLabel, whereClause string, whereArgs ...any) (*orchestrator.Agent, *merrors.Error) {
+	var row orchestratorrepo.AgentRow
+	err := sess.Select(agentColumns...).
+		From("agents").
+		Where(whereClause, whereArgs...).
+		LoadOneContext(ctx, &row)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return nil, merrors.ErrAgentNotFound
+		}
+		return nil, merrors.WrapStdServerError(err, opLabel)
+	}
+	return row.ToDomain(), nil
+}
+
 // GetByID retrieves a specific agent by its ID, verifying workspace membership.
 // Returns ErrAgentNotFound if the agent does not exist or does not belong to the specified workspace.
 // Returns ErrInvalidInput if sess is nil, workspaceID is empty, or agentID is empty.
@@ -50,20 +68,7 @@ func (r *agentRepo) GetByID(ctx context.Context, sess orchestratorrepo.SessionRu
 	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
-
-	var row orchestratorrepo.AgentRow
-	err := sess.Select(agentColumns...).
-		From("agents").
-		Where("workspace_id = ? AND id = ?", workspaceID, agentID).
-		LoadOneContext(ctx, &row)
-	if err != nil {
-		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.ErrAgentNotFound
-		}
-		return nil, merrors.WrapStdServerError(err, "select agent by id")
-	}
-
-	return row.ToDomain(), nil
+	return loadAgentWhere(ctx, sess, "select agent by id", "workspace_id = ? AND id = ?", workspaceID, agentID)
 }
 
 // Save persists agent data to the database with a specified sort order.
@@ -110,20 +115,7 @@ func (r *agentRepo) GetByIDGlobal(ctx context.Context, sess orchestratorrepo.Ses
 	if strings.TrimSpace(agentID) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
-
-	var row orchestratorrepo.AgentRow
-	err := sess.Select(agentColumns...).
-		From("agents").
-		Where("id = ?", agentID).
-		LoadOneContext(ctx, &row)
-	if err != nil {
-		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.ErrAgentNotFound
-		}
-		return nil, merrors.WrapStdServerError(err, "select agent by id global")
-	}
-
-	return row.ToDomain(), nil
+	return loadAgentWhere(ctx, sess, "select agent by id global", "id = ?", agentID)
 }
 
 // GetBySlug retrieves a specific agent by its slug within a workspace.
@@ -133,20 +125,7 @@ func (r *agentRepo) GetBySlug(ctx context.Context, sess orchestratorrepo.Session
 	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(slug) == "" {
 		return nil, merrors.ErrInvalidInput
 	}
-
-	var row orchestratorrepo.AgentRow
-	err := sess.Select(agentColumns...).
-		From("agents").
-		Where("workspace_id = ? AND slug = ?", workspaceID, slug).
-		LoadOneContext(ctx, &row)
-	if err != nil {
-		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.ErrAgentNotFound
-		}
-		return nil, merrors.WrapStdServerError(err, "get agent by slug")
-	}
-
-	return row.ToDomain(), nil
+	return loadAgentWhere(ctx, sess, "get agent by slug", "workspace_id = ? AND slug = ?", workspaceID, slug)
 }
 
 // CountMessagesByAgentID counts the total number of messages attributed to an agent.

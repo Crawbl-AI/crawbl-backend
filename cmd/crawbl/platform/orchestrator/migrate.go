@@ -162,86 +162,40 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 
 	// 2. Models
 	for i, m := range seed.AvailableModels() {
-		var existing modelRow
-		err := tx.Select("id").From("models").Where("id = ?", m.ID).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed model %q: %w", m.ID, err)
-		}
-		if existing.ID != "" {
-			_, err = tx.Update("models").
-				Set("name", m.Name).
-				Set("description", m.Description).
-				Set("sort_order", i).
-				Where("id = ?", m.ID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("models").
-				Pair("id", m.ID).
-				Pair("name", m.Name).
-				Pair("description", m.Description).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
-			return fmt.Errorf("seed model %q: %w", m.ID, err)
+		if err := upsertSortedByID(ctx, tx, idKeyedSeed{
+			Table:   "models",
+			Label:   "model",
+			ID:      m.ID,
+			SortIdx: i,
+			Fields:  map[string]any{"name": m.Name, "description": m.Description},
+		}); err != nil {
+			return err
 		}
 	}
 
 	// 3. Tool categories
 	for i, c := range agentruntimetools.ToolCategories() {
-		catID := string(c.ID)
-		var existing toolCategoryRow
-		err := tx.Select("id").From("tool_categories").Where("id = ?", catID).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed tool category %q: %w", catID, err)
-		}
-		if existing.ID != "" {
-			_, err = tx.Update("tool_categories").
-				Set("name", c.Name).
-				Set("image_url", c.ImageURL).
-				Set("sort_order", i).
-				Where("id = ?", catID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("tool_categories").
-				Pair("id", catID).
-				Pair("name", c.Name).
-				Pair("image_url", c.ImageURL).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
-			return fmt.Errorf("seed tool category %q: %w", catID, err)
+		if err := upsertSortedByID(ctx, tx, idKeyedSeed{
+			Table:   "tool_categories",
+			Label:   "tool category",
+			ID:      string(c.ID),
+			SortIdx: i,
+			Fields:  map[string]any{"name": c.Name, "image_url": c.ImageURL},
+		}); err != nil {
+			return err
 		}
 	}
 
 	// 4. Integration categories
 	for i, c := range seed.IntegrationCategories() {
-		var existing integrationCategoryRow
-		err := tx.Select("id").From("integration_categories").Where("id = ?", c.ID).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
-		}
-		if existing.ID != "" {
-			_, err = tx.Update("integration_categories").
-				Set("name", c.Name).
-				Set("image_url", c.ImageURL).
-				Set("sort_order", i).
-				Where("id = ?", c.ID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("integration_categories").
-				Pair("id", c.ID).
-				Pair("name", c.Name).
-				Pair("image_url", c.ImageURL).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
-			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
+		if err := upsertSortedByID(ctx, tx, idKeyedSeed{
+			Table:   "integration_categories",
+			Label:   "integration category",
+			ID:      c.ID,
+			SortIdx: i,
+			Fields:  map[string]any{"name": c.Name, "image_url": c.ImageURL},
+		}); err != nil {
+			return err
 		}
 	}
 
@@ -360,5 +314,51 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		slog.Int("usage_plans", len(seed.UsagePlans())),
 		slog.Int("model_pricing", len(seed.ModelPricing())),
 	)
+	return nil
+}
+
+// idKeyedSeed describes a single upsert against a reference table whose
+// primary key is a string column named "id" and which carries a sort_order
+// position plus a set of other mutable columns.
+type idKeyedSeed struct {
+	Table   string
+	Label   string
+	ID      string
+	SortIdx int
+	Fields  map[string]any
+}
+
+// upsertSortedByID upserts one row into an id-keyed reference table. If a
+// row with the given ID already exists it updates the mutable Fields and
+// sort_order; otherwise it inserts a new row with created_at = now.
+// Idempotent.
+func upsertSortedByID(ctx context.Context, tx *dbr.Tx, s idKeyedSeed) error {
+	var existingID string
+	err := tx.Select("id").From(s.Table).Where("id = ?", s.ID).LoadOneContext(ctx, &existingID)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return fmt.Errorf("seed %s %q: %w", s.Label, s.ID, err)
+	}
+
+	if existingID != "" {
+		upd := tx.Update(s.Table).Set("sort_order", s.SortIdx)
+		for col, v := range s.Fields {
+			upd = upd.Set(col, v)
+		}
+		if _, err := upd.Where("id = ?", s.ID).ExecContext(ctx); err != nil {
+			return fmt.Errorf("seed %s %q: %w", s.Label, s.ID, err)
+		}
+		return nil
+	}
+
+	ins := tx.InsertInto(s.Table).
+		Pair("id", s.ID).
+		Pair("sort_order", s.SortIdx).
+		Pair("created_at", time.Now())
+	for col, v := range s.Fields {
+		ins = ins.Pair(col, v)
+	}
+	if _, err := ins.ExecContext(ctx); err != nil {
+		return fmt.Errorf("seed %s %q: %w", s.Label, s.ID, err)
+	}
 	return nil
 }
