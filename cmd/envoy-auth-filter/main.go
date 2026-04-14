@@ -129,33 +129,43 @@ type httpContext struct {
 //  4. Validate timestamp freshness (2min window, 30s clock skew)
 //  5. Validate HMAC-SHA256 signature: HMAC(secret, token+":"+timestamp)
 func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
-	// Skip HMAC validation in local/test environments.
 	if ctx.environment == "local" || ctx.environment == "test" {
 		return types.ActionContinue
 	}
-
-	// Skip HMAC for WebSocket upgrade requests.
-	// Socket.IO connections use JWT validation (SecurityPolicy) at the edge
-	// and the Socket.IO server's own auth middleware as backstop.
 	if upgrade, err := proxywasm.GetHttpRequestHeader("upgrade"); err == nil && strings.EqualFold(upgrade, "websocket") {
 		return types.ActionContinue
 	}
-
-	// Check for X-Token header (mobile auth path).
-	// If absent, this is a Bearer auth request — no HMAC needed.
-	// JWT SecurityPolicy handles Bearer validation separately.
 	xToken, err := proxywasm.GetHttpRequestHeader("x-token")
 	if err != nil || xToken == "" {
 		return types.ActionContinue
 	}
 
-	// X-Token present — validate required device headers.
+	headers := collectDeviceHeaders()
+	if action, done := validateDeviceHeaders(headers); done {
+		return action
+	}
+
+	timestamp := headers["x-timestamp"]
+	if action, done := validateTimestamp(timestamp); done {
+		return action
+	}
+
+	return validateHMAC(ctx.hmacSecret, xToken, timestamp, headers["x-signature"])
+}
+
+// collectDeviceHeaders reads all required device headers from the request.
+func collectDeviceHeaders() map[string]string {
 	headers := make(map[string]string, len(requiredDeviceHeaders))
 	for _, h := range requiredDeviceHeaders {
 		val, _ := proxywasm.GetHttpRequestHeader(h)
 		headers[h] = strings.TrimSpace(val)
 	}
+	return headers
+}
 
+// validateDeviceHeaders checks that all required headers are present.
+// Returns (action, true) when a response has already been sent.
+func validateDeviceHeaders(headers map[string]string) (types.Action, bool) {
 	var missing []string
 	for _, h := range requiredDeviceHeaders {
 		if headers[h] == "" {
@@ -165,48 +175,46 @@ func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	if len(missing) > 0 {
 		msg := `{"error":"missing required headers: ` + strings.Join(missing, ", ") + `"}`
 		_ = proxywasm.SendHttpResponse(401, jsonContentType(), []byte(msg), -1)
-		return types.ActionPause
+		return types.ActionPause, true
 	}
+	return types.ActionContinue, false
+}
 
-	// Validate timestamp freshness.
-	timestamp := headers["x-timestamp"]
+// validateTimestamp checks that the RFC3339Nano timestamp is within the
+// acceptable freshness window. Returns (action, true) when rejected.
+func validateTimestamp(timestamp string) (types.Action, bool) {
 	parsedTime, parseErr := time.Parse(time.RFC3339Nano, timestamp)
 	if parseErr != nil {
 		_ = proxywasm.SendHttpResponse(400, jsonContentType(),
 			[]byte(`{"error":"invalid timestamp format: use RFC3339Nano"}`), -1)
-		return types.ActionPause
+		return types.ActionPause, true
 	}
-
-	now := time.Now().UTC()
-	age := now.Sub(parsedTime)
+	age := time.Now().UTC().Sub(parsedTime)
 	if age > maxTimestampAge || age < -maxClockSkew {
 		proxywasm.LogWarnf("auth-filter: timestamp rejected age=%v", age)
 		_ = proxywasm.SendHttpResponse(403, jsonContentType(),
 			[]byte(`{"error":"timestamp expired"}`), -1)
-		return types.ActionPause
+		return types.ActionPause, true
 	}
+	return types.ActionContinue, false
+}
 
-	// Validate HMAC-SHA256 signature.
-	signature := headers["x-signature"]
-	expectedSig := generateHMAC(ctx.hmacSecret, xToken+":"+timestamp)
-
+// validateHMAC verifies the HMAC-SHA256 signature using constant-time comparison.
+func validateHMAC(secret, xToken, timestamp, signature string) types.Action {
+	expectedSig := generateHMAC(secret, xToken+":"+timestamp)
 	receivedMAC, decErr := hex.DecodeString(strings.TrimSpace(signature))
 	if decErr != nil {
 		_ = proxywasm.SendHttpResponse(400, jsonContentType(),
 			[]byte(`{"error":"invalid signature format"}`), -1)
 		return types.ActionPause
 	}
-
 	expectedMAC, _ := hex.DecodeString(expectedSig)
-
-	// Constant-time comparison to prevent timing attacks.
 	if !hmac.Equal(receivedMAC, expectedMAC) {
 		proxywasm.LogWarnf("auth-filter: signature mismatch")
 		_ = proxywasm.SendHttpResponse(403, jsonContentType(),
 			[]byte(`{"error":"invalid signature"}`), -1)
 		return types.ActionPause
 	}
-
 	return types.ActionContinue
 }
 

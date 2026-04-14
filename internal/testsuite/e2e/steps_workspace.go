@@ -72,33 +72,10 @@ func (tc *testContext) userWaitsUntilAssistantIsReady(alias string) error {
 		}
 		snapshot := runtimeSnapshotFromBody(tc.lastBody)
 		if snapshot.ready() {
-			if err := tc.sendWarmupMessage(alias); err != nil {
-				// Cold-start can exceed the per-request HTTP client
-				// timeout; treat any transport-level error as "retry
-				// and keep polling the runtime" rather than a hard
-				// failure. The context deadline still bounds the loop.
-				return err
-			}
-			switch tc.lastStatus {
-			case http.StatusOK, http.StatusCreated:
-				// 201 Created is the current contract for POST
-				// /v1/workspaces/{id}/conversations/{id}/messages —
-				// the handler persists the user message and returns
-				// immediately, leaving the assistant reply to stream
-				// over Socket.IO.
-				return nil
-			case 0, 500, http.StatusServiceUnavailable:
-				// Runtime reports ready but still warming up internally.
-				return fmt.Errorf("runtime warming up (status=%d)", tc.lastStatus)
-			default:
-				return fmt.Errorf("assistant warmup failed with unexpected status %d; body: %s", tc.lastStatus, abbreviatedBody(tc.lastBody))
-			}
+			return tc.checkWarmupStatus(alias)
 		}
 		if snapshot.failed() {
-			if snapshot.LastError != "" {
-				return fmt.Errorf("workspace runtime entered failed state: %s", snapshot.LastError)
-			}
-			return fmt.Errorf("workspace runtime entered failed state: status=%q phase=%q", snapshot.Status, snapshot.Phase)
+			return snapshotFailedError(snapshot)
 		}
 		return fmt.Errorf("runtime not ready: status=%q phase=%q verified=%t error=%q", snapshot.Status, snapshot.Phase, snapshot.Verified, snapshot.LastError)
 	})
@@ -113,6 +90,32 @@ func (tc *testContext) userShouldSeeWorkspaceRuntimeReady(alias string) error {
 		return fmt.Errorf("expected ready workspace runtime, got status=%q phase=%q verified=%t", snapshot.Status, snapshot.Phase, snapshot.Verified)
 	}
 	return nil
+}
+
+// checkWarmupStatus sends a warmup message and inspects the HTTP status to
+// determine whether the runtime is truly ready for traffic.
+func (tc *testContext) checkWarmupStatus(alias string) error {
+	if err := tc.sendWarmupMessage(alias); err != nil {
+		// Cold-start can exceed the per-request HTTP client timeout;
+		// treat transport-level errors as "retry" rather than hard failure.
+		return err
+	}
+	switch tc.lastStatus {
+	case http.StatusOK, http.StatusCreated:
+		return nil
+	case 0, 500, http.StatusServiceUnavailable:
+		return fmt.Errorf("runtime warming up (status=%d)", tc.lastStatus)
+	default:
+		return fmt.Errorf("assistant warmup failed with unexpected status %d; body: %s", tc.lastStatus, abbreviatedBody(tc.lastBody))
+	}
+}
+
+// snapshotFailedError converts a failed runtime snapshot into a descriptive error.
+func snapshotFailedError(snapshot runtimeSnapshot) error {
+	if snapshot.LastError != "" {
+		return fmt.Errorf("workspace runtime entered failed state: %s", snapshot.LastError)
+	}
+	return fmt.Errorf("workspace runtime entered failed state: status=%q phase=%q", snapshot.Status, snapshot.Phase)
 }
 
 // userOpensMissingWorkspace tries to open a non-existent workspace.

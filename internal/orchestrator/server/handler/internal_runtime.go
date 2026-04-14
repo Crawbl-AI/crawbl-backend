@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
@@ -70,35 +71,7 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 		// doesn't prevent the runtime from booting.
 		blueprints := make([]internalAgentBlueprint, 0, len(agents))
 		for _, agent := range agents {
-			b := internalAgentBlueprint{
-				Slug:         agent.Slug,
-				Role:         agent.Role,
-				SystemPrompt: agent.SystemPrompt,
-				Description:  agent.Description,
-			}
-			settings, settingsErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
-				UserID:  userID,
-				AgentID: agent.ID,
-			})
-			if settingsErr != nil {
-				c.Logger.Warn("blueprint: failed to load agent settings, using defaults",
-					"workspace_id", workspaceID,
-					"agent_id", agent.ID,
-					"error", settingsErr,
-				)
-			} else if settings != nil {
-				b.Model = settings.Model.ID
-				// AllowedTools comes from agent_settings.allowed_tools
-				// in Postgres. When the column is empty the runtime
-				// falls back to each agent's hardcoded default toolset
-				// (e.g. Wally's web_fetch + web_search_tool pair).
-				// Forwarding the slice verbatim — the runtime decides
-				// enforcement policy, not the orchestrator.
-				if len(settings.AllowedTools) > 0 {
-					b.AllowedTools = settings.AllowedTools
-				}
-			}
-			blueprints = append(blueprints, b)
+			blueprints = append(blueprints, buildAgentBlueprint(r, c, userID, workspaceID, agent))
 		}
 
 		WriteJSON(w, http.StatusOK, internalWorkspaceBlueprint{
@@ -106,6 +79,37 @@ func GetWorkspaceBlueprint(c *Context) http.HandlerFunc {
 			Agents:      blueprints,
 		})
 	}
+}
+
+// buildAgentBlueprint enriches one agent with its settings (model + allowed
+// tools) and returns the blueprint. Settings errors are logged and the agent
+// is returned with default values so a partial outage doesn't block boot.
+func buildAgentBlueprint(r *http.Request, c *Context, userID, workspaceID string, agent *orchestrator.Agent) internalAgentBlueprint {
+	b := internalAgentBlueprint{
+		Slug:         agent.Slug,
+		Role:         agent.Role,
+		SystemPrompt: agent.SystemPrompt,
+		Description:  agent.Description,
+	}
+	settings, settingsErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
+		UserID:  userID,
+		AgentID: agent.ID,
+	})
+	if settingsErr != nil {
+		c.Logger.Warn("blueprint: failed to load agent settings, using defaults",
+			"workspace_id", workspaceID,
+			"agent_id", agent.ID,
+			"error", settingsErr,
+		)
+		return b
+	}
+	if settings != nil {
+		b.Model = settings.Model.ID
+		if len(settings.AllowedTools) > 0 {
+			b.AllowedTools = settings.AllowedTools
+		}
+	}
+	return b
 }
 
 // internalWorkspaceBlueprint is the wire shape returned by

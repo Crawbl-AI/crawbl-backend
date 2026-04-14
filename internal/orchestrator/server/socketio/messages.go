@@ -212,43 +212,60 @@ func parseMessageSendPayload(raw any) (messageSendPayload, bool) {
 		p.Content.Text, _ = content["text"].(string)
 	}
 
-	if mentions, ok := data["mentions"].([]any); ok {
-		for _, m := range mentions {
-			mm, ok := m.(map[string]any)
-			if !ok {
-				continue
-			}
-			mention := messageSendMention{}
-			mention.AgentID, _ = mm["agent_id"].(string)
-			mention.AgentName, _ = mm["agent_name"].(string)
-			if offset, ok := mm["offset"].(float64); ok {
-				mention.Offset = int(offset)
-			}
-			if length, ok := mm["length"].(float64); ok {
-				mention.Length = int(length)
-			}
-			p.Mentions = append(p.Mentions, mention)
-		}
-	}
-
-	if attachments, ok := data["attachments"].([]any); ok {
-		for _, a := range attachments {
-			aa, ok := a.(map[string]any)
-			if !ok {
-				continue
-			}
-			att := messageSendAttachment{}
-			att.ID, _ = aa["id"].(string)
-			att.Name, _ = aa["name"].(string)
-			att.URL, _ = aa["url"].(string)
-			att.Type, _ = aa["type"].(string)
-			att.MIMEType, _ = aa["mime_type"].(string)
-			if size, ok := aa["size"].(float64); ok {
-				att.Size = int64(size)
-			}
-			p.Attachments = append(p.Attachments, att)
-		}
-	}
+	p.Mentions = parseMentions(data)
+	p.Attachments = parseAttachments(data)
 
 	return p, true
+}
+
+// parseMentions extracts the mentions array from a raw message.send payload map.
+func parseMentions(data map[string]any) []messageSendMention {
+	raw, ok := data["mentions"].([]any)
+	if !ok {
+		return nil
+	}
+	mentions := make([]messageSendMention, 0, len(raw))
+	for _, m := range raw {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		mention := messageSendMention{}
+		mention.AgentID, _ = mm["agent_id"].(string)
+		mention.AgentName, _ = mm["agent_name"].(string)
+		if offset, ok := mm["offset"].(float64); ok {
+			mention.Offset = int(offset)
+		}
+		if length, ok := mm["length"].(float64); ok {
+			mention.Length = int(length)
+		}
+		mentions = append(mentions, mention)
+	}
+	return mentions
+}
+
+// parseAttachments extracts the attachments array from a raw message.send payload map.
+func parseAttachments(data map[string]any) []messageSendAttachment {
+	raw, ok := data["attachments"].([]any)
+	if !ok {
+		return nil
+	}
+	attachments := make([]messageSendAttachment, 0, len(raw))
+	for _, a := range raw {
+		aa, ok := a.(map[string]any)
+		if !ok {
+			continue
+		}
+		att := messageSendAttachment{}
+		att.ID, _ = aa["id"].(string)
+		att.Name, _ = aa["name"].(string)
+		att.URL, _ = aa["url"].(string)
+		att.Type, _ = aa["type"].(string)
+		att.MIMEType, _ = aa["mime_type"].(string)
+		if size, ok := aa["size"].(float64); ok {
+			att.Size = int64(size)
+		}
+		attachments = append(attachments, att)
+	}
+	return attachments
 }

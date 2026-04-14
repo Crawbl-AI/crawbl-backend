@@ -236,21 +236,7 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 	// same turn see the update.
 	rs.mu.Lock()
 	rs.events = append(rs.events, event)
-	if len(event.Actions.StateDelta) > 0 {
-		if rs.state == nil {
-			rs.state = make(map[string]any)
-		}
-		for k, v := range event.Actions.StateDelta {
-			switch {
-			case strings.HasPrefix(k, adksession.KeyPrefixApp),
-				strings.HasPrefix(k, adksession.KeyPrefixUser):
-				// App- and user-scoped deltas are tracked separately
-				// and never written into the per-session map.
-			default:
-				rs.state[k] = v
-			}
-		}
-	}
+	applyStateDelta(rs, event)
 	rs.updatedAt = event.Timestamp
 	if rs.updatedAt.IsZero() {
 		rs.updatedAt = time.Now().UTC()
@@ -355,18 +341,7 @@ func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, n
 	if err != nil {
 		return nil, err
 	}
-	if numRecent > 0 && len(events) > numRecent {
-		events = events[len(events)-numRecent:]
-	}
-	if !after.IsZero() {
-		filtered := events[:0]
-		for _, e := range events {
-			if !e.Timestamp.Before(after) {
-				filtered = append(filtered, e)
-			}
-		}
-		events = filtered
-	}
+	events = filterEvents(events, numRecent, after)
 
 	return &redisSession{
 		appName:   payload.AppName,
@@ -376,6 +351,44 @@ func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, n
 		events:    events,
 		updatedAt: payload.UpdatedAt,
 	}, nil
+}
+
+// applyStateDelta writes session-scoped keys from a state delta into rs.state.
+// App- and user-scoped keys are skipped — those are tracked in separate hashes.
+// Must be called with rs.mu held.
+func applyStateDelta(rs *redisSession, event *adksession.Event) {
+	if len(event.Actions.StateDelta) == 0 {
+		return
+	}
+	if rs.state == nil {
+		rs.state = make(map[string]any)
+	}
+	for k, v := range event.Actions.StateDelta {
+		switch {
+		case strings.HasPrefix(k, adksession.KeyPrefixApp),
+			strings.HasPrefix(k, adksession.KeyPrefixUser):
+			// App- and user-scoped deltas are tracked separately.
+		default:
+			rs.state[k] = v
+		}
+	}
+}
+
+// filterEvents applies numRecent and after-timestamp filters to a slice of events.
+func filterEvents(events []*adksession.Event, numRecent int, after time.Time) []*adksession.Event {
+	if numRecent > 0 && len(events) > numRecent {
+		events = events[len(events)-numRecent:]
+	}
+	if after.IsZero() {
+		return events
+	}
+	filtered := events[:0]
+	for _, e := range events {
+		if !e.Timestamp.Before(after) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
 }
 
 func (s *RedisService) loadEvents(ctx context.Context, app, user, sid string) ([]*adksession.Event, error) {

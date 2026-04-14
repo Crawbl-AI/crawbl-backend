@@ -92,27 +92,9 @@ func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID,
 		return nil, fmt.Errorf("artifact not found")
 	}
 
-	var ver *artifactrepo.ArtifactVersionRow
-	if version > 0 {
-		versions, mErr := s.repos.Artifact.ListVersions(ctx, sess, artifactID)
-		if mErr != nil {
-			return nil, fmt.Errorf("list versions: %s", mErr.Error())
-		}
-		for i := range versions {
-			if versions[i].Version == version {
-				ver = &versions[i]
-				break
-			}
-		}
-		if ver == nil {
-			return nil, fmt.Errorf("version %d not found", version)
-		}
-	} else {
-		v, mErr := s.repos.Artifact.GetLatestVersion(ctx, sess, artifactID)
-		if mErr != nil {
-			return nil, fmt.Errorf("no versions found for artifact")
-		}
-		ver = v
+	ver, err := s.resolveArtifactVersion(ctx, sess, artifactID, version)
+	if err != nil {
+		return nil, err
 	}
 
 	reviewRows, mErr := s.repos.Artifact.ListReviews(ctx, sess, artifactID, ver.Version)
@@ -263,6 +245,28 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	}
 
 	return &ReviewArtifactResult{Reviewed: true}, nil
+}
+
+// resolveArtifactVersion returns the requested version row for an artifact.
+// When version <= 0 the latest version is returned.
+func (s *service) resolveArtifactVersion(ctx contextT, sess sessionT, artifactID string, version int) (*artifactrepo.ArtifactVersionRow, error) {
+	if version > 0 {
+		versions, mErr := s.repos.Artifact.ListVersions(ctx, sess, artifactID)
+		if mErr != nil {
+			return nil, fmt.Errorf("list versions: %s", mErr.Error())
+		}
+		for i := range versions {
+			if versions[i].Version == version {
+				return &versions[i], nil
+			}
+		}
+		return nil, fmt.Errorf("version %d not found", version)
+	}
+	v, mErr := s.repos.Artifact.GetLatestVersion(ctx, sess, artifactID)
+	if mErr != nil {
+		return nil, fmt.Errorf("no versions found for artifact")
+	}
+	return v, nil
 }
 
 // resolveAgentParam resolves an agent ID from either a direct ID or slug.

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/adk/session"
 	"google.golang.org/genai"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -214,68 +215,19 @@ func (h *converseHandler) runOneTurn(
 			isFinal := event.IsFinalResponse()
 
 			if !isFinal {
-				// Partial event — stream each part to the client.
-				for _, part := range event.Content.Parts {
-					if part != nil && part.FunctionCall != nil && part.FunctionCall.Name != "" {
-						state.toolCalls = append(state.toolCalls, part.FunctionCall.Name)
-						h.logger.Info("agent tool invoked",
-							"workspace_id", principal.Object,
-							"session_id", sessionID,
-							"agent", event.Author,
-							"tool", part.FunctionCall.Name,
-							"args_preview", previewMap(part.FunctionCall.Args, previewLenArgs),
-						)
-					}
-					ce := translatePart(event.Author, part)
-					if ce == nil {
-						continue
-					}
-					if sendErr := stream.Send(ce); sendErr != nil {
-						return sendErr
-					}
+				if sendErr := h.sendPartialEvent(stream, principal, sessionID, event.Author, event.Content.Parts, state); sendErr != nil {
+					return sendErr
 				}
 			}
 
-			// Final event — capture as Turn for DoneEvent aggregation.
-			// Do NOT re-send parts as chunks (they were already streamed).
 			if isFinal {
-				// Emit UsageEvent from the final response. The OpenAI adapter only
-				// populates UsageMetadata on the aggregated final response, not on
-				// partial streaming chunks. Check it here before the empty-text continue.
-				if event.UsageMetadata != nil {
-					um := event.UsageMetadata
-					usageEvt := &runtimev1.ConverseEvent{
-						Event: &runtimev1.ConverseEvent_Usage{
-							Usage: &runtimev1.UsageEvent{
-								AgentId:             event.Author,
-								Model:               state.modelName,
-								PromptTokens:        um.PromptTokenCount,
-								CompletionTokens:    um.CandidatesTokenCount,
-								TotalTokens:         um.TotalTokenCount,
-								ToolUsePromptTokens: um.ToolUsePromptTokenCount,
-								ThoughtsTokens:      um.ThoughtsTokenCount,
-								CachedTokens:        um.CachedContentTokenCount,
-								CallSequence:        state.callSequence,
-							},
-						},
-					}
-					if sendErr := stream.Send(usageEvt); sendErr != nil {
-						return sendErr
-					}
-					state.callSequence++
+				done, sendErr := h.sendFinalEvent(stream, event, state)
+				if sendErr != nil {
+					return sendErr
 				}
-
-				text := concatPartText(event.Content)
-				if strings.TrimSpace(text) == "" {
-					continue
+				if done != nil {
+					turns = append(turns, done)
 				}
-				state.finalSeen = true
-				state.finalAgent = event.Author
-				state.finalText = text
-				turns = append(turns, &runtimev1.Turn{
-					AgentId: event.Author,
-					Text:    text,
-				})
 			}
 		}
 	}
@@ -338,6 +290,85 @@ func (h *converseHandler) runOneTurn(
 	}
 	h.metrics.Record(ctx, principal.Object, orDefault(state.finalAgent, orDefault(targetAgent, runner.AppName)), turnStatus, start)
 	return stream.Send(done)
+}
+
+// sendPartialEvent streams each part of a partial ADK event to the client.
+// Tool call names are recorded in state.toolCalls for the turn-complete log.
+func (h *converseHandler) sendPartialEvent(
+	stream runtimev1.AgentRuntime_ConverseServer,
+	principal crawblgrpc.Identity,
+	sessionID string,
+	author string,
+	parts []*genai.Part,
+	state *turnState,
+) error {
+	for _, part := range parts {
+		if part != nil && part.FunctionCall != nil && part.FunctionCall.Name != "" {
+			state.toolCalls = append(state.toolCalls, part.FunctionCall.Name)
+			h.logger.Info("agent tool invoked",
+				"workspace_id", principal.Object,
+				"session_id", sessionID,
+				"agent", author,
+				"tool", part.FunctionCall.Name,
+				"args_preview", previewMap(part.FunctionCall.Args, previewLenArgs),
+			)
+		}
+		ce := translatePart(author, part)
+		if ce == nil {
+			continue
+		}
+		if sendErr := stream.Send(ce); sendErr != nil {
+			return sendErr
+		}
+	}
+	return nil
+}
+
+// sendFinalEvent handles a final ADK response event: emits a UsageEvent if
+// usage metadata is present, then returns the Turn to append to the DoneEvent.
+// Returns (nil, nil) when the final event carries no non-empty text.
+func (h *converseHandler) sendFinalEvent(
+	stream runtimev1.AgentRuntime_ConverseServer,
+	event *session.Event,
+	state *turnState,
+) (*runtimev1.Turn, error) {
+	// Emit UsageEvent from the final response. The OpenAI adapter only
+	// populates UsageMetadata on the aggregated final response, not on
+	// partial streaming chunks.
+	if event.UsageMetadata != nil {
+		um := event.UsageMetadata
+		usageEvt := &runtimev1.ConverseEvent{
+			Event: &runtimev1.ConverseEvent_Usage{
+				Usage: &runtimev1.UsageEvent{
+					AgentId:             event.Author,
+					Model:               state.modelName,
+					PromptTokens:        um.PromptTokenCount,
+					CompletionTokens:    um.CandidatesTokenCount,
+					TotalTokens:         um.TotalTokenCount,
+					ToolUsePromptTokens: um.ToolUsePromptTokenCount,
+					ThoughtsTokens:      um.ThoughtsTokenCount,
+					CachedTokens:        um.CachedContentTokenCount,
+					CallSequence:        state.callSequence,
+				},
+			},
+		}
+		if sendErr := stream.Send(usageEvt); sendErr != nil {
+			return nil, sendErr
+		}
+		state.callSequence++
+	}
+
+	text := concatPartText(event.Content)
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
+	state.finalSeen = true
+	state.finalAgent = event.Author
+	state.finalText = text
+	return &runtimev1.Turn{
+		AgentId: event.Author,
+		Text:    text,
+	}, nil
 }
 
 // translatePart maps a single genai.Part into a ConverseEvent oneof.

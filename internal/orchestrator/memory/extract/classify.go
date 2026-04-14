@@ -249,32 +249,43 @@ func (c *classifier) splitIntoSegments(text string) []string {
 	}
 
 	// Paragraph split
-	raw := strings.Split(text, "\n\n")
-	var paragraphs []string
-	for _, p := range raw {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			paragraphs = append(paragraphs, p)
-		}
-	}
+	paragraphs := splitParagraphs(text)
 
-	// Single giant block: chunk by 25-line groups
+	// Single giant block: chunk by 25-line groups.
 	if len(paragraphs) <= 1 && len(lines) > 20 {
-		var segments []string
-		for i := 0; i < len(lines); i += defaultChunkSize {
-			end := i + defaultChunkSize
-			if end > len(lines) {
-				end = len(lines)
-			}
-			group := strings.TrimSpace(strings.Join(lines[i:end], "\n"))
-			if group != "" {
-				segments = append(segments, group)
-			}
-		}
-		return segments
+		return chunkLines(lines, defaultChunkSize)
 	}
 
 	return paragraphs
+}
+
+// splitParagraphs splits text on double newlines, trimming empty entries.
+func splitParagraphs(text string) []string {
+	raw := strings.Split(text, "\n\n")
+	out := make([]string, 0, len(raw))
+	for _, p := range raw {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// chunkLines groups lines into fixed-size chunks and returns non-empty joined segments.
+func chunkLines(lines []string, size int) []string {
+	var segments []string
+	for i := 0; i < len(lines); i += size {
+		end := i + size
+		if end > len(lines) {
+			end = len(lines)
+		}
+		group := strings.TrimSpace(strings.Join(lines[i:end], "\n"))
+		if group != "" {
+			segments = append(segments, group)
+		}
+	}
+	return segments
 }
 
 func splitByTurns(lines []string, turnPatterns []*regexp.Regexp) []string {

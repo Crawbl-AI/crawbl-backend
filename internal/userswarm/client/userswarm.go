@@ -142,27 +142,8 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 	}
 
 	desired := c.desiredUserSwarm(ctx, opts)
-
-	// Look up existing CR (if any) before deciding create vs update.
-	var existing crawblv1alpha1.UserSwarm
-	err := c.client.Get(ctx, k8sclient.ObjectKey{Name: desired.Name}, &existing)
-	switch {
-	case err == nil:
-		// Update the spec in place when it has drifted.
-		if !reflect.DeepEqual(existing.Spec, desired.Spec) || !reflect.DeepEqual(existing.Labels, desired.Labels) {
-			existing.Spec = desired.Spec
-			existing.Labels = desired.Labels
-			if err := c.client.Update(ctx, &existing); err != nil {
-				return nil, merrors.WrapStdServerError(err, "update userswarm")
-			}
-		}
-	case k8sclient.IgnoreNotFound(err) == nil:
-		// CR does not exist yet — create it.
-		if err := c.client.Create(ctx, desired); err != nil {
-			return nil, merrors.WrapStdServerError(err, "create userswarm")
-		}
-	default:
-		return nil, merrors.WrapStdServerError(err, "get userswarm")
+	if mErr := c.upsertUserSwarm(ctx, desired); mErr != nil {
+		return nil, mErr
 	}
 
 	// Fetch the current state (reads the status subresource populated
@@ -181,7 +162,36 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 		return status, nil
 	}
 
-	// Poll until Verified=true, PollTimeout, or ctx cancellation.
+	return c.pollUntilVerified(ctx, opts, desired.Name, status)
+}
+
+// upsertUserSwarm creates or updates the UserSwarm CR to match the desired state.
+func (c *userSwarmClient) upsertUserSwarm(ctx context.Context, desired *crawblv1alpha1.UserSwarm) *merrors.Error {
+	var existing crawblv1alpha1.UserSwarm
+	err := c.client.Get(ctx, k8sclient.ObjectKey{Name: desired.Name}, &existing)
+	switch {
+	case err == nil:
+		// Update the spec in place when it has drifted.
+		if !reflect.DeepEqual(existing.Spec, desired.Spec) || !reflect.DeepEqual(existing.Labels, desired.Labels) {
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+			if err := c.client.Update(ctx, &existing); err != nil {
+				return merrors.WrapStdServerError(err, "update userswarm")
+			}
+		}
+	case k8sclient.IgnoreNotFound(err) == nil:
+		// CR does not exist yet — create it.
+		if err := c.client.Create(ctx, desired); err != nil {
+			return merrors.WrapStdServerError(err, "create userswarm")
+		}
+	default:
+		return merrors.WrapStdServerError(err, "get userswarm")
+	}
+	return nil
+}
+
+// pollUntilVerified polls the UserSwarm CR until Verified=true, PollTimeout, or ctx cancellation.
+func (c *userSwarmClient) pollUntilVerified(ctx context.Context, opts *EnsureRuntimeOpts, swarmName string, status *orchestrator.RuntimeStatus) (*orchestrator.RuntimeStatus, *merrors.Error) {
 	timeout := c.config.PollTimeout
 	if timeout <= 0 {
 		timeout = DefaultPollTimeout
@@ -199,7 +209,8 @@ func (c *userSwarmClient) EnsureRuntime(ctx context.Context, opts *EnsureRuntime
 			return nil, merrors.WrapStdServerError(ctx.Err(), "ensure runtime canceled")
 		case <-ticker.C:
 		}
-		status, mErr = c.getRuntimeState(ctx, desired.Name)
+		var mErr *merrors.Error
+		status, mErr = c.getRuntimeState(ctx, swarmName)
 		if mErr != nil {
 			return nil, mErr
 		}

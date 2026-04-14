@@ -79,37 +79,7 @@ func BuildContextForConversation(ctx context.Context, sess database.SessionRunne
 	}
 
 	msgs, listErr := messages.ListRecent(ctx, sess, conversationID, limit)
-
-	var msgSB strings.Builder
-	if listErr == nil && len(msgs) > 0 {
-		msgSB.WriteString(header)
-
-		for _, msg := range msgs {
-			if msg.Status == orchestrator.MessageStatusSilent {
-				continue
-			}
-			text := msg.Content.Text
-			if text == "" {
-				continue
-			}
-			if len(text) > maxTextLen {
-				text = text[:maxTextLen] + "..."
-			}
-
-			sender := "User"
-			if msg.Role == orchestrator.MessageRoleAgent {
-				if msg.Agent != nil {
-					sender = msg.Agent.Name
-				} else if msg.AgentID != nil && namer != nil {
-					if name, ok := namer.AgentName(ctx, sess, *msg.AgentID); ok {
-						sender = name
-					}
-				}
-			}
-			fmt.Fprintf(&msgSB, "**%s**: %s\n\n", sender, text)
-		}
-	}
-	messagesText := msgSB.String()
+	messagesText := formatMessages(ctx, sess, msgs, listErr, header, maxTextLen, namer)
 
 	if memoryText == "" && messagesText == "" {
 		return ""
@@ -140,4 +110,54 @@ func BuildContextForConversation(ctx context.Context, sess database.SessionRunne
 		result = string(resultRunes[:memory.TokenBudgetTotal])
 	}
 	return result
+}
+
+// formatMessages renders the recent message list as a formatted string block.
+// Returns "" when listErr is non-nil or the list is empty.
+func formatMessages(
+	ctx context.Context,
+	sess database.SessionRunner,
+	msgs []*orchestrator.Message,
+	listErr *merrors.Error,
+	header string,
+	maxTextLen int,
+	namer AgentNamer,
+) string {
+	if listErr != nil || len(msgs) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(header)
+	for _, msg := range msgs {
+		if msg.Status == orchestrator.MessageStatusSilent {
+			continue
+		}
+		text := msg.Content.Text
+		if text == "" {
+			continue
+		}
+		if len(text) > maxTextLen {
+			text = text[:maxTextLen] + "..."
+		}
+		sender := resolveSender(ctx, sess, msg, namer)
+		fmt.Fprintf(&sb, "**%s**: %s\n\n", sender, text)
+	}
+	return sb.String()
+}
+
+// resolveSender returns the display name for a message sender.
+// For agent messages it prefers the attached Agent, then the namer lookup, then "Agent".
+func resolveSender(ctx context.Context, sess database.SessionRunner, msg *orchestrator.Message, namer AgentNamer) string {
+	if msg.Role != orchestrator.MessageRoleAgent {
+		return "User"
+	}
+	if msg.Agent != nil {
+		return msg.Agent.Name
+	}
+	if msg.AgentID != nil && namer != nil {
+		if name, ok := namer.AgentName(ctx, sess, *msg.AgentID); ok {
+			return name
+		}
+	}
+	return "Agent"
 }

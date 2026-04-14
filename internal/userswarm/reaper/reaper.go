@@ -111,86 +111,13 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 			continue
 		}
 
-		age := time.Since(swarm.CreationTimestamp.Time).Truncate(time.Minute)
-		userID := swarm.Spec.UserID
-
-		// Look up the owning user (including soft-deleted rows) so we can
-		// decide whether this is an e2e swarm worth reaping in phase 1, and
-		// so we can log a meaningful subject. Orphans (no user row at all)
-		// are left to phase 2, which is the dedicated orphan sweep.
-		userRow, err := repo.FindUserByID(ctx, sess, userID)
+		found, reaped, userReaped, err := processStaleSwarm(ctx, k8sClient, sess, repo, logger, swarm, softDeletedUsers, cfg.DryRun)
+		result.UsersFound += found
+		result.SwarmsReaped += reaped
+		result.UsersReaped += userReaped
 		if err != nil {
-			logger.Error("failed to look up user for stale swarm",
-				"swarm", swarm.Name,
-				"user_id", userID,
-				"error", err,
-			)
 			result.Errors++
-			continue
 		}
-		if userRow == nil {
-			// No user row at all — leave it to phase 2's orphan sweep so the
-			// log output cleanly separates "stale e2e" from "orphaned".
-			continue
-		}
-
-		// Phase 1 is scoped to e2e users. Stale CRs for real users are a
-		// different class of problem (possibly a bug in the teardown path)
-		// and should not be silently deleted here.
-		if !strings.HasPrefix(userRow.Subject, "e2e-") {
-			continue
-		}
-
-		result.UsersFound++
-		logger.Info("processing stale userswarm",
-			"swarm", swarm.Name,
-			"subject", userRow.Subject,
-			"email", userRow.Email,
-			"age", age,
-			"dry_run", cfg.DryRun,
-		)
-
-		if cfg.DryRun {
-			result.SwarmsReaped++
-			if _, seen := softDeletedUsers[userRow.ID]; !seen {
-				softDeletedUsers[userRow.ID] = struct{}{}
-				result.UsersReaped++
-			}
-			continue
-		}
-
-		if err := k8sClient.Delete(ctx, swarm); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				logger.Error("failed to delete stale userswarm", "name", swarm.Name, "error", err)
-				result.Errors++
-				continue
-			}
-		}
-		logger.Info("deleted stale userswarm", "name", swarm.Name, "user", userRow.Subject)
-		result.SwarmsReaped++
-
-		// Soft-delete the user row once, even if multiple CRs map back to
-		// the same user. The deleted_at IS NULL guard inside SoftDeleteUser
-		// is a second line of defence against double-writes.
-		if _, seen := softDeletedUsers[userRow.ID]; seen {
-			continue
-		}
-		softDeletedUsers[userRow.ID] = struct{}{}
-		if userRow.DeletedAt != nil {
-			// User was already soft-deleted out of band (e.g. by an earlier
-			// reaper run that failed after the DB update but before the CR
-			// delete). Count it as reaped for visibility, but skip the
-			// UPDATE since there's nothing to do.
-			result.UsersReaped++
-			continue
-		}
-		if err := repo.SoftDeleteUser(ctx, sess, userRow.ID); err != nil {
-			logger.Error("failed to soft-delete user", "subject", userRow.Subject, "error", err)
-			result.Errors++
-			continue
-		}
-		result.UsersReaped++
-		logger.Info("reaped user", "subject", userRow.Subject)
 	}
 
 	// Phase 2: orphan sweep. Scan all UserSwarm CRs in the cluster and remove
@@ -204,6 +131,89 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	result.Errors += errs
 
 	return result, nil
+}
+
+// processStaleSwarm handles a single stale UserSwarm CR in phase 1 of the
+// reaper loop. It looks up the owning user, validates it is an e2e subject,
+// deletes the CR when appropriate, and soft-deletes the user row once.
+//
+// Returns (usersFound, swarmsReaped, usersReaped, err). A non-nil err means
+// the operation should count as one error in Result.Errors.
+func processStaleSwarm(
+	ctx context.Context,
+	k8sClient client.Client,
+	sess *dbr.Session,
+	repo *reaperrepo.Repo,
+	logger *slog.Logger,
+	swarm *crawblv1alpha1.UserSwarm,
+	softDeletedUsers map[string]struct{},
+	dryRun bool,
+) (usersFound, swarmsReaped, usersReaped int, err error) {
+	age := time.Since(swarm.CreationTimestamp.Time).Truncate(time.Minute)
+	userID := swarm.Spec.UserID
+
+	// Look up the owning user (including soft-deleted rows). Orphans (no user
+	// row at all) are left to phase 2's dedicated orphan sweep.
+	userRow, lookupErr := repo.FindUserByID(ctx, sess, userID)
+	if lookupErr != nil {
+		logger.Error("failed to look up user for stale swarm",
+			"swarm", swarm.Name,
+			"user_id", userID,
+			"error", lookupErr,
+		)
+		return 0, 0, 0, lookupErr
+	}
+	if userRow == nil {
+		return 0, 0, 0, nil
+	}
+
+	// Phase 1 is scoped to e2e users only.
+	if !strings.HasPrefix(userRow.Subject, "e2e-") {
+		return 0, 0, 0, nil
+	}
+
+	usersFound = 1
+	logger.Info("processing stale userswarm",
+		"swarm", swarm.Name,
+		"subject", userRow.Subject,
+		"email", userRow.Email,
+		"age", age,
+		"dry_run", dryRun,
+	)
+
+	if dryRun {
+		swarmsReaped = 1
+		if _, seen := softDeletedUsers[userRow.ID]; !seen {
+			softDeletedUsers[userRow.ID] = struct{}{}
+			usersReaped = 1
+		}
+		return usersFound, swarmsReaped, usersReaped, nil
+	}
+
+	if deleteErr := k8sClient.Delete(ctx, swarm); deleteErr != nil {
+		if client.IgnoreNotFound(deleteErr) != nil {
+			logger.Error("failed to delete stale userswarm", "name", swarm.Name, "error", deleteErr)
+			return usersFound, 0, 0, deleteErr
+		}
+	}
+	logger.Info("deleted stale userswarm", "name", swarm.Name, "user", userRow.Subject)
+	swarmsReaped = 1
+
+	// Soft-delete the user row once per user even if multiple CRs map back to it.
+	if _, seen := softDeletedUsers[userRow.ID]; seen {
+		return usersFound, swarmsReaped, 0, nil
+	}
+	softDeletedUsers[userRow.ID] = struct{}{}
+	if userRow.DeletedAt != nil {
+		// Already soft-deleted out of band — count it but skip the UPDATE.
+		return usersFound, swarmsReaped, 1, nil
+	}
+	if softDeleteErr := repo.SoftDeleteUser(ctx, sess, userRow.ID); softDeleteErr != nil {
+		logger.Error("failed to soft-delete user", "subject", userRow.Subject, "error", softDeleteErr)
+		return usersFound, swarmsReaped, 0, softDeleteErr
+	}
+	logger.Info("reaped user", "subject", userRow.Subject)
+	return usersFound, swarmsReaped, 1, nil
 }
 
 // reapOrphanedSwarms is the second cleanup phase. It lists every UserSwarm CR

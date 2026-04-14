@@ -172,65 +172,18 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 				return
 			}
 
-			// Determine the authenticated user's subject. Reject the subscribe
-			// entirely when no principal is present (should not happen after auth
-			// middleware, but guard defensively).
+			// Guard: reject subscribe when no principal is present.
 			if sd.Principal == nil || strings.TrimSpace(sd.Principal.Subject) == "" {
 				logger.Warn("socketio: workspace subscribe rejected — no principal",
 					"socket_id", string(s.Id()),
 				)
 				return
 			}
-			userSubject := sd.Principal.Subject
 
-			// When DB + repo are available, verify each requested workspace is
-			// owned by the authenticated user before joining its room.
-			// IDs that fail the check are silently dropped — we do not reveal
-			// whether the workspace exists to prevent enumeration attacks.
-			authorised := ids
-			if db != nil && workspaceRepo != nil {
-				authorised = make([]string, 0, len(ids))
-				sess := db.NewSession(nil)
-				ctx := database.ContextWithSession(shutdownCtx, sess)
-
-				// Resolve Firebase subject → internal user.ID. The workspace repo
-				// queries by the internal PK (user_id column), not the subject.
-				// On failure, drop all requested IDs and bail early.
-				var userID string
-				if authService != nil {
-					user, mErr := authService.GetBySubject(ctx, &orchestratorservice.GetUserBySubjectOpts{
-						Subject: userSubject,
-					})
-					if mErr != nil {
-						logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
-							"socket_id", string(s.Id()),
-							"subject", userSubject,
-							"error", mErr.Error(),
-						)
-						return
-					}
-					userID = user.ID
-				} else {
-					// authService unavailable (dev/test): fall back to subject as-is.
-					userID = userSubject
-				}
-
-				owned, mErr := workspaceRepo.ListOwnedByUser(ctx, sess, userID, ids)
-				if mErr != nil {
-					logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
-						"socket_id", string(s.Id()),
-						"subject", userSubject,
-						"error", mErr.Error(),
-					)
-					return
-				}
-				for _, id := range ids {
-					if _, ok := owned[id]; ok {
-						authorised = append(authorised, id)
-					}
-				}
+			authorised, ok := resolveAuthorisedWorkspaces(shutdownCtx, logger, s, sd.Principal.Subject, ids, db, workspaceRepo, authService)
+			if !ok {
+				return
 			}
-
 			if len(authorised) == 0 {
 				return
 			}
@@ -280,6 +233,63 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			)
 		})
 	})
+}
+
+// resolveAuthorisedWorkspaces filters the requested workspace IDs to only those
+// owned by the authenticated user. When db/workspaceRepo are nil (dev/test) it
+// returns all ids unfiltered. Returns (ids, true) on success or (nil, false) when
+// the caller should abort the subscribe entirely (e.g. subject resolution failed).
+func resolveAuthorisedWorkspaces(
+	ctx context.Context,
+	logger *slog.Logger,
+	s *socket.Socket,
+	userSubject string,
+	ids []string,
+	db *dbr.Connection,
+	workspaceRepo workspaceOwnerChecker,
+	authService authResolver,
+) ([]string, bool) {
+	if db == nil || workspaceRepo == nil {
+		return ids, true
+	}
+
+	sess := db.NewSession(nil)
+	dbCtx := database.ContextWithSession(ctx, sess)
+
+	// Resolve Firebase subject → internal user.ID.
+	userID := userSubject
+	if authService != nil {
+		user, mErr := authService.GetBySubject(dbCtx, &orchestratorservice.GetUserBySubjectOpts{
+			Subject: userSubject,
+		})
+		if mErr != nil {
+			logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
+				"socket_id", string(s.Id()),
+				"subject", userSubject,
+				"error", mErr.Error(),
+			)
+			return nil, false
+		}
+		userID = user.ID
+	}
+
+	owned, mErr := workspaceRepo.ListOwnedByUser(dbCtx, sess, userID, ids)
+	if mErr != nil {
+		logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
+			"socket_id", string(s.Id()),
+			"subject", userSubject,
+			"error", mErr.Error(),
+		)
+		return nil, false
+	}
+
+	authorised := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := owned[id]; ok {
+			authorised = append(authorised, id)
+		}
+	}
+	return authorised, true
 }
 
 // RegisterMessageHandler adds the message.send event handler to the Socket.IO server.

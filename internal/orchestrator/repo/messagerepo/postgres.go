@@ -100,21 +100,27 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 		messages = append(messages, message)
 	}
 
-	pagination := orchestrator.Pagination{
-		HasNext: hasNext,
-		HasPrev: strings.TrimSpace(opts.ScrollID) != "",
-	}
-	if hasNext && len(messages) > 0 {
-		pagination.NextScrollID = messages[len(messages)-1].ID
-	}
-	if strings.TrimSpace(opts.ScrollID) != "" {
-		pagination.PrevScrollID = opts.ScrollID
-	}
+	pagination := buildMessagePagination(messages, opts.ScrollID, hasNext)
 
 	return &orchestrator.MessagePage{
 		Data:       messages,
 		Pagination: pagination,
 	}, nil
+}
+
+// buildMessagePagination constructs cursor-based pagination metadata for a message page.
+func buildMessagePagination(messages []*orchestrator.Message, scrollID string, hasNext bool) orchestrator.Pagination {
+	p := orchestrator.Pagination{
+		HasNext: hasNext,
+		HasPrev: strings.TrimSpace(scrollID) != "",
+	}
+	if hasNext && len(messages) > 0 {
+		p.NextScrollID = messages[len(messages)-1].ID
+	}
+	if strings.TrimSpace(scrollID) != "" {
+		p.PrevScrollID = scrollID
+	}
+	return p
 }
 
 // GetLatestByConversationID retrieves the most recent message in a conversation.
