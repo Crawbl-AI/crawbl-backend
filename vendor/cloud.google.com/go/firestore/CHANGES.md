@@ -1,5 +1,31 @@
 # Changes
 
+## [1.21.0](https://github.com/googleapis/google-cloud-go/releases/tag/firestore%2Fv1.21.0) (2026-01-15)
+
+### Features
+
+* Add ExecutionTime to PipelineSnapshot  (#13620) ([633a3ae](https://github.com/googleapis/google-cloud-go/commit/633a3ae5f8c8f7cec4f5d80aa4e1d560d16c4663))
+* add experimental warning to pipeline API  (#13621) ([6b59162](https://github.com/googleapis/google-cloud-go/commit/6b59162ff2180ed904c8b4a32d45c9b8c1fe6bc2))
+* publish the pipelines API to the stable branch ([21c9dbf](https://github.com/googleapis/google-cloud-go/commit/21c9dbfbf9061b29b1c64e5ca24273ec97078f25))
+* Support pipeline queries (#12347) ([585cd82](https://github.com/googleapis/google-cloud-go/commit/585cd823a9557565b3f427107e6637d2c7a57ef9))
+
+### Documentation
+
+* minor api documentation changes ([21c9dbf](https://github.com/googleapis/google-cloud-go/commit/21c9dbfbf9061b29b1c64e5ca24273ec97078f25))
+
+## [1.20.0](https://github.com/googleapis/google-cloud-go/compare/firestore/v1.19.0...firestore/v1.20.0) (2025-10-20)
+
+
+### Features
+
+* **firestore:** Add omitzero struct tag option ([#12992](https://github.com/googleapis/google-cloud-go/issues/12992)) ([c2f9c74](https://github.com/googleapis/google-cloud-go/commit/c2f9c7408f0a1c003da19db5520da8a745474f38))
+
+
+### Bug Fixes
+
+* **firestore:** Handle unused values ([#13103](https://github.com/googleapis/google-cloud-go/issues/13103)) ([a109cf6](https://github.com/googleapis/google-cloud-go/commit/a109cf6bde9675f8bc5edba61dce49f4852709d6)), refs [#9784](https://github.com/googleapis/google-cloud-go/issues/9784)
+* **firestore:** Upgrade gRPC service registration func ([8fffca2](https://github.com/googleapis/google-cloud-go/commit/8fffca2819fa3dc858c213aa0c503e0df331b084))
+
 ## [1.19.0](https://github.com/googleapis/google-cloud-go/compare/firestore/v1.18.0...firestore/v1.19.0) (2025-10-06)
 
 
