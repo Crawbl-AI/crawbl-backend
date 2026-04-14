@@ -77,45 +77,81 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		"redis_addr", cfg.Redis.Addr,
 	)
 
-	// Step 1.5: wire OpenTelemetry metrics export to VictoriaMetrics.
-	// Disabled when CRAWBL_OTEL_METRICS_ENDPOINT is empty so local dev
-	// runs stay quiet; cluster deployments inject the endpoint through
-	// the webhook env and get metrics automatically.
+	defer initTelemetry(cfg, logger, version)()
+
+	redisCli, sessionSvc, err := initRedisAndSession(cfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := redisCli.Close(); cerr != nil {
+			logger.Warn("redis client close error", "error", cerr)
+		}
+	}()
+
+	r, srv, mcpCloser, err := initRuntimeAndServer(cfg, logger, sessionSvc)
+	if err != nil {
+		return err
+	}
+	_ = r
+	defer func() {
+		if cerr := mcpCloser.Close(); cerr != nil {
+			logger.Warn("mcp toolset close error", "error", cerr)
+		}
+	}()
+
+	// Step 7: flip health to SERVING so Kubernetes probes mark the pod
+	// Ready as soon as the listener is up. The runner is already
+	// constructed above, so from this point forward Converse calls
+	// will succeed (subject to auth).
+	srv.Health().SetServing()
+
+	return serveUntilSignal(cfg, logger, srv)
+}
+
+// initTelemetry wires OpenTelemetry metrics export and returns a shutdown
+// function to be deferred by the caller.
+func initTelemetry(cfg config.Config, logger *slog.Logger, ver string) func() {
 	telCtx, telCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	telemetryShutdown, tErr := telemetry.Init(telCtx, telemetry.ConfigFromEnv("crawbl-agent-runtime", version), logger)
+	telemetryShutdown, tErr := telemetry.Init(telCtx, telemetry.ConfigFromEnv("crawbl-agent-runtime", ver), logger)
 	telCancel()
 	if tErr != nil {
 		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
 	}
-	defer func() {
+	return func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := telemetryShutdown(shutdownCtx); err != nil {
 			logger.Warn("telemetry shutdown returned error", "error", err)
 		}
-	}()
+	}
+}
 
-	// Step 2: Redis (shared client + ADK session service).
+// initRedisAndSession creates the Redis client and ADK session service.
+func initRedisAndSession(cfg config.Config) (redisclient.Client, *session.RedisService, error) {
 	redisCli, err := redisclient.New(cfg.Redis)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	rawRedis := redisclient.Unwrap(redisCli)
 	if rawRedis == nil {
-		return fmt.Errorf("init redis: unwrap returned nil client")
+		return nil, nil, fmt.Errorf("init redis: unwrap returned nil client")
 	}
 	sessionSvc := session.NewRedisService(rawRedis, cfg.RedisSessionTTL)
+	return redisCli, sessionSvc, nil
+}
 
-	// Step 3: fetch workspace blueprint from the orchestrator. This is
-	// done before any heavy init so a blueprint fetch failure fails
-	// fast before we burn time on the LLM adapter or MCP dial. A
-	// failure here is fatal — see runner/blueprint.go for the
-	// rationale.
+// initRuntimeAndServer builds the agent runner and gRPC server through all
+// initialization steps (blueprint fetch, LLM adapter, MCP toolset, Spaces
+// client, local tools, runner, server).
+// The returned mcpCloser must be closed by the caller when the server stops.
+func initRuntimeAndServer(cfg config.Config, logger *slog.Logger, sessionSvc *session.RedisService) (*runner.Runner, *server.Server, agentmcp.Closer, error) {
+	// Step 3: fetch workspace blueprint from the orchestrator.
 	bpCtx, bpCancel := context.WithTimeout(context.Background(), cfg.Startup.BlueprintFetchTimeout)
 	blueprint, err := runner.FetchBlueprint(bpCtx, cfg, logger)
 	bpCancel()
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
 	logger.Info("workspace blueprint loaded", "workspace_id", blueprint.WorkspaceID, "agent_count", len(blueprint.Agents))
 	for _, a := range blueprint.Agents {
@@ -125,25 +161,16 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	// Step 4a: LLM adapter.
 	llm, err := model.NewFromConfig(cfg)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
 
 	// Step 4b: orchestrator MCP toolset.
 	mcpToolset, mcpCloser, err := agentmcp.Toolset(cfg)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-	defer func() {
-		if cerr := mcpCloser.Close(); cerr != nil {
-			logger.Warn("mcp toolset close error", "error", cerr)
-		}
-	}()
 
 	// Step 4c: DigitalOcean Spaces client for file_read / file_write.
-	// Returns (nil, nil) when every CRAWBL_SPACES_* field is empty so
-	// local dev without object storage stays on a single code path;
-	// BuildCommonTools below skips the file tools when the client is
-	// nil but keeps the rest of the tool set available.
 	spacesClient, err := storage.NewSpacesClient(storage.Config{
 		Endpoint:  cfg.Spaces.Endpoint,
 		Region:    cfg.Spaces.Region,
@@ -152,7 +179,7 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		SecretKey: cfg.Spaces.SecretKey,
 	})
 	if err != nil {
-		return err
+		return nil, nil, mcpCloser, err
 	}
 	if spacesClient != nil {
 		logger.Info("spaces client ready",
@@ -164,22 +191,17 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		logger.Info("spaces client disabled (no CRAWBL_SPACES_* config); file_read/file_write unavailable")
 	}
 
-	// Step 4d: shared local tool slice (web_fetch, web_search_tool,
-	// + file_read/file_write when Spaces is configured) built once per
-	// pod and bound onto every agent in the graph. Memory tools are now
-	// provided by the orchestrator's MCP MemPalace toolset.
+	// Step 4d: shared local tool slice.
 	localTools, err := tools.BuildCommonTools(tools.CommonToolDeps{
 		WorkspaceID:     cfg.WorkspaceID,
 		SearXNGEndpoint: cfg.SearXNGEndpoint,
 		Spaces:          spacesClient,
 	})
 	if err != nil {
-		return err
+		return nil, nil, mcpCloser, err
 	}
 
-	// Step 5: agent graph + ADK runner. The runner owns the session
-	// service from this point forward; server.Shutdown calls
-	// runner.Close to tear it down on SIGTERM.
+	// Step 5: agent graph + ADK runner.
 	r, err := runner.New(runner.BuildOptions{
 		Model:          llm,
 		MCPToolset:     mcpToolset,
@@ -189,7 +211,7 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		Logger:         logger,
 	})
 	if err != nil {
-		return err
+		return nil, nil, mcpCloser, err
 	}
 	logger.Info("agent graph constructed", "root_agent", r.RootAgentName())
 
@@ -199,16 +221,15 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		Logger: logger,
 	})
 	if err != nil {
-		return err
+		return nil, nil, mcpCloser, err
 	}
 
-	// Step 7: flip health to SERVING so Kubernetes probes mark the pod
-	// Ready as soon as the listener is up. The runner is already
-	// constructed above, so from this point forward Converse calls
-	// will succeed (subject to auth).
-	srv.Health().SetServing()
+	return r, srv, mcpCloser, nil
+}
 
-	// Step 8: serve + signal loop.
+// serveUntilSignal starts the gRPC server and blocks until SIGINT/SIGTERM
+// or a serve error, then performs graceful shutdown.
+func serveUntilSignal(cfg config.Config, logger *slog.Logger, srv *server.Server) error {
 	serveErr := make(chan error, 1)
 	go func() {
 		if err := srv.Start(); err != nil {
@@ -228,14 +249,10 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		}
 	}
 
-	// Graceful stop, bounded by the configured shutdown timeout.
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), cfg.Startup.GracefulShutdownTimeout)
 	defer stopCancel()
 	_ = stopCtx
 	srv.Shutdown()
-	if cerr := redisCli.Close(); cerr != nil {
-		logger.Warn("redis client close error", "error", cerr)
-	}
 	logger.Info("crawbl-agent-runtime stopped")
 	return nil
 }

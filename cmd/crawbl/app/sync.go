@@ -29,39 +29,48 @@ func newSyncCommand() *cobra.Command {
   crawbl app sync --all                    # Hard-refresh all apps in argocd namespace
   crawbl app sync --all --force            # Reset stuck operations on all apps`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-
-			if all && len(args) > 0 {
-				return fmt.Errorf("cannot specify both --all and an app name")
-			}
-			if !all && len(args) == 0 {
-				return cmd.Help()
-			}
-
-			if all {
-				apps, err := listArgoCDApps(ctx)
-				if err != nil {
-					return err
-				}
-				if len(apps) == 0 {
-					out.Warning("no ArgoCD apps found in argocd namespace")
-					return nil
-				}
-				for _, app := range apps {
-					if err := syncApp(ctx, app, force); err != nil {
-						out.Fail("failed to sync %s: %v", app, err)
-					}
-				}
-				return nil
-			}
-
-			return syncApp(ctx, args[0], force)
+			return runSync(cmd, args, force, all)
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Reset stuck operation and hard-refresh before syncing")
 	cmd.Flags().BoolVar(&all, "all", false, "Sync all apps in the argocd namespace")
 	return cmd
+}
+
+// runSync implements the sync command: validates args, dispatches to single-app
+// or all-apps sync depending on the --all flag.
+func runSync(cmd *cobra.Command, args []string, force, all bool) error {
+	ctx := cmd.Context()
+
+	if all && len(args) > 0 {
+		return fmt.Errorf("cannot specify both --all and an app name")
+	}
+	if !all && len(args) == 0 {
+		return cmd.Help()
+	}
+	if !all {
+		return syncApp(ctx, args[0], force)
+	}
+	return syncAllApps(ctx, force)
+}
+
+// syncAllApps lists all ArgoCD applications and syncs each one.
+func syncAllApps(ctx context.Context, force bool) error {
+	apps, err := listArgoCDApps(ctx)
+	if err != nil {
+		return err
+	}
+	if len(apps) == 0 {
+		out.Warning("no ArgoCD apps found in argocd namespace")
+		return nil
+	}
+	for _, app := range apps {
+		if err := syncApp(ctx, app, force); err != nil {
+			out.Fail("failed to sync %s: %v", app, err)
+		}
+	}
+	return nil
 }
 
 // syncApp performs a hard refresh (and optional stuck-operation reset) for one ArgoCD app.

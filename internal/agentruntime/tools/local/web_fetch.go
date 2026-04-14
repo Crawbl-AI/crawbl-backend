@@ -121,25 +121,7 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 		return "", fmt.Errorf("web_fetch: %s returned status %d: %s", rawURL, resp.StatusCode, truncate(string(body), webFetchErrorBodyPreview))
 	}
 
-	content := string(body)
-
-	// Extract article text from HTML using Mozilla Readability algorithm.
-	// This strips navigation, ads, scripts, styles — keeping only the article content.
-	// For non-HTML responses (JSON, plain text), return as-is.
-	if isHTML(content) {
-		parsed, err := url.Parse(rawURL)
-		if err == nil {
-			article, readErr := readability.FromReader(bytes.NewReader(body), parsed)
-			if readErr == nil {
-				var sb strings.Builder
-				_ = article.RenderText(&sb)
-				extracted := sb.String()
-				if strings.TrimSpace(extracted) != "" {
-					content = extracted
-				}
-			}
-		}
-	}
+	content := extractContent(rawURL, body)
 
 	// Cap output to prevent token explosion in LLM context.
 	if len(content) > MaxToolOutputChars {
@@ -147,6 +129,30 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 	}
 
 	return content, nil
+}
+
+// extractContent converts a raw response body to readable text. For HTML
+// responses it applies the Mozilla Readability algorithm to strip navigation,
+// ads, and scripts. Non-HTML responses are returned as-is.
+func extractContent(rawURL string, body []byte) string {
+	content := string(body)
+	if !isHTML(content) {
+		return content
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return content
+	}
+	article, readErr := readability.FromReader(bytes.NewReader(body), parsed)
+	if readErr != nil {
+		return content
+	}
+	var sb strings.Builder
+	_ = article.RenderText(&sb)
+	if extracted := sb.String(); strings.TrimSpace(extracted) != "" {
+		return extracted
+	}
+	return content
 }
 
 // truncate trims s to at most n runes, appending an ellipsis marker when

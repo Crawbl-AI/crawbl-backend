@@ -122,8 +122,15 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 		return nil, fmt.Errorf("web_search_tool: decode searxng response: %w", err)
 	}
 
-	out := make([]WebSearchResult, 0, min(len(payload.Results), maxResults))
-	for _, r := range payload.Results {
+	return filterSearchResults(payload.Results, maxResults), nil
+}
+
+// filterSearchResults converts raw SearXNG result rows into the typed
+// WebSearchResult slice, skipping blank-title/blank-URL rows and
+// capping the output at maxResults.
+func filterSearchResults(raw []searxngResult, maxResults int) []WebSearchResult {
+	out := make([]WebSearchResult, 0, min(len(raw), maxResults))
+	for _, r := range raw {
 		if len(out) >= maxResults {
 			break
 		}
@@ -139,7 +146,7 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 			Engine:  strings.TrimSpace(r.Engine),
 		})
 	}
-	return out, nil
+	return out
 }
 
 // searxngResponse is the minimal subset of the SearXNG JSON API we

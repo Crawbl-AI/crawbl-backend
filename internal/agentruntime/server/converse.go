@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -102,38 +103,41 @@ func (h *converseHandler) Converse(stream runtimev1.AgentRuntime_ConverseServer)
 			return err
 		}
 
-		sessionID := req.GetSessionId()
-		message := req.GetMessage()
-		if message == "" {
-			h.logger.Warn("converse turn rejected: empty message",
-				"workspace_id", principal.Object,
-				"session_id", sessionID,
-			)
-			if sendErr := sendError(stream, sessionID, codes.InvalidArgument, "converse: message is required"); sendErr != nil {
-				return sendErr
-			}
-			continue
-		}
-		if sessionID == "" {
-			// Fall back to workspace ID as session ID. Not ideal —
-			// a workspace can have multiple concurrent conversations —
-			// but the current orchestrator always passes a real
-			// session ID, so this is a safety net, not the happy path.
-			sessionID = principal.Object
-		}
-
-		// Drive one turn through the ADK runner. RunTurn returns an
-		// iterator; each yielded event gets translated into a
-		// ConverseEvent oneof and sent to the client. The terminal
-		// DoneEvent aggregates turns (for wire compatibility with the
-		// orchestrator's multi-agent response consumer) and closes
-		// this turn, but the outer for-loop keeps the stream open
-		// for the next request.
-		turnErr := h.runOneTurn(stream, principal, sessionID, req.GetSystemPrompt(), req.GetAgentId(), message)
-		if turnErr != nil {
+		if turnErr := h.handleConverseRequest(stream, principal, req); turnErr != nil {
 			return turnErr
 		}
 	}
+}
+
+// handleConverseRequest validates and dispatches a single ConverseRequest.
+// Returns a non-nil error only for terminal stream failures.
+func (h *converseHandler) handleConverseRequest(stream runtimev1.AgentRuntime_ConverseServer, principal crawblgrpc.Identity, req *runtimev1.ConverseRequest) error {
+	sessionID := req.GetSessionId()
+	message := req.GetMessage()
+
+	if message == "" {
+		h.logger.Warn("converse turn rejected: empty message",
+			"workspace_id", principal.Object,
+			"session_id", sessionID,
+		)
+		return sendError(stream, sessionID, codes.InvalidArgument, "converse: message is required")
+	}
+	if sessionID == "" {
+		// Fall back to workspace ID as session ID. Not ideal —
+		// a workspace can have multiple concurrent conversations —
+		// but the current orchestrator always passes a real
+		// session ID, so this is a safety net, not the happy path.
+		sessionID = principal.Object
+	}
+
+	// Drive one turn through the ADK runner. RunTurn returns an
+	// iterator; each yielded event gets translated into a
+	// ConverseEvent oneof and sent to the client. The terminal
+	// DoneEvent aggregates turns (for wire compatibility with the
+	// orchestrator's multi-agent response consumer) and closes
+	// this turn, but the outer for-loop keeps the stream open
+	// for the next request.
+	return h.runOneTurn(stream, principal, sessionID, req.GetSystemPrompt(), req.GetAgentId(), message)
 }
 
 // turnState accumulates per-turn observations (model version, final
@@ -175,62 +179,7 @@ func (h *converseHandler) runOneTurn(
 	start := time.Now()
 	state := newTurnState(targetAgent)
 
-	var turns []*runtimev1.Turn
-	var iterErr error
-
-	for event, err := range h.runner.RunTurn(ctx, principal.Subject, sessionID, systemPrompt, targetAgent, message) {
-		if err != nil {
-			iterErr = err
-			break
-		}
-		if event == nil {
-			continue
-		}
-		if event.Author != "" {
-			state.authors[event.Author]++
-		}
-		// Track model name if present. ADK populates it on the final
-		// LLM response for each agent; we overwrite so the last
-		// agent's model is reported in the DoneEvent.
-		if mv := event.ModelVersion; mv != "" {
-			state.modelName = mv
-		}
-		if event.Partial {
-			state.partialCount++
-		}
-		// Walk the genai.Content parts and translate each into a
-		// ConverseEvent. Order is preserved by ADK's iter.Seq2, so
-		// ToolCallEvent always precedes its matching ToolResultEvent
-		// and all ChunkEvents precede the terminal DoneEvent (we
-		// synthesize Done ourselves after the iterator finishes).
-		if event.Content != nil {
-			// ADK sends content in two phases:
-			//   1. Partial events (Partial=true) — streaming token-by-token.
-			//   2. Final event (IsFinalResponse=true, Partial=false) — replays
-			//      the complete text. We must NOT send these as ChunkEvents
-			//      again or the orchestrator accumulates the text twice.
-			//
-			// Strategy: stream ChunkEvents only for partial events. For the
-			// final event, only capture the aggregated Turn for DoneEvent.
-			isFinal := event.IsFinalResponse()
-
-			if !isFinal {
-				if sendErr := h.sendPartialEvent(stream, principal, sessionID, event.Author, event.Content.Parts, state); sendErr != nil {
-					return sendErr
-				}
-			}
-
-			if isFinal {
-				done, sendErr := h.sendFinalEvent(stream, event, state)
-				if sendErr != nil {
-					return sendErr
-				}
-				if done != nil {
-					turns = append(turns, done)
-				}
-			}
-		}
-	}
+	turns, iterErr := h.drainRunnerEvents(ctx, stream, principal, sessionID, systemPrompt, targetAgent, message, state)
 
 	if iterErr != nil {
 		h.logger.Error("agent turn failed",
@@ -248,6 +197,105 @@ func (h *converseHandler) runOneTurn(
 		return sendError(stream, sessionID, codes.Internal, fmt.Sprintf("runner: %v", iterErr))
 	}
 
+	return h.sendTurnDone(ctx, stream, principal, sessionID, targetAgent, message, state, turns, start)
+}
+
+// drainRunnerEvents iterates all ADK events for one turn, translating each
+// into wire events and accumulating turn state. Returns the collected Turn
+// slice and any iterator error.
+func (h *converseHandler) drainRunnerEvents(
+	ctx context.Context,
+	stream runtimev1.AgentRuntime_ConverseServer,
+	principal crawblgrpc.Identity,
+	sessionID string,
+	systemPrompt string,
+	targetAgent string,
+	message string,
+	state *turnState,
+) ([]*runtimev1.Turn, error) {
+	var turns []*runtimev1.Turn
+
+	for event, err := range h.runner.RunTurn(ctx, principal.Subject, sessionID, systemPrompt, targetAgent, message) {
+		if err != nil {
+			return nil, err
+		}
+		if event == nil {
+			continue
+		}
+		if event.Author != "" {
+			state.authors[event.Author]++
+		}
+		// Track model name if present. ADK populates it on the final
+		// LLM response for each agent; we overwrite so the last
+		// agent's model is reported in the DoneEvent.
+		if mv := event.ModelVersion; mv != "" {
+			state.modelName = mv
+		}
+		if event.Partial {
+			state.partialCount++
+		}
+		if event.Content == nil {
+			continue
+		}
+		if sendErr := h.processContentEvent(stream, principal, sessionID, event, state, &turns); sendErr != nil {
+			return nil, sendErr
+		}
+	}
+	return turns, nil
+}
+
+// processContentEvent handles a single content-bearing ADK event. For partial
+// events it streams ChunkEvents; for final events it captures the Turn.
+// Mutates state and appends to *turns on success.
+func (h *converseHandler) processContentEvent(
+	stream runtimev1.AgentRuntime_ConverseServer,
+	principal crawblgrpc.Identity,
+	sessionID string,
+	event *session.Event,
+	state *turnState,
+	turns *[]*runtimev1.Turn,
+) error {
+	// ADK sends content in two phases:
+	//   1. Partial events (Partial=true) — streaming token-by-token.
+	//   2. Final event (IsFinalResponse=true, Partial=false) — replays
+	//      the complete text. We must NOT send these as ChunkEvents
+	//      again or the orchestrator accumulates the text twice.
+	//
+	// Strategy: stream ChunkEvents only for partial events. For the
+	// final event, only capture the aggregated Turn for DoneEvent.
+	isFinal := event.IsFinalResponse()
+
+	if !isFinal {
+		if sendErr := h.sendPartialEvent(stream, principal, sessionID, event.Author, event.Content.Parts, state); sendErr != nil {
+			return sendErr
+		}
+	}
+
+	if isFinal {
+		turn, sendErr := h.sendFinalEvent(stream, event, state)
+		if sendErr != nil {
+			return sendErr
+		}
+		if turn != nil {
+			*turns = append(*turns, turn)
+		}
+	}
+	return nil
+}
+
+// sendTurnDone synthesises the terminal DoneEvent, logs turn completion,
+// records metrics, and sends the event to the stream.
+func (h *converseHandler) sendTurnDone(
+	ctx context.Context,
+	stream runtimev1.AgentRuntime_ConverseServer,
+	principal crawblgrpc.Identity,
+	sessionID string,
+	targetAgent string,
+	message string,
+	state *turnState,
+	turns []*runtimev1.Turn,
+	start time.Time,
+) error {
 	// Synthesize the terminal DoneEvent. Legacy wire compatibility:
 	// the orchestrator's existing consumer expects a turns[] array in
 	// the final event so multi-agent responses persist cleanly.
@@ -280,9 +328,7 @@ func (h *converseHandler) runOneTurn(
 			append(baseFields, "reply_preview", preview(state.finalText, previewLenReply))...,
 		)
 	} else {
-		h.logger.Warn("agent turn produced no final response",
-			baseFields...,
-		)
+		h.logger.Warn("agent turn produced no final response", baseFields...)
 	}
 	turnStatus := "ok"
 	if !state.finalSeen {

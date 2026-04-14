@@ -162,18 +162,7 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Look up the user to get their internal UUID for workspace lookup.
-		user, userErr := c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
-			Subject: principal.Subject,
-		})
-
-		// Fetch workspaces before deletion so we can clean up agent runtime CRs.
-		var workspaces []*orchestrator.Workspace
-		if userErr == nil && user != nil {
-			workspaces, _ = c.WorkspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
-				UserID: user.ID,
-			})
-		}
+		workspaces := lookupUserWorkspaces(c, r, principal.Subject)
 
 		if mErr := c.AuthService.Delete(r.Context(), &orchestratorservice.DeleteOpts{
 			Principal:   principal,
@@ -184,25 +173,45 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 			return
 		}
 
-		// Best-effort cleanup of agent runtime CRs for each workspace.
-		if c.RuntimeClient != nil {
-			for _, ws := range workspaces {
-				if delErr := c.RuntimeClient.DeleteRuntime(r.Context(), ws.ID); delErr != nil {
-					c.Logger.Warn("failed to delete agent runtime on account deletion",
-						"workspace_id", ws.ID,
-						"user", principal.Subject,
-						"error", delErr,
-					)
-				} else {
-					c.Logger.Info("deleted agent runtime on account deletion",
-						"workspace_id", ws.ID,
-						"user", principal.Subject,
-					)
-				}
-			}
-		}
-
+		cleanupRuntimes(c, r, workspaces, principal.Subject)
 		httpserver.WriteNoContent(w)
+	}
+}
+
+// lookupUserWorkspaces fetches the user's workspaces so runtime CRs can be
+// cleaned up after deletion. Returns nil when the user cannot be resolved.
+func lookupUserWorkspaces(c *Context, r *http.Request, subject string) []*orchestrator.Workspace {
+	user, userErr := c.AuthService.GetBySubject(r.Context(), &orchestratorservice.GetUserBySubjectOpts{
+		Subject: subject,
+	})
+	if userErr != nil || user == nil {
+		return nil
+	}
+	workspaces, _ := c.WorkspaceService.ListByUserID(r.Context(), &orchestratorservice.ListWorkspacesOpts{
+		UserID: user.ID,
+	})
+	return workspaces
+}
+
+// cleanupRuntimes performs best-effort deletion of agent runtime CRs for each
+// workspace. Errors are logged but do not fail the request.
+func cleanupRuntimes(c *Context, r *http.Request, workspaces []*orchestrator.Workspace, subject string) {
+	if c.RuntimeClient == nil {
+		return
+	}
+	for _, ws := range workspaces {
+		if delErr := c.RuntimeClient.DeleteRuntime(r.Context(), ws.ID); delErr != nil {
+			c.Logger.Warn("failed to delete agent runtime on account deletion",
+				"workspace_id", ws.ID,
+				"user", subject,
+				"error", delErr,
+			)
+			continue
+		}
+		c.Logger.Info("deleted agent runtime on account deletion",
+			"workspace_id", ws.ID,
+			"user", subject,
+		)
 	}
 }
 
