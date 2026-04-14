@@ -354,103 +354,99 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
 	return cmd
 }
 
-func newDeployDocsCommand() *cobra.Command {
-	var (
-		tag  string
-		path string
-	)
+// staticDeployOpts describes a Cloudflare Pages deploy for a static site repo.
+type staticDeployOpts struct {
+	Use         string
+	Short       string
+	Long        string
+	Example     string
+	RepoDir     string
+	RepoSlug    string
+	OutputDir   string
+	PagesName   string
+	PathDefault string
+}
 
-	cmd := &cobra.Command{
+func newDeployDocsCommand() *cobra.Command {
+	return newStaticDeployCommand(staticDeployOpts{
 		Use:   "docs",
 		Short: "Deploy the documentation site to Cloudflare Pages",
 		Long:  "Build the Docusaurus site and deploy static output to Cloudflare Pages.",
 		Example: `  crawbl app deploy docs
   crawbl app deploy docs --tag v1.0.0
   crawbl app deploy docs --path /custom/path/crawbl-docs`,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if err := checkStaticDeployTools(); err != nil {
-				return err
-			}
-
-			docsDir, err := gitutil.ResolveSiblingRepo(path, buildDocsRepoDir)
-			if err != nil {
-				return err
-			}
-
-			resolved, err := resolveDeployTagForRepo(tag, false, docsDir)
-			if err != nil {
-				return err
-			}
-			tag = resolved.Tag
-
-			if err := runNpmBuild(docsDir); err != nil {
-				return err
-			}
-
-			if err := runWranglerDeploy(docsDir, "build", "crawbl-docs"); err != nil {
-				return err
-			}
-
-			return release.TagAndRelease(release.Config{
-				RepoPath: docsDir,
-				RepoSlug: RepoSlugDocs,
-				Tag:      tag,
-				PrevTag:  resolved.PrevTag,
-			})
-		},
-	}
-
-	addStaticDeployFlags(cmd, &tag, &path, "crawbl-docs")
-	return cmd
+		RepoDir:     buildDocsRepoDir,
+		RepoSlug:    RepoSlugDocs,
+		OutputDir:   "build",
+		PagesName:   "crawbl-docs",
+		PathDefault: "crawbl-docs",
+	})
 }
 
 func newDeployWebsiteCommand() *cobra.Command {
-	var (
-		tag  string
-		path string
-	)
-
-	cmd := &cobra.Command{
+	return newStaticDeployCommand(staticDeployOpts{
 		Use:   "website",
 		Short: "Deploy the marketing site to Cloudflare Pages",
 		Long:  "Build the Next.js static site and deploy output to Cloudflare Pages.",
 		Example: `  crawbl app deploy website
   crawbl app deploy website --tag v1.0.0
   crawbl app deploy website --path /custom/path/crawbl-website`,
+		RepoDir:     buildWebsiteRepoDir,
+		RepoSlug:    RepoSlugWebsite,
+		OutputDir:   "out",
+		PagesName:   "crawbl-website",
+		PathDefault: "crawbl-website",
+	})
+}
+
+// newStaticDeployCommand builds a Cloudflare Pages deploy subcommand for a
+// static site (docs, website). Behaviour is identical across sites; only the
+// repo directory, build output dir, and Pages project name vary.
+func newStaticDeployCommand(opts staticDeployOpts) *cobra.Command {
+	var (
+		tag  string
+		path string
+	)
+
+	cmd := &cobra.Command{
+		Use:     opts.Use,
+		Short:   opts.Short,
+		Long:    opts.Long,
+		Example: opts.Example,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := checkStaticDeployTools(); err != nil {
 				return err
 			}
 
-			websiteDir, err := gitutil.ResolveSiblingRepo(path, buildWebsiteRepoDir)
+			repoDir, err := gitutil.ResolveSiblingRepo(path, opts.RepoDir)
 			if err != nil {
 				return err
 			}
 
-			resolved, err := resolveDeployTagForRepo(tag, false, websiteDir)
+			resolved, err := resolveDeployTagForRepo(tag, false, repoDir)
 			if err != nil {
 				return err
 			}
 			tag = resolved.Tag
 
-			if err := runNpmBuild(websiteDir); err != nil {
+			if err := runNpmBuild(repoDir); err != nil {
 				return err
 			}
 
-			if err := runWranglerDeploy(websiteDir, "out", "crawbl-website"); err != nil {
+			if err := runWranglerDeploy(repoDir, opts.OutputDir, opts.PagesName); err != nil {
 				return err
 			}
 
 			return release.TagAndRelease(release.Config{
-				RepoPath: websiteDir,
-				RepoSlug: RepoSlugWebsite,
+				RepoPath: repoDir,
+				RepoSlug: opts.RepoSlug,
 				Tag:      tag,
 				PrevTag:  resolved.PrevTag,
 			})
 		},
 	}
 
-	addStaticDeployFlags(cmd, &tag, &path, "crawbl-website")
+	addStaticDeployFlags(cmd, &tag, &path, opts.PathDefault)
 	return cmd
 }
 

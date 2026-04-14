@@ -145,30 +145,45 @@ func (r *artifactRepo) IncrementVersion(ctx context.Context, sess orchestratorre
 	return newVersion, nil
 }
 
+// insertArtifactChildIdempotent inserts a child row (version or review) with
+// idempotent "already-exists" handling. The fields map is applied via
+// dbr.Pair in insertion order; callers pass a *pairs slice* to preserve
+// column ordering, since maps are unordered in Go. Returns nil on both
+// fresh insert and duplicate PK.
+type artifactInsertPair struct {
+	Col string
+	Val any
+}
+
+func insertArtifactChildIdempotent(ctx context.Context, sess orchestratorrepo.SessionRunner, table, opLabel string, pairs []artifactInsertPair) *merrors.Error {
+	stmt := sess.InsertInto(table)
+	for _, p := range pairs {
+		stmt = stmt.Pair(p.Col, p.Val)
+	}
+	if _, err := stmt.ExecContext(ctx); err != nil {
+		if database.IsRecordExistsError(err) {
+			return nil
+		}
+		return merrors.WrapStdServerError(err, opLabel)
+	}
+	return nil
+}
+
 // CreateVersion inserts a new version row into artifact_versions.
 func (r *artifactRepo) CreateVersion(ctx context.Context, sess orchestratorrepo.SessionRunner, row *ArtifactVersionRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-
-	_, err := sess.InsertInto("artifact_versions").
-		Pair("id", row.ID).
-		Pair("artifact_id", row.ArtifactID).
-		Pair("version", row.Version).
-		Pair("content", row.Content).
-		Pair("change_summary", row.ChangeSummary).
-		Pair("agent_id", row.AgentID).
-		Pair("agent_slug", row.AgentSlug).
-		Pair("created_at", row.CreatedAt).
-		ExecContext(ctx)
-	if err != nil {
-		if database.IsRecordExistsError(err) {
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert artifact version")
-	}
-
-	return nil
+	return insertArtifactChildIdempotent(ctx, sess, "artifact_versions", "insert artifact version", []artifactInsertPair{
+		{"id", row.ID},
+		{"artifact_id", row.ArtifactID},
+		{"version", row.Version},
+		{"content", row.Content},
+		{"change_summary", row.ChangeSummary},
+		{"agent_id", row.AgentID},
+		{"agent_slug", row.AgentSlug},
+		{"created_at", row.CreatedAt},
+	})
 }
 
 // GetLatestVersion retrieves the latest version of an artifact.
@@ -218,25 +233,16 @@ func (r *artifactRepo) CreateReview(ctx context.Context, sess orchestratorrepo.S
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-
-	_, err := sess.InsertInto("artifact_reviews").
-		Pair("id", row.ID).
-		Pair("artifact_id", row.ArtifactID).
-		Pair("version", row.Version).
-		Pair("reviewer_agent_id", row.ReviewerAgentID).
-		Pair("reviewer_agent_slug", row.ReviewerAgentSlug).
-		Pair("outcome", row.Outcome).
-		Pair("comments", row.Comments).
-		Pair("created_at", row.CreatedAt).
-		ExecContext(ctx)
-	if err != nil {
-		if database.IsRecordExistsError(err) {
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert artifact review")
-	}
-
-	return nil
+	return insertArtifactChildIdempotent(ctx, sess, "artifact_reviews", "insert artifact review", []artifactInsertPair{
+		{"id", row.ID},
+		{"artifact_id", row.ArtifactID},
+		{"version", row.Version},
+		{"reviewer_agent_id", row.ReviewerAgentID},
+		{"reviewer_agent_slug", row.ReviewerAgentSlug},
+		{"outcome", row.Outcome},
+		{"comments", row.Comments},
+		{"created_at", row.CreatedAt},
+	})
 }
 
 // ListReviews retrieves all reviews for a specific artifact version.

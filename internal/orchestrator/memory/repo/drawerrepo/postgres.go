@@ -153,13 +153,21 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 		where, paramIdx,
 	)
 
+	return querySearchResults(ctx, sess, "drawer: search", query, args...)
+}
+
+// querySearchResults executes a raw SQL query that returns the
+// DrawerSearchResult column layout and scans every row into a slice. The
+// opLabel is used as the error-message prefix so callers can distinguish
+// search from check-duplicate failures.
+func querySearchResults(ctx context.Context, sess database.SessionRunner, opLabel, query string, args ...any) ([]memory.DrawerSearchResult, error) {
 	db, ok := sess.(*dbr.Session)
 	if !ok || db == nil || db.DB == nil {
-		return nil, fmt.Errorf("drawer: search: session is not a *dbr.Session with a live connection")
+		return nil, fmt.Errorf("%s: session is not a *dbr.Session with a live connection", opLabel)
 	}
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("drawer: search: %w", err)
+		return nil, fmt.Errorf("%s: %w", opLabel, err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -172,12 +180,12 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 			&res.FiledAt, &res.CreatedAt, &res.State, &res.Summary, &res.AddedByAgent,
 			&res.Similarity,
 		); scanErr != nil {
-			return nil, fmt.Errorf("drawer: search scan: %w", scanErr)
+			return nil, fmt.Errorf("%s scan: %w", opLabel, scanErr)
 		}
 		results = append(results, res)
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, fmt.Errorf("drawer: search iterate: %w", rowsErr)
+		return nil, fmt.Errorf("%s iterate: %w", opLabel, rowsErr)
 	}
 	return results, nil
 }
@@ -345,33 +353,7 @@ func (r *Postgres) CheckDuplicate(ctx context.Context, sess database.SessionRunn
 	               ORDER BY embedding OPERATOR(public.<=>) $1::public.vector
 	               LIMIT $4`
 
-	db, ok := sess.(*dbr.Session)
-	if !ok || db == nil || db.DB == nil {
-		return nil, fmt.Errorf("drawer: check duplicate: session is not a *dbr.Session with a live connection")
-	}
-	rows, err := db.QueryContext(ctx, query, vec, workspaceID, threshold, limit)
-	if err != nil {
-		return nil, fmt.Errorf("drawer: check duplicate: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var results []memory.DrawerSearchResult
-	for rows.Next() {
-		var r memory.DrawerSearchResult
-		if scanErr := rows.Scan(
-			&r.ID, &r.WorkspaceID, &r.Wing, &r.Room, &r.Hall, &r.Content,
-			&r.Importance, &r.MemoryType, &r.SourceFile, &r.AddedBy,
-			&r.FiledAt, &r.CreatedAt, &r.State, &r.Summary, &r.AddedByAgent,
-			&r.Similarity,
-		); scanErr != nil {
-			return nil, fmt.Errorf("drawer: check duplicate scan: %w", scanErr)
-		}
-		results = append(results, r)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, fmt.Errorf("drawer: check duplicate iterate: %w", rowsErr)
-	}
-	return results, nil
+	return querySearchResults(ctx, sess, "drawer: check duplicate", query, vec, workspaceID, threshold, limit)
 }
 
 func (r *Postgres) Count(ctx context.Context, sess database.SessionRunner, workspaceID string) (int, error) {

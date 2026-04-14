@@ -37,21 +37,11 @@ type AuthedFunc[Resp any] func(
 	deps *AuthedHandlerDeps,
 ) (Resp, *merrors.Error)
 
-// AuthedHandler wires a JSON-bodied business function into an http.HandlerFunc.
-//
-// It centralises the boilerplate that every handler otherwise duplicates:
-//  1. Load the current user via Context.CurrentUser (rejects banned/deleted).
-//  2. Decode the JSON body into *Req (ErrInvalidInput on failure).
-//  3. Invoke the business closure with the decoded body and deps.
-//  4. Map any *merrors.Error to the correct HTTP status via WriteError.
-//  5. Write the response through the {"data": ...} success envelope on 200.
-//
-// Handlers should prefer this decorator when they match the JSON-in /
-// envelope-out shape. Complex flows (streaming, custom status codes,
-// multipart uploads, no-content responses) should continue to use the
-// plain http.HandlerFunc form.
-func AuthedHandler[Req any, Resp any](
+// authedJSONHandler is the shared implementation behind AuthedHandler and
+// AuthedHandlerCreated. They differ only in the success status code.
+func authedJSONHandler[Req any, Resp any](
 	c *Context,
+	successStatus int,
 	fn AuthedJSONFunc[Req, Resp],
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -78,8 +68,28 @@ func AuthedHandler[Req any, Resp any](
 			return
 		}
 
-		WriteSuccess(w, http.StatusOK, resp)
+		WriteSuccess(w, successStatus, resp)
 	}
+}
+
+// AuthedHandler wires a JSON-bodied business function into an http.HandlerFunc.
+//
+// It centralises the boilerplate that every handler otherwise duplicates:
+//  1. Load the current user via Context.CurrentUser (rejects banned/deleted).
+//  2. Decode the JSON body into *Req (ErrInvalidInput on failure).
+//  3. Invoke the business closure with the decoded body and deps.
+//  4. Map any *merrors.Error to the correct HTTP status via WriteError.
+//  5. Write the response through the {"data": ...} success envelope on 200.
+//
+// Handlers should prefer this decorator when they match the JSON-in /
+// envelope-out shape. Complex flows (streaming, custom status codes,
+// multipart uploads, no-content responses) should continue to use the
+// plain http.HandlerFunc form.
+func AuthedHandler[Req any, Resp any](
+	c *Context,
+	fn AuthedJSONFunc[Req, Resp],
+) http.HandlerFunc {
+	return authedJSONHandler(c, http.StatusOK, fn)
 }
 
 // AuthedHandlerNoBody wires a no-body business function into an
@@ -152,32 +162,7 @@ func AuthedHandlerCreated[Req any, Resp any](
 	c *Context,
 	fn AuthedJSONFunc[Req, Resp],
 ) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, mErr := c.CurrentUser(r)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		var req Req
-		if err := DecodeJSON(r, &req); err != nil {
-			WriteError(w, merrors.ErrInvalidInput)
-			return
-		}
-
-		deps := &AuthedHandlerDeps{
-			Ctx:  c,
-			User: user,
-		}
-
-		resp, mErr := fn(r, deps, &req)
-		if mErr != nil {
-			WriteError(w, mErr)
-			return
-		}
-
-		WriteSuccess(w, http.StatusCreated, resp)
-	}
+	return authedJSONHandler(c, http.StatusCreated, fn)
 }
 
 // AuthedJSONNoContent wires a JSON-bodied, no-response business function

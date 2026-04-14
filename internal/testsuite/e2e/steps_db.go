@@ -255,24 +255,31 @@ func (tc *testContext) dbUserIsDeleted(alias, expected string) error {
 // assertion that backs "the assistant should have remembered at least
 // N notes for subject X" in the Gherkin feature files; the drawer is
 // written by the memory_add_drawer tool during agent turns.
-func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) error {
+// dbCountAssert polls query+args until COUNT(*) ≥ expected, returning a
+// labelled "expected at least N <thing> for %q" error on timeout. Shared
+// scaffolding behind the at-least-N assertions (drawers, delegations,
+// agent messages).
+func (tc *testContext) dbCountAssert(alias string, expected int, label string, query string, args ...any) error {
 	return tc.withDB(func(_ *dbr.Session) error {
-		subject := tc.resolveSubject(alias)
 		return tc.pollDefault(func() error {
-			count, err := tc.queryCount(`
-				SELECT COUNT(*) FROM memory_drawers
-				JOIN workspaces ON workspaces.id = memory_drawers.workspace_id
-				JOIN users ON users.id = workspaces.user_id
-				WHERE users.subject = $1`, subject)
+			count, err := tc.queryCount(query, args...)
 			if err != nil {
 				return err
 			}
 			if count < expected {
-				return fmt.Errorf("expected at least %d memory drawer(s) for %q, got %d", expected, alias, count)
+				return fmt.Errorf("expected at least %d %s for %q, got %d", expected, label, alias, count)
 			}
 			return nil
 		})
 	})
+}
+
+func (tc *testContext) dbAgentMemoryCountForSubject(expected int, alias string) error {
+	return tc.dbCountAssert(alias, expected, "memory drawer(s)", `
+		SELECT COUNT(*) FROM memory_drawers
+		JOIN workspaces ON workspaces.id = memory_drawers.workspace_id
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, tc.resolveSubject(alias))
 }
 
 func (tc *testContext) dbMCPAuditLogForSubject(toolName, alias string) error {
@@ -295,43 +302,19 @@ func (tc *testContext) dbMCPAuditLogForSubject(toolName, alias string) error {
 }
 
 func (tc *testContext) dbAgentDelegationCountForSubject(expected int, alias string) error {
-	return tc.withDB(func(_ *dbr.Session) error {
-		subject := tc.resolveSubject(alias)
-		return tc.pollDefault(func() error {
-			count, err := tc.queryCount(`
-				SELECT COUNT(*) FROM agent_delegations
-				JOIN conversations ON conversations.id = agent_delegations.conversation_id
-				JOIN workspaces ON workspaces.id = conversations.workspace_id
-				JOIN users ON users.id = workspaces.user_id
-				WHERE users.subject = $1`, subject)
-			if err != nil {
-				return err
-			}
-			if count < expected {
-				return fmt.Errorf("expected at least %d delegation(s) for %q, got %d", expected, alias, count)
-			}
-			return nil
-		})
-	})
+	return tc.dbCountAssert(alias, expected, "delegation(s)", `
+		SELECT COUNT(*) FROM agent_delegations
+		JOIN conversations ON conversations.id = agent_delegations.conversation_id
+		JOIN workspaces ON workspaces.id = conversations.workspace_id
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, tc.resolveSubject(alias))
 }
 
 func (tc *testContext) dbAgentMessageCountForSubject(expected int, alias string) error {
-	return tc.withDB(func(_ *dbr.Session) error {
-		subject := tc.resolveSubject(alias)
-		return tc.pollDefault(func() error {
-			count, err := tc.queryCount(`
-				SELECT COUNT(*) FROM agent_messages
-				JOIN conversations ON conversations.id = agent_messages.conversation_id
-				JOIN workspaces ON workspaces.id = conversations.workspace_id
-				JOIN users ON users.id = workspaces.user_id
-				WHERE users.subject = $1`, subject)
-			if err != nil {
-				return err
-			}
-			if count < expected {
-				return fmt.Errorf("expected at least %d agent-to-agent message(s) for %q, got %d", expected, alias, count)
-			}
-			return nil
-		})
-	})
+	return tc.dbCountAssert(alias, expected, "agent-to-agent message(s)", `
+		SELECT COUNT(*) FROM agent_messages
+		JOIN conversations ON conversations.id = agent_messages.conversation_id
+		JOIN workspaces ON workspaces.id = conversations.workspace_id
+		JOIN users ON users.id = workspaces.user_id
+		WHERE users.subject = $1`, tc.resolveSubject(alias))
 }

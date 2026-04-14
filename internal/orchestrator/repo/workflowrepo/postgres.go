@@ -79,33 +79,67 @@ func (r *workflowRepo) ListDefinitions(ctx context.Context, sess orchestratorrep
 	return rows, nil
 }
 
+// workflowInsertPair is one column/value pair in an ordered insert. Using
+// a slice instead of a map preserves dbr.Pair ordering across helpers.
+type workflowInsertPair struct {
+	Col string
+	Val any
+}
+
+// workflowSet is one column/value pair in an ordered UPDATE ... SET list.
+type workflowSet struct {
+	Col string
+	Val any
+}
+
+// insertIdempotent is the shared idempotent insert behind
+// CreateExecution / CreateStepExecution. Returns nil on both fresh insert
+// and duplicate PK, matching the original call-site behaviour.
+func insertIdempotent(ctx context.Context, sess orchestratorrepo.SessionRunner, table, opLabel string, pairs []workflowInsertPair) *merrors.Error {
+	stmt := sess.InsertInto(table)
+	for _, p := range pairs {
+		stmt = stmt.Pair(p.Col, p.Val)
+	}
+	if _, err := stmt.ExecContext(ctx); err != nil {
+		if database.IsRecordExistsError(err) {
+			return nil
+		}
+		return merrors.WrapStdServerError(err, opLabel)
+	}
+	return nil
+}
+
+// updateByID runs an UPDATE ... WHERE id = ? against table with the given
+// set list. Shared between UpdateExecution / UpdateStepExecution.
+func updateByID(ctx context.Context, sess orchestratorrepo.SessionRunner, table, id, opLabel string, sets []workflowSet) *merrors.Error {
+	stmt := sess.Update(table)
+	for _, s := range sets {
+		stmt = stmt.Set(s.Col, s.Val)
+	}
+	if _, err := stmt.Where("id = ?", id).ExecContext(ctx); err != nil {
+		return merrors.WrapStdServerError(err, opLabel)
+	}
+	return nil
+}
+
 func (r *workflowRepo) CreateExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowExecutionRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-
-	_, err := sess.InsertInto("workflow_executions").
-		Pair("id", row.ID).
-		Pair("workflow_definition_id", row.WorkflowDefinitionID).
-		Pair("workspace_id", row.WorkspaceID).
-		Pair("conversation_id", row.ConversationID).
-		Pair("status", row.Status).
-		Pair("current_step", row.CurrentStep).
-		Pair("context", row.Context).
-		Pair("triggered_by", row.TriggeredBy).
-		Pair("error_message", row.ErrorMessage).
-		Pair("started_at", row.StartedAt).
-		Pair("completed_at", row.CompletedAt).
-		Pair("created_at", row.CreatedAt).
-		ExecContext(ctx)
-	if err != nil {
-		if database.IsRecordExistsError(err) {
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert workflow execution")
-	}
-
-	return nil
+	return insertIdempotent(ctx, sess, "workflow_executions", "insert workflow execution", []workflowInsertPair{
+		{"id", row.ID},
+		{"workflow_definition_id", row.WorkflowDefinitionID},
+		{"workspace_id", row.WorkspaceID},
+		{"conversation_id", row.ConversationID},
+		{"status", row.Status},
+		{"current_step", row.CurrentStep},
+		{"context", row.Context},
+		{"triggered_by", row.TriggeredBy},
+		{"error_message", row.ErrorMessage},
+		{"started_at", row.StartedAt},
+		{"completed_at", row.CompletedAt},
+		{"created_at", row.CreatedAt},
+	})
 }
 
 func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string) (*WorkflowExecutionRow, *merrors.Error) {
@@ -132,21 +166,14 @@ func (r *workflowRepo) UpdateExecution(ctx context.Context, sess orchestratorrep
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-
-	_, err := sess.Update("workflow_executions").
-		Set("status", row.Status).
-		Set("current_step", row.CurrentStep).
-		Set("context", row.Context).
-		Set("error_message", row.ErrorMessage).
-		Set("started_at", row.StartedAt).
-		Set("completed_at", row.CompletedAt).
-		Where("id = ?", row.ID).
-		ExecContext(ctx)
-	if err != nil {
-		return merrors.WrapStdServerError(err, "update workflow execution")
-	}
-
-	return nil
+	return updateByID(ctx, sess, "workflow_executions", row.ID, "update workflow execution", []workflowSet{
+		{"status", row.Status},
+		{"current_step", row.CurrentStep},
+		{"context", row.Context},
+		{"error_message", row.ErrorMessage},
+		{"started_at", row.StartedAt},
+		{"completed_at", row.CompletedAt},
+	})
 }
 
 func (r *workflowRepo) ListActiveExecutions(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]WorkflowExecutionRow, *merrors.Error) {
@@ -171,51 +198,35 @@ func (r *workflowRepo) CreateStepExecution(ctx context.Context, sess orchestrato
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-
-	_, err := sess.InsertInto("workflow_step_executions").
-		Pair("id", row.ID).
-		Pair("execution_id", row.ExecutionID).
-		Pair("step_index", row.StepIndex).
-		Pair("step_name", row.StepName).
-		Pair("agent_slug", row.AgentSlug).
-		Pair("status", row.Status).
-		Pair("input_text", row.InputText).
-		Pair("output_text", row.OutputText).
-		Pair("artifact_id", row.ArtifactID).
-		Pair("duration_ms", row.DurationMs).
-		Pair("started_at", row.StartedAt).
-		Pair("completed_at", row.CompletedAt).
-		Pair("created_at", row.CreatedAt).
-		ExecContext(ctx)
-	if err != nil {
-		if database.IsRecordExistsError(err) {
-			return nil
-		}
-		return merrors.WrapStdServerError(err, "insert workflow step execution")
-	}
-
-	return nil
+	return insertIdempotent(ctx, sess, "workflow_step_executions", "insert workflow step execution", []workflowInsertPair{
+		{"id", row.ID},
+		{"execution_id", row.ExecutionID},
+		{"step_index", row.StepIndex},
+		{"step_name", row.StepName},
+		{"agent_slug", row.AgentSlug},
+		{"status", row.Status},
+		{"input_text", row.InputText},
+		{"output_text", row.OutputText},
+		{"artifact_id", row.ArtifactID},
+		{"duration_ms", row.DurationMs},
+		{"started_at", row.StartedAt},
+		{"completed_at", row.CompletedAt},
+		{"created_at", row.CreatedAt},
+	})
 }
 
 func (r *workflowRepo) UpdateStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, row *WorkflowStepExecutionRow) *merrors.Error {
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-
-	_, err := sess.Update("workflow_step_executions").
-		Set("status", row.Status).
-		Set("output_text", row.OutputText).
-		Set("artifact_id", row.ArtifactID).
-		Set("duration_ms", row.DurationMs).
-		Set("started_at", row.StartedAt).
-		Set("completed_at", row.CompletedAt).
-		Where("id = ?", row.ID).
-		ExecContext(ctx)
-	if err != nil {
-		return merrors.WrapStdServerError(err, "update workflow step execution")
-	}
-
-	return nil
+	return updateByID(ctx, sess, "workflow_step_executions", row.ID, "update workflow step execution", []workflowSet{
+		{"status", row.Status},
+		{"output_text", row.OutputText},
+		{"artifact_id", row.ArtifactID},
+		{"duration_ms", row.DurationMs},
+		{"started_at", row.StartedAt},
+		{"completed_at", row.CompletedAt},
+	})
 }
 
 func (r *workflowRepo) GetStepExecution(ctx context.Context, sess orchestratorrepo.SessionRunner, executionID string, stepIndex int) (*WorkflowStepExecutionRow, *merrors.Error) {

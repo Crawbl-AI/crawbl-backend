@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -13,45 +14,53 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
-// WorkspaceAgentsList retrieves all agents available in a workspace.
-// Agents represent individual swarm members that users can interact with
-// through conversations.
-func WorkspaceAgentsList(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.AgentResponse, *merrors.Error) {
-		agents, mErr := c.ChatService.ListAgents(r.Context(), &orchestratorservice.ListAgentsOpts{
-			UserID:      deps.User.ID,
-			WorkspaceID: chi.URLParam(r, "workspaceId"),
-		})
+// workspaceListHandler builds a handler that lists workspace-scoped items
+// (agents, conversations, etc.), maps each domain entity to its response
+// DTO, and returns the flat slice wrapped in the standard envelope.
+// Collapses the shared WorkspaceAgentsList / ConversationsList scaffolding.
+func workspaceListHandler[Domain any, Response any](
+	c *Context,
+	list func(ctx context.Context, userID, workspaceID string) ([]Domain, *merrors.Error),
+	toResponse func(Domain) Response,
+) http.HandlerFunc {
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]Response, *merrors.Error) {
+		items, mErr := list(r.Context(), deps.User.ID, chi.URLParam(r, "workspaceId"))
 		if mErr != nil {
 			return nil, mErr
 		}
-
-		response := make([]dto.AgentResponse, 0, len(agents))
-		for _, agent := range agents {
-			response = append(response, dto.ToAgentResponse(agent))
+		response := make([]Response, 0, len(items))
+		for _, item := range items {
+			response = append(response, toResponse(item))
 		}
 		return response, nil
 	})
 }
 
+// WorkspaceAgentsList retrieves all agents available in a workspace.
+// Agents represent individual swarm members that users can interact with
+// through conversations.
+func WorkspaceAgentsList(c *Context) http.HandlerFunc {
+	return workspaceListHandler(c,
+		func(ctx context.Context, userID, workspaceID string) ([]*orchestrator.Agent, *merrors.Error) {
+			return c.ChatService.ListAgents(ctx, &orchestratorservice.ListAgentsOpts{
+				UserID: userID, WorkspaceID: workspaceID,
+			})
+		},
+		dto.ToAgentResponse,
+	)
+}
+
 // ConversationsList retrieves all conversations for a workspace.
 // Each conversation includes its associated agent and last message for preview.
 func ConversationsList(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.ConversationResponse, *merrors.Error) {
-		conversations, mErr := c.ChatService.ListConversations(r.Context(), &orchestratorservice.ListConversationsOpts{
-			UserID:      deps.User.ID,
-			WorkspaceID: chi.URLParam(r, "workspaceId"),
-		})
-		if mErr != nil {
-			return nil, mErr
-		}
-
-		response := make([]dto.ConversationResponse, 0, len(conversations))
-		for _, conversation := range conversations {
-			response = append(response, dto.ToConversationResponse(conversation))
-		}
-		return response, nil
-	})
+	return workspaceListHandler(c,
+		func(ctx context.Context, userID, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error) {
+			return c.ChatService.ListConversations(ctx, &orchestratorservice.ListConversationsOpts{
+				UserID: userID, WorkspaceID: workspaceID,
+			})
+		},
+		dto.ToConversationResponse,
+	)
 }
 
 // ConversationGet retrieves a single conversation by ID within a workspace.
