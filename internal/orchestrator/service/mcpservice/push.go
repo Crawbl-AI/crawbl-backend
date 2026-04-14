@@ -11,6 +11,7 @@ func (s *service) SendPush(ctx contextT, sess sessionT, userID, title, message s
 
 	token, err := s.repos.MCP.GetPushToken(ctx, sess, userID)
 	if err != nil {
+		s.infra.Logger.Warn("SendPush: failed to get push token", "user_id", userID, "error", err)
 		return false, "user has no push token registered — they need to open the mobile app first", nil
 	}
 

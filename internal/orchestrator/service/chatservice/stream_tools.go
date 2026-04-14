@@ -64,7 +64,9 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 
 	// Update persisted tool_status message to completed.
 	if matched.messageID != "" {
-		_ = ss.svc.messageRepo.UpdateToolState(ss.ctx, ss.sess, matched.messageID, string(orchestrator.ToolStateCompleted))
+		if mErr := ss.svc.messageRepo.UpdateToolState(ss.ctx, ss.sess, matched.messageID, string(orchestrator.ToolStateCompleted)); mErr != nil {
+			slog.Warn("failed to update tool state to completed", "message_id", matched.messageID, "error", mErr)
+		}
 	}
 
 	if matched.tool == agentruntimetools.ToolTransferToAgent {

@@ -146,6 +146,8 @@ func (s *service) CheckWorkflowStatus(ctx contextT, sess sessionT, workspaceID, 
 	for i := range steps {
 		stepExec, sErr := s.repos.Workflow.GetStepExecution(ctx, sess, executionID, i)
 		if sErr != nil {
+			s.infra.Logger.Warn("checkWorkflowStatus: failed to get step execution",
+				"execution_id", executionID, "step", i, "error", sErr)
 			continue
 		}
 		stepBriefs = append(stepBriefs, StepStatusBrief{
