@@ -3,6 +3,7 @@ package orchestrator
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -118,57 +119,23 @@ func runServer(ctx context.Context) error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: resolveLogLevel()}))
 	slog.SetDefault(logger)
 
-	// Telemetry: wire the OpenTelemetry meter provider up to
-	// VictoriaMetrics via the cluster's /opentelemetry/v1/metrics
-	// endpoint. Disabled automatically when CRAWBL_OTEL_METRICS_ENDPOINT
-	// is empty (local dev) so the same code path runs everywhere. Logs
-	// stay on stdout and are scraped into VictoriaLogs by Fluent Bit —
-	// we never double-ship them.
 	telemetryShutdown, tErr := telemetry.Init(ctx, telemetry.ConfigFromEnv("orchestrator", os.Getenv("CRAWBL_VERSION")), logger)
 	if tErr != nil {
 		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
 	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := telemetryShutdown(shutdownCtx); err != nil {
-			logger.Warn("telemetry shutdown returned error", "error", err)
-		}
-	}()
+	defer shutdownTelemetry(telemetryShutdown, logger)
 
 	db, repos, cleanup := mustBuildRepos(logger)
 	defer cleanup()
-	userRepo := repos.User
-	workspaceRepo := repos.Workspace
-	agentRepo := repos.Agent
-	conversationRepo := repos.Conversation
-	messageRepo := repos.Message
 
-	// Shared Redis client — reused by realtime (socket.io adapter) and by
-	// the palace-graph cache. Nil is safe everywhere: palacegraphrepo
-	// degrades to pass-through, buildRealtime falls back to NopBroadcaster.
 	redisClient, cleanupRedis := buildSharedRedis(logger)
 	defer cleanupRedis()
 
-	// Memory system — constructed unconditionally; embedder is optional.
-	// When CRAWBL_EMBED_BASE_URL is empty the embedder and memoryStack remain
-	// nil, and downstream services fall back to messages-only context.
-	// The concrete *Postgres structs are narrowed to the wiring-layer
-	// interfaces declared in ports.go; downstream services narrow further
-	// via their own consumer-side ports.
-	var drawerRepo mcpDrawerRepoRaw = drawerrepo.NewPostgres()
-	var kgRepo mcpKGRepoRaw = kgrepo.NewPostgres()
-	var palaceGraphRepo mcpPalaceGraphRepoRaw = palacegraphrepo.NewPostgres(redisClient, logger)
-	var identityRepo mcpIdentityRepoRaw = identityrepo.NewPostgres()
-	var centroidRepo mcpCentroidRepoRaw = centroidrepo.NewPostgres()
+	memRepos := buildMemoryRepos(redisClient, logger)
 	classifier := extract.NewClassifier()
+	memoryStack, embedder := buildMemoryStack(logger, memRepos.drawer, memRepos.identity)
 
-	memoryStack, embedder := buildMemoryStack(logger, drawerRepo, identityRepo)
-
-	// River schema migration — runs after app migrations, before HTTP server.
-	// Fatal on error: River is load-bearing; a failed migration must block boot.
 	if err := pkgriver.Migrate(ctx, db.DB); err != nil {
-		logger.Error("river migration failed", "error", err)
 		return fmt.Errorf("river migration failed: %w", err)
 	}
 	logger.Info("river migrations applied")
@@ -177,125 +144,53 @@ func runServer(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("clickhouse open: %w", err)
 	}
-	defer func() {
-		if clickhouseDB != nil {
-			_ = clickhouseDB.Close()
-		}
-	}()
+	defer closeIfNonNil(clickhouseDB)
 	llmUsageRepo := llmusagerepo.New(clickhouseDB)
 
-	// NATS client for memory fan-out events. Connected early so the
-	// memory publisher is available to the auto-ingest pool built
-	// further down.
-	natsCfg := crawblnats.DefaultConfig()
-	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
-	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
-	if natsErr != nil {
-		logger.Warn("NATS connect failed, memory publishing disabled", "error", natsErr)
-	}
-	defer func() {
-		if natsClient != nil {
-			_ = natsClient.Close()
-		}
-	}()
+	natsClient, cleanupNATS := buildNATS(ctx, logger)
+	defer cleanupNATS()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
 	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
-	// Build the single river.Config covering every background job,
-	// periodic sweep, and cron the orchestrator owns. Auto-ingest is
-	// NOT on this list — it runs in-process under
-	// internal/orchestrator/memory/autoingest so the chat-turn hot
-	// path never writes to river_job.
-	riverCfg, err := queue.NewConfig(queue.Deps{
-		DB:               db,
-		Logger:           logger,
-		DrawerRepo:       drawerRepo,
-		KGRepo:           kgRepo,
-		CentroidRepo:     centroidRepo,
-		LLMClassifier:    newLLMClassifierOrNil(),
-		Embedder:         embedder,
-		MessageRepo:      messageRepo,
-		ModelPricingRepo: modelpricingrepo.New(),
-		PricingCache:     pricingCache,
-		LLMUsageRepo:     llmUsageRepo,
-	})
+	riverClient, err := buildAndStartRiver(ctx, logger, db, memRepos, embedder, repos.Message, pricingCache, llmUsageRepo)
 	if err != nil {
-		logger.Error("river config failed", "error", err)
-		return fmt.Errorf("river config: %w", err)
-	}
-
-	// Construct the River client over the shared *sql.DB pool.
-	riverClient, err := pkgriver.New(db.DB, riverCfg)
-	if err != nil {
-		logger.Error("river client construction failed", "error", err)
-		return fmt.Errorf("river client: %w", err)
-	}
-
-	// Start the client — beyond this point, a defer will handle graceful shutdown.
-	if err := riverClient.Start(ctx); err != nil {
-		logger.Error("river client start failed", "error", err)
-		return fmt.Errorf("river start: %w", err)
+		return err
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
 
-	// In-process auto-ingest pool. Replaces the memory_autoingest River
-	// queue so the chat-turn hot path pays zero river_job inserts per
-	// message. Sized via CRAWBL_AUTOINGEST_WORKERS / _CAPACITY env vars;
-	// defaults are 16 workers × 1024 queue.
-	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
-	ingestCapacity, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_CAPACITY"))
-	ingestPool, err := autoingest.NewService(autoingest.Deps{
-		DB:              db,
-		DrawerRepo:      drawerRepo,
-		CentroidRepo:    centroidRepo,
-		Classifier:      classifier,
-		Embedder:        embedder,
-		MemoryPublisher: memoryPublisher,
-		Logger:          logger,
-	}, autoingest.Config{
-		Workers:   ingestWorkers,
-		QueueSize: ingestCapacity,
-	})
+	ingestPool, err := buildIngestPool(db, memRepos, classifier, embedder, memoryPublisher, logger)
 	if err != nil {
 		return fmt.Errorf("memory.autoingest: %w", err)
 	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := ingestPool.Shutdown(shutdownCtx); err != nil {
-			logger.Warn("memory.autoingest: shutdown timeout", "error", err)
-		}
-	}()
+	defer shutdownIngestPool(ingestPool, logger)
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
 		return err
 	}
-	httpMiddleware := buildHTTPMiddleware()
 
-	workspaceService := workspaceservice.MustNew(workspaceRepo, runtimeClient, logger)
-	authService := authservice.MustNew(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
+	workspaceService := workspaceservice.MustNew(repos.Workspace, runtimeClient, logger)
+	authService := authservice.MustNew(repos.User, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, repos.Workspace, authService)
 	defer cleanupRT()
+
 	toolsRepo := toolsrepo.New()
 	agentSettingsRepo := agentsettingsrepo.New()
 	agentPromptsRepo := agentpromptsrepo.New()
 	agentHistoryRepo := agenthistoryrepo.New()
 	artifactRepo := artifactrepo.New()
-
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
 	chatService := chatservice.MustNew(chatservice.Deps{
 		DB: db,
 		Repos: chatservice.Repos{
-			Workspace:     workspaceRepo,
-			Agent:         agentRepo,
-			Conversation:  conversationRepo,
-			Message:       messageRepo,
+			Workspace:     repos.Workspace,
+			Agent:         repos.Agent,
+			Conversation:  repos.Conversation,
+			Message:       repos.Message,
 			Tools:         toolsRepo,
 			AgentSettings: agentSettingsRepo,
 			AgentPrompts:  agentPromptsRepo,
@@ -311,22 +206,20 @@ func runServer(ctx context.Context) error {
 	})
 	agentService := agentservice.MustNew(
 		agentservice.Repos{
-			Workspace:     workspaceRepo,
-			Agent:         agentRepo,
+			Workspace:     repos.Workspace,
+			Agent:         repos.Agent,
 			Tools:         toolsRepo,
 			AgentSettings: agentSettingsRepo,
 			AgentPrompts:  agentPromptsRepo,
 			AgentHistory:  agentHistoryRepo,
 			Usage:         usagerepo.New(),
-			Drawer:        drawerRepo,
+			Drawer:        memRepos.drawer,
 		},
 		runtimeClient,
 	)
 	integrationConnRepo := integrationconnrepo.New()
 	integrationService := integrationservice.MustNew(logger, integrationConnRepo)
 
-	// Register Socket.IO message.send handler now that services are available.
-	// This breaks the circular dependency: Socket.IO server → broadcaster → chatService → message handler.
 	if ioServer != nil {
 		socketio.RegisterMessageHandler(ioServer, &socketio.Config{
 			Logger:           logger,
@@ -342,43 +235,26 @@ func runServer(ctx context.Context) error {
 		Ctx:              ctx,
 		Logger:           logger,
 		DB:               db,
-		WorkspaceRepo:    workspaceRepo,
-		AgentRepo:        agentRepo,
-		ConversationRepo: conversationRepo,
-		MessageRepo:      messageRepo,
+		WorkspaceRepo:    repos.Workspace,
+		AgentRepo:        repos.Agent,
+		ConversationRepo: repos.Conversation,
+		MessageRepo:      repos.Message,
 		AgentHistoryRepo: agentHistoryRepo,
 		ArtifactRepo:     artifactRepo,
 		RuntimeClient:    runtimeClient,
 		Broadcaster:      broadcaster,
-		DrawerRepo:       drawerRepo,
-		KGRepo:           kgRepo,
-		PalaceGraphRepo:  palaceGraphRepo,
-		IdentityRepo:     identityRepo,
+		DrawerRepo:       memRepos.drawer,
+		KGRepo:           memRepos.kg,
+		PalaceGraphRepo:  memRepos.palaceGraph,
+		IdentityRepo:     memRepos.identity,
 		Classifier:       classifier,
 		Embedder:         embedder,
 		MemoryStack:      memoryStack,
 	})
 
-	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
-	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
-	var riverUIHandler http.Handler
-	riverUIHost := strings.TrimSpace(os.Getenv("CRAWBL_RIVERUI_HOST"))
-	if riverUIHost != "" {
-		endpoints := riverui.NewEndpoints(riverClient, nil)
-		ruiHandler, ruiErr := riverui.NewHandler(&riverui.HandlerOpts{
-			Endpoints: endpoints,
-			Logger:    logger,
-		})
-		if ruiErr != nil {
-			logger.Error("riverui handler construction failed", "error", ruiErr)
-			return fmt.Errorf("riverui handler: %w", ruiErr)
-		}
-		if ruiErr = ruiHandler.Start(ctx); ruiErr != nil {
-			logger.Error("riverui handler start failed", "error", ruiErr)
-			return fmt.Errorf("riverui start: %w", ruiErr)
-		}
-		riverUIHandler = ruiHandler
-		logger.Info("riverui enabled", slog.String("host", riverUIHost))
+	riverUIHandler, riverUIHost, err := buildRiverUI(ctx, logger, riverClient)
+	if err != nil {
+		return err
 	}
 
 	srv := server.NewServer(&server.Config{
@@ -390,7 +266,7 @@ func runServer(ctx context.Context) error {
 		WorkspaceService:   workspaceService,
 		ChatService:        chatService,
 		AgentService:       agentService,
-		HTTPMiddleware:     httpMiddleware,
+		HTTPMiddleware:     buildHTTPMiddleware(),
 		Broadcaster:        broadcaster,
 		SocketIOHandler:    socketIOHandler,
 		RuntimeClient:      runtimeClient,
@@ -402,6 +278,155 @@ func runServer(ctx context.Context) error {
 	})
 
 	return srv.Run(ctx, shutdownTimeout)
+}
+
+// memoryRepoBundle groups the memory-system repos constructed at the wiring
+// layer. Keeps runServer's local variable count manageable.
+type memoryRepoBundle struct {
+	drawer      mcpDrawerRepoRaw
+	kg          mcpKGRepoRaw
+	palaceGraph mcpPalaceGraphRepoRaw
+	identity    mcpIdentityRepoRaw
+	centroid    mcpCentroidRepoRaw
+}
+
+// buildMemoryRepos constructs every memory-layer repo. The concrete *Postgres
+// structs are narrowed to the wiring-layer interfaces declared in ports.go.
+func buildMemoryRepos(redisClient redisclient.Client, logger *slog.Logger) memoryRepoBundle {
+	return memoryRepoBundle{
+		drawer:      drawerrepo.NewPostgres(),
+		kg:          kgrepo.NewPostgres(),
+		palaceGraph: palacegraphrepo.NewPostgres(redisClient, logger),
+		identity:    identityrepo.NewPostgres(),
+		centroid:    centroidrepo.NewPostgres(),
+	}
+}
+
+// shutdownTelemetry gracefully shuts down the telemetry provider.
+func shutdownTelemetry(shutdown func(context.Context) error, logger *slog.Logger) {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := shutdown(shutdownCtx); err != nil {
+		logger.Warn("telemetry shutdown returned error", "error", err)
+	}
+}
+
+// closeIfNonNil closes a *sql.DB if it is not nil.
+func closeIfNonNil(db *sql.DB) {
+	if db != nil {
+		_ = db.Close()
+	}
+}
+
+// buildNATS connects to the NATS server for memory fan-out events. Returns a
+// nil client (safe for downstream) and a no-op cleanup when the connection
+// fails or the URL is unset.
+func buildNATS(ctx context.Context, logger *slog.Logger) (*crawblnats.Client, func()) {
+	natsCfg := crawblnats.DefaultConfig()
+	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
+	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
+	if natsErr != nil {
+		logger.Warn("NATS connect failed, memory publishing disabled", "error", natsErr)
+		return nil, noopCleanup
+	}
+	return natsClient, func() { _ = natsClient.Close() }
+}
+
+// buildAndStartRiver creates the River config, constructs the client, runs
+// schema migrations, and starts the background workers.
+func buildAndStartRiver(
+	ctx context.Context,
+	logger *slog.Logger,
+	db *dbr.Connection,
+	mem memoryRepoBundle,
+	embedder embed.Embedder,
+	messageRepo coreMessageRepo,
+	pricingCache *pricing.Cache,
+	llmUsageRepo llmusagerepo.Repo,
+) (*pkgriver.Client, error) {
+	riverCfg, err := queue.NewConfig(queue.Deps{
+		DB:               db,
+		Logger:           logger,
+		DrawerRepo:       mem.drawer,
+		KGRepo:           mem.kg,
+		CentroidRepo:     mem.centroid,
+		LLMClassifier:    newLLMClassifierOrNil(),
+		Embedder:         embedder,
+		MessageRepo:      messageRepo,
+		ModelPricingRepo: modelpricingrepo.New(),
+		PricingCache:     pricingCache,
+		LLMUsageRepo:     llmUsageRepo,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("river config: %w", err)
+	}
+
+	riverClient, err := pkgriver.New(db.DB, riverCfg)
+	if err != nil {
+		return nil, fmt.Errorf("river client: %w", err)
+	}
+
+	if err := riverClient.Start(ctx); err != nil {
+		return nil, fmt.Errorf("river start: %w", err)
+	}
+	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
+	return riverClient, nil
+}
+
+// buildIngestPool constructs the in-process auto-ingest worker pool.
+func buildIngestPool(
+	db *dbr.Connection,
+	mem memoryRepoBundle,
+	classifier extract.Classifier,
+	embedder embed.Embedder,
+	memoryPublisher *queue.MemoryPublisher,
+	logger *slog.Logger,
+) (autoingest.Service, error) {
+	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
+	ingestCapacity, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_CAPACITY"))
+	return autoingest.NewService(autoingest.Deps{
+		DB:              db,
+		DrawerRepo:      mem.drawer,
+		CentroidRepo:    mem.centroid,
+		Classifier:      classifier,
+		Embedder:        embedder,
+		MemoryPublisher: memoryPublisher,
+		Logger:          logger,
+	}, autoingest.Config{
+		Workers:   ingestWorkers,
+		QueueSize: ingestCapacity,
+	})
+}
+
+// shutdownIngestPool gracefully shuts down the auto-ingest pool.
+func shutdownIngestPool(pool autoingest.Service, logger *slog.Logger) {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := pool.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("memory.autoingest: shutdown timeout", "error", err)
+	}
+}
+
+// buildRiverUI constructs the River UI dashboard handler when enabled via
+// CRAWBL_RIVERUI_HOST. Returns (nil, "", nil) when disabled.
+func buildRiverUI(ctx context.Context, logger *slog.Logger, riverClient *pkgriver.Client) (http.Handler, string, error) {
+	riverUIHost := strings.TrimSpace(os.Getenv("CRAWBL_RIVERUI_HOST"))
+	if riverUIHost == "" {
+		return nil, "", nil
+	}
+	endpoints := riverui.NewEndpoints(riverClient, nil)
+	ruiHandler, ruiErr := riverui.NewHandler(&riverui.HandlerOpts{
+		Endpoints: endpoints,
+		Logger:    logger,
+	})
+	if ruiErr != nil {
+		return nil, "", fmt.Errorf("riverui handler: %w", ruiErr)
+	}
+	if ruiErr = ruiHandler.Start(ctx); ruiErr != nil {
+		return nil, "", fmt.Errorf("riverui start: %w", ruiErr)
+	}
+	logger.Info("riverui enabled", slog.String("host", riverUIHost))
+	return ruiHandler, riverUIHost, nil
 }
 
 func envOrDefault(key, fallback string) string {
