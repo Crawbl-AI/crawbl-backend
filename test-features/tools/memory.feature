@@ -25,7 +25,6 @@ Feature: Agent memory persistence
     And the assistant reply should mention one of "three thousand|3000|3,000"
     And the assistant reply should mention "paris"
 
-  @llm-flaky
   Scenario: The assistant can forget a saved fact
     Given user "primary" has saved a memory with key "trip_budget" and content "We set the Paris trip budget at three thousand euros" for agent "wally"
     When user "primary" mentions the "wally" agent in the swarm conversation saying "Please forget the memory with key trip_budget."
