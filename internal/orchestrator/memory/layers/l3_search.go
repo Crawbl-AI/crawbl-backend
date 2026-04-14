@@ -11,19 +11,32 @@ import (
 
 const l3MaxSnippetLen = 300
 
+// renderL3Opts groups the parameters for renderL3. ctx and sess remain
+// positional per the project session/opts/repo pattern.
+type renderL3Opts struct {
+	DrawerRepo  drawerStore
+	Embedder    embed.Embedder
+	WorkspaceID string
+	Query       string
+	Wing        string
+	Room        string
+	Limit       int
+}
+
 // renderL3 performs semantic search and formats results.
-func renderL3(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, embedder embed.Embedder, workspaceID, query, wing, room string, limit int) (string, error) {
+func renderL3(ctx context.Context, sess database.SessionRunner, opts renderL3Opts) (string, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
 	}
 
 	// Generate query embedding.
-	queryEmbed, err := embedder.Embed(ctx, query)
+	queryEmbed, err := opts.Embedder.Embed(ctx, opts.Query)
 	if err != nil {
 		return fmt.Sprintf("Search error: %v", err), nil
 	}
 
-	results, err := drawerRepo.Search(ctx, sess, workspaceID, queryEmbed, wing, room, limit)
+	results, err := opts.DrawerRepo.Search(ctx, sess, opts.WorkspaceID, queryEmbed, opts.Wing, opts.Room, limit)
 	if err != nil {
 		return fmt.Sprintf("Search error: %v", err), nil
 	}
@@ -32,7 +45,7 @@ func renderL3(ctx context.Context, sess database.SessionRunner, drawerRepo drawe
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "## L3 — SEARCH RESULTS for \"%s\"", query)
+	fmt.Fprintf(&sb, "## L3 — SEARCH RESULTS for \"%s\"", opts.Query)
 
 	for i := range results {
 		r := &results[i]

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
@@ -72,7 +73,15 @@ func processWorkspace(ctx context.Context, sess database.SessionRunner, deps Pro
 	classifications, batchErr := classifyBatch(ctx, deps.LLMClassifier, drawers)
 
 	for i := range drawers {
-		processSingleDrawer(ctx, sess, deps, wsID, &drawers[i], classifications, i, batchErr, result)
+		processSingleDrawer(ctx, sess, processSingleDrawerOpts{
+			Deps:            deps,
+			WorkspaceID:     wsID,
+			Drawer:          &drawers[i],
+			Classifications: classifications,
+			Idx:             i,
+			BatchErr:        batchErr,
+			Result:          result,
+		})
 	}
 }
 
@@ -88,26 +97,31 @@ func classifyBatch(ctx context.Context, classifier extract.LLMClassifier, drawer
 	return classifier.ClassifyBatch(batchCtx, contents)
 }
 
+// processSingleDrawerOpts groups the per-drawer parameters for processSingleDrawer.
+// ctx and sess remain positional per the project session/opts/repo pattern.
+type processSingleDrawerOpts struct {
+	Deps            ProcessDeps
+	WorkspaceID     string
+	Drawer          *memory.Drawer
+	Classifications []*extract.LLMClassification
+	Idx             int
+	BatchErr        error
+	Result          *ProcessResult
+}
+
 // processSingleDrawer applies one drawer's classification, falling back to
 // a per-drawer LLM call when the batch entry is missing. Updates result
 // counters in place.
-func processSingleDrawer(
-	ctx context.Context,
-	sess database.SessionRunner,
-	deps ProcessDeps,
-	wsID string,
-	d *memory.Drawer,
-	classifications []*extract.LLMClassification,
-	idx int,
-	batchErr error,
-	result *ProcessResult,
-) {
-	classification, err := resolveClassification(ctx, deps.LLMClassifier, d, classifications, idx, batchErr)
+func processSingleDrawer(ctx context.Context, sess database.SessionRunner, opts processSingleDrawerOpts) {
+	deps := opts.Deps
+	wsID := opts.WorkspaceID
+	d := opts.Drawer
+	classification, err := resolveClassification(ctx, deps.LLMClassifier, d, opts.Classifications, opts.Idx, opts.BatchErr)
 	if err != nil {
 		slog.Warn("memory-process: drawer classify failed",
 			"drawer_id", d.ID, "workspace_id", wsID, "retry_count", d.RetryCount, "error", err)
 		handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
-		result.Failed++
+		opts.Result.Failed++
 		return
 	}
 
@@ -115,10 +129,10 @@ func processSingleDrawer(
 		slog.Warn("memory-process: drawer failed",
 			"drawer_id", d.ID, "workspace_id", wsID, "retry_count", d.RetryCount, "error", err)
 		handleProcessFailure(ctx, sess, deps.DrawerRepo, d)
-		result.Failed++
+		opts.Result.Failed++
 		return
 	}
-	result.Processed++
+	opts.Result.Processed++
 }
 
 // resolveClassification returns the batch classification for idx, falling
@@ -148,9 +162,14 @@ func applyClassification(ctx context.Context, sess database.SessionRunner, deps 
 	scaledImportance := classification.Importance * importanceScale
 	room := memory.MemoryTypeToRoom(classification.MemoryType)
 
-	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, d.WorkspaceID, d.ID,
-		classification.MemoryType, classification.Summary, room, scaledImportance,
-	); err != nil {
+	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, drawerrepo.UpdateClassificationOpts{
+		WorkspaceID: d.WorkspaceID,
+		DrawerID:    d.ID,
+		MemoryType:  classification.MemoryType,
+		Summary:     classification.Summary,
+		Room:        room,
+		Importance:  scaledImportance,
+	}); err != nil {
 		return fmt.Errorf("update classification: %w", err)
 	}
 
@@ -238,7 +257,14 @@ func clusterDrawers(ctx context.Context, sess database.SessionRunner, deps Proce
 	for i := range cluster {
 		mergeClusterMember(ctx, sess, deps, d, &cluster[i])
 	}
-	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, d.WorkspaceID, d.ID, d.MemoryType, mergedSummary, d.Room, d.Importance); err != nil {
+	if err := deps.DrawerRepo.UpdateClassification(ctx, sess, drawerrepo.UpdateClassificationOpts{
+		WorkspaceID: d.WorkspaceID,
+		DrawerID:    d.ID,
+		MemoryType:  d.MemoryType,
+		Summary:     mergedSummary,
+		Room:        d.Room,
+		Importance:  d.Importance,
+	}); err != nil {
 		slog.Warn("memory-process: update cluster leader classification failed",
 			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
 	}

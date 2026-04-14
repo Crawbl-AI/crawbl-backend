@@ -73,6 +73,10 @@ import (
 
 const shutdownTimeout = 10 * time.Second
 
+// noopCleanup is a cleanup closure that does nothing. Used when a subsystem
+// is disabled and no resources were acquired that need releasing.
+var noopCleanup = func() {}
+
 // NewOrchestratorCommand creates the "orchestrator" parent command.
 // Running it directly starts the HTTP server; "migrate" is a subcommand.
 func NewOrchestratorCommand() *cobra.Command {
@@ -334,7 +338,26 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(ctx, logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, broadcaster, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
+	mcpHandler := buildMCPHandler(mcpHandlerDeps{
+		Ctx:              ctx,
+		Logger:           logger,
+		DB:               db,
+		WorkspaceRepo:    workspaceRepo,
+		AgentRepo:        agentRepo,
+		ConversationRepo: conversationRepo,
+		MessageRepo:      messageRepo,
+		AgentHistoryRepo: agentHistoryRepo,
+		ArtifactRepo:     artifactRepo,
+		RuntimeClient:    runtimeClient,
+		Broadcaster:      broadcaster,
+		DrawerRepo:       drawerRepo,
+		KGRepo:           kgRepo,
+		PalaceGraphRepo:  palaceGraphRepo,
+		IdentityRepo:     identityRepo,
+		Classifier:       classifier,
+		Embedder:         embedder,
+		MemoryStack:      memoryStack,
+	})
 
 	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
 	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
@@ -528,26 +551,49 @@ func newLLMClassifierOrNil() extract.LLMClassifier {
 	})
 }
 
-func buildMCPHandler(
-	ctx context.Context,
-	logger *slog.Logger,
-	db *dbr.Connection,
-	workspaceRepo coreWorkspaceRepo,
-	agentRepo coreAgentRepo,
-	conversationRepo coreConversationRepo,
-	messageRepo coreMessageRepo,
-	agentHistoryRepo mcpAgentHistoryCreator,
-	artifactRepo artifactrepo.Repo,
-	runtimeClient userswarmclient.Client,
-	broadcaster realtime.Broadcaster,
-	drawerRepo mcpDrawerRepoRaw,
-	kgRepo mcpKGRepoRaw,
-	palaceGraphRepo mcpPalaceGraphRepoRaw,
-	identityRepo mcpIdentityRepoRaw,
-	classifier extract.Classifier,
-	embedder embed.Embedder,
-	memoryStack layers.Stack,
-) http.Handler {
+// mcpHandlerDeps groups all dependencies required to build the MCP HTTP handler.
+// Separating them from positional parameters keeps the constructor readable and
+// satisfies the CLAUDE.md max-5-params rule.
+type mcpHandlerDeps struct {
+	Ctx              context.Context
+	Logger           *slog.Logger
+	DB               *dbr.Connection
+	WorkspaceRepo    coreWorkspaceRepo
+	AgentRepo        coreAgentRepo
+	ConversationRepo coreConversationRepo
+	MessageRepo      coreMessageRepo
+	AgentHistoryRepo mcpAgentHistoryCreator
+	ArtifactRepo     artifactrepo.Repo
+	RuntimeClient    userswarmclient.Client
+	Broadcaster      realtime.Broadcaster
+	DrawerRepo       mcpDrawerRepoRaw
+	KGRepo           mcpKGRepoRaw
+	PalaceGraphRepo  mcpPalaceGraphRepoRaw
+	IdentityRepo     mcpIdentityRepoRaw
+	Classifier       extract.Classifier
+	Embedder         embed.Embedder
+	MemoryStack      layers.Stack
+}
+
+func buildMCPHandler(deps mcpHandlerDeps) http.Handler {
+	ctx := deps.Ctx
+	logger := deps.Logger
+	db := deps.DB
+	workspaceRepo := deps.WorkspaceRepo
+	agentRepo := deps.AgentRepo
+	conversationRepo := deps.ConversationRepo
+	messageRepo := deps.MessageRepo
+	agentHistoryRepo := deps.AgentHistoryRepo
+	artifactRepo := deps.ArtifactRepo
+	runtimeClient := deps.RuntimeClient
+	broadcaster := deps.Broadcaster
+	drawerRepo := deps.DrawerRepo
+	kgRepo := deps.KGRepo
+	palaceGraphRepo := deps.PalaceGraphRepo
+	identityRepo := deps.IdentityRepo
+	classifier := deps.Classifier
+	embedder := deps.Embedder
+	memoryStack := deps.MemoryStack
 	signingKey := strings.TrimSpace(os.Getenv("CRAWBL_MCP_SIGNING_KEY"))
 	if signingKey == "" {
 		logger.Warn("MCP server disabled: CRAWBL_MCP_SIGNING_KEY not set")
@@ -621,13 +667,13 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 	addr := strings.TrimSpace(os.Getenv("CRAWBL_REDIS_ADDR"))
 	if addr == "" {
 		logger.Info("redis disabled: CRAWBL_REDIS_ADDR not set")
-		return nil, func() {}
+		return nil, noopCleanup
 	}
 	redisCfg := redisclient.ConfigFromEnv("CRAWBL_")
 	rc, err := redisclient.New(redisCfg)
 	if err != nil {
 		logger.Error("failed to connect to Redis, continuing without it", "error", err)
-		return nil, func() {}
+		return nil, noopCleanup
 	}
 	logger.Info("redis connected", slog.String("addr", redisCfg.Addr))
 	return rc, func() { _ = rc.Close() }
@@ -643,7 +689,7 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService *authservice.Service) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
-		return realtime.NopBroadcaster{}, nil, nil, func() {}
+		return realtime.NopBroadcaster{}, nil, nil, noopCleanup
 	}
 
 	io := socketio.NewServer(&socketio.Config{

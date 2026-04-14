@@ -76,15 +76,15 @@ func (r repoNamer) AgentName(ctx context.Context, sess database.SessionRunner, a
 //  2. Recent messages fill the remaining budget up to memory.TokenBudgetTotal characters.
 //  3. A hard cap of memory.TokenBudgetTotal characters is applied to the combined output.
 func (s *service) buildConversationContext(ctx contextT, sess sessionT, workspaceID, conversationID string, limit int) string {
-	return layers.BuildContextForConversation(
-		ctx, sess,
-		s.memoryStack,
-		s.repos.Message,
-		repoNamer{repo: s.repos.Agent},
-		workspaceID, conversationID,
-		limit,
-		layers.BuildContextOpts{},
-	)
+	return layers.BuildContextForConversation(ctx, sess, layers.BuildContextParams{
+		Stack:          s.memoryStack,
+		Messages:       s.repos.Message,
+		Namer:          repoNamer{repo: s.repos.Agent},
+		WorkspaceID:    workspaceID,
+		ConversationID: conversationID,
+		Limit:          limit,
+		Opts:           layers.BuildContextOpts{},
+	})
 }
 
 // extractTextFromContent pulls the "text" field from a JSON content string.

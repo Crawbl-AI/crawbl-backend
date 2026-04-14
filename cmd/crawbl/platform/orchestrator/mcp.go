@@ -104,7 +104,26 @@ func runMCP(ctx context.Context) error {
 
 	// The MCP handler needs a broadcaster for push notifications; the MCP
 	// process does not run Socket.IO, so we use the NopBroadcaster.
-	mcpHandler := buildMCPHandler(ctx, logger, db, workspaceRepo, agentRepo, conversationRepo, messageRepo, agentHistoryRepo, artifactRepo, runtimeClient, realtime.NopBroadcaster{}, drawerRepo, kgRepo, palaceGraphRepo, identityRepo, classifier, embedder, memoryStack)
+	mcpHandler := buildMCPHandler(mcpHandlerDeps{
+		Ctx:              ctx,
+		Logger:           logger,
+		DB:               db,
+		WorkspaceRepo:    workspaceRepo,
+		AgentRepo:        agentRepo,
+		ConversationRepo: conversationRepo,
+		MessageRepo:      messageRepo,
+		AgentHistoryRepo: agentHistoryRepo,
+		ArtifactRepo:     artifactRepo,
+		RuntimeClient:    runtimeClient,
+		Broadcaster:      realtime.NopBroadcaster{},
+		DrawerRepo:       drawerRepo,
+		KGRepo:           kgRepo,
+		PalaceGraphRepo:  palaceGraphRepo,
+		IdentityRepo:     identityRepo,
+		Classifier:       classifier,
+		Embedder:         embedder,
+		MemoryStack:      memoryStack,
+	})
 	if mcpHandler == nil {
 		return fmt.Errorf("MCP handler not created: CRAWBL_MCP_SIGNING_KEY is required")
 	}

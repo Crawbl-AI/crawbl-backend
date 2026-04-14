@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
@@ -19,7 +20,7 @@ import (
 type drawerStore interface {
 	ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error)
 	ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error)
-	UpdateClassification(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, memoryType, summary, room string, importance float64) error
+	UpdateClassification(ctx context.Context, sess database.SessionRunner, opts drawerrepo.UpdateClassificationOpts) error
 	UpdateEmbedding(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, embedding []float32) error
 	UpdateState(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, state string) error
 	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)

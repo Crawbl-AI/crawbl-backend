@@ -10,6 +10,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -51,7 +52,7 @@ type messageStore interface {
 	UpdateStatus(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string, status orchestrator.MessageStatus) *merrors.Error
 	DeleteByID(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID string) *merrors.Error
 	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
-	RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID, triggerMsgID, delegatorAgentID, delegateAgentID, taskSummary string) *merrors.Error
+	RecordDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, opts messagerepo.RecordDelegationOpts) *merrors.Error
 	CompleteDelegation(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, delegateAgentID string) *merrors.Error
 	UpdateDelegationSummary(ctx context.Context, sess orchestratorrepo.SessionRunner, triggerMsgID, summary string) *merrors.Error
 	UpdateToolState(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID, state string) *merrors.Error
