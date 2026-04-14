@@ -11,3 +11,9 @@ func Deref[T any](p *T) T {
 	}
 	return *p
 }
+
+// Of returns a pointer to v. Useful when passing a literal into a function that
+// expects an optional/pointer parameter, e.g. proto optional fields.
+func Of[T any](v T) *T {
+	return &v
+}

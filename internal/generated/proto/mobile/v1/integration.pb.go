@@ -7,12 +7,11 @@
 package mobilev1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -85,15 +84,17 @@ func (x *CategoryResponse) GetImageUrl() string {
 
 // IntegrationItemResponse represents a single tool or integration item.
 type IntegrationItemResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	IconUrl       string                 `protobuf:"bytes,3,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
-	CategoryId    string                 `protobuf:"bytes,4,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
-	Type          string                 `protobuf:"bytes,5,opt,name=type,proto3" json:"type,omitempty"`
-	Provider      string                 `protobuf:"bytes,6,opt,name=provider,proto3" json:"provider,omitempty"`
-	Enabled       bool                   `protobuf:"varint,7,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	IsConnected   bool                   `protobuf:"varint,8,opt,name=is_connected,json=isConnected,proto3" json:"is_connected,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	IconUrl     string                 `protobuf:"bytes,3,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
+	CategoryId  string                 `protobuf:"bytes,4,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
+	Type        string                 `protobuf:"bytes,5,opt,name=type,proto3" json:"type,omitempty"`
+	// Provider is null for first-party tools (no external integration). Third-party
+	// integrations populate this with their provider slug (gmail, slack, ...).
+	Provider      *string `protobuf:"bytes,6,opt,name=provider,proto3,oneof" json:"provider,omitempty"`
+	Enabled       bool    `protobuf:"varint,7,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	IsConnected   bool    `protobuf:"varint,8,opt,name=is_connected,json=isConnected,proto3" json:"is_connected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -164,8 +165,8 @@ func (x *IntegrationItemResponse) GetType() string {
 }
 
 func (x *IntegrationItemResponse) GetProvider() string {
-	if x != nil {
-		return x.Provider
+	if x != nil && x.Provider != nil {
+		return *x.Provider
 	}
 	return ""
 }
@@ -444,17 +445,18 @@ const file_mobile_v1_integration_proto_rawDesc = "" +
 	"\x10CategoryResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
-	"\timage_url\x18\x03 \x01(\tR\bimageUrl\"\xf8\x01\n" +
+	"\timage_url\x18\x03 \x01(\tR\bimageUrl\"\x8a\x02\n" +
 	"\x17IntegrationItemResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +
 	"\bicon_url\x18\x03 \x01(\tR\aiconUrl\x12\x1f\n" +
 	"\vcategory_id\x18\x04 \x01(\tR\n" +
 	"categoryId\x12\x12\n" +
-	"\x04type\x18\x05 \x01(\tR\x04type\x12\x1a\n" +
-	"\bprovider\x18\x06 \x01(\tR\bprovider\x12\x18\n" +
+	"\x04type\x18\x05 \x01(\tR\x04type\x12\x1f\n" +
+	"\bprovider\x18\x06 \x01(\tH\x00R\bprovider\x88\x01\x01\x12\x18\n" +
 	"\aenabled\x18\a \x01(\bR\aenabled\x12!\n" +
-	"\fis_connected\x18\b \x01(\bR\visConnected\"\x9b\x01\n" +
+	"\fis_connected\x18\b \x01(\bR\visConnectedB\v\n" +
+	"\t_provider\"\x9b\x01\n" +
 	"\x14IntegrationsResponse\x12B\n" +
 	"\n" +
 	"categories\x18\x01 \x03(\v2\".crawbl.mobile.v1.CategoryResponseR\n" +
@@ -516,6 +518,7 @@ func file_mobile_v1_integration_proto_init() {
 	if File_mobile_v1_integration_proto != nil {
 		return
 	}
+	file_mobile_v1_integration_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

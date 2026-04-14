@@ -7,13 +7,12 @@
 package mobilev1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -31,7 +30,7 @@ type AgentResponse struct {
 	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	Slug          string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
 	Avatar        string                 `protobuf:"bytes,5,opt,name=avatar,proto3" json:"avatar,omitempty"`
-	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	Status        *string                `protobuf:"bytes,6,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -102,8 +101,8 @@ func (x *AgentResponse) GetAvatar() string {
 }
 
 func (x *AgentResponse) GetStatus() string {
-	if x != nil {
-		return x.Status
+	if x != nil && x.Status != nil {
+		return *x.Status
 	}
 	return ""
 }
@@ -1028,14 +1027,15 @@ var File_mobile_v1_agent_proto protoreflect.FileDescriptor
 
 const file_mobile_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x15mobile/v1/agent.proto\x12\x10crawbl.mobile.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16mobile/v1/common.proto\"\x8b\x01\n" +
+	"\x15mobile/v1/agent.proto\x12\x10crawbl.mobile.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16mobile/v1/common.proto\"\x9b\x01\n" +
 	"\rAgentResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12\x12\n" +
 	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\x16\n" +
-	"\x06avatar\x18\x05 \x01(\tR\x06avatar\x12\x16\n" +
-	"\x06status\x18\x06 \x01(\tR\x06status\"\xf6\x01\n" +
+	"\x06avatar\x18\x05 \x01(\tR\x06avatar\x12\x1b\n" +
+	"\x06status\x18\x06 \x01(\tH\x00R\x06status\x88\x01\x01B\t\n" +
+	"\a_status\"\xf6\x01\n" +
 	"\x12AgentStatsResponse\x12%\n" +
 	"\x0etotal_messages\x18\x01 \x01(\x01R\rtotalMessages\x12*\n" +
 	"\x11total_tokens_used\x18\x02 \x01(\x01R\x0ftotalTokensUsed\x12.\n" +
@@ -1177,6 +1177,7 @@ func file_mobile_v1_agent_proto_init() {
 		return
 	}
 	file_mobile_v1_common_proto_init()
+	file_mobile_v1_agent_proto_msgTypes[0].OneofWrappers = []any{}
 	file_mobile_v1_agent_proto_msgTypes[2].OneofWrappers = []any{}
 	file_mobile_v1_agent_proto_msgTypes[8].OneofWrappers = []any{}
 	type x struct{}

@@ -14,7 +14,7 @@ message AgentResponse {
   string role = 3;
   string slug = 4;
   string avatar = 5;
-  string status = 6;
+  optional string status = 6;
 }
 
 // AgentStatsResponse contains aggregate statistics for an agent.

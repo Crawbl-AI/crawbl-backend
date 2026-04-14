@@ -8,6 +8,7 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // IntegrationsList returns both agent tools and third-party integrations
@@ -73,7 +74,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 				IconUrl:     ig.IconURL,
 				CategoryId:  ig.CategoryID,
 				Type:        string(orchestrator.ItemTypeApp),
-				Provider:    ig.Provider,
+				Provider:    ptr.Of(ig.Provider),
 				Enabled:     ig.IsEnabled,
 				IsConnected: ig.IsConnected,
 			})
