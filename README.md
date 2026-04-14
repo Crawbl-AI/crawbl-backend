@@ -93,14 +93,14 @@ crawbl --help                          # all commands
 
 ## Components
 
-| Component | Description |
-|-----------|-------------|
-| **Orchestrator** | HTTP API, Socket.IO, MCP server, memory workers |
+| Component         | Description                                         |
+| ----------------- | --------------------------------------------------- |
+| **Orchestrator**  | HTTP API, Socket.IO, MCP server, memory workers     |
 | **Agent Runtime** | Per-workspace AI agent pod (ADK-Go, gRPC on :42618) |
-| **Webhook** | Builds pod specs for per-user agent provisioning |
-| **Auth Filter** | Envoy WASM filter for request authentication |
-| **Reaper** | Cleans up stale test users + orphaned pods |
-| **Infra** | Pulumi IaC for DOKS cluster + ArgoCD bootstrap |
+| **Webhook**       | Builds pod specs for per-user agent provisioning    |
+| **Auth Filter**   | Envoy WASM filter for request authentication        |
+| **Reaper**        | Cleans up stale test users + orphaned pods          |
+| **Infra**         | Pulumi IaC for DOKS cluster + ArgoCD bootstrap      |
 
 ## Structure
 
@@ -146,9 +146,9 @@ api/                               # Kubernetes CRD types
 
 ## Related Repos
 
-| Repo | Purpose |
-|------|---------|
-| [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs) | Docs, API reference, architecture |
-| [crawbl-argocd-apps](https://github.com/Crawbl-AI/crawbl-argocd-apps) | K8s manifests + Helm values |
-| [crawbl-mobile](https://github.com/Crawbl-AI/crawbl-mobile) | Flutter mobile app |
-| [crawbl-website](https://github.com/Crawbl-AI/crawbl-website) | Next.js marketing site |
+| Repo                                                                  | Purpose                           |
+| --------------------------------------------------------------------- | --------------------------------- |
+| [crawbl-docs](https://github.com/Crawbl-AI/crawbl-docs)               | Docs, API reference, architecture |
+| [crawbl-argocd-apps](https://github.com/Crawbl-AI/crawbl-argocd-apps) | K8s manifests + Helm values       |
+| [crawbl-mobile](https://github.com/Crawbl-AI/crawbl-mobile)           | Flutter mobile app                |
+| [crawbl-website](https://github.com/Crawbl-AI/crawbl-website)         | Next.js marketing site            |
