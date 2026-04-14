@@ -20,7 +20,9 @@ func (s *service) GetUserProfile(ctx contextT, sess sessionT, userID string, inc
 
 	if includePrefs {
 		prefs, err := s.repos.MCP.GetUserPreferences(ctx, sess, userID)
-		if err == nil && (prefs.Theme != nil || prefs.Language != nil || prefs.Currency != nil) {
+		if err != nil {
+			s.infra.Logger.Warn("GetUserProfile: failed to get user preferences", "user_id", userID, "error", err)
+		} else if prefs.Theme != nil || prefs.Language != nil || prefs.Currency != nil {
 			result.Preferences = &UserPreferences{
 				Theme:    prefs.Theme,
 				Language: prefs.Language,
@@ -46,7 +48,9 @@ func (s *service) GetWorkspaceInfo(ctx contextT, sess sessionT, userID, workspac
 
 	if includeAgents {
 		agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, workspaceID)
-		if mErr == nil {
+		if mErr != nil {
+			s.infra.Logger.Warn("GetWorkspaceInfo: failed to list agents", "workspace_id", workspaceID, "error", mErr)
+		} else {
 			result.Agents = agents
 		}
 	}

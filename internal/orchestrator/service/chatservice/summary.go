@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -30,7 +31,11 @@ func (s *Service) GetWorkspaceSummary(ctx context.Context, opts *orchestratorser
 	// Find the most recently updated conversation to get the last message.
 	// Conversations are returned ordered by updated_at DESC.
 	conversations, mErr := s.conversationRepo.ListByWorkspaceID(ctx, sess, opts.WorkspaceID)
-	if mErr != nil || len(conversations) == 0 {
+	if mErr != nil {
+		slog.WarnContext(ctx, "GetWorkspaceSummary: failed to list conversations", "workspace_id", opts.WorkspaceID, "error", mErr)
+		return summary, nil
+	}
+	if len(conversations) == 0 {
 		return summary, nil
 	}
 

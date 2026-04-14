@@ -94,6 +94,8 @@ func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareO
 	params := opts.params
 	currentDepth, err := s.repos.MCP.GetMaxAgentMessageDepth(ctx, sess, params.WorkspaceID, params.ConversationID)
 	if err != nil {
+		s.infra.Logger.Warn("prepareAgentMessage: failed to get agent message depth, defaulting to 0",
+			"workspace_id", params.WorkspaceID, "conversation_id", params.ConversationID, "error", err)
 		currentDepth = -1
 	}
 	newDepth := currentDepth + 1

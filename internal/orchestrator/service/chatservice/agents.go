@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"context"
+	"log/slog"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
@@ -91,6 +92,7 @@ func (s *Service) enrichAgentStatus(ctx context.Context, workspace *orchestrator
 		WaitForVerified: false,
 	})
 	if mErr != nil {
+		slog.WarnContext(ctx, "enrichAgentStatus: runtime check failed, marking agents offline", "error", mErr)
 		for _, agent := range agents {
 			agent.Status = orchestrator.AgentStatusOffline
 		}

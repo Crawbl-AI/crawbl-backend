@@ -401,6 +401,7 @@ func (s *Service) enrichAgentStatus(ctx context.Context, workspace *orchestrator
 		WaitForVerified: false,
 	})
 	if mErr != nil {
+		slog.WarnContext(ctx, "enrichAgentStatus: runtime check failed, marking agents offline", "error", mErr)
 		for _, agent := range agents {
 			agent.Status = orchestrator.AgentStatusOffline
 		}
