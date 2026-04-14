@@ -13,6 +13,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
+const errInvalidRequestBody = "invalid request body"
+
 // HealthCheck returns the server health status and version.
 // This endpoint is unauthenticated and used by load balancers and monitoring
 // systems to verify the server is responsive.
@@ -61,7 +63,7 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 
 		var reqBody dto.SavePushTokenRequest
 		if err := DecodeJSON(r, &reqBody); err != nil || reqBody.PushToken == "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 		if len(reqBody.PushToken) < minFCMTokenLength {
@@ -158,7 +160,7 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 
 		var reqBody dto.AuthDeleteRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
@@ -236,7 +238,7 @@ func UpdateUser(c *Context) http.HandlerFunc {
 
 		var reqBody dto.UserUpdateRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
@@ -333,7 +335,7 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 
 		var reqBody dto.UserLegalAcceptRequest
 		if err := DecodeJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
+			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 

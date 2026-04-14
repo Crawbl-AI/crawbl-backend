@@ -11,6 +11,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
+const errAgentIDOrSlugRequired = "agent_id or agent_slug is required"
+
 type createArtifactInput struct {
 	Title          string `json:"title" jsonschema:"the title of the artifact"`
 	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
@@ -86,7 +88,7 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 			return nil, createArtifactOutput{Info: "content exceeds maximum allowed size"}, nil
 		}
 		if input.AgentID == "" && input.AgentSlug == "" {
-			return nil, createArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
+			return nil, createArtifactOutput{Info: errAgentIDOrSlugRequired}, nil
 		}
 
 		result, err := deps.MCPService.CreateArtifact(ctx, sess, userID, workspaceID, &mcpservice.CreateArtifactParams{
@@ -151,7 +153,7 @@ func newUpdateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[updateArtifactIn
 			return nil, updateArtifactOutput{Info: "content exceeds maximum allowed size"}, nil
 		}
 		if input.AgentID == "" && input.AgentSlug == "" {
-			return nil, updateArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
+			return nil, updateArtifactOutput{Info: errAgentIDOrSlugRequired}, nil
 		}
 
 		result, err := deps.MCPService.UpdateArtifact(ctx, sess, userID, workspaceID, &mcpservice.UpdateArtifactParams{
@@ -176,7 +178,7 @@ func newReviewArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[reviewArtifactIn
 			return nil, reviewArtifactOutput{Info: "artifact_id, outcome, and comments are required"}, nil
 		}
 		if input.AgentID == "" && input.AgentSlug == "" {
-			return nil, reviewArtifactOutput{Info: "agent_id or agent_slug is required"}, nil
+			return nil, reviewArtifactOutput{Info: errAgentIDOrSlugRequired}, nil
 		}
 
 		result, err := deps.MCPService.ReviewArtifact(ctx, sess, userID, workspaceID, &mcpservice.ReviewArtifactParams{
