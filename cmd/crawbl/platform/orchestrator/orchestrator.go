@@ -75,7 +75,9 @@ const shutdownTimeout = 10 * time.Second
 
 // noopCleanup is a cleanup closure that does nothing. Used when a subsystem
 // is disabled and no resources were acquired that need releasing.
-var noopCleanup = func() {}
+var noopCleanup = func() {
+	// intentionally empty — lifecycle hook reserved for future use
+}
 
 // NewOrchestratorCommand creates the "orchestrator" parent command.
 // Running it directly starts the HTTP server; "migrate" is a subcommand.
@@ -287,9 +289,9 @@ func runServer(ctx context.Context) error {
 
 	usagePublisher := queue.NewUsagePublisher(riverClient, logger)
 
-	chatService := chatservice.MustNew(
-		db,
-		chatservice.Repos{
+	chatService := chatservice.MustNew(chatservice.Deps{
+		DB: db,
+		Repos: chatservice.Repos{
 			Workspace:     workspaceRepo,
 			Agent:         agentRepo,
 			Conversation:  conversationRepo,
@@ -300,9 +302,13 @@ func runServer(ctx context.Context) error {
 			AgentHistory:  agentHistoryRepo,
 			Usage:         usagerepo.New(),
 		},
-		runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher,
-		ingestPool,
-	)
+		RuntimeClient:  runtimeClient,
+		Broadcaster:    broadcaster,
+		MemoryStack:    memoryStack,
+		PricingCache:   pricingCache,
+		UsagePublisher: usagePublisher,
+		IngestPool:     ingestPool,
+	})
 	agentService := agentservice.MustNew(
 		agentservice.Repos{
 			Workspace:     workspaceRepo,

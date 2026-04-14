@@ -45,12 +45,12 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 	}
 
 	shutdownDone := make(chan struct{})
-	go func() {
+	go func() { // #nosec G118 -- server lifecycle goroutine, no request context available
 		defer close(shutdownDone)
 
 		<-ctx.Done()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaults.ShutdownGracePeriod) // #nosec G118 -- server lifecycle, no request context available
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaults.ShutdownGracePeriod)
 		defer cancel()
 
 		slog.Info("stopping userswarm webhook")

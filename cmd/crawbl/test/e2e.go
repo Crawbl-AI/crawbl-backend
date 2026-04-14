@@ -121,7 +121,7 @@ func applyPortForwards(baseURL, databaseDSN *string) (func(), error) {
 	log.Println("setting up port-forwards...")
 	orchPort, pgPort, redisPort, cleanup, err := startPortForwards()
 	if err != nil {
-		return func() {}, fmt.Errorf("port-forward setup failed: %w", err)
+		return func() { /* no port-forwards to clean up on setup failure */ }, fmt.Errorf("port-forward setup failed: %w", err)
 	}
 	if *baseURL == "http://localhost:7171" || *baseURL == "" {
 		*baseURL = fmt.Sprintf("http://localhost:%d", orchPort)
