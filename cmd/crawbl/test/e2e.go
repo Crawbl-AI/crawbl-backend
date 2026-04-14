@@ -62,7 +62,7 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 	}
 
 	for _, f := range forwards {
-		cmd := exec.CommandContext(context.Background(), "kubectl", "port-forward", f.svc,
+		cmd := exec.CommandContext(context.Background(), "kubectl", "port-forward", f.svc, // #nosec G204 -- CLI tool, input from developer
 			fmt.Sprintf("%d:%d", f.localPort, f.remotePort),
 			"-n", "backend")
 		cmd.Stdout = nil

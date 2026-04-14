@@ -136,7 +136,7 @@ func gcListRepos(ctx context.Context) ([]gcRepo, error) {
 
 // gcListTags returns all tags for a given repository.
 func gcListTags(ctx context.Context, repo string) ([]gcTag, error) {
-	data, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "list-tags", repo, "-o", "json").Output()
+	data, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "list-tags", repo, "-o", "json").Output() // #nosec G204 -- CLI tool, input from developer
 	if err != nil {
 		return nil, fmt.Errorf("doctl registry repository list-tags %s: %w", repo, err)
 	}
@@ -150,7 +150,7 @@ func gcListTags(ctx context.Context, repo string) ([]gcTag, error) {
 
 // gcDeleteManifest deletes a manifest (and its associated tags) by digest.
 func gcDeleteManifest(ctx context.Context, repo, digest string) error {
-	output, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "delete-manifest", repo, digest, "--force").CombinedOutput()
+	output, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "delete-manifest", repo, digest, "--force").CombinedOutput() // #nosec G204 -- CLI tool, input from developer
 	if err != nil {
 		return fmt.Errorf("%s: %w", string(output), err)
 	}

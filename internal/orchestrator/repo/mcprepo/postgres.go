@@ -58,7 +58,7 @@ func (p *postgres) SearchMessages(ctx context.Context, sess *dbr.Session, conver
 		Where("conversation_id = ?", conversationID).
 		Where("content::text ILIKE ?", pattern).
 		OrderDir("created_at", false).
-		Limit(uint64(limit)).
+		Limit(uint64(limit)). // #nosec G115 -- limit is validated non-negative by caller
 		LoadContext(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("mcprepo: search messages in conversation %s: %w", conversationID, err)

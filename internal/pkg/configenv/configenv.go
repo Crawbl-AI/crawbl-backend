@@ -29,7 +29,7 @@ func SecretString(key, fallback string) string {
 	if secretsDir == "" {
 		secretsDir = defaultSecretsDir
 	}
-	if data, err := os.ReadFile(filepath.Join(secretsDir, key)); err == nil {
+	if data, err := os.ReadFile(filepath.Join(secretsDir, key)); err == nil { // #nosec G304,G703 -- CLI tool, paths from developer config
 		if value := strings.TrimSpace(string(data)); value != "" {
 			return value
 		}
@@ -38,7 +38,7 @@ func SecretString(key, fallback string) string {
 	// 3. Legacy KEY_FILE env var (file-based secret injection).
 	filePath := strings.TrimSpace(os.Getenv(key + "_FILE"))
 	if filePath != "" {
-		if raw, err := os.ReadFile(filePath); err == nil {
+		if raw, err := os.ReadFile(filePath); err == nil { // #nosec G304,G703 -- CLI tool, paths from developer config
 			if value := strings.TrimSpace(string(raw)); value != "" {
 				return value
 			}

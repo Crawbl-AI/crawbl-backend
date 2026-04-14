@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
@@ -38,8 +39,9 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 	slog.Info("starting userswarm webhook", "addr", cfg.Addr, "agent_runtime_image", runtimeCfg.AgentRuntimeImage)
 
 	httpServer := &http.Server{
-		Addr:    cfg.Addr,
-		Handler: mux,
+		Addr:              cfg.Addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	shutdownDone := make(chan struct{})
@@ -48,7 +50,7 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 
 		<-ctx.Done()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaults.ShutdownGracePeriod)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaults.ShutdownGracePeriod) // #nosec G118 -- server lifecycle, no request context available
 		defer cancel()
 
 		slog.Info("stopping userswarm webhook")

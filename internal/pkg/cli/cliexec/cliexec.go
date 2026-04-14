@@ -14,7 +14,7 @@ import (
 // are wired directly to the parent process so the child's output is visible
 // to the user and interactive prompts work. Cancelling ctx kills the child.
 func Run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -26,7 +26,7 @@ func Run(ctx context.Context, name string, args ...string) error {
 // code is the only signal you care about. Stdin is still wired to the
 // parent process so interactive prompts continue to work.
 func Silent(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard

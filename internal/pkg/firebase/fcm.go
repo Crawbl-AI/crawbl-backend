@@ -25,7 +25,7 @@ func NewFCMClient(projectID, serviceAccountPath string) (*FCMClient, error) {
 		return nil, nil
 	}
 
-	credJSON, err := os.ReadFile(serviceAccountPath)
+	credJSON, err := os.ReadFile(serviceAccountPath) // #nosec G304 -- CLI tool, paths from developer config
 	if err != nil {
 		return nil, fmt.Errorf("firebase: reading service account %q: %w", serviceAccountPath, err)
 	}

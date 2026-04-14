@@ -79,7 +79,7 @@ func (tc *testContext) sendWithBody(method, alias, path, jsonBody string) error 
 }
 
 func (tc *testContext) executeRequest(req *http.Request) error {
-	resp, err := tc.http.Do(req)
+	resp, err := tc.http.Do(req) // #nosec G704 -- e2e test intentionally calls dynamic URLs
 	if err != nil {
 		tc.lastStatus = 0
 		tc.lastBody = nil
