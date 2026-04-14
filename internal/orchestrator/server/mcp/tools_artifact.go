@@ -90,6 +90,13 @@ func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactIn
 		if input.AgentID == "" && input.AgentSlug == "" {
 			return nil, createArtifactOutput{Info: errAgentIDOrSlugRequired}, nil
 		}
+		// Auto-fill from the runtime-propagated conversation ID when
+		// the agent did not specify one explicitly. Artifacts created
+		// during a conversation almost always belong to it; making
+		// the LLM guess the ID was the source of the original bug.
+		if input.ConversationID == "" {
+			input.ConversationID = conversationIDFromContext(ctx)
+		}
 
 		result, err := deps.MCPService.CreateArtifact(ctx, sess, userID, workspaceID, &mcpservice.CreateArtifactParams{
 			Title:          input.Title,

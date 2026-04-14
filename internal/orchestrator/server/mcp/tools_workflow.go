@@ -103,6 +103,11 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 		if input.WorkflowID == "" {
 			return nil, triggerWorkflowOutput{Info: "workflow_id is required"}, nil
 		}
+		// Default to the active conversation when the agent did not
+		// override; mirrors create_artifact / ask_questions.
+		if input.ConversationID == "" {
+			input.ConversationID = conversationIDFromContext(ctx)
+		}
 
 		result, err := deps.MCPService.TriggerWorkflow(ctx, sess, userID, workspaceID, &mcpservice.TriggerWorkflowParams{
 			WorkflowID:     input.WorkflowID,

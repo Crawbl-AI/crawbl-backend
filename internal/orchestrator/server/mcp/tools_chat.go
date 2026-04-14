@@ -115,6 +115,14 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input sendMessageInput) (*sdkmcp.CallToolResult, sendMessageOutput, error) {
 		RecordAPICall(ctx, "RUNTIME:GRPC Converse")
 
+		// Fall back to the runtime-propagated conversation ID. The
+		// active conversation is the natural context for an A2A
+		// hand-off; making the LLM repeat it from input was an
+		// avoidable failure mode.
+		if input.ConversationID == "" {
+			input.ConversationID = conversationIDFromContext(ctx)
+		}
+
 		result, err := deps.MCPService.SendMessageToAgent(ctx, sess, &mcpservice.SendAgentMessageParams{
 			UserID:         userID,
 			WorkspaceID:    workspaceID,

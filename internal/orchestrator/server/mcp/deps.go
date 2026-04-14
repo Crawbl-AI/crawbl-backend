@@ -45,10 +45,11 @@ const maxWorkflowStepsLength = 128 * 1024
 type contextKey string
 
 const (
-	ctxKeyUserID      contextKey = "mcp_user_id"
-	ctxKeyWorkspaceID contextKey = "mcp_workspace_id"
-	ctxKeySessionID   contextKey = "mcp_session_id"
-	ctxKeyAPICalls    contextKey = "mcp_api_calls"
+	ctxKeyUserID         contextKey = "mcp_user_id"
+	ctxKeyWorkspaceID    contextKey = "mcp_workspace_id"
+	ctxKeySessionID      contextKey = "mcp_session_id"
+	ctxKeyAPICalls       contextKey = "mcp_api_calls"
+	ctxKeyConversationID contextKey = "mcp_conversation_id"
 )
 
 // auditService is the local interface for MCP audit logging.
@@ -102,10 +103,23 @@ func sessionIDFromContext(ctx context.Context) string {
 	return v
 }
 
-func contextWithIdentity(ctx context.Context, userID, workspaceID, sessionID string) context.Context {
+// conversationIDFromContext returns the active conversation ID stamped
+// onto the request context by the auth middleware from the runtime's
+// X-Conversation-Id header. Tool handlers prefer this value over any
+// explicit conversation_id passed in the tool input — the runtime is
+// authoritative; the LLM is not.
+func conversationIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxKeyConversationID).(string)
+	return v
+}
+
+func contextWithIdentity(ctx context.Context, userID, workspaceID, sessionID, conversationID string) context.Context {
 	ctx = context.WithValue(ctx, ctxKeyUserID, userID)
 	ctx = context.WithValue(ctx, ctxKeyWorkspaceID, workspaceID)
 	ctx = context.WithValue(ctx, ctxKeySessionID, sessionID)
+	if conversationID != "" {
+		ctx = context.WithValue(ctx, ctxKeyConversationID, conversationID)
+	}
 	calls := make([]string, 0, 4)
 	ctx = context.WithValue(ctx, ctxKeyAPICalls, &calls)
 	return ctx

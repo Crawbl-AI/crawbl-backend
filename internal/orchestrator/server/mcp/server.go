@@ -69,7 +69,13 @@ func withAuth(next http.Handler, deps *Deps) http.Handler {
 		}
 
 		sessionID := r.Header.Get("Mcp-Session-Id")
-		ctx := contextWithIdentity(r.Context(), userID, workspaceID, sessionID)
+		// X-Conversation-Id is the per-call conversation propagation
+		// from the agent runtime — see internal/agentruntime/tools/mcp/transport.go
+		// which stamps it from the active turn's ctx. May be empty
+		// for non-runtime callers (e.g., test harnesses); tool
+		// handlers must tolerate that and fall back to explicit input.
+		conversationID := r.Header.Get("X-Conversation-Id")
+		ctx := contextWithIdentity(r.Context(), userID, workspaceID, sessionID, conversationID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -21,11 +21,40 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
+
+// conversationContextKey is the unexported context-value key used to carry
+// the active conversation ID from the runtime's per-turn handler down
+// through the ADK tool invocation into the MCP HTTP transport. A typed
+// key avoids collisions with any other ctx values the ADK may install.
+type conversationContextKey struct{}
+
+// WithConversationID returns a child context that carries the given
+// conversation ID. The agent runtime's per-turn entry point wraps the
+// turn ctx with this so that any MCP tool call dispatched during the
+// turn gets the conversation ID stamped onto the outgoing HTTP request
+// as the X-Conversation-Id header (see hmacRoundTripper.RoundTrip).
+//
+// Empty IDs are stored unchanged — callers that have no conversation ID
+// (e.g., bootstrap probes) get a zero-value passthrough rather than an
+// error so the call site stays simple.
+func WithConversationID(ctx context.Context, conversationID string) context.Context {
+	return context.WithValue(ctx, conversationContextKey{}, conversationID)
+}
+
+// conversationIDFromContext extracts the conversation ID previously
+// stored by WithConversationID. Returns the empty string when no value
+// is present so the transport can decide to omit the header rather
+// than send an empty value.
+func conversationIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(conversationContextKey{}).(string)
+	return v
+}
 
 // ErrMissingHMACConfig signals that a transport was constructed without
 // the minimum required fields (signing key + user + workspace). Returning
@@ -73,6 +102,13 @@ func (t *hmacRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		cloned.Header = make(http.Header)
 	}
 	cloned.Header.Set("Authorization", "Bearer "+token)
+	if convID := conversationIDFromContext(cloned.Context()); convID != "" {
+		// Header naming mirrors HTTP convention; the orchestrator's
+		// MCP authMiddleware extracts this and stashes it on the
+		// invocation context so tool handlers can read it without
+		// the LLM having to provide a conversation_id argument.
+		cloned.Header.Set("X-Conversation-Id", convID)
+	}
 	return t.base.RoundTrip(cloned)
 }
 
