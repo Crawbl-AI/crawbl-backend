@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+// CategoryResponse represents a tool category in the integrations list.
+message CategoryResponse {
+  string id = 1;
+  string name = 2;
+  string image_url = 3;
+}
+
+// IntegrationItemResponse represents a single tool or integration item.
+message IntegrationItemResponse {
+  string name = 1;
+  string description = 2;
+  string icon_url = 3;
+  string category_id = 4;
+  string type = 5;
+  string provider = 6;
+  bool enabled = 7;
+  bool is_connected = 8;
+}
+
+// IntegrationsResponse contains tool categories and a flat list of items.
+message IntegrationsResponse {
+  repeated CategoryResponse categories = 1;
+  repeated IntegrationItemResponse items = 2;
+}
+
+// IntegrationConnectRequest is the body for connect.
+message IntegrationConnectRequest {
+  string provider = 1;
+}
+
+// IntegrationConnectResponse returns OAuth config for the mobile app.
+message IntegrationConnectResponse {
+  string client_id = 1;
+  string redirect_url = 2;
+  string authorization_endpoint = 3;
+  string token_endpoint = 4;
+  repeated string scopes = 5;
+  map<string, string> additional_parameters = 6;
+}
+
+// IntegrationCallbackRequest is the body for callback.
+message IntegrationCallbackRequest {
+  string provider = 1;
+  string authorization_code = 2;
+  string code_verifier = 3;
+  string redirect_url = 4;
+}

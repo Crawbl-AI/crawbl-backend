@@ -201,6 +201,8 @@ type CreateConversationOpts struct {
 	Type orchestrator.ConversationType
 	// AgentID is required for agent-type conversations.
 	AgentID string
+	// Title is an optional display title for the conversation.
+	Title string
 }
 
 // DeleteConversationOpts contains the parameters for deleting a conversation.

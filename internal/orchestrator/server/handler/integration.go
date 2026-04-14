@@ -5,9 +5,8 @@ import (
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
@@ -17,59 +16,62 @@ import (
 //
 // GET /v1/integrations
 func IntegrationsList(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.IntegrationsResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
 		// Fetch integrations (with connection status from DB).
 		items, mErr := c.IntegrationService.ListIntegrations(r.Context(), &orchestratorservice.ListIntegrationsOpts{
-			UserID: deps.User.ID,
+			UserID: user.ID,
 		})
 		if mErr != nil {
-			return dto.IntegrationsResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
 		// Build categories by merging tool categories (agent runtime) and integration categories (orchestrator).
 		toolCats := agentruntimetools.ToolCategories()
 		appCats := orchestrator.IntegrationCategories()
-		categories := make([]dto.CategoryResponse, 0, len(toolCats)+len(appCats))
+		categories := make([]*mobilev1.CategoryResponse, 0, len(toolCats)+len(appCats))
 		for _, cat := range toolCats {
-			categories = append(categories, dto.CategoryResponse{
-				ID:       string(cat.ID),
+			categories = append(categories, &mobilev1.CategoryResponse{
+				Id:       string(cat.ID),
 				Name:     cat.Name,
-				ImageURL: cat.ImageURL,
+				ImageUrl: cat.ImageURL,
 			})
 		}
 		for _, cat := range appCats {
-			categories = append(categories, dto.CategoryResponse{
-				ID:       cat.ID,
+			categories = append(categories, &mobilev1.CategoryResponse{
+				Id:       cat.ID,
 				Name:     cat.Name,
-				ImageURL: cat.ImageURL,
+				ImageUrl: cat.ImageURL,
 			})
 		}
 
-		// Build items: tools first, then integrations. Filter to the
-		// implemented subset — users must never see a tool the agent
-		// cannot actually call. Roadmap entries live in the seed file
-		// but stay out of the API response until their implementation
-		// lands and the "implemented" flag flips in tools.json.
+		// Build items: tools first, then integrations.
 		catalog := agentruntimetools.ImplementedCatalog()
-		itemsList := make([]dto.IntegrationItemResponse, 0, len(catalog)+len(items))
+		itemsList := make([]*mobilev1.IntegrationItemResponse, 0, len(catalog)+len(items))
 
 		for _, t := range catalog {
-			itemsList = append(itemsList, dto.IntegrationItemResponse{
+			itemsList = append(itemsList, &mobilev1.IntegrationItemResponse{
 				Name:        t.DisplayName,
 				Description: t.Description,
-				IconURL:     t.IconURL,
-				CategoryID:  string(t.Category),
+				IconUrl:     t.IconURL,
+				CategoryId:  string(t.Category),
 				Type:        string(orchestrator.ItemTypeTool),
 				Enabled:     true,
 			})
 		}
 
 		for _, ig := range items {
-			itemsList = append(itemsList, dto.IntegrationItemResponse{
+			itemsList = append(itemsList, &mobilev1.IntegrationItemResponse{
 				Name:        ig.Name,
 				Description: ig.Description,
-				IconURL:     ig.IconURL,
-				CategoryID:  ig.CategoryID,
+				IconUrl:     ig.IconURL,
+				CategoryId:  ig.CategoryID,
 				Type:        string(orchestrator.ItemTypeApp),
 				Provider:    ig.Provider,
 				Enabled:     ig.IsEnabled,
@@ -77,19 +79,16 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 			})
 		}
 
-		return dto.IntegrationsResponse{
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.IntegrationsResponse{
 			Categories: categories,
 			Items:      itemsList,
-		}, nil
-	})
+		})
+	}
 }
 
 // IntegrationConnect returns OAuth configuration for a provider.
 //
 // POST /v1/integrations/connect
-//
-// Kept on the plain form because the missing-field error uses a custom
-// non-enveloped 400 message via httpserver.WriteErrorMessage.
 func IntegrationConnect(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -98,24 +97,24 @@ func IntegrationConnect(c *Context) http.HandlerFunc {
 			return
 		}
 
-		var req dto.IntegrationConnectRequest
-		if err := DecodeJSON(r, &req); err != nil || req.Provider == "" {
+		var req mobilev1.IntegrationConnectRequest
+		if err := DecodeProtoJSON(r, &req); err != nil || req.GetProvider() == "" {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "provider is required")
 			return
 		}
 
 		config, mErr := c.IntegrationService.GetOAuthConfig(r.Context(), &orchestratorservice.GetOAuthConfigOpts{
 			UserID:   user.ID,
-			Provider: req.Provider,
+			Provider: req.GetProvider(),
 		})
 		if mErr != nil {
 			WriteError(w, mErr)
 			return
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.IntegrationConnectResponse{
-			ClientID:              config.ClientID,
-			RedirectURL:           config.RedirectURL,
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.IntegrationConnectResponse{
+			ClientId:              config.ClientID,
+			RedirectUrl:           config.RedirectURL,
 			AuthorizationEndpoint: config.AuthorizationEndpoint,
 			TokenEndpoint:         config.TokenEndpoint,
 			Scopes:                config.Scopes,
@@ -127,9 +126,6 @@ func IntegrationConnect(c *Context) http.HandlerFunc {
 // IntegrationCallback exchanges the OAuth code for tokens.
 //
 // POST /v1/integrations/callback
-//
-// Kept on the plain form because the missing-field errors use custom
-// non-enveloped 400 messages via httpserver.WriteErrorMessage.
 func IntegrationCallback(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -138,22 +134,22 @@ func IntegrationCallback(c *Context) http.HandlerFunc {
 			return
 		}
 
-		var req dto.IntegrationCallbackRequest
-		if err := DecodeJSON(r, &req); err != nil {
+		var req mobilev1.IntegrationCallbackRequest
+		if err := DecodeProtoJSON(r, &req); err != nil {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-		if req.Provider == "" || req.AuthorizationCode == "" || req.CodeVerifier == "" {
+		if req.GetProvider() == "" || req.GetAuthorizationCode() == "" || req.GetCodeVerifier() == "" {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "provider, authorization_code, and code_verifier are required")
 			return
 		}
 
 		if mErr := c.IntegrationService.HandleOAuthCallback(r.Context(), &orchestratorservice.OAuthCallbackOpts{
 			UserID:            user.ID,
-			Provider:          req.Provider,
-			AuthorizationCode: req.AuthorizationCode,
-			CodeVerifier:      req.CodeVerifier,
-			RedirectURL:       req.RedirectURL,
+			Provider:          req.GetProvider(),
+			AuthorizationCode: req.GetAuthorizationCode(),
+			CodeVerifier:      req.GetCodeVerifier(),
+			RedirectURL:       req.GetRedirectUrl(),
 		}); mErr != nil {
 			WriteError(w, mErr)
 			return

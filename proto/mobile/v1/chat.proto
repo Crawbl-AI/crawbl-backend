@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "mobile/v1/agent.proto";
+
+// ContentAgent is the agent summary embedded in delegation message content.
+message ContentAgent {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  string slug = 4;
+  string avatar = 5;
+  string status = 6;
+}
+
+// ActionItemResponse represents a clickable action button in a message.
+message ActionItemResponse {
+  string id = 1;
+  string label = 2;
+  string style = 3;
+}
+
+// AttachmentResponse represents a file attached to a message.
+message AttachmentResponse {
+  string id = 1;
+  string name = 2;
+  string url = 3;
+  string type = 4;
+  int64 size = 5;
+  string mime_type = 6;
+  optional int32 duration = 7;
+}
+
+// MessageContentPayload represents the content of a message.
+message MessageContentPayload {
+  string type = 1;
+  string text = 2;
+  string title = 3;
+  string description = 4;
+  repeated ActionItemResponse actions = 5;
+  optional string selected_action_id = 6;
+  string tool = 7;
+  string state = 8;
+  string query = 9;
+  google.protobuf.Struct args = 10;
+  optional ContentAgent from = 11;
+  optional ContentAgent to = 12;
+  string status = 13;
+  string task_preview = 14;
+}
+
+// MessageResponse represents a message in API responses.
+message MessageResponse {
+  string id = 1;
+  string conversation_id = 2;
+  string role = 3;
+  MessageContentPayload content = 4;
+  string status = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  optional string local_id = 8;
+  optional AgentResponse agent = 9;
+  repeated AttachmentResponse attachments = 10;
+}
+
+// MessagesPaginationResponse provides cursor-based pagination metadata for message lists.
+message MessagesPaginationResponse {
+  string next_scroll_id = 1;
+  string prev_scroll_id = 2;
+  bool has_next = 3;
+  bool has_prev = 4;
+}
+
+// MessagesListResponse is the paginated response for listing messages.
+message MessagesListResponse {
+  repeated MessageResponse messages = 1;
+  MessagesPaginationResponse pagination = 2;
+}
+
+// ConversationResponse represents a conversation in API responses.
+message ConversationResponse {
+  string id = 1;
+  string type = 2;
+  string title = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  int32 unread_count = 6;
+  optional AgentResponse agent = 7;
+  optional MessageResponse last_message = 8;
+}
+
+// CreateConversationRequest represents the request body for creating a new conversation.
+message CreateConversationRequest {
+  string type = 1;
+  string agent_id = 2;
+  optional string title = 3;
+}
+
+// MentionPayload represents an @-mention of an agent in a message.
+message MentionPayload {
+  string agent_id = 1;
+  string agent_name = 2;
+  int32 offset = 3;
+  int32 length = 4;
+}
+
+// SendMessageRequest represents the request body for sending a new message.
+message SendMessageRequest {
+  string local_id = 1;
+  MessageContentPayload content = 2;
+  repeated AttachmentResponse attachments = 3;
+  repeated MentionPayload mentions = 4;
+}
+
+// ActionCardRequest represents the request body for responding to an action card.
+message ActionCardRequest {
+  string action_id = 1;
+}

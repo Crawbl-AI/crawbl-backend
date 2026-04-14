@@ -1,14 +1,16 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
@@ -20,142 +22,153 @@ const (
 	MaxAgentMemoryCategoryLength = 128
 )
 
-// agentByIDFetcher wires a handler that looks up an agent by URL :id,
-// calls the caller-supplied service method with {UserID, AgentID}, and
-// converts the domain result to a response DTO. Collapses the shared
-// GetAgent / GetAgentDetails scaffolding into one helper parameterised
-// over domain and response types.
-func agentByIDFetcher[Domain any, Response any](
-	c *Context,
-	fetch func(ctx context.Context, userID, agentID string) (Domain, *merrors.Error),
-	toResponse func(Domain) Response,
-) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (Response, *merrors.Error) {
-		var zero Response
-		domain, mErr := fetch(r.Context(), deps.User.ID, chi.URLParam(r, "id"))
-		if mErr != nil {
-			return zero, mErr
-		}
-		return toResponse(domain), nil
-	})
-}
-
 // GetAgent retrieves a single agent by ID.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgent(c *Context) http.HandlerFunc {
-	return agentByIDFetcher(c,
-		func(ctx context.Context, userID, agentID string) (*orchestrator.Agent, *merrors.Error) {
-			return c.AgentService.GetAgent(ctx, &orchestratorservice.GetAgentOpts{
-				UserID: userID, AgentID: agentID,
-			})
-		},
-		dto.ToAgentResponse,
-	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		agent, mErr := c.AgentService.GetAgent(r.Context(), &orchestratorservice.GetAgentOpts{
+			UserID: user.ID, AgentID: chi.URLParam(r, "id"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		WriteProtoSuccess(w, http.StatusOK, convert.AgentToProto(agent))
+	}
 }
 
 // GetAgentDetails retrieves full agent profile including stats.
 // The agent must belong to a workspace owned by the authenticated user.
 func GetAgentDetails(c *Context) http.HandlerFunc {
-	return agentByIDFetcher(c,
-		func(ctx context.Context, userID, agentID string) (*orchestrator.AgentDetails, *merrors.Error) {
-			return c.AgentService.GetAgentDetails(ctx, &orchestratorservice.GetAgentDetailsOpts{
-				UserID: userID, AgentID: agentID,
-			})
-		},
-		dto.ToAgentDetailResponse,
-	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		details, mErr := c.AgentService.GetAgentDetails(r.Context(), &orchestratorservice.GetAgentDetailsOpts{
+			UserID: user.ID, AgentID: chi.URLParam(r, "id"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		WriteProtoSuccess(w, http.StatusOK, convert.AgentDetailToProto(details))
+	}
 }
 
 // GetAgentHistory retrieves paginated conversation history for an agent.
 func GetAgentHistory(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentHistoryResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
 		limit, offset := Pagination(r)
 
 		items, pagination, mErr := c.AgentService.GetAgentHistory(r.Context(), &orchestratorservice.GetAgentHistoryOpts{
-			UserID:  deps.User.ID,
+			UserID:  user.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Limit:   limit,
 			Offset:  offset,
 		})
 		if mErr != nil {
-			return dto.AgentHistoryResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		historyItems := make([]dto.AgentHistoryItemResponse, 0, len(items))
+		historyItems := make([]*mobilev1.AgentHistoryItemResponse, 0, len(items))
 		for _, item := range items {
-			h := dto.AgentHistoryItemResponse{
-				ConversationID: item.ConversationID,
+			h := &mobilev1.AgentHistoryItemResponse{
+				ConversationId: item.ConversationID,
 				Title:          item.Title,
 				Subtitle:       item.Subtitle,
 			}
 			if item.CreatedAt != nil {
-				t := item.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
-				h.CreatedAt = &t
+				h.CreatedAt = timestamppb.New(*item.CreatedAt)
 			}
 			historyItems = append(historyItems, h)
 		}
 
-		return dto.AgentHistoryResponse{
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.AgentHistoryResponse{
 			Items:      historyItems,
-			Pagination: dto.NewOffsetPaginationResponse(*pagination),
-		}, nil
-	})
+			Pagination: convert.OffsetPaginationToProto(*pagination),
+		})
+	}
 }
 
 // GetAgentSettings retrieves model and prompt settings for an agent.
 func GetAgentSettings(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentSettingsResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
 		settings, mErr := c.AgentService.GetAgentSettings(r.Context(), &orchestratorservice.GetAgentSettingsOpts{
-			UserID:  deps.User.ID,
+			UserID:  user.ID,
 			AgentID: chi.URLParam(r, "id"),
 		})
 		if mErr != nil {
-			return dto.AgentSettingsResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		prompts := make([]dto.AgentPromptResponse, 0, len(settings.Prompts))
+		prompts := make([]*mobilev1.AgentPromptResponse, 0, len(settings.Prompts))
 		for _, p := range settings.Prompts {
-			prompts = append(prompts, dto.AgentPromptResponse{
-				ID:          p.ID,
+			prompts = append(prompts, &mobilev1.AgentPromptResponse{
+				Id:          p.ID,
 				Name:        p.Name,
 				Description: p.Description,
 				Content:     p.Content,
 			})
 		}
 
-		return dto.AgentSettingsResponse{
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.AgentSettingsResponse{
 			Model:          settings.Model.ID,
 			ResponseLength: string(settings.ResponseLength),
 			Prompts:        prompts,
-		}, nil
-	})
+		})
+	}
 }
 
 // GetAgentTools retrieves the tools assigned to an agent with offset pagination.
 func GetAgentTools(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentToolsResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
 		limit, offset := Pagination(r)
 
 		page, mErr := c.AgentService.GetAgentTools(r.Context(), &orchestratorservice.GetAgentToolsOpts{
-			UserID:  deps.User.ID,
+			UserID:  user.ID,
 			AgentID: chi.URLParam(r, "id"),
 			Limit:   limit,
 			Offset:  offset,
 		})
 		if mErr != nil {
-			return dto.AgentToolsResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		tools := make([]dto.AgentToolResponse, 0, len(page.Data))
+		tools := make([]*mobilev1.AgentToolResponse, 0, len(page.Data))
 		for _, t := range page.Data {
-			tools = append(tools, dto.ToAgentToolResponse(t))
+			tools = append(tools, convert.AgentToolToProto(t))
 		}
 
-		return dto.AgentToolsResponse{
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.AgentToolsResponse{
 			Tools:      tools,
-			Pagination: dto.NewOffsetPaginationResponse(page.Pagination),
-		}, nil
-	})
+			Pagination: convert.OffsetPaginationToProto(page.Pagination),
+		})
+	}
 }
 
 // ListModels returns the list of available LLM models.
@@ -163,16 +176,15 @@ func GetAgentTools(c *Context) http.HandlerFunc {
 func ListModels(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		available := orchestrator.GetAvailableModels()
-		models := make([]dto.AgentModelResponse, 0, len(available))
+		msgs := make([]proto.Message, 0, len(available))
 		for _, m := range available {
-			models = append(models, dto.AgentModelResponse{
-				ID:          m.ID,
+			msgs = append(msgs, &mobilev1.AgentModelResponse{
+				Id:          m.ID,
 				Name:        m.Name,
 				Description: m.Description,
 			})
 		}
-
-		WriteSuccess(w, http.StatusOK, models)
+		WriteProtoArraySuccess(w, http.StatusOK, msgs)
 	}
 }
 
@@ -180,24 +192,30 @@ func ListModels(c *Context) http.HandlerFunc {
 // Pagination is handled by the service/repo layer; the response is a flat
 // array of memory entries inside the standard {"data": [...]} envelope.
 func GetAgentMemories(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.AgentMemoryResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
 		category := r.URL.Query().Get("category")
 		limit, offset := Pagination(r)
 
 		memories, mErr := c.AgentService.GetAgentMemories(r.Context(), &orchestratorservice.GetAgentMemoriesOpts{
-			UserID:   deps.User.ID,
+			UserID:   user.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Category: category,
 			Limit:    limit,
 			Offset:   offset,
 		})
 		if mErr != nil {
-			return nil, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		items := make([]dto.AgentMemoryResponse, 0, len(memories))
+		msgs := make([]proto.Message, 0, len(memories))
 		for _, m := range memories {
-			items = append(items, dto.AgentMemoryResponse{
+			msgs = append(msgs, &mobilev1.AgentMemoryResponse{
 				Key:       m.Key,
 				Content:   m.Content,
 				Category:  m.Category,
@@ -205,9 +223,8 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 				UpdatedAt: m.UpdatedAt,
 			})
 		}
-
-		return items, nil
-	})
+		WriteProtoArraySuccess(w, http.StatusOK, msgs)
+	}
 }
 
 // DeleteAgentMemory removes a specific memory from the agent's agent runtime.
@@ -225,34 +242,50 @@ func DeleteAgentMemory(c *Context) http.HandlerFunc {
 // returns the created entry (including server-generated timestamps) as 201
 // Created inside the standard {"data": {...}} envelope.
 func CreateAgentMemory(c *Context) http.HandlerFunc {
-	return AuthedHandlerCreated(c, func(r *http.Request, deps *AuthedHandlerDeps, body *dto.CreateAgentMemoryRequest) (dto.AgentMemoryResponse, *merrors.Error) {
-		if strings.TrimSpace(body.Key) == "" || len(body.Key) > MaxAgentMemoryKeyLength {
-			return dto.AgentMemoryResponse{}, merrors.ErrAgentMemoryFieldTooLong
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
 		}
-		if strings.TrimSpace(body.Content) == "" || len(body.Content) > MaxAgentMemoryContentLength {
-			return dto.AgentMemoryResponse{}, merrors.ErrAgentMemoryFieldTooLong
+
+		var body mobilev1.CreateAgentMemoryRequest
+		if err := DecodeProtoJSON(r, &body); err != nil {
+			WriteError(w, merrors.ErrInvalidInput)
+			return
 		}
-		if len(body.Category) > MaxAgentMemoryCategoryLength {
-			return dto.AgentMemoryResponse{}, merrors.ErrAgentMemoryFieldTooLong
+
+		if strings.TrimSpace(body.GetKey()) == "" || len(body.GetKey()) > MaxAgentMemoryKeyLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
+		}
+		if strings.TrimSpace(body.GetContent()) == "" || len(body.GetContent()) > MaxAgentMemoryContentLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
+		}
+		if len(body.GetCategory()) > MaxAgentMemoryCategoryLength {
+			WriteError(w, merrors.ErrAgentMemoryFieldTooLong)
+			return
 		}
 
 		created, mErr := c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
-			UserID:   deps.User.ID,
+			UserID:   user.ID,
 			AgentID:  chi.URLParam(r, "id"),
-			Key:      body.Key,
-			Content:  body.Content,
-			Category: body.Category,
+			Key:      body.GetKey(),
+			Content:  body.GetContent(),
+			Category: body.GetCategory(),
 		})
 		if mErr != nil {
-			return dto.AgentMemoryResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		return dto.AgentMemoryResponse{
+		WriteProtoSuccess(w, http.StatusCreated, &mobilev1.AgentMemoryResponse{
 			Key:       created.Key,
 			Content:   created.Content,
 			Category:  created.Category,
 			CreatedAt: created.CreatedAt,
 			UpdatedAt: created.UpdatedAt,
-		}, nil
-	})
+		})
+	}
 }

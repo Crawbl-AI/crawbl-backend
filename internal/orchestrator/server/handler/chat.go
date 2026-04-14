@@ -1,91 +1,103 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
-// workspaceListHandler builds a handler that lists workspace-scoped items
-// (agents, conversations, etc.), maps each domain entity to its response
-// DTO, and returns the flat slice wrapped in the standard envelope.
-// Collapses the shared WorkspaceAgentsList / ConversationsList scaffolding.
-func workspaceListHandler[Domain any, Response any](
-	c *Context,
-	list func(ctx context.Context, userID, workspaceID string) ([]Domain, *merrors.Error),
-	toResponse func(Domain) Response,
-) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]Response, *merrors.Error) {
-		items, mErr := list(r.Context(), deps.User.ID, chi.URLParam(r, "workspaceId"))
-		if mErr != nil {
-			return nil, mErr
-		}
-		response := make([]Response, 0, len(items))
-		for _, item := range items {
-			response = append(response, toResponse(item))
-		}
-		return response, nil
-	})
-}
-
 // WorkspaceAgentsList retrieves all agents available in a workspace.
 // Agents represent individual swarm members that users can interact with
 // through conversations.
 func WorkspaceAgentsList(c *Context) http.HandlerFunc {
-	return workspaceListHandler(c,
-		func(ctx context.Context, userID, workspaceID string) ([]*orchestrator.Agent, *merrors.Error) {
-			return c.ChatService.ListAgents(ctx, &orchestratorservice.ListAgentsOpts{
-				UserID: userID, WorkspaceID: workspaceID,
-			})
-		},
-		dto.ToAgentResponse,
-	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		agents, mErr := c.ChatService.ListAgents(r.Context(), &orchestratorservice.ListAgentsOpts{
+			UserID: user.ID, WorkspaceID: chi.URLParam(r, "workspaceId"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		msgs := make([]proto.Message, 0, len(agents))
+		for _, agent := range agents {
+			msgs = append(msgs, convert.AgentToProto(agent))
+		}
+		WriteProtoArraySuccess(w, http.StatusOK, msgs)
+	}
 }
 
 // ConversationsList retrieves all conversations for a workspace.
 // Each conversation includes its associated agent and last message for preview.
 func ConversationsList(c *Context) http.HandlerFunc {
-	return workspaceListHandler(c,
-		func(ctx context.Context, userID, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error) {
-			return c.ChatService.ListConversations(ctx, &orchestratorservice.ListConversationsOpts{
-				UserID: userID, WorkspaceID: workspaceID,
-			})
-		},
-		dto.ToConversationResponse,
-	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		conversations, mErr := c.ChatService.ListConversations(r.Context(), &orchestratorservice.ListConversationsOpts{
+			UserID: user.ID, WorkspaceID: chi.URLParam(r, "workspaceId"),
+		})
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		msgs := make([]proto.Message, 0, len(conversations))
+		for _, conv := range conversations {
+			msgs = append(msgs, convert.ConversationToProto(conv))
+		}
+		WriteProtoArraySuccess(w, http.StatusOK, msgs)
+	}
 }
 
 // ConversationGet retrieves a single conversation by ID within a workspace.
 // The conversation must belong to a workspace owned by the authenticated user.
 func ConversationGet(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.ConversationResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
 		conversation, mErr := c.ChatService.GetConversation(r.Context(), &orchestratorservice.GetConversationOpts{
-			UserID:         deps.User.ID,
+			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
 		})
 		if mErr != nil {
-			return dto.ConversationResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
-		return dto.ToConversationResponse(conversation), nil
-	})
+		WriteProtoSuccess(w, http.StatusOK, convert.ConversationToProto(conversation))
+	}
 }
 
 // MessagesList retrieves messages for a conversation with cursor-based pagination.
 // Supports bidirectional scrolling via scrollId and direction parameters.
 // The limit parameter controls the page size for responses.
 func MessagesList(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.MessagesListResponse, *merrors.Error) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
 		page, mErr := c.ChatService.ListMessages(r.Context(), &orchestratorservice.ListMessagesOpts{
-			UserID:         deps.User.ID,
+			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
 			ScrollID:       strings.TrimSpace(r.URL.Query().Get("scrollId")),
@@ -93,24 +105,25 @@ func MessagesList(c *Context) http.HandlerFunc {
 			Direction:      strings.TrimSpace(r.URL.Query().Get("direction")),
 		})
 		if mErr != nil {
-			return dto.MessagesListResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		response := make([]dto.MessageResponse, 0, len(page.Data))
+		messages := make([]*mobilev1.MessageResponse, 0, len(page.Data))
 		for _, message := range page.Data {
-			response = append(response, dto.ToMessageResponse(message))
+			messages = append(messages, convert.MessageToProto(message))
 		}
 
-		return dto.MessagesListResponse{
-			Messages: response,
-			Pagination: dto.MessagesPaginationResponse{
-				NextScrollID: page.Pagination.NextScrollID,
-				PrevScrollID: page.Pagination.PrevScrollID,
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.MessagesListResponse{
+			Messages: messages,
+			Pagination: &mobilev1.MessagesPaginationResponse{
+				NextScrollId: page.Pagination.NextScrollID,
+				PrevScrollId: page.Pagination.PrevScrollID,
 				HasNext:      page.Pagination.HasNext,
 				HasPrev:      page.Pagination.HasPrev,
 			},
-		}, nil
-	})
+		})
+	}
 }
 
 // ConversationCreate creates a new conversation within a workspace.
@@ -118,27 +131,43 @@ func MessagesList(c *Context) http.HandlerFunc {
 // For agent conversations, agent_id must be provided.
 // Returns 201 Created.
 func ConversationCreate(c *Context) http.HandlerFunc {
-	return AuthedHandlerCreated(c, func(r *http.Request, deps *AuthedHandlerDeps, reqBody *dto.CreateConversationRequest) (dto.ConversationResponse, *merrors.Error) {
-		convType := orchestrator.ConversationType(strings.TrimSpace(reqBody.Type))
-		if convType != orchestrator.ConversationTypeSwarm && convType != orchestrator.ConversationTypeAgent {
-			return dto.ConversationResponse{}, merrors.ErrInvalidInput
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
 		}
-		if convType == orchestrator.ConversationTypeAgent && strings.TrimSpace(reqBody.AgentID) == "" {
-			return dto.ConversationResponse{}, merrors.ErrInvalidInput
+
+		var reqBody mobilev1.CreateConversationRequest
+		if err := DecodeProtoJSON(r, &reqBody); err != nil {
+			WriteError(w, merrors.ErrInvalidInput)
+			return
+		}
+
+		convType := orchestrator.ConversationType(strings.TrimSpace(reqBody.GetType()))
+		if convType != orchestrator.ConversationTypeSwarm && convType != orchestrator.ConversationTypeAgent {
+			WriteError(w, merrors.ErrInvalidInput)
+			return
+		}
+		if convType == orchestrator.ConversationTypeAgent && strings.TrimSpace(reqBody.GetAgentId()) == "" {
+			WriteError(w, merrors.ErrInvalidInput)
+			return
 		}
 
 		conversation, mErr := c.ChatService.CreateConversation(r.Context(), &orchestratorservice.CreateConversationOpts{
-			UserID:      deps.User.ID,
+			UserID:      user.ID,
 			WorkspaceID: chi.URLParam(r, "workspaceId"),
 			Type:        convType,
-			AgentID:     strings.TrimSpace(reqBody.AgentID),
+			AgentID:     strings.TrimSpace(reqBody.GetAgentId()),
+			Title:       strings.TrimSpace(reqBody.GetTitle()),
 		})
 		if mErr != nil {
-			return dto.ConversationResponse{}, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		return dto.ToConversationResponse(conversation), nil
-	})
+		WriteProtoSuccess(w, http.StatusCreated, convert.ConversationToProto(conversation))
+	}
 }
 
 // ConversationDelete removes a conversation from a workspace.
@@ -189,13 +218,13 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			return
 		}
 
-		var reqBody dto.SendMessageRequest
-		if err := DecodeJSON(r, &reqBody); err != nil {
+		var reqBody mobilev1.SendMessageRequest
+		if err := DecodeProtoJSON(r, &reqBody); err != nil {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
-		content, mErr := reqBody.Content.ToDomain()
+		content, mErr := convert.MessageContentToDomain(reqBody.GetContent())
 		if mErr != nil {
 			WriteError(w, mErr)
 			return
@@ -206,10 +235,10 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			UserID:         user.ID,
 			WorkspaceID:    chi.URLParam(r, "workspaceId"),
 			ConversationID: chi.URLParam(r, "id"),
-			LocalID:        reqBody.LocalID,
+			LocalID:        reqBody.GetLocalId(),
 			Content:        content,
-			Attachments:    dto.AttachmentsToDomain(reqBody.Attachments),
-			Mentions:       dto.MentionsToDomain(reqBody.Mentions),
+			Attachments:    convert.AttachmentsToDomain(reqBody.GetAttachments()),
+			Mentions:       convert.MentionsToDomain(reqBody.GetMentions()),
 			OnPersisted: func(msg *orchestrator.Message) {
 				userMsg = msg
 			},
@@ -232,6 +261,6 @@ func MessagesSend(c *Context) http.HandlerFunc {
 			httpserver.WriteErrorMessage(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		WriteSuccess(w, http.StatusCreated, dto.ToMessageResponse(userMsg))
+		WriteProtoSuccess(w, http.StatusCreated, convert.MessageToProto(userMsg))
 	}
 }

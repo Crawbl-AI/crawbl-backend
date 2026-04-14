@@ -61,7 +61,8 @@ The orchestrator is the mobile-facing control plane that sits between the Flutte
 - `internal/orchestrator/repo/rows.go` — Shared DB row structs. Sub-packages own their own row types locally; only truly shared rows live here.
 - `internal/orchestrator/server/routes.go` — The complete route table; every new REST endpoint is registered here.
 - `internal/orchestrator/server/handler/context.go` — `handler.Context`, shared response helpers (`WriteSuccess`, `WriteError`, `HTTPStatusForError`), and `CurrentUser`.
-- `internal/orchestrator/server/dto/` — Request/response DTOs and domain-to-wire mappers, one file per resource group.
+- `internal/generated/proto/mobile/v1/` — Protobuf-generated request/response types for the mobile API (buf.build).
+- `internal/orchestrator/server/convert/` — Domain-to-proto and proto-to-domain converters, one file per resource group.
 - `internal/orchestrator/server/socketio/types.go` — Socket.IO event name constants, payload structs, and the `Broadcaster` type.
 - `internal/orchestrator/queue/events.go` — `UsageEvent` and `MemoryEvent` — the shared payload types for async pipelines.
 - `cmd/crawbl/platform/orchestrator/orchestrator.go` — Wiring: constructs all concrete repos, services, and the server; the only place that assembles the dependency graph.

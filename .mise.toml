@@ -13,9 +13,10 @@ yq = "4"
 # ko builds container images for Go binaries (platform, agent-runtime).
 # Auth-filter still uses Docker (TinyGo/WASM).
 ko = "0.18"
-# protoc is used for generating gRPC + Protobuf bindings for the crawbl-agent-runtime
-# in internal/agentruntime and proto/agentruntime/v1/*.proto. The Go plugins
-# (protoc-gen-go, protoc-gen-go-grpc) are installed via `crawbl generate --install-tools`
+# buf is the primary protobuf build tool. It replaces raw protoc invocations
+# for linting, breaking-change detection, and code generation (buf generate).
+buf = "1.50"
+# protoc is kept as a fallback dependency for buf remote plugins.
 protoc = "34.1"
 # SonarQube scanner CLI for static analysis (Go code quality).
 sonar-scanner-cli = "latest"

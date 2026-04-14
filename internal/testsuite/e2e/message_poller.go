@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/tidwall/gjson"
 )
 
@@ -48,12 +49,11 @@ func (tc *testContext) sendMessage(alias, text string) error {
 	if state.currentConversation == "" {
 		return fmt.Errorf("no current conversation set for %q — open one first", alias)
 	}
-	body := map[string]any{
-		"local_id":    tc.nextLocalID(alias, "message"),
-		"content":     map[string]any{"type": "text", "text": text},
-		"attachments": []any{},
+	body := &mobilev1.SendMessageRequest{
+		LocalId: tc.nextLocalID(alias, "message"),
+		Content: &mobilev1.MessageContentPayload{Type: "text", Text: text},
 	}
-	if _, err := tc.doRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {
+	if _, err := tc.doProtoRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {
 		return err
 	}
 	// Empty-text scenarios expect a rejection status (400/422/etc.);
@@ -151,11 +151,10 @@ func synthesizeRepliesBody(replies []gjson.Result) ([]byte, error) {
 // main scenario begins.
 func (tc *testContext) sendWarmupMessage(alias string) error {
 	state := tc.userState(alias)
-	body := map[string]any{
-		"local_id":    tc.nextLocalID(alias, "warmup"),
-		"content":     map[string]any{"type": "text", "text": "Reply with the single word READY."},
-		"attachments": []any{},
+	body := &mobilev1.SendMessageRequest{
+		LocalId: tc.nextLocalID(alias, "warmup"),
+		Content: &mobilev1.MessageContentPayload{Type: "text", Text: "Reply with the single word READY."},
 	}
-	_, err := tc.doRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body)
+	_, err := tc.doProtoRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body)
 	return err
 }

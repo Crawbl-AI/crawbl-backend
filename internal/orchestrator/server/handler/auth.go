@@ -7,7 +7,8 @@ import (
 	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
@@ -20,7 +21,7 @@ const errInvalidRequestBody = "invalid request body"
 // systems to verify the server is responsive.
 func HealthCheck(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		WriteSuccess(w, http.StatusOK, &dto.HealthCheckResponse{
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.HealthCheckResponse{
 			Online:  true,
 			Version: orchestrator.APIVersion,
 		})
@@ -38,7 +39,7 @@ func Legal(c *Context) http.HandlerFunc {
 			return
 		}
 
-		WriteSuccess(w, http.StatusOK, &dto.LegalResponse{
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.LegalResponse{
 			TermsOfService:        legalDocuments.TermsOfService,
 			PrivacyPolicy:         legalDocuments.PrivacyPolicy,
 			TermsOfServiceVersion: legalDocuments.TermsOfServiceVersion,
@@ -61,29 +62,29 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 		const minFCMTokenLength = 32
 		const maxFCMTokenLength = 4096
 
-		var reqBody dto.SavePushTokenRequest
-		if err := DecodeJSON(r, &reqBody); err != nil || reqBody.PushToken == "" {
+		var reqBody mobilev1.SavePushTokenRequest
+		if err := DecodeProtoJSON(r, &reqBody); err != nil || reqBody.GetPushToken() == "" {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
-		if len(reqBody.PushToken) < minFCMTokenLength {
+		if len(reqBody.GetPushToken()) < minFCMTokenLength {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "push token is too short")
 			return
 		}
-		if len(reqBody.PushToken) > maxFCMTokenLength {
+		if len(reqBody.GetPushToken()) > maxFCMTokenLength {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "push token exceeds maximum allowed length")
 			return
 		}
 
 		if mErr := c.AuthService.SavePushToken(r.Context(), &orchestratorservice.SavePushTokenOpts{
 			Principal: principal,
-			PushToken: reqBody.PushToken,
+			PushToken: reqBody.GetPushToken(),
 		}); mErr != nil {
 			WriteError(w, mErr)
 			return
 		}
 
-		WriteSuccess(w, http.StatusOK, &dto.SavePushTokenResponse{Success: true})
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.SavePushTokenResponse{Success: true})
 	}
 }
 
@@ -158,8 +159,8 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 			return
 		}
 
-		var reqBody dto.AuthDeleteRequest
-		if err := DecodeJSON(r, &reqBody); err != nil {
+		var reqBody mobilev1.AuthDeleteRequest
+		if err := DecodeProtoJSON(r, &reqBody); err != nil {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
@@ -168,8 +169,8 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 
 		if mErr := c.AuthService.Delete(r.Context(), &orchestratorservice.DeleteOpts{
 			Principal:   principal,
-			Reason:      reqBody.Reason,
-			Description: reqBody.Description,
+			Reason:      reqBody.GetReason(),
+			Description: reqBody.GetDescription(),
 		}); mErr != nil {
 			WriteError(w, mErr)
 			return
@@ -220,9 +221,14 @@ func cleanupRuntimes(c *Context, r *http.Request, workspaces []*orchestrator.Wor
 // UserProfile retrieves the authenticated user's profile information.
 // Returns user details including preferences, subscription status, and account state.
 func UserProfile(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (*dto.UserProfileResponse, *merrors.Error) {
-		return toUserProfileResponse(deps.User), nil
-	})
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+		WriteProtoSuccess(w, http.StatusOK, convert.UserProfileToProto(user))
+	}
 }
 
 // UpdateUser modifies the authenticated user's profile information.
@@ -236,13 +242,13 @@ func UpdateUser(c *Context) http.HandlerFunc {
 			return
 		}
 
-		var reqBody dto.UserUpdateRequest
-		if err := DecodeJSON(r, &reqBody); err != nil {
+		var reqBody mobilev1.UserUpdateRequest
+		if err := DecodeProtoJSON(r, &reqBody); err != nil {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
-		if errMsg := validateUserUpdateFields(reqBody); errMsg != "" {
+		if errMsg := validateUserUpdateProtoFields(&reqBody); errMsg != "" {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errMsg)
 			return
 		}
@@ -257,9 +263,17 @@ func UpdateUser(c *Context) http.HandlerFunc {
 		}
 
 		var dateOfBirth *time.Time
-		if reqBody.DateOfBirth != nil && !reqBody.DateOfBirth.IsZero() {
-			value := reqBody.DateOfBirth.UTC()
-			dateOfBirth = &value
+		if reqBody.DateOfBirth != nil && *reqBody.DateOfBirth != "" {
+			parsed, parseErr := time.Parse(time.RFC3339, *reqBody.DateOfBirth)
+			if parseErr != nil {
+				parsed, parseErr = time.Parse("2006-01-02T15:04:05.000", *reqBody.DateOfBirth)
+				if parseErr != nil {
+					httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid date_of_birth format")
+					return
+				}
+			}
+			utc := parsed.UTC()
+			dateOfBirth = &utc
 		}
 
 		if _, mErr := c.AuthService.UpdateProfile(r.Context(), &orchestratorservice.UpdateProfileOpts{
@@ -279,9 +293,9 @@ func UpdateUser(c *Context) http.HandlerFunc {
 	}
 }
 
-// validateUserUpdateFields checks profile field lengths and formats.
+// validateUserUpdateProtoFields checks profile field lengths and formats.
 // Returns an error message string on failure, or "" on success.
-func validateUserUpdateFields(req dto.UserUpdateRequest) string {
+func validateUserUpdateProtoFields(req *mobilev1.UserUpdateRequest) string {
 	const maxProfileNameLength = 64
 	if req.Nickname != nil && len(*req.Nickname) > maxProfileNameLength {
 		return "nickname exceeds maximum allowed length"
@@ -305,21 +319,28 @@ func validateUserUpdateFields(req dto.UserUpdateRequest) string {
 // Returns terms of service and privacy policy content and versions, plus whether
 // the user has agreed to each document.
 func UserLegal(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (*dto.UserLegalResponse, *merrors.Error) {
-		legalDocuments, mErr := c.AuthService.GetLegalDocuments(r.Context())
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, mErr := c.CurrentUser(r)
 		if mErr != nil {
-			return nil, mErr
+			WriteError(w, mErr)
+			return
 		}
 
-		return &dto.UserLegalResponse{
+		legalDocuments, mErr := c.AuthService.GetLegalDocuments(r.Context())
+		if mErr != nil {
+			WriteError(w, mErr)
+			return
+		}
+
+		WriteProtoSuccess(w, http.StatusOK, &mobilev1.UserLegalResponse{
 			TermsOfService:             legalDocuments.TermsOfService,
 			PrivacyPolicy:              legalDocuments.PrivacyPolicy,
 			TermsOfServiceVersion:      legalDocuments.TermsOfServiceVersion,
 			PrivacyPolicyVersion:       legalDocuments.PrivacyPolicyVersion,
-			HasAgreedWithTerms:         deps.User.HasAgreedWithTerms,
-			HasAgreedWithPrivacyPolicy: deps.User.HasAgreedWithPrivacyPolicy,
-		}, nil
-	})
+			HasAgreedWithTerms:         user.HasAgreedWithTerms,
+			HasAgreedWithPrivacyPolicy: user.HasAgreedWithPrivacyPolicy,
+		})
+	}
 }
 
 // AcceptLegal records the user's acceptance of the specified legal document versions.
@@ -333,8 +354,8 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 			return
 		}
 
-		var reqBody dto.UserLegalAcceptRequest
-		if err := DecodeJSON(r, &reqBody); err != nil {
+		var reqBody mobilev1.UserLegalAcceptRequest
+		if err := DecodeProtoJSON(r, &reqBody); err != nil {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
@@ -364,46 +385,6 @@ func Logout(c *Context) http.HandlerFunc {
 		})
 		return nil
 	})
-}
-
-// toUserProfileResponse converts a domain User to the API response format.
-// It handles nil pointer fields and provides default values for subscription
-// when the user has no active subscription (defaults to "Freemium").
-func toUserProfileResponse(user *orchestrator.User) *dto.UserProfileResponse {
-	subscriptionName := user.Subscription.Name
-	if subscriptionName == "" {
-		subscriptionName = orchestrator.DefaultSubscriptionName
-	}
-	subscriptionCode := user.Subscription.Code
-	if subscriptionCode == "" {
-		subscriptionCode = orchestrator.DefaultSubscriptionCode
-	}
-
-	return &dto.UserProfileResponse{
-		Email:                      user.Email,
-		FirebaseUID:                user.Subject,
-		Nickname:                   user.Nickname,
-		Name:                       user.Name,
-		Surname:                    user.Surname,
-		AvatarURL:                  StringOrEmpty(user.AvatarURL),
-		CountryCode:                StringOrEmpty(user.CountryCode),
-		DateOfBirth:                user.DateOfBirth,
-		CreatedAt:                  user.CreatedAt,
-		IsDeleted:                  user.DeletedAt != nil,
-		IsBanned:                   user.IsBanned,
-		HasAgreedWithTerms:         user.HasAgreedWithTerms,
-		HasAgreedWithPrivacyPolicy: user.HasAgreedWithPrivacyPolicy,
-		Preferences: dto.UserPreferencesResponse{
-			PlatformTheme:    StringOrEmpty(user.Preferences.PlatformTheme),
-			PlatformLanguage: StringOrEmpty(user.Preferences.PlatformLanguage),
-			CurrencyCode:     StringOrEmpty(user.Preferences.CurrencyCode),
-		},
-		Subscription: dto.UserSubscriptionResponse{
-			Name:      subscriptionName,
-			Code:      subscriptionCode,
-			ExpiresAt: user.Subscription.ExpiresAt,
-		},
-	}
 }
 
 // seedWorkspaceRuntime triggers the workspace list operation to ensure the user's

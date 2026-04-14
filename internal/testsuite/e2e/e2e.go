@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -235,11 +236,11 @@ func cleanupUser(cfg *Config, user *testUser) {
 		http:  client,
 		users: map[string]*testUser{user.alias: user},
 	}
-	body := map[string]any{
-		"reason":      "e2e-cleanup",
-		"description": "suite-level cleanup",
+	body := &mobilev1.AuthDeleteRequest{
+		Reason:      "e2e-cleanup",
+		Description: "suite-level cleanup",
 	}
-	_, _ = tc.doRequest("DELETE", "/v1/auth/delete", user.alias, body)
+	_, _ = tc.doProtoRequest("DELETE", "/v1/auth/delete", user.alias, body)
 }
 
 // PrintResults writes a summary to w.

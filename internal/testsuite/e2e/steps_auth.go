@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
+	"google.golang.org/protobuf/proto"
 )
 
 func registerAuthSteps(sc *godog.ScenarioContext, tc *testContext) {
@@ -93,19 +95,19 @@ func (tc *testContext) userShouldSeeDefaultProfileDetails(alias string) error {
 }
 
 func (tc *testContext) userUpdatesProfileDetails(alias string) error {
-	body := map[string]any{
-		"nickname":      testUserBerlinBuilder,
-		"name":          "Alex",
-		"surname":       "Tester",
-		"country_code":  "DE",
-		"date_of_birth": "2000-01-15T00:00:00Z",
-		"preferences": map[string]any{
-			"platform_theme":    "dark",
-			"platform_language": "en",
-			"currency_code":     "EUR",
+	body := &mobilev1.UserUpdateRequest{
+		Nickname:    proto.String(testUserBerlinBuilder),
+		Name:        proto.String("Alex"),
+		Surname:     proto.String("Tester"),
+		CountryCode: proto.String("DE"),
+		DateOfBirth: proto.String("2000-01-15T00:00:00Z"),
+		Preferences: &mobilev1.UserUpdatePreferencesRequest{
+			PlatformTheme:    proto.String("dark"),
+			PlatformLanguage: proto.String("en"),
+			CurrencyCode:     proto.String("EUR"),
 		},
 	}
-	if _, err := tc.doRequest("PATCH", "/v1/users", alias, body); err != nil {
+	if _, err := tc.doProtoRequest("PATCH", "/v1/users", alias, body); err != nil {
 		return err
 	}
 	return tc.assertStatus(http.StatusNoContent)
@@ -137,8 +139,8 @@ func (tc *testContext) userShouldSeeUpdatedProfileDetails(alias string) error {
 func (tc *testContext) userRegistersPushToken(alias string) error {
 	state := tc.userState(alias)
 	state.pushToken = fmt.Sprintf("e2e-%s-push-%d", alias, time.Now().UnixNano())
-	body := map[string]any{"push_token": state.pushToken}
-	if _, err := tc.doRequest("POST", "/v1/fcm-token", alias, body); err != nil {
+	body := &mobilev1.SavePushTokenRequest{PushToken: state.pushToken}
+	if _, err := tc.doProtoRequest("POST", "/v1/fcm-token", alias, body); err != nil {
 		return err
 	}
 	if err := tc.assertStatus(http.StatusOK); err != nil {
@@ -176,11 +178,13 @@ func (tc *testContext) userAcceptsCurrentLegalDocuments(alias string) error {
 	if err := tc.userOpensLegalStatus(alias); err != nil {
 		return err
 	}
-	body := map[string]any{
-		"terms_of_service_version": gjson.GetBytes(tc.lastBody, "data.terms_of_service_version").String(),
-		"privacy_policy_version":   gjson.GetBytes(tc.lastBody, "data.privacy_policy_version").String(),
+	tosVersion := gjson.GetBytes(tc.lastBody, "data.terms_of_service_version").String()
+	ppVersion := gjson.GetBytes(tc.lastBody, "data.privacy_policy_version").String()
+	body := &mobilev1.UserLegalAcceptRequest{
+		TermsOfServiceVersion: proto.String(tosVersion),
+		PrivacyPolicyVersion:  proto.String(ppVersion),
 	}
-	if _, err := tc.doRequest("POST", "/v1/users/legal/accept", alias, body); err != nil {
+	if _, err := tc.doProtoRequest("POST", "/v1/users/legal/accept", alias, body); err != nil {
 		return err
 	}
 	return tc.assertStatus(http.StatusNoContent)
@@ -197,11 +201,11 @@ func (tc *testContext) userShouldShowAcceptedLegalDocuments(alias string) error 
 }
 
 func (tc *testContext) userDeletesTheirAccount(alias string) error {
-	body := map[string]any{
-		"reason":      "e2e-account-deletion",
-		"description": "Testing account deletion flow",
+	body := &mobilev1.AuthDeleteRequest{
+		Reason:      "e2e-account-deletion",
+		Description: "Testing account deletion flow",
 	}
-	if _, err := tc.doRequest("DELETE", "/v1/auth/delete", alias, body); err != nil {
+	if _, err := tc.doProtoRequest("DELETE", "/v1/auth/delete", alias, body); err != nil {
 		return err
 	}
 	// Invalidate the cached resolution so subsequent resolveUser calls

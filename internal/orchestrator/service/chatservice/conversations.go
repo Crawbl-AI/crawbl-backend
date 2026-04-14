@@ -156,7 +156,7 @@ func (s *Service) CreateConversation(ctx context.Context, opts *orchestratorserv
 		WorkspaceID: opts.WorkspaceID,
 		AgentID:     agentID,
 		Type:        opts.Type,
-		Title:       "",
+		Title:       opts.Title,
 		UnreadCount: 0,
 		CreatedAt:   now,
 		UpdatedAt:   now,

@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+// WorkspaceUsageResponse is the response for workspace usage.
+message WorkspaceUsageResponse {
+  string period = 1;
+  int64 tokens_used = 2;
+  int64 prompt_tokens_used = 3;
+  int64 completion_tokens_used = 4;
+  int32 request_count = 5;
+  int64 token_limit = 6;
+}
+
+// UserUsageSummaryResponse is the response for user usage summary.
+message UserUsageSummaryResponse {
+  string current_period = 1;
+  int64 tokens_used = 2;
+  int64 prompt_tokens_used = 3;
+  int64 completion_tokens_used = 4;
+  int32 request_count = 5;
+  int64 token_limit = 6;
+  string plan_id = 7;
+}

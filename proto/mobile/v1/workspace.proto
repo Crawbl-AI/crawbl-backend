@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+import "google/protobuf/timestamp.proto";
+
+// LastMessagePreviewResponse represents a preview of the most recent message.
+message LastMessagePreviewResponse {
+  string text = 1;
+  string sender_name = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// WorkspaceRuntimeResponse represents the swarm runtime status for a workspace.
+message WorkspaceRuntimeResponse {
+  string status = 1;
+  string phase = 2;
+  bool verified = 3;
+  int32 total_agents = 4;
+  optional LastMessagePreviewResponse last_message_preview = 5;
+}
+
+// WorkspaceResponse represents a workspace in API responses.
+message WorkspaceResponse {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  optional WorkspaceRuntimeResponse runtime = 5;
+}
