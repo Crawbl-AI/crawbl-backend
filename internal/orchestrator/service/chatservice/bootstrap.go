@@ -76,29 +76,11 @@ func (s *Service) ensureWorkspaceBootstrap(ctx context.Context, sess *dbr.Sessio
 	return workspace, agents, conversations, nil
 }
 
-// ensureDefaultAgents ensures all default agents exist for the workspace.
+// ensureDefaultAgents ensures all default agents exist for the workspace and
+// reconciles them with the current blueprint (prompt, tools, metadata) so
+// changes in seed/agents.json land on existing workspaces without a one-off
+// migration.
 func (s *Service) ensureDefaultAgents(ctx context.Context, sess *dbr.Session, workspace *orchestrator.Workspace) ([]*orchestrator.Agent, *merrors.Error) {
-	agents, mErr := s.agentRepo.ListByWorkspaceID(ctx, sess, workspace.ID)
-	if mErr != nil {
-		return nil, mErr
-	}
-
-	agentsBySlug := make(map[string]*orchestrator.Agent, len(agents))
-	for _, agent := range agents {
-		agentsBySlug[agent.Slug] = agent
-	}
-
-	missing := false
-	for _, blueprint := range s.defaultAgents {
-		if agentsBySlug[blueprint.Slug] == nil {
-			missing = true
-			break
-		}
-	}
-	if !missing {
-		return agents, nil
-	}
-
 	return database.WithTransaction(sess, "ensure default agents", func(tx *dbr.Tx) ([]*orchestrator.Agent, *merrors.Error) {
 		freshAgents, mErr := s.agentRepo.ListByWorkspaceID(ctx, tx, workspace.ID)
 		if mErr != nil {
