@@ -288,9 +288,6 @@ func (s *Service) ensureDefaultAgentSettings(ctx context.Context, sess orchestra
 		if mErr != nil {
 			return mErr
 		}
-		if existing != nil {
-			continue // already seeded
-		}
 
 		// Find allowed tools from blueprint.
 		var allowedTools []string
@@ -301,14 +298,24 @@ func (s *Service) ensureDefaultAgentSettings(ctx context.Context, sess orchestra
 			}
 		}
 
-		if mErr := s.agentSettingsRepo.Save(ctx, sess, &orchestratorrepo.AgentSettingsRow{
+		row := &orchestratorrepo.AgentSettingsRow{
 			AgentID:        agent.ID,
 			Model:          orchestrator.DefaultAgentModel,
 			ResponseLength: string(orchestrator.ResponseLengthAuto),
 			AllowedTools:   allowedTools,
-			CreatedAt:      now,
 			UpdatedAt:      now,
-		}); mErr != nil {
+		}
+		if existing != nil {
+			// Preserve user-selected model/response length; reconcile allowed_tools
+			// to the blueprint so new tools land on existing agents without requiring
+			// a migration each rollout.
+			row.Model = existing.Model
+			row.ResponseLength = existing.ResponseLength
+			row.CreatedAt = existing.CreatedAt
+		} else {
+			row.CreatedAt = now
+		}
+		if mErr := s.agentSettingsRepo.Save(ctx, sess, row); mErr != nil {
 			return mErr
 		}
 	}
