@@ -159,9 +159,11 @@ func ListModels(c *Context) http.HandlerFunc {
 	}
 }
 
-// GetAgentMemories retrieves memories from the agent's agent runtime.
+// GetAgentMemories retrieves memories from the agent's memory palace.
+// Pagination is handled by the service/repo layer; the response is a flat
+// array of memory entries inside the standard {"data": [...]} envelope.
 func GetAgentMemories(c *Context) http.HandlerFunc {
-	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) (dto.AgentMemoriesListResponse, *merrors.Error) {
+	return AuthedHandlerNoBody(c, func(r *http.Request, deps *AuthedHandlerDeps) ([]dto.AgentMemoryResponse, *merrors.Error) {
 		category := r.URL.Query().Get("category")
 		limit, offset := Pagination(r)
 
@@ -173,23 +175,11 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			Offset:   offset,
 		})
 		if mErr != nil {
-			return dto.AgentMemoriesListResponse{}, mErr
+			return nil, mErr
 		}
 
-		// Slice pagination over the full list from the agent runtime.
-		total := len(memories)
-		start := offset
-		if start > total {
-			start = total
-		}
-		end := start + limit
-		if end > total {
-			end = total
-		}
-		page := memories[start:end]
-
-		items := make([]dto.AgentMemoryResponse, 0, len(page))
-		for _, m := range page {
+		items := make([]dto.AgentMemoryResponse, 0, len(memories))
+		for _, m := range memories {
 			items = append(items, dto.AgentMemoryResponse{
 				Key:       m.Key,
 				Content:   m.Content,
@@ -199,15 +189,7 @@ func GetAgentMemories(c *Context) http.HandlerFunc {
 			})
 		}
 
-		return dto.AgentMemoriesListResponse{
-			Memories: items,
-			Pagination: dto.OffsetPaginationResponse{
-				Total:   total,
-				Limit:   limit,
-				Offset:  offset,
-				HasNext: end < total,
-			},
-		}, nil
+		return items, nil
 	})
 }
 
@@ -222,25 +204,38 @@ func DeleteAgentMemory(c *Context) http.HandlerFunc {
 	})
 }
 
-// CreateAgentMemory stores a new memory in the agent's agent runtime.
+// CreateAgentMemory stores a new memory in the agent's memory palace and
+// returns the created entry (including server-generated timestamps) as 201
+// Created inside the standard {"data": {...}} envelope.
 func CreateAgentMemory(c *Context) http.HandlerFunc {
-	return AuthedJSONNoContent(c, func(r *http.Request, deps *AuthedHandlerDeps, body *dto.CreateAgentMemoryRequest) *merrors.Error {
+	return AuthedHandlerCreated(c, func(r *http.Request, deps *AuthedHandlerDeps, body *dto.CreateAgentMemoryRequest) (dto.AgentMemoryResponse, *merrors.Error) {
 		if strings.TrimSpace(body.Key) == "" || len(body.Key) > MaxAgentMemoryKeyLength {
-			return merrors.ErrAgentMemoryFieldTooLong
+			return dto.AgentMemoryResponse{}, merrors.ErrAgentMemoryFieldTooLong
 		}
 		if strings.TrimSpace(body.Content) == "" || len(body.Content) > MaxAgentMemoryContentLength {
-			return merrors.ErrAgentMemoryFieldTooLong
+			return dto.AgentMemoryResponse{}, merrors.ErrAgentMemoryFieldTooLong
 		}
 		if len(body.Category) > MaxAgentMemoryCategoryLength {
-			return merrors.ErrAgentMemoryFieldTooLong
+			return dto.AgentMemoryResponse{}, merrors.ErrAgentMemoryFieldTooLong
 		}
 
-		return c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
+		created, mErr := c.AgentService.CreateAgentMemory(r.Context(), &orchestratorservice.CreateAgentMemoryOpts{
 			UserID:   deps.User.ID,
 			AgentID:  chi.URLParam(r, "id"),
 			Key:      body.Key,
 			Content:  body.Content,
 			Category: body.Category,
 		})
+		if mErr != nil {
+			return dto.AgentMemoryResponse{}, mErr
+		}
+
+		return dto.AgentMemoryResponse{
+			Key:       created.Key,
+			Content:   created.Content,
+			Category:  created.Category,
+			CreatedAt: created.CreatedAt,
+			UpdatedAt: created.UpdatedAt,
+		}, nil
 	})
 }
