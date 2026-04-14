@@ -17,6 +17,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/dev"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/generate"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/infra"
+	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/lint"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/platform"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/setup"
 	"github.com/Crawbl-AI/crawbl-backend/cmd/crawbl/test"
@@ -113,7 +114,10 @@ func main() {
 	ciCmd := ci.NewCICommand()
 	ciCmd.GroupID = groupBuild
 
-	rootCmd.AddCommand(platformCmd, infraCmd, appCmd, testCmd, setupCmd, devCmd, generateCmd, ciCmd)
+	lintCmd := lint.NewLintCommand()
+	lintCmd.GroupID = groupDevelopment
+
+	rootCmd.AddCommand(platformCmd, infraCmd, appCmd, testCmd, setupCmd, devCmd, generateCmd, ciCmd, lintCmd)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		stop()

@@ -1,0 +1,6 @@
+version: v1.62.2
+name: crawbl-lint
+destination: ./bin
+plugins:
+  - module: github.com/Crawbl-AI/crawbl-backend
+    path: .
