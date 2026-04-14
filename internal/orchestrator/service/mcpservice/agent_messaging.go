@@ -128,7 +128,11 @@ func (s *service) callAgentRuntime(
 	})
 	if rErr != nil {
 		duration := time.Since(startTime).Milliseconds()
-		s.failAgentMessage(ctx, sess, msgID, rErr.Error(), duration, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID)
+		s.failAgentMessage(failAgentMessageOpts{
+			ctx: ctx, sess: sess, msgID: msgID, errText: rErr.Error(),
+			durationMs: duration, workspaceID: params.WorkspaceID,
+			from: fromAgent, to: targetAgent, conversationID: params.ConversationID,
+		})
 		return &SendAgentMessageResult{AgentSlug: slug, Error: "runtime not ready: " + rErr.Error(), MessageID: msgID}, nil
 	}
 
@@ -141,7 +145,11 @@ func (s *service) callAgentRuntime(
 	duration := time.Since(startTime).Milliseconds()
 
 	if callErr != nil {
-		s.failAgentMessage(ctx, sess, msgID, callErr.Error(), duration, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID)
+		s.failAgentMessage(failAgentMessageOpts{
+			ctx: ctx, sess: sess, msgID: msgID, errText: callErr.Error(),
+			durationMs: duration, workspaceID: params.WorkspaceID,
+			from: fromAgent, to: targetAgent, conversationID: params.ConversationID,
+		})
 		return &SendAgentMessageResult{AgentSlug: slug, Error: callErr.Error(), MessageID: msgID}, nil
 	}
 
@@ -216,12 +224,25 @@ func resolveAgents(agents []*orchestrator.Agent, slug, sessionID string) (target
 	return target, from, callingSlug, ""
 }
 
+// failAgentMessageOpts groups the inputs for failAgentMessage.
+type failAgentMessageOpts struct {
+	ctx            contextT
+	sess           sessionT
+	msgID          string
+	errText        string
+	durationMs     int64
+	workspaceID    string
+	from           *orchestrator.Agent
+	to             *orchestrator.Agent
+	conversationID string
+}
+
 // failAgentMessage marks an agent_messages row as failed and emits a delegation-done event.
-func (s *service) failAgentMessage(ctx contextT, sess sessionT, msgID, errText string, durationMs int64, workspaceID string, from, to *orchestrator.Agent, conversationID string) {
-	if failErr := s.repos.MCP.UpdateAgentMessageFailed(ctx, sess, msgID, errText, durationMs); failErr != nil {
+func (s *service) failAgentMessage(o failAgentMessageOpts) {
+	if failErr := s.repos.MCP.UpdateAgentMessageFailed(o.ctx, o.sess, o.msgID, o.errText, o.durationMs); failErr != nil {
 		s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
 	}
-	s.emitDelegationDone(ctx, workspaceID, from, to, conversationID, msgID, realtime.AgentDelegationStatusFailed)
+	s.emitDelegationDone(o.ctx, o.workspaceID, o.from, o.to, o.conversationID, o.msgID, realtime.AgentDelegationStatusFailed)
 }
 
 func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, to *orchestrator.Agent, conversationID, msgID, message string) {

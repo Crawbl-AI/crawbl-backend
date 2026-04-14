@@ -14,92 +14,89 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
+// Deps holds the infrastructure dependencies for a ChatService.
+// DB is required. Broadcaster defaults to a no-op when nil.
+// MemoryStack, PricingCache, UsagePublisher, and IngestPool are optional
+// and degrade gracefully when nil.
+type Deps struct {
+	DB             *dbr.Connection
+	Repos          Repos
+	RuntimeClient  userswarmclient.Client
+	Broadcaster    realtime.Broadcaster
+	MemoryStack    layers.Stack
+	PricingCache   *pricing.Cache
+	UsagePublisher *queue.UsagePublisher
+	IngestPool     autoingest.Service
+}
+
 // New creates a new ChatService with the provided dependencies.
-// db is required for request sessions. memoryStack may be nil; when nil,
-// context building falls back to recent messages only. ingestPool may
+// DB is required for request sessions. MemoryStack may be nil; when nil,
+// context building falls back to recent messages only. IngestPool may
 // be nil, in which case auto-ingest is disabled cleanly.
 // Returns an error if any required dependency is nil.
-func New(
-	db *dbr.Connection,
-	repos Repos,
-	runtimeClient userswarmclient.Client,
-	broadcaster realtime.Broadcaster,
-	memoryStack layers.Stack,
-	pricingCache *pricing.Cache,
-	usagePublisher *queue.UsagePublisher,
-	ingestPool autoingest.Service,
-) (*Service, error) {
-	if db == nil {
+func New(deps Deps) (*Service, error) {
+	if deps.DB == nil {
 		return nil, errors.New("chatservice: db is required")
 	}
-	if repos.Workspace == nil {
+	if deps.Repos.Workspace == nil {
 		return nil, errors.New("chatservice: Workspace repo is required")
 	}
-	if repos.Agent == nil {
+	if deps.Repos.Agent == nil {
 		return nil, errors.New("chatservice: Agent repo is required")
 	}
-	if repos.Conversation == nil {
+	if deps.Repos.Conversation == nil {
 		return nil, errors.New("chatservice: Conversation repo is required")
 	}
-	if repos.Message == nil {
+	if deps.Repos.Message == nil {
 		return nil, errors.New("chatservice: Message repo is required")
 	}
-	if repos.Tools == nil {
+	if deps.Repos.Tools == nil {
 		return nil, errors.New("chatservice: Tools repo is required")
 	}
-	if repos.AgentSettings == nil {
+	if deps.Repos.AgentSettings == nil {
 		return nil, errors.New("chatservice: AgentSettings repo is required")
 	}
-	if repos.AgentPrompts == nil {
+	if deps.Repos.AgentPrompts == nil {
 		return nil, errors.New("chatservice: AgentPrompts repo is required")
 	}
-	if repos.AgentHistory == nil {
+	if deps.Repos.AgentHistory == nil {
 		return nil, errors.New("chatservice: AgentHistory repo is required")
 	}
-	if repos.Usage == nil {
+	if deps.Repos.Usage == nil {
 		return nil, errors.New("chatservice: Usage repo is required")
 	}
-	if runtimeClient == nil {
+	if deps.RuntimeClient == nil {
 		return nil, errors.New("chatservice: runtimeClient is required")
 	}
-	if broadcaster == nil {
-		broadcaster = realtime.NopBroadcaster{}
+	if deps.Broadcaster == nil {
+		deps.Broadcaster = realtime.NopBroadcaster{}
 	}
 
 	return &Service{
-		db:                db,
-		workspaceRepo:     repos.Workspace,
-		agentRepo:         repos.Agent,
-		conversationRepo:  repos.Conversation,
-		messageRepo:       repos.Message,
-		toolsRepo:         repos.Tools,
-		agentSettingsRepo: repos.AgentSettings,
-		agentPromptsRepo:  repos.AgentPrompts,
-		agentHistoryRepo:  repos.AgentHistory,
-		usageRepo:         repos.Usage,
-		runtimeClient:     runtimeClient,
-		broadcaster:       broadcaster,
+		db:                deps.DB,
+		workspaceRepo:     deps.Repos.Workspace,
+		agentRepo:         deps.Repos.Agent,
+		conversationRepo:  deps.Repos.Conversation,
+		messageRepo:       deps.Repos.Message,
+		toolsRepo:         deps.Repos.Tools,
+		agentSettingsRepo: deps.Repos.AgentSettings,
+		agentPromptsRepo:  deps.Repos.AgentPrompts,
+		agentHistoryRepo:  deps.Repos.AgentHistory,
+		usageRepo:         deps.Repos.Usage,
+		runtimeClient:     deps.RuntimeClient,
+		broadcaster:       deps.Broadcaster,
 		defaultAgents:     orchestrator.GetDefaultAgents(),
-		memoryStack:       memoryStack,
-		pricingCache:      pricingCache,
-		usagePublisher:    usagePublisher,
-		ingestPool:        ingestPool,
+		memoryStack:       deps.MemoryStack,
+		pricingCache:      deps.PricingCache,
+		usagePublisher:    deps.UsagePublisher,
+		ingestPool:        deps.IngestPool,
 	}, nil
 }
 
 // MustNew creates a new ChatService or panics if any required dependency is nil.
 // Use in main/wiring only; prefer New in code that can propagate errors.
-func MustNew(
-	db *dbr.Connection,
-	repos Repos,
-	runtimeClient userswarmclient.Client,
-	broadcaster realtime.Broadcaster,
-	memoryStack layers.Stack,
-	pricingCache *pricing.Cache,
-	usagePublisher *queue.UsagePublisher,
-	ingestPool autoingest.Service,
-) *Service {
-	s, err := New(db, repos, runtimeClient, broadcaster, memoryStack, pricingCache, usagePublisher, ingestPool)
+func MustNew(deps Deps) *Service {
+	s, err := New(deps)
 	if err != nil {
 		panic(err)
 	}

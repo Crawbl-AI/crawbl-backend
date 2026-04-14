@@ -111,7 +111,11 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 			continue
 		}
 
-		found, reaped, userReaped, err := processStaleSwarm(ctx, k8sClient, sess, repo, logger, swarm, softDeletedUsers, cfg.DryRun)
+		found, reaped, userReaped, err := processStaleSwarm(processStaleSwarmOpts{
+			ctx: ctx, k8sClient: k8sClient, sess: sess, repo: repo,
+			logger: logger, swarm: swarm, softDeletedUsers: softDeletedUsers,
+			dryRun: cfg.DryRun,
+		})
 		result.UsersFound += found
 		result.SwarmsReaped += reaped
 		result.UsersReaped += userReaped
@@ -133,22 +137,33 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	return result, nil
 }
 
+// processStaleSwarmOpts groups the inputs for processStaleSwarm.
+type processStaleSwarmOpts struct {
+	ctx              context.Context
+	k8sClient        client.Client
+	sess             *dbr.Session
+	repo             *reaperrepo.Repo
+	logger           *slog.Logger
+	swarm            *crawblv1alpha1.UserSwarm
+	softDeletedUsers map[string]struct{}
+	dryRun           bool
+}
+
 // processStaleSwarm handles a single stale UserSwarm CR in phase 1 of the
 // reaper loop. It looks up the owning user, validates it is an e2e subject,
 // deletes the CR when appropriate, and soft-deletes the user row once.
 //
 // Returns (usersFound, swarmsReaped, usersReaped, err). A non-nil err means
 // the operation should count as one error in Result.Errors.
-func processStaleSwarm(
-	ctx context.Context,
-	k8sClient client.Client,
-	sess *dbr.Session,
-	repo *reaperrepo.Repo,
-	logger *slog.Logger,
-	swarm *crawblv1alpha1.UserSwarm,
-	softDeletedUsers map[string]struct{},
-	dryRun bool,
-) (usersFound, swarmsReaped, usersReaped int, err error) {
+func processStaleSwarm(o processStaleSwarmOpts) (usersFound, swarmsReaped, usersReaped int, err error) {
+	ctx := o.ctx
+	k8sClient := o.k8sClient
+	sess := o.sess
+	repo := o.repo
+	logger := o.logger
+	swarm := o.swarm
+	softDeletedUsers := o.softDeletedUsers
+	dryRun := o.dryRun
 	age := time.Since(swarm.CreationTimestamp.Time).Truncate(time.Minute)
 	userID := swarm.Spec.UserID
 

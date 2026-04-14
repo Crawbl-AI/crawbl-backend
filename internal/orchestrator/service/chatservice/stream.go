@@ -50,92 +50,107 @@ type streamSession struct {
 	firstChunk  bool
 }
 
-func newStreamSession(
-	ctx context.Context,
-	svc *Service,
-	opts *orchestratorservice.SendMessageOpts,
-	pm *persistedMsg,
-	conv *orchestrator.Conversation,
-	agent *orchestrator.Agent,
-	lookups agentLookups,
-	placeholder *orchestrator.Message,
-) *streamSession {
-	return &streamSession{
-		ctx:          ctx,
-		svc:          svc,
-		sess:         database.SessionFromContext(ctx),
-		wsID:         opts.WorkspaceID,
-		userID:       opts.UserID,
-		convID:       conv.ID,
-		conversation: conv,
-		primary:      agent,
-		lookups:      lookups,
-		placeholder:  placeholder,
-		streams:      map[string]*subAgentStream{agent.ID: {agent: agent, placeholder: placeholder, firstChunk: true}},
-		pending:      make(map[string]pendingToolCall),
-		log:          slog.With("agent", agent.Slug, "conv", conv.ID),
+// newStreamSessionOpts groups the inputs for newStreamSession.
+type newStreamSessionOpts struct {
+	ctx         context.Context
+	svc         *Service
+	sendOpts    *orchestratorservice.SendMessageOpts
+	pm          *persistedMsg
+	conv        *orchestrator.Conversation
+	agent       *orchestrator.Agent
+	lookups     agentLookups
+	placeholder *orchestrator.Message
+}
 
-		userMessageID: pm.userMessageID,
-		localID:       pm.localID,
-		deliveredOnce: pm.deliveredOnce,
-		readOnce:      pm.readOnce,
-		onPersisted:   pm.onPersisted,
+func newStreamSession(o newStreamSessionOpts) *streamSession {
+	return &streamSession{
+		ctx:          o.ctx,
+		svc:          o.svc,
+		sess:         database.SessionFromContext(o.ctx),
+		wsID:         o.sendOpts.WorkspaceID,
+		userID:       o.sendOpts.UserID,
+		convID:       o.conv.ID,
+		conversation: o.conv,
+		primary:      o.agent,
+		lookups:      o.lookups,
+		placeholder:  o.placeholder,
+		streams:      map[string]*subAgentStream{o.agent.ID: {agent: o.agent, placeholder: o.placeholder, firstChunk: true}},
+		pending:      make(map[string]pendingToolCall),
+		log:          slog.With("agent", o.agent.Slug, "conv", o.conv.ID),
+
+		userMessageID: o.pm.userMessageID,
+		localID:       o.pm.localID,
+		deliveredOnce: o.pm.deliveredOnce,
+		readOnce:      o.pm.readOnce,
+		onPersisted:   o.pm.onPersisted,
 
 		startTime:  time.Now(),
 		firstChunk: true,
 	}
 }
 
+// callAgentStreamingOpts groups the inputs for callAgentStreaming.
+type callAgentStreamingOpts struct {
+	ctx          context.Context
+	sendOpts     *orchestratorservice.SendMessageOpts
+	pm           *persistedMsg
+	conversation *orchestrator.Conversation
+	runtimeState *orchestrator.RuntimeStatus
+	agent        *orchestrator.Agent
+	lookups      agentLookups
+	extraContext string
+}
+
 // callAgentStreaming handles a single agent's streaming gRPC call.
 // Creates a placeholder, reads chunks from the runtime, emits Socket.IO
 // events, and persists the final message(s). Multi-agent: distinct agent_id
 // values in chunks get separate placeholder messages.
-func (s *Service) callAgentStreaming(
-	ctx context.Context,
-	opts *orchestratorservice.SendMessageOpts,
-	pm *persistedMsg,
-	conversation *orchestrator.Conversation,
-	runtimeState *orchestrator.RuntimeStatus,
-	agent *orchestrator.Agent,
-	lookups agentLookups,
-	extraContext string,
-) ([]*orchestrator.Message, *merrors.Error) {
-	if agent == nil {
+func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.Message, *merrors.Error) {
+	if o.agent == nil {
 		return nil, merrors.ErrAgentNotFound
 	}
 
-	wsID := opts.WorkspaceID
-	convID := conversation.ID
-	sess := database.SessionFromContext(ctx)
+	wsID := o.sendOpts.WorkspaceID
+	convID := o.conversation.ID
+	sess := database.SessionFromContext(o.ctx)
 
 	// 1. Emit thinking + create placeholder.
-	log := slog.With("agent", agent.Slug, "conv", convID)
-	s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusThinking), convID)
+	log := slog.With("agent", o.agent.Slug, "conv", convID)
+	s.broadcaster.EmitAgentStatus(o.ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusThinking), convID)
 
-	placeholder := s.newPlaceholder(conversation.ID, agent)
-	if mErr := s.savePlaceholder(ctx, sess, placeholder); mErr != nil {
-		s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusError))
+	placeholder := s.newPlaceholder(o.conversation.ID, o.agent)
+	if mErr := s.savePlaceholder(o.ctx, sess, placeholder); mErr != nil {
+		s.broadcaster.EmitAgentStatus(o.ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusError))
 		return nil, mErr
 	}
 
 	// 2. Open gRPC stream.
-	streamCh, mErr := s.runtimeClient.SendTextStream(ctx, &userswarmclient.SendTextOpts{
-		Runtime:   runtimeState,
-		Message:   runtimeMessage(normalizeRuntimeMessage(opts.Content.Text, opts.Mentions), extraContext),
+	streamCh, mErr := s.runtimeClient.SendTextStream(o.ctx, &userswarmclient.SendTextOpts{
+		Runtime:   o.runtimeState,
+		Message:   runtimeMessage(normalizeRuntimeMessage(o.sendOpts.Content.Text, o.sendOpts.Mentions), o.extraContext),
 		SessionID: convID,
-		AgentID:   runtimeAgentID(agent),
+		AgentID:   runtimeAgentID(o.agent),
 	})
 	if mErr != nil {
 		log.Warn("stream open failed, removing placeholder", "error", mErr.Error())
-		if delErr := s.messageRepo.DeleteByID(ctx, sess, placeholder.ID); delErr != nil {
+		if delErr := s.messageRepo.DeleteByID(o.ctx, sess, placeholder.ID); delErr != nil {
 			log.Warn("failed to delete placeholder", "error", delErr.Error())
 		}
-		s.broadcaster.EmitAgentStatus(ctx, wsID, agent.ID, string(orchestrator.AgentStatusError), convID)
+		s.broadcaster.EmitAgentStatus(o.ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusError), convID)
 		return nil, mErr
 	}
 
 	// 3. Create session and process stream.
-	ss := newStreamSession(ctx, s, opts, pm, conversation, agent, lookups, placeholder)
+	ss := newStreamSession(newStreamSessionOpts{
+		ctx:         o.ctx,
+		svc:         s,
+		sendOpts:    o.sendOpts,
+		pm:          o.pm,
+		conv:        o.conversation,
+		agent:       o.agent,
+		lookups:     o.lookups,
+		placeholder: placeholder,
+	})
 	ss.emitDelivered()
 	ss.processStream(streamCh)
 
@@ -144,8 +159,8 @@ func (s *Service) callAgentStreaming(
 
 	// Auto-ingest conversation into MemPalace memory (non-blocking).
 	if len(replies) > 0 {
-		agentID := agent.ID
-		s.autoIngestConversation(ctx, wsID, agentID, opts.Content.Text, replies)
+		agentID := o.agent.ID
+		s.autoIngestConversation(o.ctx, wsID, agentID, o.sendOpts.Content.Text, replies)
 	}
 
 	if len(replies) == 0 {

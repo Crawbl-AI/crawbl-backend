@@ -172,7 +172,11 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		if ctx.Err() != nil {
 			break
 		}
-		done := s.executeWorkflowStep(ctx, sess, executionID, i, step, workflowCtx, execution, emitter, runtime)
+		done := s.executeWorkflowStep(executeWorkflowStepOpts{
+			ctx: ctx, sess: sess, executionID: executionID, i: i,
+			step: step, workflowCtx: workflowCtx, execution: execution,
+			emitter: emitter, runtime: runtime,
+		})
 		if done {
 			return
 		}
@@ -189,19 +193,31 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 	emitter.Completed(ctx)
 }
 
+// executeWorkflowStepOpts groups the inputs for executeWorkflowStep.
+type executeWorkflowStepOpts struct {
+	ctx         context.Context
+	sess        *dbr.Session
+	executionID string
+	i           int
+	step        workflowrepo.WorkflowStep
+	workflowCtx map[string]string
+	execution   *workflowrepo.WorkflowExecutionRow
+	emitter     *workflowEmitter
+	runtime     *orchestrator.RuntimeStatus
+}
+
 // executeWorkflowStep runs a single workflow step and updates state in-place.
 // Returns true when the caller should stop the loop (fatal failure handled internally).
-func (s *service) executeWorkflowStep(
-	ctx context.Context,
-	sess *dbr.Session,
-	executionID string,
-	i int,
-	step workflowrepo.WorkflowStep,
-	workflowCtx map[string]string,
-	execution *workflowrepo.WorkflowExecutionRow,
-	emitter *workflowEmitter,
-	runtime *orchestrator.RuntimeStatus,
-) bool {
+func (s *service) executeWorkflowStep(o executeWorkflowStepOpts) bool {
+	ctx := o.ctx
+	sess := o.sess
+	executionID := o.executionID
+	i := o.i
+	step := o.step
+	workflowCtx := o.workflowCtx
+	execution := o.execution
+	emitter := o.emitter
+	runtime := o.runtime
 	// Build prompt from template with context substitution.
 	prompt := step.PromptTemplate
 	for k, v := range workflowCtx {
@@ -252,7 +268,12 @@ func (s *service) executeWorkflowStep(
 	completedAt := time.Now().UTC()
 
 	if callErr != nil {
-		return s.handleStepFailure(ctx, sess, executionID, i, step, stepExec, execution, emitter, callErr, durationMs, completedAt)
+		return s.handleStepFailure(handleStepFailureOpts{
+			ctx: ctx, sess: sess, executionID: executionID, i: i,
+			step: step, stepExec: stepExec, execution: execution,
+			emitter: emitter, callErr: callErr, durationMs: durationMs,
+			completedAt: completedAt,
+		})
 	}
 
 	// Concatenate all agent turn texts into a single response string.
@@ -317,21 +338,35 @@ func (s *service) handleStepApproval(
 	}
 }
 
+// handleStepFailureOpts groups the inputs for handleStepFailure.
+type handleStepFailureOpts struct {
+	ctx         context.Context
+	sess        *dbr.Session
+	executionID string
+	i           int
+	step        workflowrepo.WorkflowStep
+	stepExec    *workflowrepo.WorkflowStepExecutionRow
+	execution   *workflowrepo.WorkflowExecutionRow
+	emitter     *workflowEmitter
+	callErr     error
+	durationMs  int
+	completedAt time.Time
+}
+
 // handleStepFailure updates state after a step runtime call fails.
 // Returns true when the workflow loop should stop (OnFailureStop policy).
-func (s *service) handleStepFailure(
-	ctx context.Context,
-	sess *dbr.Session,
-	executionID string,
-	i int,
-	step workflowrepo.WorkflowStep,
-	stepExec *workflowrepo.WorkflowStepExecutionRow,
-	execution *workflowrepo.WorkflowExecutionRow,
-	emitter *workflowEmitter,
-	callErr error,
-	durationMs int,
-	completedAt time.Time,
-) bool {
+func (s *service) handleStepFailure(o handleStepFailureOpts) bool {
+	ctx := o.ctx
+	sess := o.sess
+	executionID := o.executionID
+	i := o.i
+	step := o.step
+	stepExec := o.stepExec
+	execution := o.execution
+	emitter := o.emitter
+	callErr := o.callErr
+	durationMs := o.durationMs
+	completedAt := o.completedAt
 	errMsg := callErr.Error()
 	stepExec.Status = string(workflowrepo.WorkflowStatusFailed)
 	stepExec.OutputText = &errMsg

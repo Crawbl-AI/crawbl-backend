@@ -165,52 +165,73 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			"subject", subject,
 		)
 
-		registerWorkspaceSubscribeHandler(s, sd, logger, subject, shutdownCtx, db, workspaceRepo, authService)
+		registerWorkspaceSubscribeHandler(workspaceSubscribeHandlerOpts{
+				socket:        s,
+				sd:            sd,
+				logger:        logger,
+				subject:       subject,
+				shutdownCtx:   shutdownCtx,
+				db:            db,
+				workspaceRepo: workspaceRepo,
+				authService:   authService,
+			})
 		registerWorkspaceUnsubscribeHandler(s, logger, subject)
 		registerDisconnectHandler(s, sd, logger, subject)
 	})
 }
 
+// workspaceSubscribeHandlerOpts groups the inputs for registerWorkspaceSubscribeHandler.
+type workspaceSubscribeHandlerOpts struct {
+	socket        *socket.Socket
+	sd            *socketData
+	logger        *slog.Logger
+	subject       string
+	shutdownCtx   context.Context
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
+}
+
 // registerWorkspaceSubscribeHandler wires the workspace.subscribe event on a socket.
 // It verifies ownership then joins the authorised workspace rooms.
-func registerWorkspaceSubscribeHandler(
-	s *socket.Socket,
-	sd *socketData,
-	logger *slog.Logger,
-	subject string,
-	shutdownCtx context.Context,
-	db *dbr.Connection,
-	workspaceRepo workspaceOwnerChecker,
-	authService authResolver,
-) {
-	_ = s.On(eventWorkspaceSubscribe, func(args ...any) {
+func registerWorkspaceSubscribeHandler(o workspaceSubscribeHandlerOpts) {
+	_ = o.socket.On(eventWorkspaceSubscribe, func(args ...any) {
 		ids := parseWorkspaceIDs(args)
 		if len(ids) == 0 {
 			return
 		}
 
 		// Guard: reject subscribe when no principal is present.
-		if sd.Principal == nil || strings.TrimSpace(sd.Principal.Subject) == "" {
-			logger.Warn("socketio: workspace subscribe rejected — no principal",
-				"socket_id", string(s.Id()),
+		if o.sd.Principal == nil || strings.TrimSpace(o.sd.Principal.Subject) == "" {
+			o.logger.Warn("socketio: workspace subscribe rejected — no principal",
+				"socket_id", string(o.socket.Id()),
 			)
 			return
 		}
 
-		authorised, ok := resolveAuthorisedWorkspaces(shutdownCtx, logger, s, sd.Principal.Subject, ids, db, workspaceRepo, authService)
+		authorised, ok := resolveAuthorisedWorkspaces(resolveAuthorisedWorkspacesOpts{
+			ctx:           o.shutdownCtx,
+			logger:        o.logger,
+			socket:        o.socket,
+			userSubject:   o.sd.Principal.Subject,
+			ids:           ids,
+			db:            o.db,
+			workspaceRepo: o.workspaceRepo,
+			authService:   o.authService,
+		})
 		if !ok || len(authorised) == 0 {
 			return
 		}
 
 		for _, id := range authorised {
-			s.Join(socket.Room(workspaceRoomPrefix + id))
+			o.socket.Join(socket.Room(workspaceRoomPrefix + id))
 		}
-		logger.Info("socketio: workspace subscribe",
-			"socket_id", string(s.Id()),
-			"subject", subject,
+		o.logger.Info("socketio: workspace subscribe",
+			"socket_id", string(o.socket.Id()),
+			"subject", o.subject,
 			"workspace_ids", authorised,
 		)
-		_ = s.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
+		_ = o.socket.Emit(eventWorkspaceSubscribed, workspaceSubscribePayload{WorkspaceIDs: authorised})
 	})
 }
 
@@ -252,37 +273,40 @@ func registerDisconnectHandler(s *socket.Socket, sd *socketData, logger *slog.Lo
 	})
 }
 
+// resolveAuthorisedWorkspacesOpts groups the inputs for resolveAuthorisedWorkspaces.
+type resolveAuthorisedWorkspacesOpts struct {
+	ctx           context.Context
+	logger        *slog.Logger
+	socket        *socket.Socket
+	userSubject   string
+	ids           []string
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
+}
+
 // resolveAuthorisedWorkspaces filters the requested workspace IDs to only those
 // owned by the authenticated user. When db/workspaceRepo are nil (dev/test) it
 // returns all ids unfiltered. Returns (ids, true) on success or (nil, false) when
 // the caller should abort the subscribe entirely (e.g. subject resolution failed).
-func resolveAuthorisedWorkspaces(
-	ctx context.Context,
-	logger *slog.Logger,
-	s *socket.Socket,
-	userSubject string,
-	ids []string,
-	db *dbr.Connection,
-	workspaceRepo workspaceOwnerChecker,
-	authService authResolver,
-) ([]string, bool) {
-	if db == nil || workspaceRepo == nil {
-		return ids, true
+func resolveAuthorisedWorkspaces(o resolveAuthorisedWorkspacesOpts) ([]string, bool) {
+	if o.db == nil || o.workspaceRepo == nil {
+		return o.ids, true
 	}
 
-	sess := db.NewSession(nil)
-	dbCtx := database.ContextWithSession(ctx, sess)
+	sess := o.db.NewSession(nil)
+	dbCtx := database.ContextWithSession(o.ctx, sess)
 
 	// Resolve Firebase subject → internal user.ID.
-	userID := userSubject
-	if authService != nil {
-		user, mErr := authService.GetBySubject(dbCtx, &orchestratorservice.GetUserBySubjectOpts{
-			Subject: userSubject,
+	userID := o.userSubject
+	if o.authService != nil {
+		user, mErr := o.authService.GetBySubject(dbCtx, &orchestratorservice.GetUserBySubjectOpts{
+			Subject: o.userSubject,
 		})
 		if mErr != nil {
-			logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
-				"socket_id", string(s.Id()),
-				"subject", userSubject,
+			o.logger.Warn("socketio: workspace subscribe — subject resolution failed, dropping all ids",
+				"socket_id", string(o.socket.Id()),
+				"subject", o.userSubject,
 				"error", mErr.Error(),
 			)
 			return nil, false
@@ -290,18 +314,18 @@ func resolveAuthorisedWorkspaces(
 		userID = user.ID
 	}
 
-	owned, mErr := workspaceRepo.ListOwnedByUser(dbCtx, sess, userID, ids)
+	owned, mErr := o.workspaceRepo.ListOwnedByUser(dbCtx, sess, userID, o.ids)
 	if mErr != nil {
-		logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
-			"socket_id", string(s.Id()),
-			"subject", userSubject,
+		o.logger.Warn("socketio: workspace subscribe ownership check failed — dropping all ids",
+			"socket_id", string(o.socket.Id()),
+			"subject", o.userSubject,
 			"error", mErr.Error(),
 		)
 		return nil, false
 	}
 
-	authorised := make([]string, 0, len(ids))
-	for _, id := range ids {
+	authorised := make([]string, 0, len(o.ids))
+	for _, id := range o.ids {
 		if _, ok := owned[id]; ok {
 			authorised = append(authorised, id)
 		}
