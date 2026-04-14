@@ -42,74 +42,101 @@ After setup completes, deploy to dev with 'crawbl app deploy platform'.`,
 	return cmd
 }
 
-// runSetup runs the four-step setup process.
+// runSetup runs the five-step setup process.
 func runSetup() error {
 	out.Ln()
 	out.Step(style.Setup, "Crawbl Backend Setup")
 	out.Ln()
 
-	// --- Step 1: Configure git hooks ---
+	setupGitHooks()
+	setupMiseTools()
+	setupRequiredTools()
+	setupSnykMCP()
+	if err := setupEnvFile(); err != nil {
+		return err
+	}
+
+	printSetupNextSteps()
+	return nil
+}
+
+// setupGitHooks configures the repo-local hooks path and marks the shipped
+// hook scripts executable. Errors are reported but never fatal.
+func setupGitHooks() {
 	out.Step(style.Setup, "Step 1/5: Configuring git hooks...")
 	out.Ln()
 
 	if err := runCmd("git", "config", "core.hooksPath", ".githooks"); err != nil {
 		out.Warning("git hooks config failed: %v", err)
-	} else {
-		_ = chmodExecutable(".githooks/pre-push")
-		_ = chmodExecutable(".githooks/pre-commit")
-		_ = chmodExecutable("crawbl")
-		out.Step(style.Check, "Git hooks configured")
+		out.Ln()
+		return
 	}
+	_ = chmodExecutable(".githooks/pre-push")
+	_ = chmodExecutable(".githooks/pre-commit")
+	_ = chmodExecutable("crawbl")
+	out.Step(style.Check, "Git hooks configured")
 	out.Ln()
+}
 
-	// --- Step 2: Install repo-managed tools ---
+// setupMiseTools runs `mise install` when a .mise.toml is present and the
+// mise binary is available. All branches are informational — the process
+// never fails here.
+func setupMiseTools() {
 	out.Step(style.Setup, "Step 2/5: Installing repo-managed tools...")
 	out.Ln()
 
-	if fileExists(".mise.toml") {
-		if commandExists("mise") {
-			out.Step(style.Running, "Running mise install...")
-			if err := runCmd("mise", "install"); err != nil {
-				out.Warning("mise install failed: %v", err)
-			} else {
-				out.Step(style.Check, "Installed tool versions from .mise.toml")
-			}
-		} else {
-			out.Step(style.Warning, "mise not found — repo-managed tools skipped")
-			out.Infof("Install: https://mise.jdx.dev  then rerun: ./crawbl setup")
-		}
-	} else {
+	if !fileExists(".mise.toml") {
 		out.Step(style.Check, "No .mise.toml found, skipping")
+		out.Ln()
+		return
 	}
+	if !commandExists("mise") {
+		out.Step(style.Warning, "mise not found — repo-managed tools skipped")
+		out.Infof("Install: https://mise.jdx.dev  then rerun: ./crawbl setup")
+		out.Ln()
+		return
+	}
+	out.Step(style.Running, "Running mise install...")
+	if err := runCmd("mise", "install"); err != nil {
+		out.Warning("mise install failed: %v", err)
+		out.Ln()
+		return
+	}
+	out.Step(style.Check, "Installed tool versions from .mise.toml")
 	out.Ln()
+}
 
-	// --- Step 3: Check required tools ---
+// requiredDevTools is the catalog verified by setupRequiredTools.
+var requiredDevTools = []toolCheck{
+	{"go", "go version", "https://go.dev/dl/ or: mise install go"},
+	{"ko", "ko version", "go install github.com/google/ko@latest"},
+	{"kubectl", "kubectl version --client --short 2>/dev/null || kubectl version --client", "mise install kubectl"},
+	{"helm", "helm version --short", "mise install helm"},
+	{"doctl", "doctl version", "mise install doctl"},
+	{"aws", "aws --version", "mise install awscli"},
+	{"pulumi", "pulumi version", "mise install pulumi"},
+	{"yq", "yq --version", "mise install yq  (required for crawbl app deploy)"},
+	{"gh", "gh --version", "https://cli.github.com/"},
+	{"snyk", "snyk --version", "mise install  (npm:snyk in .mise.toml)"},
+	{"sonar-scanner", "sonar-scanner --version", "mise install  (sonar-scanner-cli in .mise.toml)"},
+	{"docker (auth-filter only)", "docker --version", "https://docs.docker.com/get-docker/ (only needed for auth-filter WASM builds)"},
+}
+
+// setupRequiredTools runs each toolCheck and prints per-tool status. If
+// any tool is missing, the trailing hint block nudges the user toward
+// mise.
+func setupRequiredTools() {
 	out.Step(style.Setup, "Step 3/5: Checking required tools...")
 	out.Ln()
 
 	allFound := true
-	tools := []toolCheck{
-		{"go", "go version", "https://go.dev/dl/ or: mise install go"},
-		{"ko", "ko version", "go install github.com/google/ko@latest"},
-		{"kubectl", "kubectl version --client --short 2>/dev/null || kubectl version --client", "mise install kubectl"},
-		{"helm", "helm version --short", "mise install helm"},
-		{"doctl", "doctl version", "mise install doctl"},
-		{"aws", "aws --version", "mise install awscli"},
-		{"pulumi", "pulumi version", "mise install pulumi"},
-		{"yq", "yq --version", "mise install yq  (required for crawbl app deploy)"},
-		{"gh", "gh --version", "https://cli.github.com/"},
-		{"snyk", "snyk --version", "mise install  (npm:snyk in .mise.toml)"},
-		{"sonar-scanner", "sonar-scanner --version", "mise install  (sonar-scanner-cli in .mise.toml)"},
-		{"docker (auth-filter only)", "docker --version", "https://docs.docker.com/get-docker/ (only needed for auth-filter WASM builds)"},
-	}
-
-	for _, t := range tools {
+	for _, t := range requiredDevTools {
 		if checkTool(t) {
 			out.Step(style.Check, "%s", t.name)
-		} else {
-			out.Step(style.Failure, "%s — install: %s", t.name, t.installHint)
-			allFound = false
+			continue
 		}
+		out.Step(style.Failure, "%s — install: %s", t.name, t.installHint)
+		allFound = false
 	}
 	out.Ln()
 
@@ -120,42 +147,59 @@ func runSetup() error {
 		out.Infof("mise install")
 		out.Ln()
 	}
+}
 
-	// --- Step 4: Configure Snyk MCP for Claude Code ---
+// setupSnykMCP runs `snyk mcp configure` so Claude Code can talk to the
+// Snyk security scanner. Skipped when snyk is not on PATH.
+func setupSnykMCP() {
 	out.Step(style.Setup, "Step 4/5: Configuring Snyk MCP for Claude Code...")
 	out.Ln()
 
-	if commandExists("snyk") {
-		out.Step(style.Running, "Running snyk mcp configure...")
-		if err := runCmd("snyk", "mcp", "configure", "--tool=claude-cli"); err != nil {
-			out.Warning("snyk mcp configure failed: %v", err)
-		} else {
-			out.Step(style.Check, "Snyk MCP configured for Claude Code")
-		}
-	} else {
+	if !commandExists("snyk") {
 		out.Step(style.Warning, "snyk not found — run mise install first, then rerun crawbl setup")
+		out.Ln()
+		return
 	}
+	out.Step(style.Running, "Running snyk mcp configure...")
+	if err := runCmd("snyk", "mcp", "configure", "--tool=claude-cli"); err != nil {
+		out.Warning("snyk mcp configure failed: %v", err)
+		out.Ln()
+		return
+	}
+	out.Step(style.Check, "Snyk MCP configured for Claude Code")
 	out.Ln()
+}
 
-	// --- Step 5: Check/create .env file ---
+// setupEnvFile creates .env from .env.example when it is missing. Returns
+// an error only when the copy itself fails.
+func setupEnvFile() error {
 	out.Step(style.Config, "Step 5/5: Checking .env file...")
 	out.Ln()
 
-	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		if _, err := os.Stat(".env.example"); err == nil {
-			if err := copyFile(".env.example", ".env"); err != nil {
-				return fmt.Errorf("failed to create .env: %w", err)
-			}
-			out.Step(style.Check, "Created .env from .env.example")
-		} else {
-			out.Warning("No .env.example found — create .env manually")
-		}
-	} else {
+	if _, err := os.Stat(".env"); err == nil {
 		out.Step(style.Check, ".env already exists")
+		out.Ln()
+		return nil
+	} else if !os.IsNotExist(err) {
+		// Only surface unexpected stat errors.
+		return fmt.Errorf("stat .env: %w", err)
 	}
-	out.Ln()
 
-	// --- Done ---
+	if _, err := os.Stat(".env.example"); err != nil {
+		out.Warning("No .env.example found — create .env manually")
+		out.Ln()
+		return nil
+	}
+	if err := copyFile(".env.example", ".env"); err != nil {
+		return fmt.Errorf("failed to create .env: %w", err)
+	}
+	out.Step(style.Check, "Created .env from .env.example")
+	out.Ln()
+	return nil
+}
+
+// printSetupNextSteps prints the post-setup quickstart.
+func printSetupNextSteps() {
 	out.Step(style.Celebrate, "Ready! Next steps:")
 	out.Infof("1. Source your environment:")
 	out.Infof("   set -a && source .env && set +a")
@@ -165,8 +209,6 @@ func runSetup() error {
 	out.Infof("   crawbl test e2e --base-url https://api-dev.crawbl.com")
 	out.Step(style.Doc, "Docs: https://dev.docs.crawbl.com/getting-started")
 	out.Ln()
-
-	return nil
 }
 
 // --- Helpers ---

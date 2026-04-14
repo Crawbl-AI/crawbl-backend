@@ -12,6 +12,7 @@ import (
 
 	"github.com/riverqueue/river"
 
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 )
@@ -104,52 +105,12 @@ func (w *PricingRefresh) Work(ctx context.Context, job *river.Job[PricingRefresh
 	}
 
 	sess := w.deps.DB.NewSession(nil)
-
-	var inserted, unchanged, skipped int
+	inserted, unchanged, skipped := 0, 0, 0
 	for modelName, entry := range models {
-		provider := normalizeProvider(entry.Provider)
-		if provider == "" {
-			skipped++
-			continue
-		}
-		if entry.Mode != "" && entry.Mode != "chat" && entry.Mode != "completion" {
-			skipped++
-			continue
-		}
-		if entry.InputCostPerToken == nil || entry.OutputCostPerToken == nil {
-			skipped++
-			continue
-		}
-		inputCost := *entry.InputCostPerToken
-		outputCost := *entry.OutputCostPerToken
-		cachedCost := 0.0
-		if entry.CacheReadInput != nil {
-			cachedCost = *entry.CacheReadInput
-		}
-
-		latest, merr := w.deps.ModelPricingRepo.GetLatest(ctx, sess, provider, modelName)
-		if merr != nil {
-			w.deps.Logger.Warn("pricing-refresh: GetLatest failed", slog.String("model", modelName), slog.String("error", merr.Error()))
-			skipped++
-			continue
-		}
-		if latest != nil && latest.InputCostPerToken == inputCost && latest.OutputCostPerToken == outputCost {
-			unchanged++
-			continue
-		}
-
-		if merr := w.deps.ModelPricingRepo.Insert(ctx, sess, modelpricingrepo.InsertPriceOpts{
-			Provider:           provider,
-			Model:              modelName,
-			InputCostPerToken:  inputCost,
-			OutputCostPerToken: outputCost,
-			CachedCostPerToken: cachedCost,
-			Source:             "litellm",
-		}); merr != nil {
-			w.deps.Logger.Warn("pricing-refresh: Insert failed", slog.String("model", modelName), slog.String("error", merr.Error()))
-			continue
-		}
-		inserted++
+		ins, unc, skp := w.processPricingEntry(ctx, sess, modelName, entry)
+		inserted += ins
+		unchanged += unc
+		skipped += skp
 	}
 
 	w.deps.Logger.InfoContext(ctx, "pricing-refresh: complete",
@@ -159,6 +120,68 @@ func (w *PricingRefresh) Work(ctx context.Context, job *river.Job[PricingRefresh
 		slog.Int("skipped", skipped),
 	)
 	return nil
+}
+
+// processPricingEntry diffs one LiteLLM entry against the latest stored
+// price and conditionally inserts a fresh row. Returns (inserted,
+// unchanged, skipped) as 0/1 counters so the caller can aggregate.
+func (w *PricingRefresh) processPricingEntry(ctx context.Context, sess orchestratorrepo.SessionRunner, modelName string, entry litellmEntry) (int, int, int) {
+	input, output, cached, ok := extractLitellmCosts(entry)
+	if !ok {
+		return 0, 0, 1
+	}
+
+	latest, merr := w.deps.ModelPricingRepo.GetLatest(ctx, sess, input.provider, modelName)
+	if merr != nil {
+		w.deps.Logger.Warn("pricing-refresh: GetLatest failed", slog.String("model", modelName), slog.String("error", merr.Error()))
+		return 0, 0, 1
+	}
+	if latest != nil && latest.InputCostPerToken == input.input && latest.OutputCostPerToken == output {
+		return 0, 1, 0
+	}
+
+	if merr := w.deps.ModelPricingRepo.Insert(ctx, sess, modelpricingrepo.InsertPriceOpts{
+		Provider:           input.provider,
+		Model:              modelName,
+		InputCostPerToken:  input.input,
+		OutputCostPerToken: output,
+		CachedCostPerToken: cached,
+		Source:             "litellm",
+	}); merr != nil {
+		w.deps.Logger.Warn("pricing-refresh: Insert failed", slog.String("model", modelName), slog.String("error", merr.Error()))
+		return 0, 0, 0
+	}
+	return 1, 0, 0
+}
+
+// litellmExtractedCosts bundles the normalised provider label with the
+// primary input-cost so processPricingEntry can pass both through as a
+// single struct without a wide parameter list.
+type litellmExtractedCosts struct {
+	provider string
+	input    float64
+}
+
+// extractLitellmCosts normalises the provider and mode guards, pulls the
+// required input/output cost pair, and defaults the cached-cost entry.
+// Returns ok=false when the entry is ineligible for insert (bad provider,
+// non-chat mode, or missing costs).
+func extractLitellmCosts(entry litellmEntry) (litellmExtractedCosts, float64, float64, bool) {
+	provider := normalizeProvider(entry.Provider)
+	if provider == "" {
+		return litellmExtractedCosts{}, 0, 0, false
+	}
+	if entry.Mode != "" && entry.Mode != "chat" && entry.Mode != "completion" {
+		return litellmExtractedCosts{}, 0, 0, false
+	}
+	if entry.InputCostPerToken == nil || entry.OutputCostPerToken == nil {
+		return litellmExtractedCosts{}, 0, 0, false
+	}
+	cachedCost := 0.0
+	if entry.CacheReadInput != nil {
+		cachedCost = *entry.CacheReadInput
+	}
+	return litellmExtractedCosts{provider: provider, input: *entry.InputCostPerToken}, *entry.OutputCostPerToken, cachedCost, true
 }
 
 // fetchLiteLLMPricing downloads and decodes the upstream LiteLLM JSON

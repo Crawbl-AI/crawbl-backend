@@ -29,39 +29,48 @@ func newSyncCommand() *cobra.Command {
   crawbl app sync --all                    # Hard-refresh all apps in argocd namespace
   crawbl app sync --all --force            # Reset stuck operations on all apps`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-
-			if all && len(args) > 0 {
-				return fmt.Errorf("cannot specify both --all and an app name")
-			}
-			if !all && len(args) == 0 {
-				return cmd.Help()
-			}
-
-			if all {
-				apps, err := listArgoCDApps(ctx)
-				if err != nil {
-					return err
-				}
-				if len(apps) == 0 {
-					out.Warning("no ArgoCD apps found in argocd namespace")
-					return nil
-				}
-				for _, app := range apps {
-					if err := syncApp(ctx, app, force); err != nil {
-						out.Fail("failed to sync %s: %v", app, err)
-					}
-				}
-				return nil
-			}
-
-			return syncApp(ctx, args[0], force)
+			return runSyncCommand(cmd, args, all, force)
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Reset stuck operation and hard-refresh before syncing")
 	cmd.Flags().BoolVar(&all, "all", false, "Sync all apps in the argocd namespace")
 	return cmd
+}
+
+// runSyncCommand dispatches the sync request to single-app or all-apps
+// mode after validating the flag/argument combination.
+func runSyncCommand(cmd *cobra.Command, args []string, all, force bool) error {
+	if all && len(args) > 0 {
+		return fmt.Errorf("cannot specify both --all and an app name")
+	}
+	if !all && len(args) == 0 {
+		return cmd.Help()
+	}
+	ctx := cmd.Context()
+	if all {
+		return syncAllApps(ctx, force)
+	}
+	return syncApp(ctx, args[0], force)
+}
+
+// syncAllApps fans syncApp out across every ArgoCD Application in the
+// argocd namespace. Per-app failures are logged but do not abort the sweep.
+func syncAllApps(ctx context.Context, force bool) error {
+	apps, err := listArgoCDApps(ctx)
+	if err != nil {
+		return err
+	}
+	if len(apps) == 0 {
+		out.Warning("no ArgoCD apps found in argocd namespace")
+		return nil
+	}
+	for _, app := range apps {
+		if err := syncApp(ctx, app, force); err != nil {
+			out.Fail("failed to sync %s: %v", app, err)
+		}
+	}
+	return nil
 }
 
 // syncApp performs a hard refresh (and optional stuck-operation reset) for one ArgoCD app.

@@ -55,15 +55,38 @@ const (
 // Errors from the search are wrapped with the query for debuggability
 // and returned to the LLM as tool output — no panics, no silent
 // failures.
+const (
+	webSearchBodyLimit         = 4 * 1024 * 1024 // 4 MiB
+	webSearchErrorStatusThresh = 400
+	webSearchErrorBodyPreview  = 256
+)
+
 func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]WebSearchResult, error) {
+	query, maxResults, err := validateWebSearchInputs(endpoint, opts)
+	if err != nil {
+		return nil, err
+	}
+	searchURL, err := buildSearxngURL(endpoint, query)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := fetchSearxngResults(ctx, searchURL)
+	if err != nil {
+		return nil, err
+	}
+	return materialiseSearchResults(payload, maxResults), nil
+}
+
+// validateWebSearchInputs validates required fields and normalises the
+// max-results argument against the module's ceilings.
+func validateWebSearchInputs(endpoint string, opts WebSearchOptions) (string, int, error) {
 	query := strings.TrimSpace(opts.Query)
 	if query == "" {
-		return nil, errors.New("web_search_tool: query is required")
+		return "", 0, errors.New("web_search_tool: query is required")
 	}
 	if strings.TrimSpace(endpoint) == "" {
-		return nil, errors.New("web_search_tool: searxng endpoint is not configured")
+		return "", 0, errors.New("web_search_tool: searxng endpoint is not configured")
 	}
-
 	maxResults := opts.MaxResults
 	if maxResults <= 0 {
 		maxResults = DefaultWebSearchMaxResults
@@ -71,7 +94,12 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 	if maxResults > MaxWebSearchMaxResults {
 		maxResults = MaxWebSearchMaxResults
 	}
+	return query, maxResults, nil
+}
 
+// buildSearxngURL composes the SearXNG /search URL with JSON format and
+// standard language/safesearch defaults.
+func buildSearxngURL(endpoint, query string) (*url.URL, error) {
 	u, err := url.Parse(strings.TrimRight(endpoint, "/") + "/search")
 	if err != nil {
 		return nil, fmt.Errorf("web_search_tool: parse endpoint %q: %w", endpoint, err)
@@ -82,7 +110,12 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 	q.Set("safesearch", "0")
 	q.Set("language", "en")
 	u.RawQuery = q.Encode()
+	return u, nil
+}
 
+// fetchSearxngResults performs the HTTP GET, enforces the body cap, and
+// decodes the SearXNG JSON envelope.
+func fetchSearxngResults(ctx context.Context, u *url.URL) (*searxngResponse, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, defaultWebSearchTimeout)
 	defer cancel()
 
@@ -95,12 +128,6 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 	// ?format=json on some configurations.
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "crawbl-agent-runtime (+https://crawbl.com)")
-
-	const (
-		webSearchBodyLimit         = 4 * 1024 * 1024 // 4 MiB
-		webSearchErrorStatusThresh = 400
-		webSearchErrorBodyPreview  = 256
-	)
 
 	resp, err := toolHTTPClient.Do(req)
 	if err != nil {
@@ -116,12 +143,17 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 		return nil, fmt.Errorf("web_search_tool: searxng returned status %d: %s",
 			resp.StatusCode, truncate(string(body), webSearchErrorBodyPreview))
 	}
-
 	var payload searxngResponse
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("web_search_tool: decode searxng response: %w", err)
 	}
+	return &payload, nil
+}
 
+// materialiseSearchResults translates the raw SearXNG rows into the
+// stable WebSearchResult shape, skipping rows that are missing a title
+// or URL and stopping after maxResults hits.
+func materialiseSearchResults(payload *searxngResponse, maxResults int) []WebSearchResult {
 	out := make([]WebSearchResult, 0, min(len(payload.Results), maxResults))
 	for _, r := range payload.Results {
 		if len(out) >= maxResults {
@@ -139,7 +171,7 @@ func WebSearch(ctx context.Context, endpoint string, opts WebSearchOptions) ([]W
 			Engine:  strings.TrimSpace(r.Engine),
 		})
 	}
-	return out, nil
+	return out
 }
 
 // searxngResponse is the minimal subset of the SearXNG JSON API we

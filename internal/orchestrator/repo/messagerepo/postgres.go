@@ -63,26 +63,19 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 		OrderDesc("id").
 		Limit(uint64(limit + 1))
 
-	if scrollID := strings.TrimSpace(opts.ScrollID); scrollID != "" {
-		var cursor struct {
-			ID        string    `db:"id"`
-			CreatedAt time.Time `db:"created_at"`
+	scrollID := strings.TrimSpace(opts.ScrollID)
+	if scrollID != "" {
+		constrained, empty, mErr := r.applyListScrollCursor(ctx, sess, opts.ConversationID, scrollID, query)
+		if mErr != nil {
+			return nil, mErr
 		}
-		err := sess.Select("id", "created_at").
-			From("messages").
-			Where("conversation_id = ? AND id = ?", opts.ConversationID, scrollID).
-			LoadOneContext(ctx, &cursor)
-		if err != nil {
-			if database.IsRecordNotFoundError(err) {
-				return &orchestrator.MessagePage{
-					Data:       []*orchestrator.Message{},
-					Pagination: orchestrator.Pagination{},
-				}, nil
-			}
-			return nil, merrors.WrapStdServerError(err, "select message cursor")
+		if empty {
+			return &orchestrator.MessagePage{
+				Data:       []*orchestrator.Message{},
+				Pagination: orchestrator.Pagination{},
+			}, nil
 		}
-
-		query = query.Where("(created_at < ? OR (created_at = ? AND id < ?))", cursor.CreatedAt, cursor.CreatedAt, cursor.ID)
+		query = constrained
 	}
 
 	var rows []orchestratorrepo.MessageRow
@@ -96,6 +89,42 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 		rows = rows[:limit]
 	}
 
+	messages, mErr := decodeMessageRows(rows)
+	if mErr != nil {
+		return nil, mErr
+	}
+
+	return &orchestrator.MessagePage{
+		Data:       messages,
+		Pagination: buildMessagePagination(hasNext, scrollID, messages),
+	}, nil
+}
+
+// applyListScrollCursor resolves the scroll cursor into (created_at, id)
+// and appends the tuple comparison to query. Returns (empty=true, nil)
+// when the cursor refers to a missing message so the caller can return
+// an empty page.
+func (r *messageRepo) applyListScrollCursor(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID, scrollID string, query *dbr.SelectBuilder) (*dbr.SelectBuilder, bool, *merrors.Error) {
+	var cursor struct {
+		ID        string    `db:"id"`
+		CreatedAt time.Time `db:"created_at"`
+	}
+	err := sess.Select("id", "created_at").
+		From("messages").
+		Where("conversation_id = ? AND id = ?", conversationID, scrollID).
+		LoadOneContext(ctx, &cursor)
+	if err != nil {
+		if database.IsRecordNotFoundError(err) {
+			return nil, true, nil
+		}
+		return nil, false, merrors.WrapStdServerError(err, "select message cursor")
+	}
+	return query.Where("(created_at < ? OR (created_at = ? AND id < ?))", cursor.CreatedAt, cursor.CreatedAt, cursor.ID), false, nil
+}
+
+// decodeMessageRows converts stored MessageRow entries into domain
+// messages, propagating decode errors as persistence errors.
+func decodeMessageRows(rows []orchestratorrepo.MessageRow) ([]*orchestrator.Message, *merrors.Error) {
 	messages := make([]*orchestrator.Message, 0, len(rows))
 	for i := range rows {
 		message, err := rows[i].ToDomain()
@@ -104,22 +133,23 @@ func (r *messageRepo) ListByConversationID(ctx context.Context, sess orchestrato
 		}
 		messages = append(messages, message)
 	}
+	return messages, nil
+}
 
+// buildMessagePagination assembles the Pagination envelope from the
+// scroll cursor, the decoded page, and whether a next page exists.
+func buildMessagePagination(hasNext bool, scrollID string, messages []*orchestrator.Message) orchestrator.Pagination {
 	pagination := orchestrator.Pagination{
 		HasNext: hasNext,
-		HasPrev: strings.TrimSpace(opts.ScrollID) != "",
+		HasPrev: scrollID != "",
 	}
 	if hasNext && len(messages) > 0 {
 		pagination.NextScrollID = messages[len(messages)-1].ID
 	}
-	if strings.TrimSpace(opts.ScrollID) != "" {
-		pagination.PrevScrollID = opts.ScrollID
+	if scrollID != "" {
+		pagination.PrevScrollID = scrollID
 	}
-
-	return &orchestrator.MessagePage{
-		Data:       messages,
-		Pagination: pagination,
-	}, nil
+	return pagination
 }
 
 // GetLatestByConversationID retrieves the most recent message in a conversation.

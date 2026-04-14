@@ -230,25 +230,32 @@ func (c *classifier) isCodeLine(line string) bool {
 // splitIntoSegments splits text by speaker turns or double newlines.
 func (c *classifier) splitIntoSegments(text string) []string {
 	lines := strings.Split(text, "\n")
+	turnPatterns := []*regexp.Regexp{c.blockquote, c.humanSpeaker, c.assistantSpeaker}
 
-	turnPatterns := []*regexp.Regexp{
-		c.blockquote,
-		c.humanSpeaker,
-		c.assistantSpeaker,
-	}
-
-	turnCount := 0
-	for _, line := range lines {
-		if lineMatchesAny(strings.TrimSpace(line), turnPatterns) {
-			turnCount++
-		}
-	}
-
-	if turnCount >= 3 {
+	if countTurnLines(lines, turnPatterns) >= 3 {
 		return splitByTurns(lines, turnPatterns)
 	}
 
-	// Paragraph split
+	paragraphs := splitParagraphs(text)
+	if len(paragraphs) <= 1 && len(lines) > 20 {
+		return chunkLines(lines, defaultChunkSize)
+	}
+	return paragraphs
+}
+
+// countTurnLines returns the number of lines that match any turn pattern.
+func countTurnLines(lines []string, turnPatterns []*regexp.Regexp) int {
+	count := 0
+	for _, line := range lines {
+		if lineMatchesAny(strings.TrimSpace(line), turnPatterns) {
+			count++
+		}
+	}
+	return count
+}
+
+// splitParagraphs trims text at double newlines and drops empties.
+func splitParagraphs(text string) []string {
 	raw := strings.Split(text, "\n\n")
 	var paragraphs []string
 	for _, p := range raw {
@@ -257,24 +264,23 @@ func (c *classifier) splitIntoSegments(text string) []string {
 			paragraphs = append(paragraphs, p)
 		}
 	}
-
-	// Single giant block: chunk by 25-line groups
-	if len(paragraphs) <= 1 && len(lines) > 20 {
-		var segments []string
-		for i := 0; i < len(lines); i += defaultChunkSize {
-			end := i + defaultChunkSize
-			if end > len(lines) {
-				end = len(lines)
-			}
-			group := strings.TrimSpace(strings.Join(lines[i:end], "\n"))
-			if group != "" {
-				segments = append(segments, group)
-			}
-		}
-		return segments
-	}
-
 	return paragraphs
+}
+
+// chunkLines groups lines into fixed-size windows, dropping empty groups.
+func chunkLines(lines []string, chunkSize int) []string {
+	var segments []string
+	for i := 0; i < len(lines); i += chunkSize {
+		end := i + chunkSize
+		if end > len(lines) {
+			end = len(lines)
+		}
+		group := strings.TrimSpace(strings.Join(lines[i:end], "\n"))
+		if group != "" {
+			segments = append(segments, group)
+		}
+	}
+	return segments
 }
 
 func splitByTurns(lines []string, turnPatterns []*regexp.Regexp) []string {

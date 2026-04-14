@@ -204,61 +204,22 @@ func (s *RedisService) Delete(ctx context.Context, req *adksession.DeleteRequest
 // inmemory service behavior; otherwise every SSE delta would bloat the
 // events list).
 func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, event *adksession.Event) error {
-	if cur == nil {
-		return fmt.Errorf("session/redis: session is nil")
+	rs, err := validateAppendEventInputs(cur, event)
+	if err != nil {
+		return err
 	}
-	if event == nil {
-		return fmt.Errorf("session/redis: event is nil")
-	}
-	if event.Partial {
+	if rs == nil {
+		// Partial event — the helper already signalled a clean no-op.
 		return nil
 	}
 
 	// Strip temp-scoped state keys so they don't persist past the
 	// current invocation. KeyPrefixTemp is explicitly defined in ADK
 	// as "discarded after the invocation completes".
-	if len(event.Actions.StateDelta) > 0 {
-		filtered := make(map[string]any, len(event.Actions.StateDelta))
-		for k, v := range event.Actions.StateDelta {
-			if !strings.HasPrefix(k, adksession.KeyPrefixTemp) {
-				filtered[k] = v
-			}
-		}
-		event.Actions.StateDelta = filtered
-	}
+	event.Actions.StateDelta = stripTempDelta(event.Actions.StateDelta)
 
-	rs, ok := cur.(*redisSession)
-	if !ok {
-		return fmt.Errorf("session/redis: unexpected session type %T", cur)
-	}
+	stateCopy := applyEventToSession(rs, event)
 
-	// Mutate the in-memory copy first so subsequent calls within the
-	// same turn see the update.
-	rs.mu.Lock()
-	rs.events = append(rs.events, event)
-	if len(event.Actions.StateDelta) > 0 {
-		if rs.state == nil {
-			rs.state = make(map[string]any)
-		}
-		for k, v := range event.Actions.StateDelta {
-			switch {
-			case strings.HasPrefix(k, adksession.KeyPrefixApp),
-				strings.HasPrefix(k, adksession.KeyPrefixUser):
-				// App- and user-scoped deltas are tracked separately
-				// and never written into the per-session map.
-			default:
-				rs.state[k] = v
-			}
-		}
-	}
-	rs.updatedAt = event.Timestamp
-	if rs.updatedAt.IsZero() {
-		rs.updatedAt = time.Now().UTC()
-	}
-	stateCopy := maps.Clone(rs.state)
-	rs.mu.Unlock()
-
-	// Split delta for durable scopes.
 	appDelta, userDelta, _ := splitStateDeltas(event.Actions.StateDelta)
 	if err := s.mergeAppState(ctx, rs.AppName(), appDelta); err != nil {
 		return err
@@ -267,8 +228,83 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 		return err
 	}
 
-	// Persist: append event JSON to the events list and rewrite the
-	// session blob with the updated session-local state and timestamp.
+	return s.persistAppendEvent(ctx, rs, event, stateCopy)
+}
+
+// validateAppendEventInputs validates the inputs of AppendEvent. Returns
+// (session, nil) when the caller should persist; (nil, nil) when the
+// event is a partial and should be silently dropped; (nil, err) when the
+// inputs are invalid.
+func validateAppendEventInputs(cur adksession.Session, event *adksession.Event) (*redisSession, error) {
+	if cur == nil {
+		return nil, fmt.Errorf("session/redis: session is nil")
+	}
+	if event == nil {
+		return nil, fmt.Errorf("session/redis: event is nil")
+	}
+	if event.Partial {
+		return nil, nil
+	}
+	rs, ok := cur.(*redisSession)
+	if !ok {
+		return nil, fmt.Errorf("session/redis: unexpected session type %T", cur)
+	}
+	return rs, nil
+}
+
+// stripTempDelta removes KeyPrefixTemp entries from the state delta. Empty
+// and nil maps pass through unchanged.
+func stripTempDelta(delta map[string]any) map[string]any {
+	if len(delta) == 0 {
+		return delta
+	}
+	filtered := make(map[string]any, len(delta))
+	for k, v := range delta {
+		if !strings.HasPrefix(k, adksession.KeyPrefixTemp) {
+			filtered[k] = v
+		}
+	}
+	return filtered
+}
+
+// applyEventToSession mutates the in-memory redisSession copy — appending
+// the event, merging the non-scoped state delta, bumping updated_at — and
+// returns a clone of the resulting state suitable for durable persistence.
+func applyEventToSession(rs *redisSession, event *adksession.Event) map[string]any {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	rs.events = append(rs.events, event)
+	if len(event.Actions.StateDelta) > 0 {
+		if rs.state == nil {
+			rs.state = make(map[string]any)
+		}
+		for k, v := range event.Actions.StateDelta {
+			if isScopedStateKey(k) {
+				// App- and user-scoped deltas are tracked separately
+				// and never written into the per-session map.
+				continue
+			}
+			rs.state[k] = v
+		}
+	}
+	rs.updatedAt = event.Timestamp
+	if rs.updatedAt.IsZero() {
+		rs.updatedAt = time.Now().UTC()
+	}
+	return maps.Clone(rs.state)
+}
+
+// isScopedStateKey reports whether a state-delta key belongs to the
+// app- or user-scoped bucket (those flow through durable hashes, not the
+// per-session state map).
+func isScopedStateKey(k string) bool {
+	return strings.HasPrefix(k, adksession.KeyPrefixApp) || strings.HasPrefix(k, adksession.KeyPrefixUser)
+}
+
+// persistAppendEvent writes the event+session blob atomically. It also
+// refreshes the session-index TTL so active conversations extend it.
+func (s *RedisService) persistAppendEvent(ctx context.Context, rs *redisSession, event *adksession.Event, stateCopy map[string]any) error {
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("session/redis: marshal event: %w", err)
@@ -276,11 +312,6 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 
 	eventsK := eventsKey(rs.AppName(), rs.UserID(), rs.ID())
 	sessK := sessionKey(rs.AppName(), rs.UserID(), rs.ID())
-
-	pipe := s.client.TxPipeline()
-	pipe.RPush(ctx, eventsK, eventJSON)
-	pipe.LTrim(ctx, eventsK, -maxSessionEvents, -1)
-	pipe.Expire(ctx, eventsK, s.ttl)
 
 	payload := sessionPayload{
 		AppName:   rs.AppName(),
@@ -293,14 +324,15 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 	if err != nil {
 		return fmt.Errorf("session/redis: marshal session: %w", err)
 	}
+
+	pipe := s.client.TxPipeline()
+	pipe.RPush(ctx, eventsK, eventJSON)
+	pipe.LTrim(ctx, eventsK, -maxSessionEvents, -1)
+	pipe.Expire(ctx, eventsK, s.ttl)
 	pipe.Set(ctx, sessK, blob, s.ttl)
-
-	// Refresh TTL on the session index so active conversations extend it.
-	idxKey := userSessionsKey(rs.AppName(), rs.UserID())
 	if s.ttl > 0 {
-		pipe.Expire(ctx, idxKey, s.ttl)
+		pipe.Expire(ctx, userSessionsKey(rs.AppName(), rs.UserID()), s.ttl)
 	}
-
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("session/redis: persist event: %w", err)
 	}
@@ -312,6 +344,35 @@ func (s *RedisService) AppendEvent(ctx context.Context, cur adksession.Session, 
 // across scopes (app + user + session) to match the behavior of the
 // reference in-memory implementation.
 func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, numRecent int, after time.Time) (*redisSession, error) {
+	payload, err := s.loadSessionPayload(ctx, app, user, sid)
+	if err != nil {
+		return nil, err
+	}
+
+	merged, err := s.loadAndMergeState(ctx, app, user, payload.State)
+	if err != nil {
+		return nil, err
+	}
+
+	events, err := s.loadFilteredEvents(ctx, app, user, sid, numRecent, after)
+	if err != nil {
+		return nil, err
+	}
+
+	return &redisSession{
+		appName:   payload.AppName,
+		userID:    payload.UserID,
+		sessionID: payload.SessionID,
+		state:     merged,
+		events:    events,
+		updatedAt: payload.UpdatedAt,
+	}, nil
+}
+
+// loadSessionPayload fetches the stored session blob for (app,user,sid)
+// and refreshes its TTL on the touch so active sessions don't expire
+// mid-conversation.
+func (s *RedisService) loadSessionPayload(ctx context.Context, app, user, sid string) (*sessionPayload, error) {
 	sessK := sessionKey(app, user, sid)
 	blob, err := s.client.Get(ctx, sessK).Bytes()
 	if err != nil {
@@ -324,11 +385,16 @@ func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, n
 	if err := json.Unmarshal(blob, &payload); err != nil {
 		return nil, fmt.Errorf("session/redis: decode session: %w", err)
 	}
-	// Extend TTL on touch so active sessions don't expire mid-conversation.
 	if s.ttl > 0 {
 		_ = s.client.Expire(ctx, sessK, s.ttl).Err()
 	}
+	return &payload, nil
+}
 
+// loadAndMergeState fetches the app and user scopes and merges them with
+// the per-session state. Session-local wins over user which wins over
+// app, matching the inmemory service merge order.
+func (s *RedisService) loadAndMergeState(ctx context.Context, app, user string, sessionState map[string]any) (map[string]any, error) {
 	appState, err := s.loadAppState(ctx, app)
 	if err != nil {
 		return nil, err
@@ -337,20 +403,22 @@ func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, n
 	if err != nil {
 		return nil, err
 	}
-
-	// Merge scopes. Session-local state wins over user which wins over
-	// app, matching the inmemory service merge order.
-	merged := make(map[string]any, len(appState)+len(userState)+len(payload.State))
+	merged := make(map[string]any, len(appState)+len(userState)+len(sessionState))
 	for k, v := range appState {
 		merged[adksession.KeyPrefixApp+k] = v
 	}
 	for k, v := range userState {
 		merged[adksession.KeyPrefixUser+k] = v
 	}
-	for k, v := range payload.State {
+	for k, v := range sessionState {
 		merged[k] = v
 	}
+	return merged, nil
+}
 
+// loadFilteredEvents loads the events list for a session and applies the
+// numRecent / after filters that callers can pass through GetRequest.
+func (s *RedisService) loadFilteredEvents(ctx context.Context, app, user, sid string, numRecent int, after time.Time) ([]*adksession.Event, error) {
 	events, err := s.loadEvents(ctx, app, user, sid)
 	if err != nil {
 		return nil, err
@@ -358,24 +426,16 @@ func (s *RedisService) loadSession(ctx context.Context, app, user, sid string, n
 	if numRecent > 0 && len(events) > numRecent {
 		events = events[len(events)-numRecent:]
 	}
-	if !after.IsZero() {
-		filtered := events[:0]
-		for _, e := range events {
-			if !e.Timestamp.Before(after) {
-				filtered = append(filtered, e)
-			}
-		}
-		events = filtered
+	if after.IsZero() {
+		return events, nil
 	}
-
-	return &redisSession{
-		appName:   payload.AppName,
-		userID:    payload.UserID,
-		sessionID: payload.SessionID,
-		state:     merged,
-		events:    events,
-		updatedAt: payload.UpdatedAt,
-	}, nil
+	filtered := events[:0]
+	for _, e := range events {
+		if !e.Timestamp.Before(after) {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered, nil
 }
 
 func (s *RedisService) loadEvents(ctx context.Context, app, user, sid string) ([]*adksession.Event, error) {

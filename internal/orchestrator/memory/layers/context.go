@@ -46,6 +46,12 @@ type BuildContextParams struct {
 	Opts           BuildContextOpts
 }
 
+// Default cap on per-message text length before truncation.
+const defaultBuildContextMaxTextLen = 500
+
+// Default header prepended to the recent-messages block.
+const defaultBuildContextHeader = "## Conversation Context\nRecent messages (oldest first):\n\n"
+
 // BuildContextForConversation returns the formatted context block that both
 // ChatService and MCPService prepend to LLM prompts. It performs the
 // memory-layer wake-up (L0+L1), appends recent messages, and caps the result
@@ -54,90 +60,129 @@ type BuildContextParams struct {
 // The returned string does NOT include a leading "\n\n" separator — callers
 // that need one must prepend it themselves.
 func BuildContextForConversation(ctx context.Context, sess database.SessionRunner, params BuildContextParams) string {
-	stack := params.Stack
-	messages := params.Messages
-	namer := params.Namer
-	workspaceID := params.WorkspaceID
-	conversationID := params.ConversationID
-	limit := params.Limit
-	opts := params.Opts
+	maxTextLen, header := resolveContextOpts(params.Opts)
+	memoryText := wakeUpMemoryText(ctx, sess, params.Stack, params.WorkspaceID)
+	messagesText := renderRecentMessages(ctx, sess, params, header, maxTextLen)
+	return composeContext(memoryText, messagesText)
+}
+
+// resolveContextOpts applies defaults to the optional parameters.
+func resolveContextOpts(opts BuildContextOpts) (int, string) {
 	maxTextLen := opts.MaxTextLen
 	if maxTextLen <= 0 {
-		maxTextLen = 500
+		maxTextLen = defaultBuildContextMaxTextLen
 	}
 	header := opts.Header
 	if header == "" {
-		header = "## Conversation Context\nRecent messages (oldest first):\n\n"
+		header = defaultBuildContextHeader
 	}
+	return maxTextLen, header
+}
 
-	var memoryText string
-	if stack != nil {
-		wakeUp, err := stack.WakeUp(ctx, sess, workspaceID, "")
-		if err == nil {
-			memoryText = wakeUp
+// wakeUpMemoryText asks the memory stack for the workspace wake-up block.
+// Returns an empty string when the stack is nil or the call fails — callers
+// treat absence as a soft signal and fall back to messages-only context.
+func wakeUpMemoryText(ctx context.Context, sess database.SessionRunner, stack Stack, workspaceID string) string {
+	if stack == nil {
+		return ""
+	}
+	wakeUp, err := stack.WakeUp(ctx, sess, workspaceID, "")
+	if err != nil {
+		return ""
+	}
+	return wakeUp
+}
+
+// renderRecentMessages formats the "Recent messages" block. Empty string
+// when the message repo returns nothing or an error.
+func renderRecentMessages(ctx context.Context, sess database.SessionRunner, params BuildContextParams, header string, maxTextLen int) string {
+	msgs, listErr := params.Messages.ListRecent(ctx, sess, params.ConversationID, params.Limit)
+	if listErr != nil || len(msgs) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(header)
+	for _, msg := range msgs {
+		appendMessageLine(ctx, sess, &sb, msg, params.Namer, maxTextLen)
+	}
+	return sb.String()
+}
+
+// appendMessageLine formats one message into the running message block.
+// Silent and empty-text messages are skipped.
+func appendMessageLine(ctx context.Context, sess database.SessionRunner, sb *strings.Builder, msg *orchestrator.Message, namer AgentNamer, maxTextLen int) {
+	if msg.Status == orchestrator.MessageStatusSilent {
+		return
+	}
+	text := msg.Content.Text
+	if text == "" {
+		return
+	}
+	if len(text) > maxTextLen {
+		text = text[:maxTextLen] + "..."
+	}
+	sender := resolveSender(ctx, sess, msg, namer)
+	fmt.Fprintf(sb, "**%s**: %s\n\n", sender, text)
+}
+
+// resolveSender returns the human-visible sender label for a message. User
+// messages always render as "User"; agent messages prefer the embedded
+// agent name, then the namer lookup, falling back to "User" if neither
+// resolves.
+func resolveSender(ctx context.Context, sess database.SessionRunner, msg *orchestrator.Message, namer AgentNamer) string {
+	if msg.Role != orchestrator.MessageRoleAgent {
+		return "User"
+	}
+	if msg.Agent != nil {
+		return msg.Agent.Name
+	}
+	if msg.AgentID != nil && namer != nil {
+		if name, ok := namer.AgentName(ctx, sess, *msg.AgentID); ok {
+			return name
 		}
 	}
+	return "User"
+}
 
-	msgs, listErr := messages.ListRecent(ctx, sess, conversationID, limit)
-
-	var msgSB strings.Builder
-	if listErr == nil && len(msgs) > 0 {
-		msgSB.WriteString(header)
-
-		for _, msg := range msgs {
-			if msg.Status == orchestrator.MessageStatusSilent {
-				continue
-			}
-			text := msg.Content.Text
-			if text == "" {
-				continue
-			}
-			if len(text) > maxTextLen {
-				text = text[:maxTextLen] + "..."
-			}
-
-			sender := "User"
-			if msg.Role == orchestrator.MessageRoleAgent {
-				if msg.Agent != nil {
-					sender = msg.Agent.Name
-				} else if msg.AgentID != nil && namer != nil {
-					if name, ok := namer.AgentName(ctx, sess, *msg.AgentID); ok {
-						sender = name
-					}
-				}
-			}
-			fmt.Fprintf(&msgSB, "**%s**: %s\n\n", sender, text)
-		}
-	}
-	messagesText := msgSB.String()
-
+// composeContext concatenates the memory and messages blocks, respecting
+// memory.TokenBudgetTotal on the combined output.
+func composeContext(memoryText, messagesText string) string {
 	if memoryText == "" && messagesText == "" {
 		return ""
 	}
-
 	var sb strings.Builder
 	if memoryText != "" {
 		sb.WriteString(memoryText)
 	}
 	if messagesText != "" {
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		// Fill remaining budget with recent messages.
-		remaining := memory.TokenBudgetTotal - sb.Len()
-		if remaining > 0 {
-			runes := []rune(messagesText)
-			if len(runes) > remaining {
-				messagesText = string(runes[:remaining])
-			}
-			sb.WriteString(messagesText)
-		}
+		appendMessagesWithinBudget(&sb, messagesText)
 	}
+	return capToTokenBudget(sb.String())
+}
 
-	// Hard cap on total output.
-	result := sb.String()
-	if resultRunes := []rune(result); len(resultRunes) > memory.TokenBudgetTotal {
-		result = string(resultRunes[:memory.TokenBudgetTotal])
+// appendMessagesWithinBudget writes messagesText onto sb, trimming it to
+// whatever of memory.TokenBudgetTotal remains unused by the memory block.
+func appendMessagesWithinBudget(sb *strings.Builder, messagesText string) {
+	if sb.Len() > 0 {
+		sb.WriteString("\n\n")
 	}
-	return result
+	remaining := memory.TokenBudgetTotal - sb.Len()
+	if remaining <= 0 {
+		return
+	}
+	runes := []rune(messagesText)
+	if len(runes) > remaining {
+		messagesText = string(runes[:remaining])
+	}
+	sb.WriteString(messagesText)
+}
+
+// capToTokenBudget enforces the hard cap on total output so downstream
+// LLM prompts stay within the combined memory/messages budget.
+func capToTokenBudget(s string) string {
+	runes := []rune(s)
+	if len(runes) <= memory.TokenBudgetTotal {
+		return s
+	}
+	return string(runes[:memory.TokenBudgetTotal])
 }

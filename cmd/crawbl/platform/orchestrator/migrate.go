@@ -143,8 +143,48 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 	}
 	defer tx.RollbackUnlessCommitted()
 
-	// 1. Tools — uses the existing repo Seed method (dbr builder pattern).
 	catalog := agentruntimetools.DefaultCatalog()
+	if err := seedTools(ctx, tx, catalog, logger); err != nil {
+		return err
+	}
+	if err := seedModels(ctx, tx); err != nil {
+		return err
+	}
+	if err := seedToolCategories(ctx, tx); err != nil {
+		return err
+	}
+	if err := seedIntegrationCategories(ctx, tx); err != nil {
+		return err
+	}
+	if err := seedIntegrationProviders(ctx, tx); err != nil {
+		return err
+	}
+	if err := seedUsagePlans(ctx, tx); err != nil {
+		return err
+	}
+	if err := seedModelPricing(ctx, tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	logger.Info("catalogs seeded",
+		slog.Int("tools", len(catalog)),
+		slog.Int("models", len(seed.AvailableModels())),
+		slog.Int("tool_categories", len(agentruntimetools.ToolCategories())),
+		slog.Int("integration_categories", len(seed.IntegrationCategories())),
+		slog.Int("integration_providers", len(seed.IntegrationProviders())),
+		slog.Int("usage_plans", len(seed.UsagePlans())),
+		slog.Int("model_pricing", len(seed.ModelPricing())),
+	)
+	return nil
+}
+
+// seedTools builds ToolRow entries from the default catalog and delegates
+// the upsert to the existing toolsrepo.Seed (dbr builder pattern).
+func seedTools(ctx context.Context, tx *dbr.Tx, catalog []agentruntimetools.ToolDef, logger *slog.Logger) error {
 	toolRows := make([]orchestratorrepo.ToolRow, len(catalog))
 	for i, t := range catalog {
 		toolRows[i] = orchestratorrepo.ToolRow{
@@ -162,206 +202,235 @@ func seedCatalogs(ctx context.Context, db *dbr.Connection, logger *slog.Logger) 
 		logger.Error("tool catalog seed failed", "error", mErr.Error())
 		return fmt.Errorf("tool catalog seed: %s", mErr.Error())
 	}
+	return nil
+}
 
-	// 2. Models
+// seedModels upserts the bundled chat-model catalog.
+func seedModels(ctx context.Context, tx *dbr.Tx) error {
 	for i, m := range seed.AvailableModels() {
-		var existing modelRow
-		err := tx.Select("id").From("models").Where(whereID, m.ID).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed model %q: %w", m.ID, err)
-		}
-		if existing.ID != "" {
-			_, err = tx.Update("models").
-				Set("name", m.Name).
-				Set("description", m.Description).
-				Set("sort_order", i).
-				Where(whereID, m.ID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("models").
-				Pair("id", m.ID).
-				Pair("name", m.Name).
-				Pair("description", m.Description).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
+		if err := upsertModel(ctx, tx, i, m); err != nil {
 			return fmt.Errorf("seed model %q: %w", m.ID, err)
 		}
 	}
+	return nil
+}
 
-	// 3. Tool categories
+func upsertModel(ctx context.Context, tx *dbr.Tx, sortOrder int, m seed.ModelEntry) error {
+	var existing modelRow
+	err := tx.Select("id").From("models").Where(whereID, m.ID).LoadOneContext(ctx, &existing)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return err
+	}
+	if existing.ID != "" {
+		_, err = tx.Update("models").
+			Set("name", m.Name).
+			Set("description", m.Description).
+			Set("sort_order", sortOrder).
+			Where(whereID, m.ID).
+			ExecContext(ctx)
+		return err
+	}
+	_, err = tx.InsertInto("models").
+		Pair("id", m.ID).
+		Pair("name", m.Name).
+		Pair("description", m.Description).
+		Pair("sort_order", sortOrder).
+		Pair("created_at", time.Now()).
+		ExecContext(ctx)
+	return err
+}
+
+// seedToolCategories upserts the tool category reference rows.
+func seedToolCategories(ctx context.Context, tx *dbr.Tx) error {
 	for i, c := range agentruntimetools.ToolCategories() {
 		catID := string(c.ID)
-		var existing toolCategoryRow
-		err := tx.Select("id").From("tool_categories").Where(whereID, catID).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed tool category %q: %w", catID, err)
-		}
-		if existing.ID != "" {
-			_, err = tx.Update("tool_categories").
-				Set("name", c.Name).
-				Set("image_url", c.ImageURL).
-				Set("sort_order", i).
-				Where(whereID, catID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("tool_categories").
-				Pair("id", catID).
-				Pair("name", c.Name).
-				Pair("image_url", c.ImageURL).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
+		if err := upsertToolCategory(ctx, tx, i, catID, c); err != nil {
 			return fmt.Errorf("seed tool category %q: %w", catID, err)
 		}
 	}
-
-	// 4. Integration categories
-	for i, c := range seed.IntegrationCategories() {
-		var existing integrationCategoryRow
-		err := tx.Select("id").From("integration_categories").Where(whereID, c.ID).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
-		}
-		if existing.ID != "" {
-			_, err = tx.Update("integration_categories").
-				Set("name", c.Name).
-				Set("image_url", c.ImageURL).
-				Set("sort_order", i).
-				Where(whereID, c.ID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("integration_categories").
-				Pair("id", c.ID).
-				Pair("name", c.Name).
-				Pair("image_url", c.ImageURL).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
-			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
-		}
-	}
-
-	// 5. Integration providers
-	for i, p := range seed.IntegrationProviders() {
-		var existing integrationProviderRow
-		err := tx.Select("provider").From("integration_providers").Where("provider = ?", p.Provider).LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)
-		}
-		if existing.Provider != "" {
-			_, err = tx.Update("integration_providers").
-				Set("name", p.Name).
-				Set("description", p.Description).
-				Set("icon_url", p.IconURL).
-				Set("category_id", p.CategoryID).
-				Set("is_enabled", p.IsEnabled).
-				Set("sort_order", i).
-				Where("provider = ?", p.Provider).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("integration_providers").
-				Pair("provider", p.Provider).
-				Pair("name", p.Name).
-				Pair("description", p.Description).
-				Pair("icon_url", p.IconURL).
-				Pair("category_id", p.CategoryID).
-				Pair("is_enabled", p.IsEnabled).
-				Pair("sort_order", i).
-				Pair("created_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
-			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)
-		}
-	}
-
-	// 6. Usage plans
-	for _, p := range seed.UsagePlans() {
-		var existing struct {
-			PlanID string `db:"plan_id"`
-		}
-		err := tx.Select("plan_id").From("usage_plans").
-			Where("plan_id = ?", p.PlanID).
-			LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed usage plan %q: %w", p.PlanID, err)
-		}
-		if existing.PlanID != "" {
-			_, err = tx.Update("usage_plans").
-				Set("name", p.Name).
-				Set("monthly_token_limit", p.MonthlyTokenLimit).
-				Set("daily_request_limit", p.DailyRequestLimit).
-				Set("max_tokens_per_request", p.MaxTokensPerRequest).
-				Set("updated_at", time.Now()).
-				Where("plan_id = ?", p.PlanID).
-				ExecContext(ctx)
-		} else {
-			_, err = tx.InsertInto("usage_plans").
-				Pair("plan_id", p.PlanID).
-				Pair("name", p.Name).
-				Pair("monthly_token_limit", p.MonthlyTokenLimit).
-				Pair("daily_request_limit", p.DailyRequestLimit).
-				Pair("max_tokens_per_request", p.MaxTokensPerRequest).
-				Pair("created_at", time.Now()).
-				Pair("updated_at", time.Now()).
-				ExecContext(ctx)
-		}
-		if err != nil {
-			return fmt.Errorf("seed usage plan %q: %w", p.PlanID, err)
-		}
-	}
-
-	// 7. Model pricing (bootstrap — CronJob is the real source of truth)
-	for _, p := range seed.ModelPricing() {
-		var existing struct {
-			Model string `db:"model"`
-		}
-		err := tx.Select("model").From("model_pricing").
-			Where("provider = ? AND model = ? AND region = ?", p.Provider, p.Model, p.Region).
-			OrderBy("effective_at DESC").
-			Limit(1).
-			LoadOneContext(ctx, &existing)
-		if err != nil && !database.IsRecordNotFoundError(err) {
-			return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
-		}
-		if existing.Model != "" {
-			continue // Already has pricing — don't overwrite CronJob data
-		}
-		_, err = tx.InsertInto("model_pricing").
-			Pair("provider", p.Provider).
-			Pair("model", p.Model).
-			Pair("region", p.Region).
-			Pair("input_cost_per_token", p.InputCostPerToken).
-			Pair("output_cost_per_token", p.OutputCostPerToken).
-			Pair("cached_cost_per_token", p.CachedCostPerToken).
-			Pair("source", p.Source).
-			Pair("effective_at", time.Now()).
-			Pair("created_at", time.Now()).
-			ExecContext(ctx)
-		if err != nil {
-			return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
-
-	logger.Info("catalogs seeded",
-		slog.Int("tools", len(catalog)),
-		slog.Int("models", len(seed.AvailableModels())),
-		slog.Int("tool_categories", len(agentruntimetools.ToolCategories())),
-		slog.Int("integration_categories", len(seed.IntegrationCategories())),
-		slog.Int("integration_providers", len(seed.IntegrationProviders())),
-		slog.Int("usage_plans", len(seed.UsagePlans())),
-		slog.Int("model_pricing", len(seed.ModelPricing())),
-	)
 	return nil
+}
+
+func upsertToolCategory(ctx context.Context, tx *dbr.Tx, sortOrder int, catID string, c agentruntimetools.CategoryMeta) error {
+	var existing toolCategoryRow
+	err := tx.Select("id").From("tool_categories").Where(whereID, catID).LoadOneContext(ctx, &existing)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return err
+	}
+	if existing.ID != "" {
+		_, err = tx.Update("tool_categories").
+			Set("name", c.Name).
+			Set("image_url", c.ImageURL).
+			Set("sort_order", sortOrder).
+			Where(whereID, catID).
+			ExecContext(ctx)
+		return err
+	}
+	_, err = tx.InsertInto("tool_categories").
+		Pair("id", catID).
+		Pair("name", c.Name).
+		Pair("image_url", c.ImageURL).
+		Pair("sort_order", sortOrder).
+		Pair("created_at", time.Now()).
+		ExecContext(ctx)
+	return err
+}
+
+// seedIntegrationCategories upserts integration category reference rows.
+func seedIntegrationCategories(ctx context.Context, tx *dbr.Tx) error {
+	for i, c := range seed.IntegrationCategories() {
+		if err := upsertIntegrationCategory(ctx, tx, i, c); err != nil {
+			return fmt.Errorf("seed integration category %q: %w", c.ID, err)
+		}
+	}
+	return nil
+}
+
+func upsertIntegrationCategory(ctx context.Context, tx *dbr.Tx, sortOrder int, c seed.IntegrationCategoryEntry) error {
+	var existing integrationCategoryRow
+	err := tx.Select("id").From("integration_categories").Where(whereID, c.ID).LoadOneContext(ctx, &existing)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return err
+	}
+	if existing.ID != "" {
+		_, err = tx.Update("integration_categories").
+			Set("name", c.Name).
+			Set("image_url", c.ImageURL).
+			Set("sort_order", sortOrder).
+			Where(whereID, c.ID).
+			ExecContext(ctx)
+		return err
+	}
+	_, err = tx.InsertInto("integration_categories").
+		Pair("id", c.ID).
+		Pair("name", c.Name).
+		Pair("image_url", c.ImageURL).
+		Pair("sort_order", sortOrder).
+		Pair("created_at", time.Now()).
+		ExecContext(ctx)
+	return err
+}
+
+// seedIntegrationProviders upserts integration provider reference rows.
+func seedIntegrationProviders(ctx context.Context, tx *dbr.Tx) error {
+	for i, p := range seed.IntegrationProviders() {
+		if err := upsertIntegrationProvider(ctx, tx, i, p); err != nil {
+			return fmt.Errorf("seed integration provider %q: %w", p.Provider, err)
+		}
+	}
+	return nil
+}
+
+func upsertIntegrationProvider(ctx context.Context, tx *dbr.Tx, sortOrder int, p seed.IntegrationEntry) error {
+	var existing integrationProviderRow
+	err := tx.Select("provider").From("integration_providers").Where("provider = ?", p.Provider).LoadOneContext(ctx, &existing)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return err
+	}
+	if existing.Provider != "" {
+		_, err = tx.Update("integration_providers").
+			Set("name", p.Name).
+			Set("description", p.Description).
+			Set("icon_url", p.IconURL).
+			Set("category_id", p.CategoryID).
+			Set("is_enabled", p.IsEnabled).
+			Set("sort_order", sortOrder).
+			Where("provider = ?", p.Provider).
+			ExecContext(ctx)
+		return err
+	}
+	_, err = tx.InsertInto("integration_providers").
+		Pair("provider", p.Provider).
+		Pair("name", p.Name).
+		Pair("description", p.Description).
+		Pair("icon_url", p.IconURL).
+		Pair("category_id", p.CategoryID).
+		Pair("is_enabled", p.IsEnabled).
+		Pair("sort_order", sortOrder).
+		Pair("created_at", time.Now()).
+		ExecContext(ctx)
+	return err
+}
+
+// seedUsagePlans upserts the plan catalog used by the billing quota layer.
+func seedUsagePlans(ctx context.Context, tx *dbr.Tx) error {
+	for _, p := range seed.UsagePlans() {
+		if err := upsertUsagePlan(ctx, tx, p); err != nil {
+			return fmt.Errorf("seed usage plan %q: %w", p.PlanID, err)
+		}
+	}
+	return nil
+}
+
+func upsertUsagePlan(ctx context.Context, tx *dbr.Tx, p seed.UsagePlanEntry) error {
+	var existing struct {
+		PlanID string `db:"plan_id"`
+	}
+	err := tx.Select("plan_id").From("usage_plans").
+		Where("plan_id = ?", p.PlanID).
+		LoadOneContext(ctx, &existing)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return err
+	}
+	if existing.PlanID != "" {
+		_, err = tx.Update("usage_plans").
+			Set("name", p.Name).
+			Set("monthly_token_limit", p.MonthlyTokenLimit).
+			Set("daily_request_limit", p.DailyRequestLimit).
+			Set("max_tokens_per_request", p.MaxTokensPerRequest).
+			Set("updated_at", time.Now()).
+			Where("plan_id = ?", p.PlanID).
+			ExecContext(ctx)
+		return err
+	}
+	_, err = tx.InsertInto("usage_plans").
+		Pair("plan_id", p.PlanID).
+		Pair("name", p.Name).
+		Pair("monthly_token_limit", p.MonthlyTokenLimit).
+		Pair("daily_request_limit", p.DailyRequestLimit).
+		Pair("max_tokens_per_request", p.MaxTokensPerRequest).
+		Pair("created_at", time.Now()).
+		Pair("updated_at", time.Now()).
+		ExecContext(ctx)
+	return err
+}
+
+// seedModelPricing bootstraps model_pricing rows. The CronJob is the real
+// source of truth — we never overwrite existing pricing here.
+func seedModelPricing(ctx context.Context, tx *dbr.Tx) error {
+	for _, p := range seed.ModelPricing() {
+		if err := insertModelPricingIfMissing(ctx, tx, p); err != nil {
+			return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
+		}
+	}
+	return nil
+}
+
+func insertModelPricingIfMissing(ctx context.Context, tx *dbr.Tx, p seed.ModelPricingEntry) error {
+	var existing struct {
+		Model string `db:"model"`
+	}
+	err := tx.Select("model").From("model_pricing").
+		Where("provider = ? AND model = ? AND region = ?", p.Provider, p.Model, p.Region).
+		OrderBy("effective_at DESC").
+		Limit(1).
+		LoadOneContext(ctx, &existing)
+	if err != nil && !database.IsRecordNotFoundError(err) {
+		return err
+	}
+	if existing.Model != "" {
+		return nil // Already has pricing — don't overwrite CronJob data
+	}
+	_, err = tx.InsertInto("model_pricing").
+		Pair("provider", p.Provider).
+		Pair("model", p.Model).
+		Pair("region", p.Region).
+		Pair("input_cost_per_token", p.InputCostPerToken).
+		Pair("output_cost_per_token", p.OutputCostPerToken).
+		Pair("cached_cost_per_token", p.CachedCostPerToken).
+		Pair("source", p.Source).
+		Pair("effective_at", time.Now()).
+		Pair("created_at", time.Now()).
+		ExecContext(ctx)
+	return err
 }

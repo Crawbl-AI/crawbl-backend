@@ -113,69 +113,7 @@ func newDeployPlatformCommand() *cobra.Command {
   crawbl app deploy platform --tag v1.0.0 --argocd-repo ../crawbl-argocd-apps
   crawbl app deploy platform --gc`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			if err := checkNotProdContext(); err != nil {
-				return err
-			}
-			if err := checkAllTools(); err != nil {
-				return err
-			}
-			resolved, err := resolveDeployTag(tag, "")
-			if err != nil {
-				return err
-			}
-			tag = resolved.Tag
-
-			if err := runKoBuild(ctx, koBuildOpts{
-				importPath:   "./cmd/crawbl",
-				imageRepo:    buildPlatformImageRepo,
-				tag:          tag,
-				push:         true,
-				buildVersion: tag,
-			}); err != nil {
-				return err
-			}
-
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdateOrchestrator(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdatePlatform(ctx); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush(ctx, "platform"); err != nil {
-				return err
-			}
-
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: RepoSlugBackend,
-				Tag:      tag,
-				PrevTag:  resolved.PrevTag,
-			}); err != nil {
-				return err
-			}
-
-			if scan {
-				if err := runScan(ctx); err != nil {
-					out.Warning("SonarQube scan failed: %v", err)
-				}
-			}
-			if gc {
-				return runGC(ctx, defaultGCKeep, false)
-			}
-			return nil
+			return runDeployPlatform(cmd.Context(), &tag, argocdRepo, gc, scan)
 		},
 	}
 
@@ -201,65 +139,7 @@ func newDeployAuthFilterCommand() *cobra.Command {
   crawbl app deploy auth-filter --tag v1.0.0
   crawbl app deploy auth-filter --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			if err := checkNotProdContext(); err != nil {
-				return err
-			}
-			if err := checkAllTools(); err != nil {
-				return err
-			}
-			resolved, err := resolveDeployTag(tag, "auth-filter/")
-			if err != nil {
-				return err
-			}
-			// Git tag is prefixed (auth-filter/v0.1.0), Docker tag is bare (v0.1.0).
-			gitTag := resolved.Tag
-			tag = strings.TrimPrefix(gitTag, "auth-filter/")
-
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-
-			if err := runDockerBuild(ctx, dockerBuildOpts{
-				imageRepo:  buildAuthFilterImageRepo,
-				dockerfile: filepath.Join(rootDir, buildAuthFilterDockerfile),
-				contextDir: filepath.Join(rootDir, buildAuthFilterContext),
-				tag:        tag,
-				platform:   platform,
-				push:       true,
-			}); err != nil {
-				return err
-			}
-
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdateAuthFilter(ctx); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush(ctx, "auth-filter"); err != nil {
-				return err
-			}
-
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: RepoSlugBackend,
-				Tag:      gitTag,
-				PrevTag:  resolved.PrevTag,
-			}); err != nil {
-				return err
-			}
-
-			if gc {
-				return runGC(ctx, defaultGCKeep, false)
-			}
-			return nil
+			return runDeployAuthFilter(cmd.Context(), &tag, platform, argocdRepo, gc)
 		},
 	}
 
@@ -292,63 +172,7 @@ func newDeployAgentRuntimeCommand() *cobra.Command {
   crawbl app deploy agent-runtime --tag v0.1.0
   crawbl app deploy agent-runtime --argocd-repo ../crawbl-argocd-apps`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx := cmd.Context()
-			if err := checkNotProdContext(); err != nil {
-				return err
-			}
-			if err := checkAllTools(); err != nil {
-				return err
-			}
-			resolved, err := resolveDeployTag(tag, "agent-runtime/")
-			if err != nil {
-				return err
-			}
-			// Git tag is prefixed (agent-runtime/v0.1.0), Docker tag is bare (v0.1.0).
-			gitTag := resolved.Tag
-			imageTag := strings.TrimPrefix(gitTag, "agent-runtime/")
-			tag = imageTag
-
-			if err := runKoBuild(ctx, koBuildOpts{
-				importPath: "./cmd/crawbl-agent-runtime",
-				imageRepo:  buildAgentRuntimeImageRepo,
-				tag:        tag,
-				push:       true,
-			}); err != nil {
-				return err
-			}
-
-			repoPath, err := resolveArgocdRepo(argocdRepo)
-			if err != nil {
-				return err
-			}
-			u := &argocd.Update{RepoPath: repoPath, Tag: tag}
-			if err := u.PullLatest(ctx); err != nil {
-				return err
-			}
-			if err := u.UpdateAgentRuntime(ctx); err != nil {
-				return err
-			}
-			if err := u.CommitAndPush(ctx, "agent-runtime"); err != nil {
-				return err
-			}
-
-			rootDir, err := gitutil.RootDir()
-			if err != nil {
-				return err
-			}
-			if err := release.TagAndRelease(release.Config{
-				RepoPath: rootDir,
-				RepoSlug: RepoSlugBackend,
-				Tag:      gitTag,
-				PrevTag:  resolved.PrevTag,
-			}); err != nil {
-				return err
-			}
-
-			if gc {
-				return runGC(ctx, defaultGCKeep, false)
-			}
-			return nil
+			return runDeployAgentRuntime(cmd.Context(), &tag, argocdRepo, gc)
 		},
 	}
 
@@ -455,6 +279,220 @@ func newDeployWebsiteCommand() *cobra.Command {
 
 	addStaticDeployFlags(cmd, &tag, &path, "crawbl-website")
 	return cmd
+}
+
+// runDeployPlatform executes the end-to-end platform deploy pipeline:
+// preflight → ko build → argocd bump → git release → optional scan/gc.
+// Any step that fails short-circuits with the underlying error.
+func runDeployPlatform(ctx context.Context, tag *string, argocdRepo string, gc, scan bool) error {
+	resolved, err := deployPreflight(tag, "")
+	if err != nil {
+		return err
+	}
+	if err := runKoBuild(ctx, koBuildOpts{
+		importPath:   "./cmd/crawbl",
+		imageRepo:    buildPlatformImageRepo,
+		tag:          *tag,
+		push:         true,
+		buildVersion: *tag,
+	}); err != nil {
+		return err
+	}
+	if err := bumpArgocdForPlatform(ctx, argocdRepo, *tag); err != nil {
+		return err
+	}
+	if err := tagBackendRelease(*tag, resolved.PrevTag); err != nil {
+		return err
+	}
+	return maybeScanAndGC(ctx, scan, gc)
+}
+
+// deployPreflight runs the shared preflight (prod-context guard, tool
+// check, tag resolution) and writes the resolved tag back through tagPtr.
+func deployPreflight(tagPtr *string, tagPrefix string) (tagPair, error) {
+	if err := checkNotProdContext(); err != nil {
+		return tagPair{}, err
+	}
+	if err := checkAllTools(); err != nil {
+		return tagPair{}, err
+	}
+	resolved, err := resolveDeployTag(*tagPtr, tagPrefix)
+	if err != nil {
+		return tagPair{}, err
+	}
+	*tagPtr = resolved.Tag
+	return resolved, nil
+}
+
+// bumpArgocdForPlatform pulls the argocd-apps repo, updates the
+// orchestrator + platform image tags, and pushes the commit.
+func bumpArgocdForPlatform(ctx context.Context, argocdRepo, tag string) error {
+	repoPath, err := resolveArgocdRepo(argocdRepo)
+	if err != nil {
+		return err
+	}
+	u := &argocd.Update{RepoPath: repoPath, Tag: tag}
+	if err := u.PullLatest(ctx); err != nil {
+		return err
+	}
+	if err := u.UpdateOrchestrator(ctx); err != nil {
+		return err
+	}
+	if err := u.UpdatePlatform(ctx); err != nil {
+		return err
+	}
+	return u.CommitAndPush(ctx, "platform")
+}
+
+// tagBackendRelease creates the GitHub release at the given tag against
+// the crawbl-backend repo root.
+func tagBackendRelease(tag, prevTag string) error {
+	rootDir, err := gitutil.RootDir()
+	if err != nil {
+		return err
+	}
+	return release.TagAndRelease(release.Config{
+		RepoPath: rootDir,
+		RepoSlug: RepoSlugBackend,
+		Tag:      tag,
+		PrevTag:  prevTag,
+	})
+}
+
+// runDeployAuthFilter executes the auth-filter deploy pipeline: preflight,
+// Docker build+push, argocd bump, release tag, optional GC.
+func runDeployAuthFilter(ctx context.Context, tag *string, platform, argocdRepo string, gc bool) error {
+	resolved, err := deployPreflight(tag, "auth-filter/")
+	if err != nil {
+		return err
+	}
+	// Git tag is prefixed (auth-filter/v0.1.0), Docker tag is bare (v0.1.0).
+	gitTag := resolved.Tag
+	*tag = strings.TrimPrefix(gitTag, "auth-filter/")
+
+	rootDir, err := gitutil.RootDir()
+	if err != nil {
+		return err
+	}
+	if err := runDockerBuild(ctx, dockerBuildOpts{
+		imageRepo:  buildAuthFilterImageRepo,
+		dockerfile: filepath.Join(rootDir, buildAuthFilterDockerfile),
+		contextDir: filepath.Join(rootDir, buildAuthFilterContext),
+		tag:        *tag,
+		platform:   platform,
+		push:       true,
+	}); err != nil {
+		return err
+	}
+	if err := bumpArgocdForAuthFilter(ctx, argocdRepo, *tag); err != nil {
+		return err
+	}
+	if err := release.TagAndRelease(release.Config{
+		RepoPath: rootDir,
+		RepoSlug: RepoSlugBackend,
+		Tag:      gitTag,
+		PrevTag:  resolved.PrevTag,
+	}); err != nil {
+		return err
+	}
+	if gc {
+		return runGC(ctx, defaultGCKeep, false)
+	}
+	return nil
+}
+
+// bumpArgocdForAuthFilter pulls, updates the auth-filter image tag, and
+// pushes the argocd-apps commit.
+func bumpArgocdForAuthFilter(ctx context.Context, argocdRepo, tag string) error {
+	repoPath, err := resolveArgocdRepo(argocdRepo)
+	if err != nil {
+		return err
+	}
+	u := &argocd.Update{RepoPath: repoPath, Tag: tag}
+	if err := u.PullLatest(ctx); err != nil {
+		return err
+	}
+	if err := u.UpdateAuthFilter(ctx); err != nil {
+		return err
+	}
+	return u.CommitAndPush(ctx, "auth-filter")
+}
+
+// runDeployAgentRuntime executes the crawbl-agent-runtime deploy pipeline:
+// preflight, ko build+push, argocd bump, release tag, optional GC.
+func runDeployAgentRuntime(ctx context.Context, tag *string, argocdRepo string, gc bool) error {
+	resolved, err := deployPreflight(tag, "agent-runtime/")
+	if err != nil {
+		return err
+	}
+	// Git tag is prefixed (agent-runtime/v0.1.0), Docker tag is bare (v0.1.0).
+	gitTag := resolved.Tag
+	*tag = strings.TrimPrefix(gitTag, "agent-runtime/")
+
+	if err := runKoBuild(ctx, koBuildOpts{
+		importPath: "./cmd/crawbl-agent-runtime",
+		imageRepo:  buildAgentRuntimeImageRepo,
+		tag:        *tag,
+		push:       true,
+	}); err != nil {
+		return err
+	}
+	if err := bumpArgocdForAgentRuntime(ctx, argocdRepo, *tag); err != nil {
+		return err
+	}
+	if err := tagBackendReleaseWithSlug(gitTag, resolved.PrevTag); err != nil {
+		return err
+	}
+	if gc {
+		return runGC(ctx, defaultGCKeep, false)
+	}
+	return nil
+}
+
+// bumpArgocdForAgentRuntime pulls, updates the agent-runtime image tag,
+// and pushes the argocd-apps commit.
+func bumpArgocdForAgentRuntime(ctx context.Context, argocdRepo, tag string) error {
+	repoPath, err := resolveArgocdRepo(argocdRepo)
+	if err != nil {
+		return err
+	}
+	u := &argocd.Update{RepoPath: repoPath, Tag: tag}
+	if err := u.PullLatest(ctx); err != nil {
+		return err
+	}
+	if err := u.UpdateAgentRuntime(ctx); err != nil {
+		return err
+	}
+	return u.CommitAndPush(ctx, "agent-runtime")
+}
+
+// tagBackendReleaseWithSlug tags the prefixed agent-runtime release
+// against the backend repo root.
+func tagBackendReleaseWithSlug(gitTag, prevTag string) error {
+	rootDir, err := gitutil.RootDir()
+	if err != nil {
+		return err
+	}
+	return release.TagAndRelease(release.Config{
+		RepoPath: rootDir,
+		RepoSlug: RepoSlugBackend,
+		Tag:      gitTag,
+		PrevTag:  prevTag,
+	})
+}
+
+// maybeScanAndGC runs the optional SonarQube scan and registry GC steps
+// in the order platform deploys expect.
+func maybeScanAndGC(ctx context.Context, scan, gc bool) error {
+	if scan {
+		if err := runScan(ctx); err != nil {
+			out.Warning("SonarQube scan failed: %v", err)
+		}
+	}
+	if gc {
+		return runGC(ctx, defaultGCKeep, false)
+	}
+	return nil
 }
 
 // addStaticDeployFlags registers flags for static site deploy subcommands (docs, website).

@@ -58,47 +58,63 @@ func (r *userRepo) GetUser(ctx context.Context, sess orchestratorrepo.SessionRun
 		return nil, merrors.ErrInvalidInput
 	}
 
-	var userRow orchestratorrepo.UserRow
-
-	// Prefer lookup by email (unique), so we can detect subject mismatches
+	// Prefer lookup by email (unique), so we can detect subject mismatches.
 	if email != "" {
-		err := sess.Select(userColumns...).
-			From("users").
-			Where("email = ?", email).
-			LoadOneContext(ctx, &userRow)
-		if err == nil {
-			// Found by email — verify the subject if caller provided one
-			if subject != "" && userRow.Subject != subject {
-				return nil, merrors.ErrUserWrongFirebaseUID
-			}
-			user := userRow.ToDomain()
-			r.loadPreferences(ctx, sess, user)
-			return user, nil
+		user, handled, mErr := r.getUserByEmail(ctx, sess, subject, email)
+		if handled {
+			return user, mErr
 		}
-		if !database.IsRecordNotFoundError(err) {
-			return nil, merrors.WrapStdServerError(err, "select user by email")
-		}
-		// Not found by email — continue to subject lookup
 	}
 
-	// Fallback: lookup by subject
 	if subject != "" {
-		err := sess.Select(userColumns...).
-			From("users").
-			Where("subject = ?", subject).
-			LoadOneContext(ctx, &userRow)
-		if err == nil {
-			user := userRow.ToDomain()
-			r.loadPreferences(ctx, sess, user)
-			return user, nil
-		}
-		if database.IsRecordNotFoundError(err) {
-			return nil, merrors.ErrUserNotFound
-		}
-		return nil, merrors.WrapStdServerError(err, "select user by subject")
+		return r.getUserBySubject(ctx, sess, subject)
 	}
-
 	return nil, merrors.ErrUserNotFound
+}
+
+// getUserByEmail resolves a user by email and optionally verifies that a
+// caller-supplied subject matches. Returns (_, true, _) when the lookup
+// reached a terminal outcome (hit, mismatch, or real error) and the
+// caller should return. (_, false, nil) signals "not found, fall through
+// to subject lookup".
+func (r *userRepo) getUserByEmail(ctx context.Context, sess orchestratorrepo.SessionRunner, subject, email string) (*orchestrator.User, bool, *merrors.Error) {
+	var userRow orchestratorrepo.UserRow
+	err := sess.Select(userColumns...).
+		From("users").
+		Where("email = ?", email).
+		LoadOneContext(ctx, &userRow)
+	if err == nil {
+		if subject != "" && userRow.Subject != subject {
+			return nil, true, merrors.ErrUserWrongFirebaseUID
+		}
+		user := userRow.ToDomain()
+		r.loadPreferences(ctx, sess, user)
+		return user, true, nil
+	}
+	if database.IsRecordNotFoundError(err) {
+		return nil, false, nil
+	}
+	return nil, true, merrors.WrapStdServerError(err, "select user by email")
+}
+
+// getUserBySubject resolves a user by Firebase subject. Record-not-found
+// collapses into the domain-level ErrUserNotFound so the caller handles
+// new-user flows uniformly.
+func (r *userRepo) getUserBySubject(ctx context.Context, sess orchestratorrepo.SessionRunner, subject string) (*orchestrator.User, *merrors.Error) {
+	var userRow orchestratorrepo.UserRow
+	err := sess.Select(userColumns...).
+		From("users").
+		Where("subject = ?", subject).
+		LoadOneContext(ctx, &userRow)
+	if err == nil {
+		user := userRow.ToDomain()
+		r.loadPreferences(ctx, sess, user)
+		return user, nil
+	}
+	if database.IsRecordNotFoundError(err) {
+		return nil, merrors.ErrUserNotFound
+	}
+	return nil, merrors.WrapStdServerError(err, "select user by subject")
 }
 
 // CreateUser creates a new user with the specified legal agreement status.

@@ -68,20 +68,45 @@ const (
 // This is the only tool in US-AR-005 with a real implementation; it's
 // required for the US-AR-014 e2e assertion "fetch https://example.com
 // and return the page title" → response contains "Example Domain".
+const (
+	webFetchErrorStatusThresh = 400
+	webFetchErrorBodyPreview  = 256
+)
+
 func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
-	rawURL := strings.TrimSpace(opts.URL)
+	rawURL, err := validateWebFetchURL(opts.URL)
+	if err != nil {
+		return "", err
+	}
+	maxBytes, timeoutSeconds := normaliseWebFetchOptions(opts)
+
+	body, err := fetchWebFetchBody(ctx, rawURL, maxBytes, timeoutSeconds)
+	if err != nil {
+		return "", err
+	}
+	return capToolOutput(extractReadableContent(body, rawURL)), nil
+}
+
+// validateWebFetchURL trims and validates the input URL. Returns the
+// canonical URL on success.
+func validateWebFetchURL(raw string) (string, error) {
+	rawURL := strings.TrimSpace(raw)
 	if rawURL == "" {
 		return "", errors.New("web_fetch: url is required")
 	}
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		return "", fmt.Errorf("web_fetch: url must start with http:// or https://, got %q", rawURL)
 	}
+	return rawURL, nil
+}
 
+// normaliseWebFetchOptions applies defaults and ceilings to the user-
+// supplied options.
+func normaliseWebFetchOptions(opts WebFetchOptions) (int64, int) {
 	maxBytes := opts.MaxBytes
 	if maxBytes <= 0 {
 		maxBytes = DefaultWebFetchMaxBytes
 	}
-
 	timeoutSeconds := opts.TimeoutSeconds
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = DefaultWebFetchTimeoutSeconds
@@ -89,64 +114,71 @@ func WebFetch(ctx context.Context, opts WebFetchOptions) (string, error) {
 	if timeoutSeconds > MaxWebFetchTimeoutSeconds {
 		timeoutSeconds = MaxWebFetchTimeoutSeconds
 	}
+	return maxBytes, timeoutSeconds
+}
 
+// fetchWebFetchBody performs the HTTP GET and reads up to maxBytes. Non-
+// 2xx responses and I/O errors are returned as typed errors.
+func fetchWebFetchBody(ctx context.Context, rawURL string, maxBytes int64, timeoutSeconds int) ([]byte, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
-		return "", fmt.Errorf("web_fetch: build request for %s: %w", rawURL, err)
+		return nil, fmt.Errorf("web_fetch: build request for %s: %w", rawURL, err)
 	}
 	// Identify ourselves so remote services can rate-limit sensibly. No
 	// contact URL until Phase 3 when we can point it at a public docs page.
 	req.Header.Set("User-Agent", "crawbl-agent-runtime/phase1 (+https://crawbl.com)")
 	req.Header.Set("Accept", "text/html, text/plain, application/json, */*;q=0.5")
 
-	const (
-		webFetchErrorStatusThresh = 400
-		webFetchErrorBodyPreview  = 256
-	)
-
 	resp, err := toolHTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("web_fetch: GET %s: %w", rawURL, err)
+		return nil, fmt.Errorf("web_fetch: GET %s: %w", rawURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
 	if err != nil {
-		return "", fmt.Errorf("web_fetch: read body from %s: %w", rawURL, err)
+		return nil, fmt.Errorf("web_fetch: read body from %s: %w", rawURL, err)
 	}
 	if resp.StatusCode >= webFetchErrorStatusThresh {
-		return "", fmt.Errorf("web_fetch: %s returned status %d: %s", rawURL, resp.StatusCode, truncate(string(body), webFetchErrorBodyPreview))
+		return nil, fmt.Errorf("web_fetch: %s returned status %d: %s", rawURL, resp.StatusCode, truncate(string(body), webFetchErrorBodyPreview))
 	}
+	return body, nil
+}
 
+// extractReadableContent returns the Readability-extracted article text
+// when body is HTML, falling back to the raw string otherwise.
+func extractReadableContent(body []byte, rawURL string) string {
 	content := string(body)
-
-	// Extract article text from HTML using Mozilla Readability algorithm.
-	// This strips navigation, ads, scripts, styles — keeping only the article content.
-	// For non-HTML responses (JSON, plain text), return as-is.
-	if isHTML(content) {
-		parsed, err := url.Parse(rawURL)
-		if err == nil {
-			article, readErr := readability.FromReader(bytes.NewReader(body), parsed)
-			if readErr == nil {
-				var sb strings.Builder
-				_ = article.RenderText(&sb)
-				extracted := sb.String()
-				if strings.TrimSpace(extracted) != "" {
-					content = extracted
-				}
-			}
-		}
+	if !isHTML(content) {
+		return content
 	}
-
-	// Cap output to prevent token explosion in LLM context.
-	if len(content) > MaxToolOutputChars {
-		content = content[:MaxToolOutputChars] + "\n\n[truncated — content exceeded 30K chars]"
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return content
 	}
+	article, readErr := readability.FromReader(bytes.NewReader(body), parsed)
+	if readErr != nil {
+		return content
+	}
+	var sb strings.Builder
+	_ = article.RenderText(&sb)
+	extracted := sb.String()
+	if strings.TrimSpace(extracted) == "" {
+		return content
+	}
+	return extracted
+}
 
-	return content, nil
+// capToolOutput trims content to MaxToolOutputChars so the tool result
+// never blows the LLM context budget.
+func capToolOutput(content string) string {
+	if len(content) <= MaxToolOutputChars {
+		return content
+	}
+	return content[:MaxToolOutputChars] + "\n\n[truncated — content exceeded 30K chars]"
 }
 
 // truncate trims s to at most n runes, appending an ellipsis marker when

@@ -114,6 +114,80 @@ func waitForPort(ctx context.Context, port int) error {
 	}
 }
 
+// maybeStartE2EPortForwards launches kubectl port-forwards when the
+// --port-forward flag is set, returning the cleanup func. baseURL and
+// databaseDSN are rewritten in place when they are still at defaults and
+// the forwards supply concrete values.
+func maybeStartE2EPortForwards(portForwardFlag bool, baseURL, databaseDSN *string) (func(), error) {
+	if !portForwardFlag {
+		return nil, nil
+	}
+	log.Println("setting up port-forwards...")
+	orchPort, pgPort, redisPort, cleanup, err := startPortForwards()
+	if err != nil {
+		return nil, fmt.Errorf("port-forward setup failed: %w", err)
+	}
+	applyE2EPortForwardEnv(orchPort, pgPort, redisPort, baseURL, databaseDSN)
+	return cleanup, nil
+}
+
+// applyE2EPortForwardEnv rewrites defaults and env vars so the test run
+// targets the local port-forward tunnels.
+func applyE2EPortForwardEnv(orchPort, pgPort, redisPort int, baseURL, databaseDSN *string) {
+	if *baseURL == "http://localhost:7171" || *baseURL == "" {
+		*baseURL = fmt.Sprintf("http://localhost:%d", orchPort)
+	}
+	if os.Getenv("CRAWBL_E2E_REDIS_ADDR") == "" {
+		_ = os.Setenv("CRAWBL_E2E_REDIS_ADDR", fmt.Sprintf("localhost:%d", redisPort))
+	}
+	if *databaseDSN != "" {
+		return
+	}
+	pgPass := os.Getenv("CRAWBL_E2E_PG_PASSWORD")
+	if pgPass == "" {
+		return
+	}
+	*databaseDSN = fmt.Sprintf("postgres://postgres:%s@localhost:%d/crawbl?sslmode=disable&search_path=orchestrator", pgPass, pgPort)
+}
+
+// e2eConfigInputs groups the flags read from cobra that seed an e2e.Config.
+type e2eConfigInputs struct {
+	baseURL             string
+	e2eToken            string
+	verbose             bool
+	timeout             time.Duration
+	runtimeReadyTimeout time.Duration
+	runtimePollInterval time.Duration
+	databaseDSN         string
+	category            string
+	tags                string
+}
+
+// buildE2EConfig assembles the e2e.Config from the cobra-provided inputs
+// and the CRAWBL_E2E_* environment variables.
+func buildE2EConfig(in e2eConfigInputs) *e2e.Config {
+	return &e2e.Config{
+		BaseURL:             in.baseURL,
+		E2EToken:            in.e2eToken,
+		Verbose:             in.verbose,
+		Timeout:             in.timeout,
+		RuntimeReadyTimeout: in.runtimeReadyTimeout,
+		RuntimePollInterval: in.runtimePollInterval,
+		DatabaseDSN:         in.databaseDSN,
+		Category:            in.category,
+		Tags:                in.tags,
+
+		RedisAddr:       os.Getenv("CRAWBL_E2E_REDIS_ADDR"),
+		RedisPassword:   os.Getenv("CRAWBL_E2E_REDIS_PASSWORD"),
+		RedisDB:         envInt("CRAWBL_E2E_REDIS_DB", 0),
+		SpacesEndpoint:  os.Getenv("CRAWBL_E2E_SPACES_ENDPOINT"),
+		SpacesRegion:    os.Getenv("CRAWBL_E2E_SPACES_REGION"),
+		SpacesBucket:    os.Getenv("CRAWBL_E2E_SPACES_BUCKET"),
+		SpacesAccessKey: os.Getenv("CRAWBL_E2E_SPACES_ACCESS_KEY"),
+		SpacesSecretKey: os.Getenv("CRAWBL_E2E_SPACES_SECRET_KEY"),
+	}
+}
+
 func newE2ECommand() *cobra.Command {
 	var (
 		baseURL             string
@@ -153,56 +227,24 @@ runs only test-features/chat/).`,
   # Gateway mode (CI) — no port-forward needed
   crawbl test e2e --base-url https://api-dev.crawbl.com --e2e-token $CRAWBL_E2E_TOKEN`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var pfCleanup func()
-			if portForwardFlag {
-				log.Println("setting up port-forwards...")
-				orchPort, pgPort, redisPort, cleanup, err := startPortForwards()
-				if err != nil {
-					return fmt.Errorf("port-forward setup failed: %w", err)
-				}
-				pfCleanup = cleanup
-				defer pfCleanup()
-
-				// Override base-url if still default and port-forward is active.
-				if baseURL == "http://localhost:7171" || baseURL == "" {
-					baseURL = fmt.Sprintf("http://localhost:%d", orchPort)
-				}
-
-				// Auto-configure infra clients from cluster secrets when
-				// port-forward is active and env vars are not already set.
-				if os.Getenv("CRAWBL_E2E_REDIS_ADDR") == "" {
-					_ = os.Setenv("CRAWBL_E2E_REDIS_ADDR", fmt.Sprintf("localhost:%d", redisPort))
-				}
-
-				// Build DSN if not provided and the PG password env is set.
-				if databaseDSN == "" {
-					pgPass := os.Getenv("CRAWBL_E2E_PG_PASSWORD")
-					if pgPass != "" {
-						databaseDSN = fmt.Sprintf("postgres://postgres:%s@localhost:%d/crawbl?sslmode=disable&search_path=orchestrator", pgPass, pgPort)
-					}
-				}
+			cleanup, err := maybeStartE2EPortForwards(portForwardFlag, &baseURL, &databaseDSN)
+			if err != nil {
+				return err
 			}
-
-			cfg := &e2e.Config{
-				BaseURL:             baseURL,
-				E2EToken:            e2eToken,
-				Verbose:             verbose,
-				Timeout:             timeout,
-				RuntimeReadyTimeout: runtimeReadyTimeout,
-				RuntimePollInterval: runtimePollInterval,
-				DatabaseDSN:         databaseDSN,
-				Category:            category,
-				Tags:                tags,
-
-				RedisAddr:       os.Getenv("CRAWBL_E2E_REDIS_ADDR"),
-				RedisPassword:   os.Getenv("CRAWBL_E2E_REDIS_PASSWORD"),
-				RedisDB:         envInt("CRAWBL_E2E_REDIS_DB", 0),
-				SpacesEndpoint:  os.Getenv("CRAWBL_E2E_SPACES_ENDPOINT"),
-				SpacesRegion:    os.Getenv("CRAWBL_E2E_SPACES_REGION"),
-				SpacesBucket:    os.Getenv("CRAWBL_E2E_SPACES_BUCKET"),
-				SpacesAccessKey: os.Getenv("CRAWBL_E2E_SPACES_ACCESS_KEY"),
-				SpacesSecretKey: os.Getenv("CRAWBL_E2E_SPACES_SECRET_KEY"),
+			if cleanup != nil {
+				defer cleanup()
 			}
+			cfg := buildE2EConfig(e2eConfigInputs{
+				baseURL:             baseURL,
+				e2eToken:            e2eToken,
+				verbose:             verbose,
+				timeout:             timeout,
+				runtimeReadyTimeout: runtimeReadyTimeout,
+				runtimePollInterval: runtimePollInterval,
+				databaseDSN:         databaseDSN,
+				category:            category,
+				tags:                tags,
+			})
 
 			results := e2e.Run(cfg)
 			e2e.PrintResults(os.Stdout, results)

@@ -12,6 +12,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
 const (
@@ -67,18 +68,42 @@ func RunCentroidRecompute(ctx context.Context, deps CentroidRecomputeDeps) (*Cen
 	}
 
 	grouped := groupCentroidSamples(samples)
-	existing, err := deps.CentroidRepo.GetAll(ctx, sess)
+	existingHash, err := loadExistingCentroidHashes(ctx, sess, deps.CentroidRepo)
+	if err != nil {
+		return nil, err
+	}
+
+	toUpsert, result := buildCentroidUpserts(grouped, existingHash)
+	if len(toUpsert) == 0 {
+		return result, nil
+	}
+	if err := deps.CentroidRepo.Upsert(ctx, sess, toUpsert); err != nil {
+		return nil, fmt.Errorf("upsert centroids: %w", err)
+	}
+	result.Updated = len(toUpsert)
+	return result, nil
+}
+
+// loadExistingCentroidHashes indexes the current centroid source hashes
+// by memory type so the recompute can no-op types whose sample cohort
+// hasn't changed since the last sweep.
+func loadExistingCentroidHashes(ctx context.Context, sess database.SessionRunner, repo centroidStore) (map[string]string, error) {
+	existing, err := repo.GetAll(ctx, sess)
 	if err != nil {
 		return nil, fmt.Errorf("load existing centroids: %w", err)
 	}
-	existingHash := make(map[string]string, len(existing))
+	out := make(map[string]string, len(existing))
 	for i := range existing {
-		existingHash[existing[i].MemoryType] = existing[i].SourceHash
+		out[existing[i].MemoryType] = existing[i].SourceHash
 	}
+	return out, nil
+}
 
-	// Iterate memory types in sorted order so upsert sequence, log
-	// ordering, and partial-failure recovery are deterministic across
-	// runs. Go's map iteration order is randomized.
+// buildCentroidUpserts iterates memory types in sorted order so upsert
+// sequence, log ordering, and partial-failure recovery are deterministic
+// across runs (Go's map iteration is randomised). Returns the upsert
+// batch plus a running result tally.
+func buildCentroidUpserts(grouped map[string][]memory.CentroidTrainingSample, existingHash map[string]string) ([]memory.MemoryTypeCentroid, *CentroidRecomputeResult) {
 	memTypes := make([]string, 0, len(grouped))
 	for memType := range grouped {
 		memTypes = append(memTypes, memType)
@@ -88,38 +113,39 @@ func RunCentroidRecompute(ctx context.Context, deps CentroidRecomputeDeps) (*Cen
 	result := &CentroidRecomputeResult{}
 	toUpsert := make([]memory.MemoryTypeCentroid, 0, len(grouped))
 	for _, memType := range memTypes {
-		rows := grouped[memType]
-		if len(rows) < memory.MemoryCentroidMinSamples {
-			result.Skipped++
-			continue
+		centroid, ok := buildCentroidForType(memType, grouped[memType], existingHash[memType], result)
+		if ok {
+			toUpsert = append(toUpsert, centroid)
 		}
-		centroid := averageVectors(rows)
-		if centroid == nil {
-			result.Skipped++
-			continue
-		}
-		hash := hashSampleIDs(rows)
-		if existingHash[memType] == hash {
-			result.Unchanged++
-			continue
-		}
-		toUpsert = append(toUpsert, memory.MemoryTypeCentroid{
-			MemoryType:  memType,
-			Centroid:    centroid,
-			SampleCount: len(rows),
-			ComputedAt:  time.Now().UTC(),
-			SourceHash:  hash,
-		})
 	}
+	return toUpsert, result
+}
 
-	if len(toUpsert) == 0 {
-		return result, nil
+// buildCentroidForType prepares one centroid row for upsert. Tallies the
+// skipped/unchanged counters on result and returns (row, true) only for
+// the types that must be persisted.
+func buildCentroidForType(memType string, rows []memory.CentroidTrainingSample, existingHash string, result *CentroidRecomputeResult) (memory.MemoryTypeCentroid, bool) {
+	if len(rows) < memory.MemoryCentroidMinSamples {
+		result.Skipped++
+		return memory.MemoryTypeCentroid{}, false
 	}
-	if err := deps.CentroidRepo.Upsert(ctx, sess, toUpsert); err != nil {
-		return nil, fmt.Errorf("upsert centroids: %w", err)
+	centroid := averageVectors(rows)
+	if centroid == nil {
+		result.Skipped++
+		return memory.MemoryTypeCentroid{}, false
 	}
-	result.Updated = len(toUpsert)
-	return result, nil
+	hash := hashSampleIDs(rows)
+	if existingHash == hash {
+		result.Unchanged++
+		return memory.MemoryTypeCentroid{}, false
+	}
+	return memory.MemoryTypeCentroid{
+		MemoryType:  memType,
+		Centroid:    centroid,
+		SampleCount: len(rows),
+		ComputedAt:  time.Now().UTC(),
+		SourceHash:  hash,
+	}, true
 }
 
 // groupCentroidSamples buckets samples by memory type so callers can

@@ -70,54 +70,68 @@ func runGC(ctx context.Context, keep int, dryRun bool) error {
 	out.Step(style.Docker, "Found %d repositories in registry", len(repos))
 
 	var totalDeleted int
-
 	for _, repo := range repos {
-		tags, err := gcListTags(ctx, repo.Name)
-		if err != nil {
-			out.Warning("Failed to list tags for %s: %v", repo.Name, err)
-			continue
-		}
-
-		if len(tags) <= keep {
-			out.Infof("%s: %d tags (within limit of %d, skipping)", repo.Name, len(tags), keep)
-			continue
-		}
-
-		// Sort by updated_at descending (newest first).
-		sort.Slice(tags, func(i, j int) bool {
-			return tags[i].UpdatedAt.After(tags[j].UpdatedAt)
-		})
-
-		toDelete := tags[keep:]
-		out.Step(style.Delete, "%s: %d total, keeping %d, deleting %d",
-			repo.Name, len(tags), keep, len(toDelete))
-
-		for _, tag := range toDelete {
-			age := time.Since(tag.UpdatedAt).Truncate(time.Hour)
-
-			if dryRun {
-				out.Infof("[dry-run] would delete %s:%s (age: %s)", repo.Name, tag.Tag, age)
-				totalDeleted++
-				continue
-			}
-
-			if err := gcDeleteManifest(ctx, repo.Name, tag.ManifestDigest); err != nil {
-				out.Warning("Failed to delete %s:%s: %v", repo.Name, tag.Tag, err)
-				continue
-			}
-			out.Infof("Deleted %s:%s (age: %s)", repo.Name, tag.Tag, age)
-			totalDeleted++
-		}
+		totalDeleted += gcSweepRepo(ctx, repo.Name, keep, dryRun)
 	}
 
+	reportGCResult(dryRun, totalDeleted)
+	return nil
+}
+
+// gcSweepRepo trims one repository to at most keep tags and returns the
+// number of tags deleted (or that would be deleted in dry-run).
+func gcSweepRepo(ctx context.Context, repoName string, keep int, dryRun bool) int {
+	tags, err := gcListTags(ctx, repoName)
+	if err != nil {
+		out.Warning("Failed to list tags for %s: %v", repoName, err)
+		return 0
+	}
+	if len(tags) <= keep {
+		out.Infof("%s: %d tags (within limit of %d, skipping)", repoName, len(tags), keep)
+		return 0
+	}
+
+	// Sort by updated_at descending (newest first).
+	sort.Slice(tags, func(i, j int) bool {
+		return tags[i].UpdatedAt.After(tags[j].UpdatedAt)
+	})
+	toDelete := tags[keep:]
+	out.Step(style.Delete, "%s: %d total, keeping %d, deleting %d",
+		repoName, len(tags), keep, len(toDelete))
+
+	deleted := 0
+	for _, tag := range toDelete {
+		if gcApplyTagDeletion(ctx, repoName, tag, dryRun) {
+			deleted++
+		}
+	}
+	return deleted
+}
+
+// gcApplyTagDeletion removes (or logs, in dry-run) a single tag. Returns
+// true when the tag is counted against the deletion tally.
+func gcApplyTagDeletion(ctx context.Context, repoName string, tag gcTag, dryRun bool) bool {
+	age := time.Since(tag.UpdatedAt).Truncate(time.Hour)
+	if dryRun {
+		out.Infof("[dry-run] would delete %s:%s (age: %s)", repoName, tag.Tag, age)
+		return true
+	}
+	if err := gcDeleteManifest(ctx, repoName, tag.ManifestDigest); err != nil {
+		out.Warning("Failed to delete %s:%s: %v", repoName, tag.Tag, err)
+		return false
+	}
+	out.Infof("Deleted %s:%s (age: %s)", repoName, tag.Tag, age)
+	return true
+}
+
+// reportGCResult prints the final summary line based on run mode.
+func reportGCResult(dryRun bool, totalDeleted int) {
 	out.Ln()
 	if dryRun {
 		out.Step(style.Tip, "Dry run: %d tags would be deleted", totalDeleted)
-	} else {
-		out.Step(style.Reaper, "Deleted %d tags total", totalDeleted)
+		return
 	}
-
-	return nil
+	out.Step(style.Reaper, "Deleted %d tags total", totalDeleted)
 }
 
 // gcListRepos returns all repositories in the authenticated DOCR registry.

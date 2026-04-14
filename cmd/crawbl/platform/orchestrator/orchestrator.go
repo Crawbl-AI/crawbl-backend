@@ -3,6 +3,7 @@ package orchestrator
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -97,17 +98,23 @@ func NewOrchestratorCommand() *cobra.Command {
 	return cmd
 }
 
-func runServer(ctx context.Context) error {
-	logLevel := slog.LevelInfo
+// logLevelFromEnv parses the LOG_LEVEL env var into an slog.Level. The
+// returned level defaults to Info for unrecognised or empty values.
+func logLevelFromEnv() slog.Level {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
 	case "debug":
-		logLevel = slog.LevelDebug
+		return slog.LevelDebug
 	case "warn", "warning":
-		logLevel = slog.LevelWarn
+		return slog.LevelWarn
 	case "error":
-		logLevel = slog.LevelError
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+}
+
+func runServer(ctx context.Context) error {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevelFromEnv()}))
 	slog.SetDefault(logger)
 
 	// Telemetry: wire the OpenTelemetry meter provider up to
@@ -155,19 +162,7 @@ func runServer(ctx context.Context) error {
 	var centroidRepo mcpCentroidRepoRaw = centroidrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
-	var memoryStack layers.Stack
-	var embedder embed.Embedder
-	if baseURL := os.Getenv("CRAWBL_EMBED_BASE_URL"); baseURL != "" {
-		embedder = embed.NewProvider(embed.ProviderConfig{
-			BaseURL: baseURL,
-			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
-			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
-		})
-		memoryStack = layers.NewStack(drawerRepo, identityRepo, embedder)
-		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
-	} else {
-		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
-	}
+	memoryStack, embedder := buildMemoryStack(logger, drawerRepo, identityRepo)
 
 	// River schema migration — runs after app migrations, before HTTP server.
 	// Fatal on error: River is load-bearing; a failed migration must block boot.
@@ -177,9 +172,9 @@ func runServer(ctx context.Context) error {
 	}
 	logger.Info("river migrations applied")
 
-	clickhouseDB, err := clickhouse.Open(ctx, logger)
+	clickhouseDB, err := openClickhouseForServer(ctx, logger)
 	if err != nil {
-		return fmt.Errorf("clickhouse open: %w", err)
+		return err
 	}
 	defer func() {
 		if clickhouseDB != nil {
@@ -188,15 +183,7 @@ func runServer(ctx context.Context) error {
 	}()
 	llmUsageRepo := llmusagerepo.New(clickhouseDB)
 
-	// NATS client for memory fan-out events. Connected early so the
-	// memory publisher is available to the auto-ingest pool built
-	// further down.
-	natsCfg := crawblnats.DefaultConfig()
-	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
-	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
-	if natsErr != nil {
-		logger.Warn("NATS connect failed, memory publishing disabled", "error", natsErr)
-	}
+	natsClient := connectNATSForMemory(ctx, logger)
 	defer func() {
 		if natsClient != nil {
 			_ = natsClient.Close()
@@ -212,7 +199,7 @@ func runServer(ctx context.Context) error {
 	// NOT on this list — it runs in-process under
 	// internal/orchestrator/memory/autoingest so the chat-turn hot
 	// path never writes to river_job.
-	riverCfg, err := queue.NewConfig(queue.Deps{
+	riverClient, err := buildAndStartRiverClient(ctx, logger, queue.Deps{
 		DB:               db,
 		Logger:           logger,
 		DrawerRepo:       drawerRepo,
@@ -226,32 +213,11 @@ func runServer(ctx context.Context) error {
 		LLMUsageRepo:     llmUsageRepo,
 	})
 	if err != nil {
-		logger.Error("river config failed", "error", err)
-		return fmt.Errorf("river config: %w", err)
-	}
-
-	// Construct the River client over the shared *sql.DB pool.
-	riverClient, err := pkgriver.New(db.DB, riverCfg)
-	if err != nil {
-		logger.Error("river client construction failed", "error", err)
-		return fmt.Errorf("river client: %w", err)
-	}
-
-	// Start the client — beyond this point, a defer will handle graceful shutdown.
-	if err := riverClient.Start(ctx); err != nil {
-		logger.Error("river client start failed", "error", err)
-		return fmt.Errorf("river start: %w", err)
+		return err
 	}
 	defer pkgriver.Shutdown(riverClient, logger)
-	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
 
-	// In-process auto-ingest pool. Replaces the memory_autoingest River
-	// queue so the chat-turn hot path pays zero river_job inserts per
-	// message. Sized via CRAWBL_AUTOINGEST_WORKERS / _CAPACITY env vars;
-	// defaults are 16 workers × 1024 queue.
-	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
-	ingestCapacity, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_CAPACITY"))
-	ingestPool, err := autoingest.NewService(autoingest.Deps{
+	ingestPool, err := buildAutoIngestPool(logger, autoingest.Deps{
 		DB:              db,
 		DrawerRepo:      drawerRepo,
 		CentroidRepo:    centroidRepo,
@@ -259,30 +225,21 @@ func runServer(ctx context.Context) error {
 		Embedder:        embedder,
 		MemoryPublisher: memoryPublisher,
 		Logger:          logger,
-	}, autoingest.Config{
-		Workers:   ingestWorkers,
-		QueueSize: ingestCapacity,
 	})
 	if err != nil {
-		return fmt.Errorf("memory.autoingest: %w", err)
+		return err
 	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := ingestPool.Shutdown(shutdownCtx); err != nil {
-			logger.Warn("memory.autoingest: shutdown timeout", "error", err)
-		}
-	}()
+	defer shutdownAutoIngestPool(ingestPool, logger)
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
 		return err
 	}
-	httpMiddleware := buildHTTPMiddleware()
 
 	workspaceService := workspaceservice.MustNew(workspaceRepo, runtimeClient, logger)
 	authService := authservice.MustNew(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
+	httpMiddleware := buildHTTPMiddleware()
 	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
 	defer cleanupRT()
 	toolsRepo := toolsrepo.New()
@@ -365,24 +322,10 @@ func runServer(ctx context.Context) error {
 
 	// River UI dashboard — host-gated, auth enforced at the Envoy Gateway layer.
 	// Disabled when CRAWBL_RIVERUI_HOST is empty (feature flag off).
-	var riverUIHandler http.Handler
 	riverUIHost := strings.TrimSpace(os.Getenv("CRAWBL_RIVERUI_HOST"))
-	if riverUIHost != "" {
-		endpoints := riverui.NewEndpoints(riverClient, nil)
-		ruiHandler, ruiErr := riverui.NewHandler(&riverui.HandlerOpts{
-			Endpoints: endpoints,
-			Logger:    logger,
-		})
-		if ruiErr != nil {
-			logger.Error("riverui handler construction failed", "error", ruiErr)
-			return fmt.Errorf("riverui handler: %w", ruiErr)
-		}
-		if ruiErr = ruiHandler.Start(ctx); ruiErr != nil {
-			logger.Error("riverui handler start failed", "error", ruiErr)
-			return fmt.Errorf("riverui start: %w", ruiErr)
-		}
-		riverUIHandler = ruiHandler
-		logger.Info("riverui enabled", slog.String("host", riverUIHost))
+	riverUIHandler, err := buildRiverUIHandler(ctx, logger, riverClient, riverUIHost)
+	if err != nil {
+		return err
 	}
 
 	srv := server.NewServer(&server.Config{
@@ -406,6 +349,122 @@ func runServer(ctx context.Context) error {
 	})
 
 	return srv.Run(ctx, shutdownTimeout)
+}
+
+// buildAndStartRiverClient builds the River config, constructs the client
+// over db.DB, and starts it. Any step that fails returns an error wrapped
+// with the failure stage so the caller can surface it uniformly.
+func buildAndStartRiverClient(ctx context.Context, logger *slog.Logger, deps queue.Deps) (*pkgriver.Client, error) {
+	riverCfg, err := queue.NewConfig(deps)
+	if err != nil {
+		logger.Error("river config failed", "error", err)
+		return nil, fmt.Errorf("river config: %w", err)
+	}
+	riverClient, err := pkgriver.New(deps.DB.DB, riverCfg)
+	if err != nil {
+		logger.Error("river client construction failed", "error", err)
+		return nil, fmt.Errorf("river client: %w", err)
+	}
+	if err := riverClient.Start(ctx); err != nil {
+		logger.Error("river client start failed", "error", err)
+		return nil, fmt.Errorf("river start: %w", err)
+	}
+	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
+	return riverClient, nil
+}
+
+// buildAutoIngestPool wires the in-process auto-ingest service sized by
+// CRAWBL_AUTOINGEST_WORKERS / _CAPACITY env vars.
+func buildAutoIngestPool(_ *slog.Logger, deps autoingest.Deps) (autoingest.Service, error) {
+	ingestWorkers, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_WORKERS"))
+	ingestCapacity, _ := strconv.Atoi(os.Getenv("CRAWBL_AUTOINGEST_CAPACITY"))
+	pool, err := autoingest.NewService(deps, autoingest.Config{
+		Workers:   ingestWorkers,
+		QueueSize: ingestCapacity,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("memory.autoingest: %w", err)
+	}
+	return pool, nil
+}
+
+// shutdownAutoIngestPool drains the auto-ingest pool with a bounded
+// timeout, logging any shutdown-timeout warnings but never returning an
+// error since the caller is already on its way out.
+func shutdownAutoIngestPool(pool autoingest.Service, logger *slog.Logger) {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := pool.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("memory.autoingest: shutdown timeout", "error", err)
+	}
+}
+
+// buildRiverUIHandler constructs the River UI handler when the feature
+// flag (CRAWBL_RIVERUI_HOST) is set. Returns (nil, nil) when disabled so
+// the caller can pass a nil handler straight through to server.Config.
+func buildRiverUIHandler(ctx context.Context, logger *slog.Logger, riverClient *pkgriver.Client, riverUIHost string) (http.Handler, error) {
+	if riverUIHost == "" {
+		return nil, nil
+	}
+	endpoints := riverui.NewEndpoints(riverClient, nil)
+	ruiHandler, err := riverui.NewHandler(&riverui.HandlerOpts{
+		Endpoints: endpoints,
+		Logger:    logger,
+	})
+	if err != nil {
+		logger.Error("riverui handler construction failed", "error", err)
+		return nil, fmt.Errorf("riverui handler: %w", err)
+	}
+	if err := ruiHandler.Start(ctx); err != nil {
+		logger.Error("riverui handler start failed", "error", err)
+		return nil, fmt.Errorf("riverui start: %w", err)
+	}
+	logger.Info("riverui enabled", slog.String("host", riverUIHost))
+	return ruiHandler, nil
+}
+
+// openClickhouseForServer opens the ClickHouse connection for the
+// orchestrator server. A failure to open is fatal; returning nil is
+// permitted when ClickHouse is not configured.
+func openClickhouseForServer(ctx context.Context, logger *slog.Logger) (*sql.DB, error) {
+	clickhouseDB, err := clickhouse.Open(ctx, logger)
+	if err != nil {
+		return nil, fmt.Errorf("clickhouse open: %w", err)
+	}
+	return clickhouseDB, nil
+}
+
+// connectNATSForMemory connects to NATS for memory fan-out events. On
+// failure the returned client is nil — downstream publishers handle
+// that case by no-oping so local dev does not require NATS.
+func connectNATSForMemory(ctx context.Context, logger *slog.Logger) *crawblnats.Client {
+	cfg := crawblnats.DefaultConfig()
+	cfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
+	client, err := crawblnats.Connect(ctx, cfg, logger)
+	if err != nil {
+		logger.Warn("NATS connect failed, memory publishing disabled", "error", err)
+		return nil
+	}
+	return client
+}
+
+// buildMemoryStack constructs the memory.Stack and its embedder when
+// CRAWBL_EMBED_BASE_URL is configured. Returns (nil, nil) otherwise so
+// downstream services fall back to messages-only context.
+func buildMemoryStack(logger *slog.Logger, drawerRepo mcpDrawerRepoRaw, identityRepo mcpIdentityRepoRaw) (layers.Stack, embed.Embedder) {
+	baseURL := os.Getenv("CRAWBL_EMBED_BASE_URL")
+	if baseURL == "" {
+		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set — WakeUp context injection and semantic search will be unavailable")
+		return nil, nil
+	}
+	embedder := embed.NewProvider(embed.ProviderConfig{
+		BaseURL: baseURL,
+		APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
+		Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
+	})
+	stack := layers.NewStack(drawerRepo, identityRepo, embedder)
+	logger.Info("memory stack enabled", slog.String("base_url", baseURL))
+	return stack, embedder
 }
 
 func envOrDefault(key, fallback string) string {
