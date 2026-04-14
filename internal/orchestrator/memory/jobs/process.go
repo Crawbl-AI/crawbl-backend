@@ -60,10 +60,18 @@ func RunProcess(ctx context.Context, deps ProcessDeps) (*ProcessResult, error) {
 }
 
 // processWorkspace runs the cold pipeline for every raw drawer in one workspace.
-func processWorkspace(ctx context.Context, sess database.SessionRunner, deps ProcessDeps, wsID string, result *ProcessResult) {
-	drawers, err := deps.DrawerRepo.ListByState(ctx, sess, wsID, string(memory.DrawerStateRaw), rawDrawerBatchSize)
+//
+// Pattern A (short-tx CAS claim): the row-level locks acquired by
+// ListByState (FOR UPDATE SKIP LOCKED) are only useful while the
+// transaction is open. We begin a transaction, select + immediately
+// CAS-transition the drawers to 'classifying', then commit — all within
+// claimDrawers. The heavy LLM work happens after the transaction commits
+// so competing workers see 'classifying' rows and skip them via SKIP LOCKED
+// without being blocked for the duration of the LLM round-trip.
+func processWorkspace(ctx context.Context, sess *dbr.Session, deps ProcessDeps, wsID string, result *ProcessResult) {
+	drawers, err := claimDrawers(ctx, sess, deps, wsID)
 	if err != nil {
-		slog.Warn("memory-process: list raw drawers failed", "workspace_id", wsID, "error", err)
+		slog.Warn("memory-process: claim raw drawers failed", "workspace_id", wsID, "error", err)
 		return
 	}
 	if len(drawers) == 0 {
@@ -83,6 +91,41 @@ func processWorkspace(ctx context.Context, sess database.SessionRunner, deps Pro
 			Result:          result,
 		})
 	}
+}
+
+// claimDrawers opens a short transaction, selects raw drawers with
+// FOR UPDATE SKIP LOCKED, and atomically advances their state to
+// 'classifying' via a CAS UPDATE — all within one commit. The
+// returned slice contains exactly the drawers this worker owns;
+// concurrent workers will skip them on their next SKIP LOCKED scan.
+func claimDrawers(ctx context.Context, sess *dbr.Session, deps ProcessDeps, wsID string) ([]memory.Drawer, error) {
+	tx, err := sess.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin claim tx: %w", err)
+	}
+	defer tx.RollbackUnlessCommitted()
+
+	drawers, err := deps.DrawerRepo.ListByState(ctx, tx, wsID, string(memory.DrawerStateRaw), rawDrawerBatchSize)
+	if err != nil {
+		return nil, fmt.Errorf("list raw drawers: %w", err)
+	}
+	if len(drawers) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]string, len(drawers))
+	for i := range drawers {
+		ids[i] = drawers[i].ID
+	}
+
+	if err := deps.DrawerRepo.ClaimForProcessing(ctx, tx, wsID, ids); err != nil {
+		return nil, fmt.Errorf("claim drawers for processing: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit claim tx: %w", err)
+	}
+	return drawers, nil
 }
 
 // classifyBatch runs one batch LLM classify call for all drawers in a workspace.
@@ -307,12 +350,22 @@ func resolveNeighborConflict(ctx context.Context, sess database.SessionRunner, d
 	}
 }
 
+// handleProcessFailure increments the retry counter and either resets the
+// drawer back to 'raw' (so the next sweep can retry it) or marks it 'failed'
+// once ColdWorkerMaxRetries is exhausted. The drawer is currently in state
+// 'classifying'; without an explicit state reset it would be stuck there
+// permanently since ListByState only queries state = 'raw'.
 func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, d *memory.Drawer) {
 	if err := drawerRepo.IncrementRetryCount(ctx, sess, d.WorkspaceID, d.ID); err != nil {
 		slog.Warn("memory-process: increment retry count failed",
 			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
 	}
 	if d.RetryCount+1 < memory.ColdWorkerMaxRetries {
+		// Reset to 'raw' so the next sweep can claim this drawer again.
+		if err := drawerRepo.UpdateState(ctx, sess, d.WorkspaceID, d.ID, string(memory.DrawerStateRaw)); err != nil {
+			slog.Warn("memory-process: reset drawer to raw failed",
+				"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)
+		}
 		return
 	}
 	slog.Warn("memory-process: max retries, marking failed",

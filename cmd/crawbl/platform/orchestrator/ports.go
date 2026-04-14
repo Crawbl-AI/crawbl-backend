@@ -94,6 +94,7 @@ type mcpDrawerRepoRaw interface {
 	GetByWingRoom(ctx context.Context, sess database.SessionRunner, workspaceID, wing, room string, limit int) ([]memory.Drawer, error)
 	ListByWorkspace(ctx context.Context, sess database.SessionRunner, workspaceID string, limit, offset int) ([]memory.Drawer, error)
 	ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error)
+	ClaimForProcessing(ctx context.Context, sess database.SessionRunner, workspaceID string, ids []string) error
 	UpdateState(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, state string) error
 	UpdateClassification(ctx context.Context, sess database.SessionRunner, opts drawerrepo.UpdateClassificationOpts) error
 	UpdateEmbedding(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, embedding []float32) error

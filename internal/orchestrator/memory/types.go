@@ -25,10 +25,11 @@ const (
 type DrawerState string
 
 const (
-	DrawerStateRaw       DrawerState = "raw"
-	DrawerStateProcessed DrawerState = "processed"
-	DrawerStateMerged    DrawerState = "merged"
-	DrawerStateFailed    DrawerState = "failed"
+	DrawerStateRaw         DrawerState = "raw"
+	DrawerStateClassifying DrawerState = "classifying"
+	DrawerStateProcessed   DrawerState = "processed"
+	DrawerStateMerged      DrawerState = "merged"
+	DrawerStateFailed      DrawerState = "failed"
 )
 
 // Workspace limits.
