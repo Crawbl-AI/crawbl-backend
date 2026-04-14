@@ -8,7 +8,6 @@ Feature: Agent mentions in the swarm chat
     And user "primary" opens their default workspace
     And user "primary" waits until their assistant is ready
 
-  @llm-flaky
   Scenario: Mentioning Wally routes the reply through Wally
     When user "primary" mentions the "wally" agent in the swarm conversation saying "Say you are ready in four words."
     Then the assistant reply should succeed

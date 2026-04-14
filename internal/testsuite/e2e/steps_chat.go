@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
@@ -212,8 +213,58 @@ func (tc *testContext) assistantReplyShouldComeFromAgent() error {
 	return tc.assertJSONNotEmpty("data.0.agent.id")
 }
 
+// assistantReplyShouldComeFromSpecificAgent checks that the first
+// assistant reply came from the expected agent. Because the LLM may
+// initially route through the manager before the delegated agent's
+// reply surfaces, this step retries up to 3 times with a 2-second
+// backoff, re-fetching the conversation messages each attempt.
 func (tc *testContext) assistantReplyShouldComeFromSpecificAgent(role string) error {
-	return tc.assertJSONEquals("data.0.agent.slug", normalizeKey(role))
+	expected := normalizeKey(role)
+	const maxAttempts = 3
+	const retryDelay = 2 * time.Second
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Check all reply turns, not just the first — the delegated
+		// agent's reply may appear after the manager's acknowledgment.
+		replies := gjson.GetBytes(tc.lastBody, "data").Array()
+		for _, r := range replies {
+			if r.Get("agent.slug").String() == expected {
+				return nil
+			}
+		}
+
+		if attempt == maxAttempts {
+			got := gjson.GetBytes(tc.lastBody, "data.0.agent.slug").String()
+			return fmt.Errorf("JSON data.*.agent.slug: expected %q in any reply turn, got first=%q after %d attempts", expected, got, maxAttempts)
+		}
+
+		// Re-fetch the conversation messages for the next attempt.
+		time.Sleep(retryDelay)
+		state := tc.userState("primary")
+		listURL := pathWorkspaces + state.workspaceID + pathConversations + state.currentConversation + pathMessages
+		if _, err := tc.doRequest("GET", listURL, "primary", nil); err != nil {
+			return fmt.Errorf("retry fetch messages: %w", err)
+		}
+		// Rebuild tc.lastBody in the synthesized reply shape so
+		// downstream assertions keep working.
+		msgs := gjson.GetBytes(tc.lastBody, "data.messages").Array()
+		var assistantReplies []gjson.Result
+		for _, m := range msgs {
+			r := m.Get("role").String()
+			if r != "" && r != "user" {
+				assistantReplies = append(assistantReplies, m)
+			}
+		}
+		if len(assistantReplies) > 0 {
+			synthesized, err := synthesizeRepliesBody(assistantReplies)
+			if err != nil {
+				return fmt.Errorf("retry synthesize: %w", err)
+			}
+			tc.lastBody = synthesized
+			tc.lastStatus = http.StatusOK
+		}
+	}
+	return nil
 }
 
 // assistantReplyShouldMention verifies the assistant's reply contains

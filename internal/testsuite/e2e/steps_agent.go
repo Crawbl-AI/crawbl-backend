@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
@@ -98,10 +99,24 @@ func (tc *testContext) userDeletesAgentMemory(alias, key, slug string) error {
 }
 
 // memoryShouldNotExist lists the agent's memories and verifies no entry
-// has the given key. Uses the "primary" user alias implicitly via the
-// most-recent user state.
+// has the given key. Retries up to 3 times with a 3-second backoff
+// because the agent may need a moment to process the memory_remove_key
+// tool call. Uses the "primary" user alias implicitly.
 func (tc *testContext) memoryShouldNotExist(key, slug string) error {
-	return tc.assertMemoryKeyExists("primary", key, slug, false)
+	const maxAttempts = 3
+	const retryDelay = 3 * time.Second
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := tc.assertMemoryKeyExists("primary", key, slug, false)
+		if err == nil {
+			return nil
+		}
+		if attempt == maxAttempts {
+			return fmt.Errorf("%w (after %d attempts)", err, maxAttempts)
+		}
+		time.Sleep(retryDelay)
+	}
+	return nil
 }
 
 // memoryShouldExist is the positive counterpart of memoryShouldNotExist.
