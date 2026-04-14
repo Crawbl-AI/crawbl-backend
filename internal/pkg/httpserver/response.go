@@ -8,11 +8,13 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+const headerContentType = "Content-Type"
+
 // WriteSuccessResponse writes a JSON success response with the given status code and data.
 // The response is wrapped in a success envelope: {"data": <data>}.
 // This function sets the Content-Type header to application/json and logs encoding errors.
 func WriteSuccessResponse(w http.ResponseWriter, statusCode int, data any) {
-	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set(headerContentType, ContentTypeJSON)
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(&successResponseEnvelope{Data: data}); err != nil {
 		slog.Error("failed to encode success response", slog.String("error", err.Error()))
@@ -39,7 +41,7 @@ func WriteErrorResponse(w http.ResponseWriter, statusCode int, mErr *merrors.Err
 			envelope.Message = "internal server error"
 		}
 	}
-	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set(headerContentType, ContentTypeJSON)
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(envelope); err != nil {
 		slog.Error("failed to encode error response", slog.String("error", err.Error()))
@@ -51,7 +53,7 @@ func WriteErrorResponse(w http.ResponseWriter, statusCode int, mErr *merrors.Err
 // before the service layer is reached). Produces {"message": <message>} with no code.
 // This function sets the Content-Type header to application/json and logs encoding errors.
 func WriteErrorMessage(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set(headerContentType, ContentTypeJSON)
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(&errorResponseEnvelope{Message: message}); err != nil {
 		slog.Error("failed to encode error response", slog.String("error", err.Error()))
@@ -62,7 +64,7 @@ func WriteErrorMessage(w http.ResponseWriter, statusCode int, message string) {
 // Unlike WriteSuccessResponse, this does not wrap the payload in an envelope.
 // This function sets the Content-Type header to application/json and logs encoding errors.
 func WriteJSONResponse(w http.ResponseWriter, statusCode int, payload any) {
-	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set(headerContentType, ContentTypeJSON)
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		slog.Error("failed to encode JSON response", slog.String("error", err.Error()))

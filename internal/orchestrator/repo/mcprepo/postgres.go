@@ -9,6 +9,8 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
+const whereID = "id = ?"
+
 type postgres struct{}
 
 // New returns a Postgres-backed MCP repository.
@@ -18,7 +20,7 @@ func (p *postgres) GetUserByID(ctx context.Context, sess *dbr.Session, userID st
 	var row UserRow
 	err := sess.Select("id", "email", "nickname", "name", "surname", "country_code", "created_at").
 		From("users").
-		Where("id = ?", userID).
+		Where(whereID, userID).
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		return nil, fmt.Errorf("mcprepo: get user %s: %w", userID, err)
@@ -106,7 +108,7 @@ func (p *postgres) finaliseAgentMessage(ctx context.Context, sess *dbr.Session, 
 		Set(opts.FinalCol, opts.FinalVal).
 		Set("duration_ms", opts.DurationMs).
 		Set("completed_at", time.Now().UTC()).
-		Where("id = ?", opts.ID).
+		Where(whereID, opts.ID).
 		ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("mcprepo: %s %s: %w", opts.OpLabel, opts.ID, err)
@@ -145,7 +147,7 @@ func (p *postgres) UpdateArtifactStatus(ctx context.Context, sess *dbr.Session, 
 	_, err := sess.Update("artifacts").
 		Set("status", status).
 		Set("updated_at", time.Now().UTC()).
-		Where("id = ?", artifactID).
+		Where(whereID, artifactID).
 		ExecContext(ctx)
 	if err != nil {
 		return fmt.Errorf("mcprepo: update artifact %s status to %s: %w", artifactID, status, err)

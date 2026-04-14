@@ -9,6 +9,8 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+const whereID = "id = ?"
+
 // New creates a new workflow Repo instance backed by PostgreSQL.
 func New() *workflowRepo {
 	return &workflowRepo{}
@@ -116,7 +118,7 @@ func updateByID(ctx context.Context, sess orchestratorrepo.SessionRunner, table,
 	for _, s := range sets {
 		stmt = stmt.Set(s.Col, s.Val)
 	}
-	if _, err := stmt.Where("id = ?", id).ExecContext(ctx); err != nil {
+	if _, err := stmt.Where(whereID, id).ExecContext(ctx); err != nil {
 		return merrors.WrapStdServerError(err, opLabel)
 	}
 	return nil
@@ -150,7 +152,7 @@ func (r *workflowRepo) GetExecution(ctx context.Context, sess orchestratorrepo.S
 	var row WorkflowExecutionRow
 	err := sess.Select(executionColumns...).
 		From("workflow_executions").
-		Where("id = ?", executionID).
+		Where(whereID, executionID).
 		LoadOneContext(ctx, &row)
 	if err != nil {
 		if database.IsRecordNotFoundError(err) {

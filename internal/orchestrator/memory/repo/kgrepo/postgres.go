@@ -18,6 +18,11 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
+const (
+	countAll        = "COUNT(*)"
+	whereWorkspaceID = "workspace_id = ?"
+)
+
 // Postgres is the knowledge graph repository backed by PostgreSQL. It
 // implements repo.KGRepo; callers hold it through that interface.
 type Postgres struct{}
@@ -110,9 +115,9 @@ func (g *Postgres) AddTriple(ctx context.Context, sess database.SessionRunner, w
 // either quota is exceeded so AddTriple can bail without inserting.
 func (g *Postgres) checkWorkspaceLimits(ctx context.Context, sess database.SessionRunner, workspaceID string) error {
 	var entityCount int
-	if err := sess.Select("COUNT(*)").
+	if err := sess.Select(countAll).
 		From("memory_entities").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspaceID, workspaceID).
 		LoadOneContext(ctx, &entityCount); err != nil {
 		return fmt.Errorf("kg: count entities: %w", err)
 	}
@@ -121,9 +126,9 @@ func (g *Postgres) checkWorkspaceLimits(ctx context.Context, sess database.Sessi
 	}
 
 	var tripleCount int
-	if err := sess.Select("COUNT(*)").
+	if err := sess.Select(countAll).
 		From("memory_triples").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspaceID, workspaceID).
 		LoadOneContext(ctx, &tripleCount); err != nil {
 		return fmt.Errorf("kg: count triples: %w", err)
 	}
@@ -309,25 +314,25 @@ LIMIT 100`
 
 func (g *Postgres) Stats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.KGStats, error) {
 	var entities int
-	err := sess.Select("COUNT(*)").
+	err := sess.Select(countAll).
 		From("memory_entities").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspaceID, workspaceID).
 		LoadOneContext(ctx, &entities)
 	if err != nil {
 		return nil, fmt.Errorf("kg: stats entities: %w", err)
 	}
 
 	var triples int
-	err = sess.Select("COUNT(*)").
+	err = sess.Select(countAll).
 		From("memory_triples").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspaceID, workspaceID).
 		LoadOneContext(ctx, &triples)
 	if err != nil {
 		return nil, fmt.Errorf("kg: stats triples: %w", err)
 	}
 
 	var current int
-	err = sess.Select("COUNT(*)").
+	err = sess.Select(countAll).
 		From("memory_triples").
 		Where("workspace_id = ? AND valid_to IS NULL", workspaceID).
 		LoadOneContext(ctx, &current)
@@ -338,7 +343,7 @@ func (g *Postgres) Stats(ctx context.Context, sess database.SessionRunner, works
 	var predicates []string
 	_, err = sess.Select("DISTINCT predicate").
 		From("memory_triples").
-		Where("workspace_id = ?", workspaceID).
+		Where(whereWorkspaceID, workspaceID).
 		OrderDir("predicate", true).
 		LoadContext(ctx, &predicates)
 	if err != nil {

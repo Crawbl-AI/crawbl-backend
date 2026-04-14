@@ -13,6 +13,8 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
+const errArtifactNotFound = "artifact not found"
+
 func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceID string, params *CreateArtifactParams) (*CreateArtifactResult, error) {
 	if err := s.verifyWorkspace(ctx, sess, userID, workspaceID); err != nil {
 		return nil, err
@@ -89,7 +91,7 @@ func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID,
 
 	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, artifactID)
 	if mErr != nil {
-		return nil, fmt.Errorf("artifact not found")
+		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
 	ver, err := s.resolveArtifactVersion(ctx, sess, artifactID, version)
@@ -130,7 +132,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 
 	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, params.ArtifactID)
 	if mErr != nil {
-		return nil, fmt.Errorf("artifact not found")
+		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
 	if params.ExpectedVersion > 0 && params.ExpectedVersion != artifact.CurrentVersion {
@@ -199,7 +201,7 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 
 	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, params.ArtifactID)
 	if mErr != nil {
-		return nil, fmt.Errorf("artifact not found")
+		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
 	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentID, params.AgentSlug)
