@@ -7,14 +7,13 @@
 package mobilev1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -32,7 +31,7 @@ type ContentAgent struct {
 	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	Slug          string                 `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
 	Avatar        string                 `protobuf:"bytes,5,opt,name=avatar,proto3" json:"avatar,omitempty"`
-	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	Status        *string                `protobuf:"bytes,6,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -103,8 +102,8 @@ func (x *ContentAgent) GetAvatar() string {
 }
 
 func (x *ContentAgent) GetStatus() string {
-	if x != nil {
-		return x.Status
+	if x != nil && x.Status != nil {
+		return *x.Status
 	}
 	return ""
 }
@@ -528,12 +527,12 @@ type MessageContentPayload struct {
 	Actions          []*ActionItemResponse    `protobuf:"bytes,5,rep,name=actions,proto3" json:"actions,omitempty"`
 	SelectedActionId *string                  `protobuf:"bytes,6,opt,name=selected_action_id,json=selectedActionId,proto3,oneof" json:"selected_action_id,omitempty"`
 	Tool             string                   `protobuf:"bytes,7,opt,name=tool,proto3" json:"tool,omitempty"`
-	State            string                   `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
+	State            *string                  `protobuf:"bytes,8,opt,name=state,proto3,oneof" json:"state,omitempty"`
 	Query            string                   `protobuf:"bytes,9,opt,name=query,proto3" json:"query,omitempty"`
 	Args             *structpb.Struct         `protobuf:"bytes,10,opt,name=args,proto3" json:"args,omitempty"`
 	From             *ContentAgent            `protobuf:"bytes,11,opt,name=from,proto3,oneof" json:"from,omitempty"`
 	To               *ContentAgent            `protobuf:"bytes,12,opt,name=to,proto3,oneof" json:"to,omitempty"`
-	Status           string                   `protobuf:"bytes,13,opt,name=status,proto3" json:"status,omitempty"`
+	Status           *string                  `protobuf:"bytes,13,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	TaskPreview      string                   `protobuf:"bytes,14,opt,name=task_preview,json=taskPreview,proto3" json:"task_preview,omitempty"`
 	Turns            []*QuestionTurnPayload   `protobuf:"bytes,15,rep,name=turns,proto3" json:"turns,omitempty"`
 	Answers          []*QuestionAnswerPayload `protobuf:"bytes,16,rep,name=answers,proto3" json:"answers,omitempty"`
@@ -621,8 +620,8 @@ func (x *MessageContentPayload) GetTool() string {
 }
 
 func (x *MessageContentPayload) GetState() string {
-	if x != nil {
-		return x.State
+	if x != nil && x.State != nil {
+		return *x.State
 	}
 	return ""
 }
@@ -656,8 +655,8 @@ func (x *MessageContentPayload) GetTo() *ContentAgent {
 }
 
 func (x *MessageContentPayload) GetStatus() string {
-	if x != nil {
-		return x.Status
+	if x != nil && x.Status != nil {
+		return *x.Status
 	}
 	return ""
 }
@@ -1342,14 +1341,15 @@ var File_mobile_v1_chat_proto protoreflect.FileDescriptor
 
 const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\n" +
-	"\x14mobile/v1/chat.proto\x12\x10crawbl.mobile.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15mobile/v1/agent.proto\"\x8a\x01\n" +
+	"\x14mobile/v1/chat.proto\x12\x10crawbl.mobile.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15mobile/v1/agent.proto\"\x9a\x01\n" +
 	"\fContentAgent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12\x12\n" +
 	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\x16\n" +
-	"\x06avatar\x18\x05 \x01(\tR\x06avatar\x12\x16\n" +
-	"\x06status\x18\x06 \x01(\tR\x06status\"P\n" +
+	"\x06avatar\x18\x05 \x01(\tR\x06avatar\x12\x1b\n" +
+	"\x06status\x18\x06 \x01(\tH\x00R\x06status\x88\x01\x01B\t\n" +
+	"\a_status\"P\n" +
 	"\x12ActionItemResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
@@ -1382,7 +1382,7 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"option_ids\x18\x02 \x03(\tR\toptionIds\x12\x1f\n" +
 	"\vcustom_text\x18\x03 \x01(\tR\n" +
-	"customText\"\xa7\x05\n" +
+	"customText\"\xc6\x05\n" +
 	"\x15MessageContentPayload\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x14\n" +
@@ -1390,20 +1390,22 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12>\n" +
 	"\aactions\x18\x05 \x03(\v2$.crawbl.mobile.v1.ActionItemResponseR\aactions\x121\n" +
 	"\x12selected_action_id\x18\x06 \x01(\tH\x00R\x10selectedActionId\x88\x01\x01\x12\x12\n" +
-	"\x04tool\x18\a \x01(\tR\x04tool\x12\x14\n" +
-	"\x05state\x18\b \x01(\tR\x05state\x12\x14\n" +
+	"\x04tool\x18\a \x01(\tR\x04tool\x12\x19\n" +
+	"\x05state\x18\b \x01(\tH\x01R\x05state\x88\x01\x01\x12\x14\n" +
 	"\x05query\x18\t \x01(\tR\x05query\x12+\n" +
 	"\x04args\x18\n" +
 	" \x01(\v2\x17.google.protobuf.StructR\x04args\x127\n" +
-	"\x04from\x18\v \x01(\v2\x1e.crawbl.mobile.v1.ContentAgentH\x01R\x04from\x88\x01\x01\x123\n" +
-	"\x02to\x18\f \x01(\v2\x1e.crawbl.mobile.v1.ContentAgentH\x02R\x02to\x88\x01\x01\x12\x16\n" +
-	"\x06status\x18\r \x01(\tR\x06status\x12!\n" +
+	"\x04from\x18\v \x01(\v2\x1e.crawbl.mobile.v1.ContentAgentH\x02R\x04from\x88\x01\x01\x123\n" +
+	"\x02to\x18\f \x01(\v2\x1e.crawbl.mobile.v1.ContentAgentH\x03R\x02to\x88\x01\x01\x12\x1b\n" +
+	"\x06status\x18\r \x01(\tH\x04R\x06status\x88\x01\x01\x12!\n" +
 	"\ftask_preview\x18\x0e \x01(\tR\vtaskPreview\x12;\n" +
 	"\x05turns\x18\x0f \x03(\v2%.crawbl.mobile.v1.QuestionTurnPayloadR\x05turns\x12A\n" +
 	"\aanswers\x18\x10 \x03(\v2'.crawbl.mobile.v1.QuestionAnswerPayloadR\aanswersB\x15\n" +
-	"\x13_selected_action_idB\a\n" +
+	"\x13_selected_action_idB\b\n" +
+	"\x06_stateB\a\n" +
 	"\x05_fromB\x05\n" +
-	"\x03_to\"\xea\x03\n" +
+	"\x03_toB\t\n" +
+	"\a_status\"\xea\x03\n" +
 	"\x0fMessageResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\x12\n" +
@@ -1540,6 +1542,7 @@ func file_mobile_v1_chat_proto_init() {
 		return
 	}
 	file_mobile_v1_agent_proto_init()
+	file_mobile_v1_chat_proto_msgTypes[0].OneofWrappers = []any{}
 	file_mobile_v1_chat_proto_msgTypes[2].OneofWrappers = []any{}
 	file_mobile_v1_chat_proto_msgTypes[7].OneofWrappers = []any{}
 	file_mobile_v1_chat_proto_msgTypes[8].OneofWrappers = []any{}

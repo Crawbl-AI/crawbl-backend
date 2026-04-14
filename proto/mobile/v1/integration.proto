@@ -18,7 +18,9 @@ message IntegrationItemResponse {
   string icon_url = 3;
   string category_id = 4;
   string type = 5;
-  string provider = 6;
+  // Provider is null for first-party tools (no external integration). Third-party
+  // integrations populate this with their provider slug (gmail, slack, ...).
+  optional string provider = 6;
   bool enabled = 7;
   bool is_connected = 8;
 }

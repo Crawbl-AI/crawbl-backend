@@ -9,6 +9,7 @@ import (
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // MaxMessageTextLength is the maximum allowed byte length for a chat message text.
@@ -60,10 +61,14 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 		Title:       content.Title,
 		Description: content.Description,
 		Tool:        content.Tool,
-		State:       string(content.State),
 		Query:       content.Query,
-		Status:      content.Status,
 		TaskPreview: content.TaskPreview,
+	}
+	if s := string(content.State); s != "" {
+		resp.State = ptr.Of(s)
+	}
+	if content.Status != "" {
+		resp.Status = ptr.Of(content.Status)
 	}
 	if content.SelectedActionID != nil {
 		resp.SelectedActionId = content.SelectedActionID
@@ -157,14 +162,17 @@ func ContentAgentToProto(ca *orchestrator.ContentAgent) *mobilev1.ContentAgent {
 	if ca == nil {
 		return nil
 	}
-	return &mobilev1.ContentAgent{
+	out := &mobilev1.ContentAgent{
 		Id:     ca.ID,
 		Name:   ca.Name,
 		Role:   ca.Role,
 		Slug:   ca.Slug,
 		Avatar: ca.Avatar,
-		Status: string(ca.Status),
 	}
+	if s := string(ca.Status); s != "" {
+		out.Status = ptr.Of(s)
+	}
+	return out
 }
 
 // AttachmentsToProto converts domain Attachments to the proto response.

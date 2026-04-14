@@ -15,7 +15,7 @@ message ContentAgent {
   string role = 3;
   string slug = 4;
   string avatar = 5;
-  string status = 6;
+  optional string status = 6;
 }
 
 // ActionItemResponse represents a clickable action button in a message.
@@ -77,12 +77,12 @@ message MessageContentPayload {
   repeated ActionItemResponse actions = 5;
   optional string selected_action_id = 6;
   string tool = 7;
-  string state = 8;
+  optional string state = 8;
   string query = 9;
   google.protobuf.Struct args = 10;
   optional ContentAgent from = 11;
   optional ContentAgent to = 12;
-  string status = 13;
+  optional string status = 13;
   string task_preview = 14;
   repeated QuestionTurnPayload turns = 15;
   repeated QuestionAnswerPayload answers = 16;

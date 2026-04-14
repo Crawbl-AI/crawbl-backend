@@ -8,21 +8,26 @@ import (
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // AgentToProto converts a domain Agent to the proto response.
+// Returns nil when agent is nil so callers that receive nil simply omit the field.
 func AgentToProto(agent *orchestrator.Agent) *mobilev1.AgentResponse {
 	if agent == nil {
-		return &mobilev1.AgentResponse{}
+		return nil
 	}
-	return &mobilev1.AgentResponse{
+	out := &mobilev1.AgentResponse{
 		Id:     agent.ID,
 		Name:   agent.Name,
 		Role:   agent.Role,
 		Slug:   agent.Slug,
 		Avatar: agent.AvatarURL,
-		Status: string(agent.Status),
 	}
+	if s := string(agent.Status); s != "" {
+		out.Status = ptr.Of(s)
+	}
+	return out
 }
 
 // AgentDetailToProto converts a domain AgentDetails to the proto response.

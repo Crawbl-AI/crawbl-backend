@@ -7,13 +7,12 @@
 package mobilev1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -87,8 +86,8 @@ func (x *LastMessagePreviewResponse) GetTimestamp() *timestamppb.Timestamp {
 // WorkspaceRuntimeResponse represents the swarm runtime status for a workspace.
 type WorkspaceRuntimeResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
-	Status   string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Phase    string                 `protobuf:"bytes,2,opt,name=phase,proto3" json:"phase,omitempty"`
+	Status   *string                `protobuf:"bytes,1,opt,name=status,proto3,oneof" json:"status,omitempty"`
+	Phase    *string                `protobuf:"bytes,2,opt,name=phase,proto3,oneof" json:"phase,omitempty"`
 	Verified bool                   `protobuf:"varint,3,opt,name=verified,proto3" json:"verified,omitempty"`
 	// int32 (not int64) so the JSON encoding is a number, not a string —
 	// the mobile Dart client decodes this field as num.
@@ -129,15 +128,15 @@ func (*WorkspaceRuntimeResponse) Descriptor() ([]byte, []int) {
 }
 
 func (x *WorkspaceRuntimeResponse) GetStatus() string {
-	if x != nil {
-		return x.Status
+	if x != nil && x.Status != nil {
+		return *x.Status
 	}
 	return ""
 }
 
 func (x *WorkspaceRuntimeResponse) GetPhase() string {
-	if x != nil {
-		return x.Phase
+	if x != nil && x.Phase != nil {
+		return *x.Phase
 	}
 	return ""
 }
@@ -249,13 +248,15 @@ const file_mobile_v1_workspace_proto_rawDesc = "" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1f\n" +
 	"\vsender_name\x18\x02 \x01(\tR\n" +
 	"senderName\x128\n" +
-	"\ttimestamp\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x85\x02\n" +
-	"\x18WorkspaceRuntimeResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\x12\x14\n" +
-	"\x05phase\x18\x02 \x01(\tR\x05phase\x12\x1a\n" +
+	"\ttimestamp\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xa4\x02\n" +
+	"\x18WorkspaceRuntimeResponse\x12\x1b\n" +
+	"\x06status\x18\x01 \x01(\tH\x00R\x06status\x88\x01\x01\x12\x19\n" +
+	"\x05phase\x18\x02 \x01(\tH\x01R\x05phase\x88\x01\x01\x12\x1a\n" +
 	"\bverified\x18\x03 \x01(\bR\bverified\x12!\n" +
 	"\ftotal_agents\x18\x04 \x01(\x05R\vtotalAgents\x12c\n" +
-	"\x14last_message_preview\x18\x05 \x01(\v2,.crawbl.mobile.v1.LastMessagePreviewResponseH\x00R\x12lastMessagePreview\x88\x01\x01B\x17\n" +
+	"\x14last_message_preview\x18\x05 \x01(\v2,.crawbl.mobile.v1.LastMessagePreviewResponseH\x02R\x12lastMessagePreview\x88\x01\x01B\t\n" +
+	"\a_statusB\b\n" +
+	"\x06_phaseB\x17\n" +
 	"\x15_last_message_preview\"\x84\x02\n" +
 	"\x11WorkspaceResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
