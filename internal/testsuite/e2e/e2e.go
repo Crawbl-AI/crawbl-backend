@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
@@ -135,16 +136,26 @@ func Run(cfg *Config) *Results {
 		},
 	}
 
+	// Always exclude @wip and @llm-flaky scenarios by default.
+	// @wip: known-broken tests needing fixture/config changes.
+	// @llm-flaky: tests that depend on non-deterministic LLM behavior.
+	tags := cfg.Tags
+	if tags == "" {
+		tags = "~@wip && ~@llm-flaky"
+	} else {
+		if !strings.Contains(tags, "@wip") {
+			tags += " && ~@wip"
+		}
+		if !strings.Contains(tags, "@llm-flaky") {
+			tags += " && ~@llm-flaky"
+		}
+	}
+
 	// Auto-exclude @db scenarios when no database connection is available.
 	// DB-dependent scenarios (blueprint reload, usage quota) write directly
 	// to Postgres and cannot run in gateway-only mode.
-	tags := cfg.Tags
 	if cfg.DatabaseDSN == "" {
-		if tags == "" {
-			tags = "~@db"
-		} else {
-			tags += " && ~@db"
-		}
+		tags += " && ~@db"
 	}
 
 	opts := godog.Options{

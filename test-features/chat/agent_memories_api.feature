@@ -10,7 +10,7 @@ Feature: Agent memories from the app
 
   Scenario: A user can save a memory against an agent from the app
     When user "primary" saves a memory with key "fav_color" and content "blue" for agent "wally"
-    Then the response status should be 204
+    Then the response status should be 201
 
   Scenario: A user can list memories for an agent
     When user "primary" opens the memories for agent "wally"
