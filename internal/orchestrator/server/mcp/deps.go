@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"regexp"
 
 	"github.com/gocraft/dbr/v2"
 
@@ -74,6 +75,11 @@ type Deps struct {
 	IdentityRepo identityStore
 	Classifier   extract.Classifier
 	Embedder     embed.Embedder
+
+	// Noise filter — rejects trivial content (greetings, short filler)
+	// from the memory_add_drawer tool. Compiled from noise_patterns.json.
+	NoiseMinLength int
+	NoisePattern   *regexp.Regexp
 }
 
 // newSession creates a new database session for MCP tool queries.

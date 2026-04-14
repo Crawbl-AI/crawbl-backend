@@ -483,6 +483,11 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 			return nil, memoryAddDrawerOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxContentLength)}, nil
 		}
 
+		// Reject trivial/noise content (greetings, short filler).
+		if deps.NoisePattern != nil && (len(input.Content) < deps.NoiseMinLength || deps.NoisePattern.MatchString(strings.TrimSpace(input.Content))) {
+			return nil, memoryAddDrawerOutput{Info: "content too short or trivial to store"}, nil
+		}
+
 		// Generate drawer ID.
 		hash := sha256.Sum256([]byte(input.Content))
 		drawerID := fmt.Sprintf("drawer_%s_%s_%x", input.Wing, input.Room, hash[:8])

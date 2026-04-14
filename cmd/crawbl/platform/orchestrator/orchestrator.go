@@ -20,6 +20,7 @@ import (
 
 	orch "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
+	memconfig "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
@@ -687,7 +688,11 @@ func buildMCPHandler(deps mcpHandlerDeps) http.Handler {
 		memoryStack,
 	)
 
-	handler := crawblmcp.NewHandler(&crawblmcp.Deps{
+	noiseCfg, err := memconfig.LoadNoiseConfig()
+	if err != nil {
+		logger.Warn("failed to load noise config for MCP, noise filter disabled", "error", err)
+	}
+	mcpDeps := &crawblmcp.Deps{
 		DB:           db,
 		Logger:       logger,
 		SigningKey:   signingKey,
@@ -700,7 +705,12 @@ func buildMCPHandler(deps mcpHandlerDeps) http.Handler {
 		IdentityRepo: identityRepo,
 		Classifier:   classifier,
 		Embedder:     embedder,
-	})
+	}
+	if noiseCfg != nil {
+		mcpDeps.NoiseMinLength = noiseCfg.MinLength
+		mcpDeps.NoisePattern = noiseCfg.CompileNoisePattern()
+	}
+	handler := crawblmcp.NewHandler(mcpDeps)
 	logger.Info("MCP server enabled at /mcp/v1")
 	return handler
 }
