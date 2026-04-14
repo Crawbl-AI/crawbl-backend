@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
+
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 )
 
 func registerUserSteps(sc *godog.ScenarioContext, tc *testContext) {

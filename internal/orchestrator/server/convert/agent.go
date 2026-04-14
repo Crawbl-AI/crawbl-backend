@@ -6,8 +6,8 @@ package convert
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
 // AgentToProto converts a domain Agent to the proto response.
@@ -37,14 +37,14 @@ func AgentDetailToProto(d *orchestrator.AgentDetails) *mobilev1.AgentDetailRespo
 		Description: d.Description,
 		AvatarUrl:   d.AvatarURL,
 		Status:      string(d.Status),
-		SortOrder:   int64(d.SortOrder),
+		SortOrder:   int32(d.SortOrder), // #nosec G115 -- sort order is a small UI ordering value, well within int32 range
 		Skills:      []string{},
 		Stats: &mobilev1.AgentStatsResponse{
-			TotalMessages:         int64(d.Stats.TotalMessages),
-			TotalTokensUsed:       d.Stats.TotalTokensUsed,
-			TotalPromptTokens:     d.Stats.TotalPromptTokens,
-			TotalCompletionTokens: d.Stats.TotalCompletionTokens,
-			TotalRequests:         int64(d.Stats.TotalRequests),
+			TotalMessages:         float64(d.Stats.TotalMessages),
+			TotalTokensUsed:       float64(d.Stats.TotalTokensUsed),
+			TotalPromptTokens:     float64(d.Stats.TotalPromptTokens),
+			TotalCompletionTokens: float64(d.Stats.TotalCompletionTokens),
+			TotalRequests:         float64(d.Stats.TotalRequests),
 		},
 	}
 	if !d.UpdatedAt.IsZero() {
@@ -72,9 +72,9 @@ func AgentToolToProto(t orchestrator.AgentTool) *mobilev1.AgentToolResponse {
 // OffsetPaginationToProto converts a domain OffsetPagination to the proto response.
 func OffsetPaginationToProto(p orchestrator.OffsetPagination) *mobilev1.OffsetPagination {
 	return &mobilev1.OffsetPagination{
-		Total:   int64(p.Total),
-		Limit:   int64(p.Limit),
-		Offset:  int64(p.Offset),
+		Total:   float64(p.Total),
+		Limit:   int32(p.Limit), // #nosec G115 -- page size fits in int32
+		Offset:  float64(p.Offset),
 		HasNext: p.HasNext,
 	}
 }

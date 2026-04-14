@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
-	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/agentruntime/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
+	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/agentruntime/v1"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 

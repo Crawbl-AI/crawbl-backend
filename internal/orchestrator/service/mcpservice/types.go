@@ -45,6 +45,11 @@ type Service interface {
 	UpdateArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *UpdateArtifactParams) (*UpdateArtifactResult, error)
 	ReviewArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *ReviewArtifactParams) (*ReviewArtifactResult, error)
 
+	// Questions
+	// AskQuestions creates an interactive questions message for the given conversation,
+	// persists it with role=agent and content.type="questions", and broadcasts it.
+	AskQuestions(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *AskQuestionsParams) (*AskQuestionsResult, error)
+
 	// Workflows
 	CreateWorkflow(ctx context.Context, sess *dbr.Session, workspaceID string, params *CreateWorkflowParams) (*CreateWorkflowResult, error)
 	TriggerWorkflow(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *TriggerWorkflowParams) (*TriggerWorkflowResult, error)
@@ -220,6 +225,33 @@ type ReviewArtifactParams struct {
 // ReviewArtifactResult is returned by ReviewArtifact.
 type ReviewArtifactResult struct {
 	Reviewed bool
+}
+
+// AskQuestionsParams holds input for creating an interactive questions message.
+type AskQuestionsParams struct {
+	AgentID        string
+	AgentSlug      string
+	ConversationID string
+	Turns          []AskQuestionsTurn
+}
+
+// AskQuestionsTurn describes one turn group to present to the user.
+type AskQuestionsTurn struct {
+	Label     string
+	Questions []AskQuestionsQuestion
+}
+
+// AskQuestionsQuestion describes one question with its allowed options.
+type AskQuestionsQuestion struct {
+	Prompt      string
+	Mode        orchestrator.QuestionMode
+	Options     []string // option labels; service assigns A, B, C, …
+	AllowCustom bool     // whether the user may also provide free-text input
+}
+
+// AskQuestionsResult is returned by AskQuestions.
+type AskQuestionsResult struct {
+	MessageID string
 }
 
 // CreateWorkflowParams holds input for creating a workflow definition.

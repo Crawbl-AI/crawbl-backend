@@ -237,6 +237,29 @@ type RespondToActionCardOpts struct {
 	ActionID string
 }
 
+// QuestionAnswerInput is a single user-submitted answer fed to RespondToQuestions.
+type QuestionAnswerInput struct {
+	// QuestionID identifies which question this answer is for.
+	QuestionID string
+	// OptionIDs lists the selected option IDs. For single-mode questions at most one entry is allowed.
+	OptionIDs []string
+	// CustomText holds a user-provided free-text answer when the question allows custom input.
+	CustomText string
+}
+
+// RespondToQuestionsOpts carries the arguments for ChatService.RespondToQuestions.
+// The session is taken from ctx via database.SessionFromContext, not this struct.
+type RespondToQuestionsOpts struct {
+	// UserID is the unique identifier of the user responding.
+	UserID string
+	// WorkspaceID is the unique identifier of the workspace owning the message.
+	WorkspaceID string
+	// MessageID is the unique identifier of the questions message.
+	MessageID string
+	// Answers holds one entry per question the user answered.
+	Answers []QuestionAnswerInput
+}
+
 // GetWorkspaceSummaryOpts contains options for the GetWorkspaceSummary method.
 type GetWorkspaceSummaryOpts struct {
 	// WorkspaceID is the unique identifier of the workspace to summarize.

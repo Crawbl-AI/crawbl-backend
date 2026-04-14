@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
+
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 )
 
 func registerChatSteps(sc *godog.ScenarioContext, tc *testContext) {
@@ -180,7 +181,7 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 		LocalId: tc.nextLocalID(alias, "mention"),
 		Content: &mobilev1.MessageContentPayload{Type: "text", Text: text},
 		Mentions: []*mobilev1.MentionPayload{
-			{AgentId: agentID, AgentName: agentName, Offset: 0, Length: int64(len(agentName) + 1)},
+			{AgentId: agentID, AgentName: agentName, Offset: 0, Length: int32(len(agentName) + 1)}, // #nosec G115 -- mention length is a short string offset, fits in int32
 		},
 	}
 	if _, err = tc.doProtoRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {

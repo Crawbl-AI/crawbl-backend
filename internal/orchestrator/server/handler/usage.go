@@ -37,11 +37,11 @@ func UserUsageSummary(c *Context) http.HandlerFunc {
 
 		WriteProtoSuccess(w, http.StatusOK, &mobilev1.UserUsageSummaryResponse{
 			CurrentPeriod:        period,
-			TokensUsed:           tokensUsed,
-			PromptTokensUsed:     counters.PromptTokensUsed,
-			CompletionTokensUsed: counters.CompletionTokensUsed,
-			RequestCount:         int64(counters.RequestCount),
-			TokenLimit:           tokenLimit,
+			TokensUsed:           float64(tokensUsed),
+			PromptTokensUsed:     float64(counters.PromptTokensUsed),
+			CompletionTokensUsed: float64(counters.CompletionTokensUsed),
+			RequestCount:         float64(counters.RequestCount),
+			TokenLimit:           float64(tokenLimit),
 			PlanId:               counters.PlanID,
 		})
 	}
@@ -83,11 +83,11 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 
 		WriteProtoSuccess(w, http.StatusOK, &mobilev1.WorkspaceUsageResponse{
 			Period:               period,
-			TokensUsed:           counters.TokensUsed,
-			PromptTokensUsed:     counters.PromptTokensUsed,
-			CompletionTokensUsed: counters.CompletionTokensUsed,
-			RequestCount:         int64(counters.RequestCount),
-			TokenLimit:           tokenLimit,
+			TokensUsed:           float64(counters.TokensUsed),
+			PromptTokensUsed:     float64(counters.PromptTokensUsed),
+			CompletionTokensUsed: float64(counters.CompletionTokensUsed),
+			RequestCount:         float64(counters.RequestCount),
+			TokenLimit:           float64(tokenLimit),
 		})
 	}
 }

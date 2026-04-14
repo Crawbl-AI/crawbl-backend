@@ -53,6 +53,17 @@ func registerTools(server *sdkmcp.Server, deps *Deps) {
 	// Workflow engine
 	registerWorkflowTools(server, deps)
 
+	// Interactive questions
+	registerQuestionTools(server, deps)
+
 	// Memory palace
 	registerMemoryTools(server, deps)
+}
+
+// registerQuestionTools adds the ask_questions MCP tool to the server.
+func registerQuestionTools(server *sdkmcp.Server, deps *Deps) {
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "ask_questions",
+		Description: "Present the user with an interactive multi-turn question card (single- or multi-choice, with a built-in 'write your own' free-text slot per question). Use when you need structured input instead of free prose. Returns the created message_id.",
+	}, newAskQuestionsHandler(deps))
 }

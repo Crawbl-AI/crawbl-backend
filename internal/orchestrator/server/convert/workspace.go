@@ -3,8 +3,8 @@ package convert
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
 // WorkspaceToProto converts a domain Workspace to the proto response.
@@ -32,7 +32,7 @@ func EnrichWorkspaceRuntime(resp *mobilev1.WorkspaceResponse, summary *orchestra
 	if resp.Runtime == nil || summary == nil {
 		return
 	}
-	resp.Runtime.TotalAgents = int64(summary.TotalAgents)
+	resp.Runtime.TotalAgents = int32(summary.TotalAgents) // #nosec G115 -- agent count per workspace fits in int32; proto uses int32 so the JSON encoding is a number, not a string.
 	if summary.LastMessagePreview != nil {
 		resp.Runtime.LastMessagePreview = &mobilev1.LastMessagePreviewResponse{
 			Text:       summary.LastMessagePreview.Text,

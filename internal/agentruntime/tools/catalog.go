@@ -78,6 +78,7 @@ const (
 	ToolTriggerWorkflow      = "orchestrator__trigger_workflow"
 	ToolCheckWorkflowStatus  = "orchestrator__check_workflow_status"
 	ToolListWorkflows        = "orchestrator__list_workflows"
+	ToolAskQuestions         = "orchestrator__ask_questions"
 )
 
 // ToolQueryField maps tool names to the JSON arg field(s) that contain

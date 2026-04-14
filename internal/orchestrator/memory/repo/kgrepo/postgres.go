@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	countAll        = "COUNT(*)"
+	countAll         = "COUNT(*)"
 	whereWorkspaceID = "workspace_id = ?"
 )
 

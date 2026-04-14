@@ -62,5 +62,6 @@
   { "name": "orchestrator__create_workflow", "display_name": "Create Workflow", "description": "Define a multi-step agent workflow", "category": "integration", "icon_url": "https://cdn.crawbl.com/tools/workflow-create.png", "implemented": true },
   { "name": "orchestrator__trigger_workflow", "display_name": "Start Workflow", "description": "Trigger a defined workflow", "category": "integration", "icon_url": "https://cdn.crawbl.com/tools/workflow-trigger.png", "implemented": true },
   { "name": "orchestrator__check_workflow_status", "display_name": "Workflow Status", "description": "Check the status of a running workflow", "category": "integration", "icon_url": "https://cdn.crawbl.com/tools/workflow-status.png", "implemented": true },
-  { "name": "orchestrator__list_workflows", "display_name": "List Workflows", "description": "List all available workflows", "category": "integration", "icon_url": "https://cdn.crawbl.com/tools/workflow-list.png", "implemented": true }
+  { "name": "orchestrator__list_workflows", "display_name": "List Workflows", "description": "List all available workflows", "category": "integration", "icon_url": "https://cdn.crawbl.com/tools/workflow-list.png", "implemented": true },
+  { "name": "orchestrator__ask_questions", "display_name": "Ask Questions", "description": "Present an interactive multi-turn question card to the user", "category": "integration", "icon_url": "https://cdn.crawbl.com/tools/ask-questions.png", "implemented": true }
 ]

@@ -3,8 +3,8 @@ package convert
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
 // UserProfileToProto converts a domain User to the proto UserProfileResponse.
@@ -19,17 +19,17 @@ func UserProfileToProto(user *orchestrator.User) *mobilev1.UserProfileResponse {
 	}
 
 	resp := &mobilev1.UserProfileResponse{
-		Email:                    user.Email,
-		FirebaseUid:              user.Subject,
-		Nickname:                 user.Nickname,
-		Name:                     user.Name,
-		Surname:                  user.Surname,
-		AvatarUrl:                stringOrEmpty(user.AvatarURL),
-		CountryCode:              stringOrEmpty(user.CountryCode),
-		CreatedAt:                timestamppb.New(user.CreatedAt),
-		IsDeleted:                user.DeletedAt != nil,
-		IsBanned:                 user.IsBanned,
-		HasAgreedWithTerms:       user.HasAgreedWithTerms,
+		Email:                      user.Email,
+		FirebaseUid:                user.Subject,
+		Nickname:                   user.Nickname,
+		Name:                       user.Name,
+		Surname:                    user.Surname,
+		AvatarUrl:                  stringOrEmpty(user.AvatarURL),
+		CountryCode:                stringOrEmpty(user.CountryCode),
+		CreatedAt:                  timestamppb.New(user.CreatedAt),
+		IsDeleted:                  user.DeletedAt != nil,
+		IsBanned:                   user.IsBanned,
+		HasAgreedWithTerms:         user.HasAgreedWithTerms,
 		HasAgreedWithPrivacyPolicy: user.HasAgreedWithPrivacyPolicy,
 		Preferences: &mobilev1.UserPreferencesResponse{
 			PlatformTheme:    stringOrEmpty(user.Preferences.PlatformTheme),

@@ -6,11 +6,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/gocraft/dbr/v2"
+
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	"github.com/gocraft/dbr/v2"
 )
 
 const errArtifactNotFound = "artifact not found"

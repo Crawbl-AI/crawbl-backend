@@ -182,6 +182,10 @@ const (
 	// name, current step, and overall status. See
 	// BACKEND_REQUIREMENTS.md §13.
 	MessageContentTypeWorkflow MessageContentType = "workflow"
+
+	// MessageContentTypeQuestions renders a multi-turn interactive question card.
+	// Emitted by the ask_questions MCP tool.
+	MessageContentTypeQuestions MessageContentType = "questions"
 )
 
 // ActionStyle represents the visual style of an action button.
@@ -669,6 +673,10 @@ type MessageContent struct {
 	To          *ContentAgent `json:"to,omitempty"`
 	Status      string        `json:"status,omitempty"`
 	TaskPreview string        `json:"task_preview,omitempty"`
+
+	// Questions fields (type = "questions").
+	Turns   []QuestionTurn   `json:"turns,omitempty"`
+	Answers []QuestionAnswer `json:"answers,omitempty"`
 }
 
 // ContentAgent is the agent summary embedded in delegation and workflow
@@ -708,6 +716,58 @@ type ActionItem struct {
 
 	// Style determines the visual presentation of the action.
 	Style ActionStyle `json:"style"`
+}
+
+// QuestionMode is the selection mode for a question item.
+type QuestionMode string
+
+const (
+	// QuestionModeSingle allows at most one selected option plus optional custom text.
+	QuestionModeSingle QuestionMode = "single"
+	// QuestionModeMulti allows multiple selected options plus optional custom text.
+	QuestionModeMulti QuestionMode = "multi"
+)
+
+// QuestionTurn groups related questions shown together as one turn block.
+type QuestionTurn struct {
+	// Index is the 1-based position of this turn in the message.
+	Index int `json:"index"`
+	// Label is an optional heading displayed above the turn.
+	Label string `json:"label,omitempty"`
+	// Questions are the question items belonging to this turn.
+	Questions []QuestionItem `json:"questions"`
+}
+
+// QuestionItem is a single choice question inside a QuestionTurn.
+type QuestionItem struct {
+	// ID is the stable identifier for the question (e.g. "t1q2").
+	ID string `json:"id"`
+	// Prompt is the question text displayed to the user.
+	Prompt string `json:"prompt"`
+	// Mode controls whether the client allows single or multi selection.
+	Mode QuestionMode `json:"mode"`
+	// Options are the selectable answers.
+	Options []QuestionOption `json:"options"`
+	// AllowCustom indicates the client should render a free-text "write your own" slot.
+	AllowCustom bool `json:"allow_custom"`
+}
+
+// QuestionOption is a selectable answer for a QuestionItem.
+type QuestionOption struct {
+	// ID is the option identifier within the question (e.g. "A", "B").
+	ID string `json:"id"`
+	// Label is the option text displayed to the user.
+	Label string `json:"label"`
+}
+
+// QuestionAnswer captures a user's response to a QuestionItem.
+type QuestionAnswer struct {
+	// QuestionID identifies which question this answer belongs to.
+	QuestionID string `json:"question_id"`
+	// OptionIDs lists the selected option IDs. For QuestionModeSingle this must have at most one entry.
+	OptionIDs []string `json:"option_ids,omitempty"`
+	// CustomText holds a user-provided free-text answer when AllowCustom is true on the question.
+	CustomText string `json:"custom_text,omitempty"`
 }
 
 // Attachment represents a file attached to a message.

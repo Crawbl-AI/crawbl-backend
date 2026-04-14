@@ -5,10 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
 	"google.golang.org/protobuf/proto"
+
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 )
 
 func registerAuthSteps(sc *godog.ScenarioContext, tc *testContext) {

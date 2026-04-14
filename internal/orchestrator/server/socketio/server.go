@@ -166,15 +166,15 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 		)
 
 		registerWorkspaceSubscribeHandler(workspaceSubscribeHandlerOpts{
-				socket:        s,
-				sd:            sd,
-				logger:        logger,
-				subject:       subject,
-				shutdownCtx:   shutdownCtx,
-				db:            db,
-				workspaceRepo: workspaceRepo,
-				authService:   authService,
-			})
+			socket:        s,
+			sd:            sd,
+			logger:        logger,
+			subject:       subject,
+			shutdownCtx:   shutdownCtx,
+			db:            db,
+			workspaceRepo: workspaceRepo,
+			authService:   authService,
+		})
 		registerWorkspaceUnsubscribeHandler(s, logger, subject)
 		registerDisconnectHandler(s, sd, logger, subject)
 	})
@@ -361,6 +361,8 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 		shutdownCtx:      shutdownCtx,
 	}
 
+	answers := newAnswersHandler(cfg)
+
 	nsp := io.Of(socketNamespace, nil)
 	_ = nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
@@ -369,6 +371,9 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 		}
 		_ = s.On(eventMessageSend, func(msgArgs ...any) {
 			h.handleMessageSend(s, msgArgs...)
+		})
+		_ = s.On(eventMessageAnswers, func(ansArgs ...any) {
+			answers.handleMessageAnswers(s, ansArgs...)
 		})
 	})
 

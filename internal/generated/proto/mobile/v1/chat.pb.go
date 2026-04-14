@@ -7,13 +7,14 @@
 package mobilev1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -170,15 +171,18 @@ func (x *ActionItemResponse) GetStyle() string {
 }
 
 // AttachmentResponse represents a file attached to a message.
+// Unbounded numeric fields use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision. Genuinely bounded fields keep int32.
 type AttachmentResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Url           string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
 	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	Size          int64                  `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	Size          float64                `protobuf:"fixed64,5,opt,name=size,proto3" json:"size,omitempty"`
 	MimeType      string                 `protobuf:"bytes,6,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	Duration      *int64                 `protobuf:"varint,7,opt,name=duration,proto3,oneof" json:"duration,omitempty"`
+	Duration      *int32                 `protobuf:"varint,7,opt,name=duration,proto3,oneof" json:"duration,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -241,7 +245,7 @@ func (x *AttachmentResponse) GetType() string {
 	return ""
 }
 
-func (x *AttachmentResponse) GetSize() int64 {
+func (x *AttachmentResponse) GetSize() float64 {
 	if x != nil {
 		return x.Size
 	}
@@ -255,37 +259,291 @@ func (x *AttachmentResponse) GetMimeType() string {
 	return ""
 }
 
-func (x *AttachmentResponse) GetDuration() int64 {
+func (x *AttachmentResponse) GetDuration() int32 {
 	if x != nil && x.Duration != nil {
 		return *x.Duration
 	}
 	return 0
 }
 
+// QuestionOptionPayload is a selectable answer option for a question.
+type QuestionOptionPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuestionOptionPayload) Reset() {
+	*x = QuestionOptionPayload{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuestionOptionPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuestionOptionPayload) ProtoMessage() {}
+
+func (x *QuestionOptionPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuestionOptionPayload.ProtoReflect.Descriptor instead.
+func (*QuestionOptionPayload) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *QuestionOptionPayload) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *QuestionOptionPayload) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+// QuestionItemPayload is a single question in an interactive card.
+type QuestionItemPayload struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Id            string                   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Prompt        string                   `protobuf:"bytes,2,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Mode          string                   `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
+	Options       []*QuestionOptionPayload `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty"`
+	AllowCustom   bool                     `protobuf:"varint,5,opt,name=allow_custom,json=allowCustom,proto3" json:"allow_custom,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuestionItemPayload) Reset() {
+	*x = QuestionItemPayload{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuestionItemPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuestionItemPayload) ProtoMessage() {}
+
+func (x *QuestionItemPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuestionItemPayload.ProtoReflect.Descriptor instead.
+func (*QuestionItemPayload) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *QuestionItemPayload) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *QuestionItemPayload) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *QuestionItemPayload) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *QuestionItemPayload) GetOptions() []*QuestionOptionPayload {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *QuestionItemPayload) GetAllowCustom() bool {
+	if x != nil {
+		return x.AllowCustom
+	}
+	return false
+}
+
+// QuestionTurnPayload groups questions shown as one turn block.
+type QuestionTurnPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Questions     []*QuestionItemPayload `protobuf:"bytes,3,rep,name=questions,proto3" json:"questions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuestionTurnPayload) Reset() {
+	*x = QuestionTurnPayload{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuestionTurnPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuestionTurnPayload) ProtoMessage() {}
+
+func (x *QuestionTurnPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuestionTurnPayload.ProtoReflect.Descriptor instead.
+func (*QuestionTurnPayload) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *QuestionTurnPayload) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *QuestionTurnPayload) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *QuestionTurnPayload) GetQuestions() []*QuestionItemPayload {
+	if x != nil {
+		return x.Questions
+	}
+	return nil
+}
+
+// QuestionAnswerPayload captures a user response to a question.
+type QuestionAnswerPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	QuestionId    string                 `protobuf:"bytes,1,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`
+	OptionIds     []string               `protobuf:"bytes,2,rep,name=option_ids,json=optionIds,proto3" json:"option_ids,omitempty"`
+	CustomText    string                 `protobuf:"bytes,3,opt,name=custom_text,json=customText,proto3" json:"custom_text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuestionAnswerPayload) Reset() {
+	*x = QuestionAnswerPayload{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuestionAnswerPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuestionAnswerPayload) ProtoMessage() {}
+
+func (x *QuestionAnswerPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuestionAnswerPayload.ProtoReflect.Descriptor instead.
+func (*QuestionAnswerPayload) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *QuestionAnswerPayload) GetQuestionId() string {
+	if x != nil {
+		return x.QuestionId
+	}
+	return ""
+}
+
+func (x *QuestionAnswerPayload) GetOptionIds() []string {
+	if x != nil {
+		return x.OptionIds
+	}
+	return nil
+}
+
+func (x *QuestionAnswerPayload) GetCustomText() string {
+	if x != nil {
+		return x.CustomText
+	}
+	return ""
+}
+
 // MessageContentPayload represents the content of a message.
 type MessageContentPayload struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Type             string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Text             string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
-	Title            string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	Description      string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Actions          []*ActionItemResponse  `protobuf:"bytes,5,rep,name=actions,proto3" json:"actions,omitempty"`
-	SelectedActionId *string                `protobuf:"bytes,6,opt,name=selected_action_id,json=selectedActionId,proto3,oneof" json:"selected_action_id,omitempty"`
-	Tool             string                 `protobuf:"bytes,7,opt,name=tool,proto3" json:"tool,omitempty"`
-	State            string                 `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
-	Query            string                 `protobuf:"bytes,9,opt,name=query,proto3" json:"query,omitempty"`
-	Args             *structpb.Struct       `protobuf:"bytes,10,opt,name=args,proto3" json:"args,omitempty"`
-	From             *ContentAgent          `protobuf:"bytes,11,opt,name=from,proto3,oneof" json:"from,omitempty"`
-	To               *ContentAgent          `protobuf:"bytes,12,opt,name=to,proto3,oneof" json:"to,omitempty"`
-	Status           string                 `protobuf:"bytes,13,opt,name=status,proto3" json:"status,omitempty"`
-	TaskPreview      string                 `protobuf:"bytes,14,opt,name=task_preview,json=taskPreview,proto3" json:"task_preview,omitempty"`
+	state            protoimpl.MessageState   `protogen:"open.v1"`
+	Type             string                   `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Text             string                   `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Title            string                   `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Description      string                   `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Actions          []*ActionItemResponse    `protobuf:"bytes,5,rep,name=actions,proto3" json:"actions,omitempty"`
+	SelectedActionId *string                  `protobuf:"bytes,6,opt,name=selected_action_id,json=selectedActionId,proto3,oneof" json:"selected_action_id,omitempty"`
+	Tool             string                   `protobuf:"bytes,7,opt,name=tool,proto3" json:"tool,omitempty"`
+	State            string                   `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
+	Query            string                   `protobuf:"bytes,9,opt,name=query,proto3" json:"query,omitempty"`
+	Args             *structpb.Struct         `protobuf:"bytes,10,opt,name=args,proto3" json:"args,omitempty"`
+	From             *ContentAgent            `protobuf:"bytes,11,opt,name=from,proto3,oneof" json:"from,omitempty"`
+	To               *ContentAgent            `protobuf:"bytes,12,opt,name=to,proto3,oneof" json:"to,omitempty"`
+	Status           string                   `protobuf:"bytes,13,opt,name=status,proto3" json:"status,omitempty"`
+	TaskPreview      string                   `protobuf:"bytes,14,opt,name=task_preview,json=taskPreview,proto3" json:"task_preview,omitempty"`
+	Turns            []*QuestionTurnPayload   `protobuf:"bytes,15,rep,name=turns,proto3" json:"turns,omitempty"`
+	Answers          []*QuestionAnswerPayload `protobuf:"bytes,16,rep,name=answers,proto3" json:"answers,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
 func (x *MessageContentPayload) Reset() {
 	*x = MessageContentPayload{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[3]
+	mi := &file_mobile_v1_chat_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -297,7 +555,7 @@ func (x *MessageContentPayload) String() string {
 func (*MessageContentPayload) ProtoMessage() {}
 
 func (x *MessageContentPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[3]
+	mi := &file_mobile_v1_chat_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -310,7 +568,7 @@ func (x *MessageContentPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageContentPayload.ProtoReflect.Descriptor instead.
 func (*MessageContentPayload) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{3}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MessageContentPayload) GetType() string {
@@ -411,6 +669,20 @@ func (x *MessageContentPayload) GetTaskPreview() string {
 	return ""
 }
 
+func (x *MessageContentPayload) GetTurns() []*QuestionTurnPayload {
+	if x != nil {
+		return x.Turns
+	}
+	return nil
+}
+
+func (x *MessageContentPayload) GetAnswers() []*QuestionAnswerPayload {
+	if x != nil {
+		return x.Answers
+	}
+	return nil
+}
+
 // MessageResponse represents a message in API responses.
 type MessageResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -430,7 +702,7 @@ type MessageResponse struct {
 
 func (x *MessageResponse) Reset() {
 	*x = MessageResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[4]
+	mi := &file_mobile_v1_chat_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +714,7 @@ func (x *MessageResponse) String() string {
 func (*MessageResponse) ProtoMessage() {}
 
 func (x *MessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[4]
+	mi := &file_mobile_v1_chat_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +727,7 @@ func (x *MessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageResponse.ProtoReflect.Descriptor instead.
 func (*MessageResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{4}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MessageResponse) GetId() string {
@@ -541,7 +813,7 @@ type MessagesPaginationResponse struct {
 
 func (x *MessagesPaginationResponse) Reset() {
 	*x = MessagesPaginationResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[5]
+	mi := &file_mobile_v1_chat_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -553,7 +825,7 @@ func (x *MessagesPaginationResponse) String() string {
 func (*MessagesPaginationResponse) ProtoMessage() {}
 
 func (x *MessagesPaginationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[5]
+	mi := &file_mobile_v1_chat_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -566,7 +838,7 @@ func (x *MessagesPaginationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessagesPaginationResponse.ProtoReflect.Descriptor instead.
 func (*MessagesPaginationResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{5}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MessagesPaginationResponse) GetNextScrollId() string {
@@ -608,7 +880,7 @@ type MessagesListResponse struct {
 
 func (x *MessagesListResponse) Reset() {
 	*x = MessagesListResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[6]
+	mi := &file_mobile_v1_chat_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +892,7 @@ func (x *MessagesListResponse) String() string {
 func (*MessagesListResponse) ProtoMessage() {}
 
 func (x *MessagesListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[6]
+	mi := &file_mobile_v1_chat_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,7 +905,7 @@ func (x *MessagesListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessagesListResponse.ProtoReflect.Descriptor instead.
 func (*MessagesListResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{6}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MessagesListResponse) GetMessages() []*MessageResponse {
@@ -658,7 +930,7 @@ type ConversationResponse struct {
 	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	UnreadCount   int64                  `protobuf:"varint,6,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
+	UnreadCount   int32                  `protobuf:"varint,6,opt,name=unread_count,json=unreadCount,proto3" json:"unread_count,omitempty"`
 	Agent         *AgentResponse         `protobuf:"bytes,7,opt,name=agent,proto3,oneof" json:"agent,omitempty"`
 	LastMessage   *MessageResponse       `protobuf:"bytes,8,opt,name=last_message,json=lastMessage,proto3,oneof" json:"last_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -667,7 +939,7 @@ type ConversationResponse struct {
 
 func (x *ConversationResponse) Reset() {
 	*x = ConversationResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[7]
+	mi := &file_mobile_v1_chat_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -679,7 +951,7 @@ func (x *ConversationResponse) String() string {
 func (*ConversationResponse) ProtoMessage() {}
 
 func (x *ConversationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[7]
+	mi := &file_mobile_v1_chat_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +964,7 @@ func (x *ConversationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationResponse.ProtoReflect.Descriptor instead.
 func (*ConversationResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{7}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ConversationResponse) GetId() string {
@@ -730,7 +1002,7 @@ func (x *ConversationResponse) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *ConversationResponse) GetUnreadCount() int64 {
+func (x *ConversationResponse) GetUnreadCount() int32 {
 	if x != nil {
 		return x.UnreadCount
 	}
@@ -763,7 +1035,7 @@ type CreateConversationRequest struct {
 
 func (x *CreateConversationRequest) Reset() {
 	*x = CreateConversationRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[8]
+	mi := &file_mobile_v1_chat_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -775,7 +1047,7 @@ func (x *CreateConversationRequest) String() string {
 func (*CreateConversationRequest) ProtoMessage() {}
 
 func (x *CreateConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[8]
+	mi := &file_mobile_v1_chat_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -788,7 +1060,7 @@ func (x *CreateConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateConversationRequest.ProtoReflect.Descriptor instead.
 func (*CreateConversationRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{8}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateConversationRequest) GetType() string {
@@ -813,19 +1085,21 @@ func (x *CreateConversationRequest) GetTitle() string {
 }
 
 // MentionPayload represents an @-mention of an agent in a message.
+// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
+// not strings. The Flutter client decodes these as num.
 type MentionPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	AgentName     string                 `protobuf:"bytes,2,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
-	Offset        int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
-	Length        int64                  `protobuf:"varint,4,opt,name=length,proto3" json:"length,omitempty"`
+	Offset        int32                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Length        int32                  `protobuf:"varint,4,opt,name=length,proto3" json:"length,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MentionPayload) Reset() {
 	*x = MentionPayload{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[9]
+	mi := &file_mobile_v1_chat_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -837,7 +1111,7 @@ func (x *MentionPayload) String() string {
 func (*MentionPayload) ProtoMessage() {}
 
 func (x *MentionPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[9]
+	mi := &file_mobile_v1_chat_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -850,7 +1124,7 @@ func (x *MentionPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MentionPayload.ProtoReflect.Descriptor instead.
 func (*MentionPayload) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{9}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MentionPayload) GetAgentId() string {
@@ -867,14 +1141,14 @@ func (x *MentionPayload) GetAgentName() string {
 	return ""
 }
 
-func (x *MentionPayload) GetOffset() int64 {
+func (x *MentionPayload) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-func (x *MentionPayload) GetLength() int64 {
+func (x *MentionPayload) GetLength() int32 {
 	if x != nil {
 		return x.Length
 	}
@@ -894,7 +1168,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[10]
+	mi := &file_mobile_v1_chat_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +1180,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[10]
+	mi := &file_mobile_v1_chat_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +1193,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{10}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SendMessageRequest) GetLocalId() string {
@@ -960,7 +1234,7 @@ type ActionCardRequest struct {
 
 func (x *ActionCardRequest) Reset() {
 	*x = ActionCardRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[11]
+	mi := &file_mobile_v1_chat_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +1246,7 @@ func (x *ActionCardRequest) String() string {
 func (*ActionCardRequest) ProtoMessage() {}
 
 func (x *ActionCardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[11]
+	mi := &file_mobile_v1_chat_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -985,7 +1259,7 @@ func (x *ActionCardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionCardRequest.ProtoReflect.Descriptor instead.
 func (*ActionCardRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{11}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ActionCardRequest) GetActionId() string {
@@ -993,6 +1267,75 @@ func (x *ActionCardRequest) GetActionId() string {
 		return x.ActionId
 	}
 	return ""
+}
+
+// MessageAnswersRequest is the payload for the Socket.IO `message.answers` event.
+type MessageAnswersRequest struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	WorkspaceId   string                   `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	MessageId     string                   `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	LocalId       string                   `protobuf:"bytes,3,opt,name=local_id,json=localId,proto3" json:"local_id,omitempty"`
+	Answers       []*QuestionAnswerPayload `protobuf:"bytes,4,rep,name=answers,proto3" json:"answers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MessageAnswersRequest) Reset() {
+	*x = MessageAnswersRequest{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MessageAnswersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageAnswersRequest) ProtoMessage() {}
+
+func (x *MessageAnswersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageAnswersRequest.ProtoReflect.Descriptor instead.
+func (*MessageAnswersRequest) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *MessageAnswersRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MessageAnswersRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *MessageAnswersRequest) GetLocalId() string {
+	if x != nil {
+		return x.LocalId
+	}
+	return ""
+}
+
+func (x *MessageAnswersRequest) GetAnswers() []*QuestionAnswerPayload {
+	if x != nil {
+		return x.Answers
+	}
+	return nil
 }
 
 var File_mobile_v1_chat_proto protoreflect.FileDescriptor
@@ -1016,10 +1359,30 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
 	"\x03url\x18\x03 \x01(\tR\x03url\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
-	"\x04size\x18\x05 \x01(\x03R\x04size\x12\x1b\n" +
+	"\x04size\x18\x05 \x01(\x01R\x04size\x12\x1b\n" +
 	"\tmime_type\x18\x06 \x01(\tR\bmimeType\x12\x1f\n" +
-	"\bduration\x18\a \x01(\x03H\x00R\bduration\x88\x01\x01B\v\n" +
-	"\t_duration\"\xa7\x04\n" +
+	"\bduration\x18\a \x01(\x05H\x00R\bduration\x88\x01\x01B\v\n" +
+	"\t_duration\"=\n" +
+	"\x15QuestionOptionPayload\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xb7\x01\n" +
+	"\x13QuestionItemPayload\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12A\n" +
+	"\aoptions\x18\x04 \x03(\v2'.crawbl.mobile.v1.QuestionOptionPayloadR\aoptions\x12!\n" +
+	"\fallow_custom\x18\x05 \x01(\bR\vallowCustom\"\x86\x01\n" +
+	"\x13QuestionTurnPayload\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12C\n" +
+	"\tquestions\x18\x03 \x03(\v2%.crawbl.mobile.v1.QuestionItemPayloadR\tquestions\"x\n" +
+	"\x15QuestionAnswerPayload\x12\x1f\n" +
+	"\vquestion_id\x18\x01 \x01(\tR\n" +
+	"questionId\x12\x1d\n" +
+	"\n" +
+	"option_ids\x18\x02 \x03(\tR\toptionIds\x12\x1f\n" +
+	"\vcustom_text\x18\x03 \x01(\tR\n" +
+	"customText\"\xa7\x05\n" +
 	"\x15MessageContentPayload\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x14\n" +
@@ -1035,7 +1398,9 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\x04from\x18\v \x01(\v2\x1e.crawbl.mobile.v1.ContentAgentH\x01R\x04from\x88\x01\x01\x123\n" +
 	"\x02to\x18\f \x01(\v2\x1e.crawbl.mobile.v1.ContentAgentH\x02R\x02to\x88\x01\x01\x12\x16\n" +
 	"\x06status\x18\r \x01(\tR\x06status\x12!\n" +
-	"\ftask_preview\x18\x0e \x01(\tR\vtaskPreviewB\x15\n" +
+	"\ftask_preview\x18\x0e \x01(\tR\vtaskPreview\x12;\n" +
+	"\x05turns\x18\x0f \x03(\v2%.crawbl.mobile.v1.QuestionTurnPayloadR\x05turns\x12A\n" +
+	"\aanswers\x18\x10 \x03(\v2'.crawbl.mobile.v1.QuestionAnswerPayloadR\aanswersB\x15\n" +
 	"\x13_selected_action_idB\a\n" +
 	"\x05_fromB\x05\n" +
 	"\x03_to\"\xea\x03\n" +
@@ -1073,7 +1438,7 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12!\n" +
-	"\funread_count\x18\x06 \x01(\x03R\vunreadCount\x12:\n" +
+	"\funread_count\x18\x06 \x01(\x05R\vunreadCount\x12:\n" +
 	"\x05agent\x18\a \x01(\v2\x1f.crawbl.mobile.v1.AgentResponseH\x00R\x05agent\x88\x01\x01\x12I\n" +
 	"\flast_message\x18\b \x01(\v2!.crawbl.mobile.v1.MessageResponseH\x01R\vlastMessage\x88\x01\x01B\b\n" +
 	"\x06_agentB\x0f\n" +
@@ -1087,15 +1452,21 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\x02 \x01(\tR\tagentName\x12\x16\n" +
-	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06length\x18\x04 \x01(\x03R\x06length\"\xf8\x01\n" +
+	"\x06offset\x18\x03 \x01(\x05R\x06offset\x12\x16\n" +
+	"\x06length\x18\x04 \x01(\x05R\x06length\"\xf8\x01\n" +
 	"\x12SendMessageRequest\x12\x19\n" +
 	"\blocal_id\x18\x01 \x01(\tR\alocalId\x12A\n" +
 	"\acontent\x18\x02 \x01(\v2'.crawbl.mobile.v1.MessageContentPayloadR\acontent\x12F\n" +
 	"\vattachments\x18\x03 \x03(\v2$.crawbl.mobile.v1.AttachmentResponseR\vattachments\x12<\n" +
 	"\bmentions\x18\x04 \x03(\v2 .crawbl.mobile.v1.MentionPayloadR\bmentions\"0\n" +
 	"\x11ActionCardRequest\x12\x1b\n" +
-	"\taction_id\x18\x01 \x01(\tR\bactionIdBQZOgithub.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1b\x06proto3"
+	"\taction_id\x18\x01 \x01(\tR\bactionId\"\xb7\x01\n" +
+	"\x15MessageAnswersRequest\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x19\n" +
+	"\blocal_id\x18\x03 \x01(\tR\alocalId\x12A\n" +
+	"\aanswers\x18\x04 \x03(\v2'.crawbl.mobile.v1.QuestionAnswerPayloadR\aanswersBQZOgithub.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1b\x06proto3"
 
 var (
 	file_mobile_v1_chat_proto_rawDescOnce sync.Once
@@ -1109,48 +1480,58 @@ func file_mobile_v1_chat_proto_rawDescGZIP() []byte {
 	return file_mobile_v1_chat_proto_rawDescData
 }
 
-var file_mobile_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_mobile_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_mobile_v1_chat_proto_goTypes = []any{
 	(*ContentAgent)(nil),               // 0: crawbl.mobile.v1.ContentAgent
 	(*ActionItemResponse)(nil),         // 1: crawbl.mobile.v1.ActionItemResponse
 	(*AttachmentResponse)(nil),         // 2: crawbl.mobile.v1.AttachmentResponse
-	(*MessageContentPayload)(nil),      // 3: crawbl.mobile.v1.MessageContentPayload
-	(*MessageResponse)(nil),            // 4: crawbl.mobile.v1.MessageResponse
-	(*MessagesPaginationResponse)(nil), // 5: crawbl.mobile.v1.MessagesPaginationResponse
-	(*MessagesListResponse)(nil),       // 6: crawbl.mobile.v1.MessagesListResponse
-	(*ConversationResponse)(nil),       // 7: crawbl.mobile.v1.ConversationResponse
-	(*CreateConversationRequest)(nil),  // 8: crawbl.mobile.v1.CreateConversationRequest
-	(*MentionPayload)(nil),             // 9: crawbl.mobile.v1.MentionPayload
-	(*SendMessageRequest)(nil),         // 10: crawbl.mobile.v1.SendMessageRequest
-	(*ActionCardRequest)(nil),          // 11: crawbl.mobile.v1.ActionCardRequest
-	(*structpb.Struct)(nil),            // 12: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),      // 13: google.protobuf.Timestamp
-	(*AgentResponse)(nil),              // 14: crawbl.mobile.v1.AgentResponse
+	(*QuestionOptionPayload)(nil),      // 3: crawbl.mobile.v1.QuestionOptionPayload
+	(*QuestionItemPayload)(nil),        // 4: crawbl.mobile.v1.QuestionItemPayload
+	(*QuestionTurnPayload)(nil),        // 5: crawbl.mobile.v1.QuestionTurnPayload
+	(*QuestionAnswerPayload)(nil),      // 6: crawbl.mobile.v1.QuestionAnswerPayload
+	(*MessageContentPayload)(nil),      // 7: crawbl.mobile.v1.MessageContentPayload
+	(*MessageResponse)(nil),            // 8: crawbl.mobile.v1.MessageResponse
+	(*MessagesPaginationResponse)(nil), // 9: crawbl.mobile.v1.MessagesPaginationResponse
+	(*MessagesListResponse)(nil),       // 10: crawbl.mobile.v1.MessagesListResponse
+	(*ConversationResponse)(nil),       // 11: crawbl.mobile.v1.ConversationResponse
+	(*CreateConversationRequest)(nil),  // 12: crawbl.mobile.v1.CreateConversationRequest
+	(*MentionPayload)(nil),             // 13: crawbl.mobile.v1.MentionPayload
+	(*SendMessageRequest)(nil),         // 14: crawbl.mobile.v1.SendMessageRequest
+	(*ActionCardRequest)(nil),          // 15: crawbl.mobile.v1.ActionCardRequest
+	(*MessageAnswersRequest)(nil),      // 16: crawbl.mobile.v1.MessageAnswersRequest
+	(*structpb.Struct)(nil),            // 17: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
+	(*AgentResponse)(nil),              // 19: crawbl.mobile.v1.AgentResponse
 }
 var file_mobile_v1_chat_proto_depIdxs = []int32{
-	1,  // 0: crawbl.mobile.v1.MessageContentPayload.actions:type_name -> crawbl.mobile.v1.ActionItemResponse
-	12, // 1: crawbl.mobile.v1.MessageContentPayload.args:type_name -> google.protobuf.Struct
-	0,  // 2: crawbl.mobile.v1.MessageContentPayload.from:type_name -> crawbl.mobile.v1.ContentAgent
-	0,  // 3: crawbl.mobile.v1.MessageContentPayload.to:type_name -> crawbl.mobile.v1.ContentAgent
-	3,  // 4: crawbl.mobile.v1.MessageResponse.content:type_name -> crawbl.mobile.v1.MessageContentPayload
-	13, // 5: crawbl.mobile.v1.MessageResponse.created_at:type_name -> google.protobuf.Timestamp
-	13, // 6: crawbl.mobile.v1.MessageResponse.updated_at:type_name -> google.protobuf.Timestamp
-	14, // 7: crawbl.mobile.v1.MessageResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
-	2,  // 8: crawbl.mobile.v1.MessageResponse.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
-	4,  // 9: crawbl.mobile.v1.MessagesListResponse.messages:type_name -> crawbl.mobile.v1.MessageResponse
-	5,  // 10: crawbl.mobile.v1.MessagesListResponse.pagination:type_name -> crawbl.mobile.v1.MessagesPaginationResponse
-	13, // 11: crawbl.mobile.v1.ConversationResponse.created_at:type_name -> google.protobuf.Timestamp
-	13, // 12: crawbl.mobile.v1.ConversationResponse.updated_at:type_name -> google.protobuf.Timestamp
-	14, // 13: crawbl.mobile.v1.ConversationResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
-	4,  // 14: crawbl.mobile.v1.ConversationResponse.last_message:type_name -> crawbl.mobile.v1.MessageResponse
-	3,  // 15: crawbl.mobile.v1.SendMessageRequest.content:type_name -> crawbl.mobile.v1.MessageContentPayload
-	2,  // 16: crawbl.mobile.v1.SendMessageRequest.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
-	9,  // 17: crawbl.mobile.v1.SendMessageRequest.mentions:type_name -> crawbl.mobile.v1.MentionPayload
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	3,  // 0: crawbl.mobile.v1.QuestionItemPayload.options:type_name -> crawbl.mobile.v1.QuestionOptionPayload
+	4,  // 1: crawbl.mobile.v1.QuestionTurnPayload.questions:type_name -> crawbl.mobile.v1.QuestionItemPayload
+	1,  // 2: crawbl.mobile.v1.MessageContentPayload.actions:type_name -> crawbl.mobile.v1.ActionItemResponse
+	17, // 3: crawbl.mobile.v1.MessageContentPayload.args:type_name -> google.protobuf.Struct
+	0,  // 4: crawbl.mobile.v1.MessageContentPayload.from:type_name -> crawbl.mobile.v1.ContentAgent
+	0,  // 5: crawbl.mobile.v1.MessageContentPayload.to:type_name -> crawbl.mobile.v1.ContentAgent
+	5,  // 6: crawbl.mobile.v1.MessageContentPayload.turns:type_name -> crawbl.mobile.v1.QuestionTurnPayload
+	6,  // 7: crawbl.mobile.v1.MessageContentPayload.answers:type_name -> crawbl.mobile.v1.QuestionAnswerPayload
+	7,  // 8: crawbl.mobile.v1.MessageResponse.content:type_name -> crawbl.mobile.v1.MessageContentPayload
+	18, // 9: crawbl.mobile.v1.MessageResponse.created_at:type_name -> google.protobuf.Timestamp
+	18, // 10: crawbl.mobile.v1.MessageResponse.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 11: crawbl.mobile.v1.MessageResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
+	2,  // 12: crawbl.mobile.v1.MessageResponse.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
+	8,  // 13: crawbl.mobile.v1.MessagesListResponse.messages:type_name -> crawbl.mobile.v1.MessageResponse
+	9,  // 14: crawbl.mobile.v1.MessagesListResponse.pagination:type_name -> crawbl.mobile.v1.MessagesPaginationResponse
+	18, // 15: crawbl.mobile.v1.ConversationResponse.created_at:type_name -> google.protobuf.Timestamp
+	18, // 16: crawbl.mobile.v1.ConversationResponse.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 17: crawbl.mobile.v1.ConversationResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
+	8,  // 18: crawbl.mobile.v1.ConversationResponse.last_message:type_name -> crawbl.mobile.v1.MessageResponse
+	7,  // 19: crawbl.mobile.v1.SendMessageRequest.content:type_name -> crawbl.mobile.v1.MessageContentPayload
+	2,  // 20: crawbl.mobile.v1.SendMessageRequest.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
+	13, // 21: crawbl.mobile.v1.SendMessageRequest.mentions:type_name -> crawbl.mobile.v1.MentionPayload
+	6,  // 22: crawbl.mobile.v1.MessageAnswersRequest.answers:type_name -> crawbl.mobile.v1.QuestionAnswerPayload
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_mobile_v1_chat_proto_init() }
@@ -1160,17 +1541,17 @@ func file_mobile_v1_chat_proto_init() {
 	}
 	file_mobile_v1_agent_proto_init()
 	file_mobile_v1_chat_proto_msgTypes[2].OneofWrappers = []any{}
-	file_mobile_v1_chat_proto_msgTypes[3].OneofWrappers = []any{}
-	file_mobile_v1_chat_proto_msgTypes[4].OneofWrappers = []any{}
 	file_mobile_v1_chat_proto_msgTypes[7].OneofWrappers = []any{}
 	file_mobile_v1_chat_proto_msgTypes[8].OneofWrappers = []any{}
+	file_mobile_v1_chat_proto_msgTypes[11].OneofWrappers = []any{}
+	file_mobile_v1_chat_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mobile_v1_chat_proto_rawDesc), len(file_mobile_v1_chat_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
