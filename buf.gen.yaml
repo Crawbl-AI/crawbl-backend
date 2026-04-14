@@ -1,0 +1,11 @@
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: .
+    opt:
+      - module=github.com/Crawbl-AI/crawbl-backend
+  - remote: buf.build/grpc/go
+    out: .
+    opt:
+      - module=github.com/Crawbl-AI/crawbl-backend
+      - require_unimplemented_servers=false

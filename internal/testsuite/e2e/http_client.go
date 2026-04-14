@@ -4,8 +4,15 @@
 package e2e
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -27,4 +34,34 @@ func abbreviatedBody(body []byte) string {
 		return text[:maxBodyDisplayLen]
 	}
 	return text
+}
+
+// doProtoRequest marshals a proto message to JSON and sends it via HTTP,
+// recording tc.lastStatus and tc.lastBody exactly like doRequest.
+func (tc *testContext) doProtoRequest(method, path, alias string, msg proto.Message) (string, error) {
+	path = tc.interpolatePath(path)
+	url := tc.cfg.BaseURL + path
+
+	b, err := marshalProtoJSON(msg)
+	if err != nil {
+		return "", fmt.Errorf("marshal proto: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), method, url, bytes.NewReader(b))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	tc.setAuthHeaders(req, alias)
+
+	resp, err := tc.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request %s %s failed: %w", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	tc.lastStatus = resp.StatusCode
+	tc.lastBody = respBody
+	return string(respBody), nil
 }

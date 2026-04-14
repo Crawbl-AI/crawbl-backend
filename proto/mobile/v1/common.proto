@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+// OffsetPagination provides offset-based pagination metadata.
+message OffsetPagination {
+  int64 total = 1;
+  int64 limit = 2;
+  int64 offset = 3;
+  bool has_next = 4;
+}
+
+// HealthCheckResponse represents the server health status.
+message HealthCheckResponse {
+  bool online = 1;
+  string version = 2;
+}
+
+// LegalResponse contains the platform's legal documents for unauthenticated access.
+message LegalResponse {
+  string terms_of_service = 1;
+  string privacy_policy = 2;
+  string terms_of_service_version = 3;
+  string privacy_policy_version = 4;
+}

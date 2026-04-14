@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
 )
@@ -175,15 +176,14 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 		return err
 	}
 	agentName := state.agentNamesBySlug[normalizeKey(role)]
-	body := map[string]any{
-		"local_id":    tc.nextLocalID(alias, "mention"),
-		"content":     map[string]any{"type": "text", "text": text},
-		"attachments": []any{},
-		"mentions": []map[string]any{
-			{"agent_id": agentID, "agent_name": agentName, "offset": 0, "length": len(agentName) + 1},
+	body := &mobilev1.SendMessageRequest{
+		LocalId: tc.nextLocalID(alias, "mention"),
+		Content: &mobilev1.MessageContentPayload{Type: "text", Text: text},
+		Mentions: []*mobilev1.MentionPayload{
+			{AgentId: agentID, AgentName: agentName, Offset: 0, Length: int32(len(agentName) + 1)},
 		},
 	}
-	if _, err = tc.doRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {
+	if _, err = tc.doProtoRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {
 		return err
 	}
 	if tc.lastStatus != http.StatusOK && tc.lastStatus != http.StatusCreated {
@@ -332,8 +332,8 @@ func (tc *testContext) userCreatesConversation(alias, title string) error {
 		return err
 	}
 	state := tc.userState(alias)
-	body := map[string]any{"title": title, "type": "swarm"}
-	if _, err := tc.doRequest("POST", pathWorkspaces+state.workspaceID+"/conversations", alias, body); err != nil {
+	body := &mobilev1.CreateConversationRequest{Type: "swarm"}
+	if _, err := tc.doProtoRequest("POST", pathWorkspaces+state.workspaceID+"/conversations", alias, body); err != nil {
 		return err
 	}
 	id := gjson.GetBytes(tc.lastBody, "data.id").String()
@@ -366,7 +366,7 @@ func (tc *testContext) userDeletesConversation(alias string) error {
 	if state.currentConversation == "" {
 		return fmt.Errorf(errNoConversation, alias)
 	}
-	_, err := tc.doRequest("DELETE", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation, alias, map[string]any{})
+	_, err := tc.doRequest("DELETE", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation, alias, nil)
 	return err
 }
 

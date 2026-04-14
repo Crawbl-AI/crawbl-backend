@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
 )
 
@@ -100,11 +101,11 @@ func (tc *testContext) userHasConversationSaved(alias, key string) error {
 }
 
 func (tc *testContext) userHasDeletedAccount(alias string) error {
-	body := map[string]any{
-		"reason":      "e2e-test",
-		"description": "setup for deletion test",
+	body := &mobilev1.AuthDeleteRequest{
+		Reason:      "e2e-test",
+		Description: "setup for deletion test",
 	}
-	_, err := tc.doRequest("DELETE", "/v1/auth/delete", alias, body)
+	_, err := tc.doProtoRequest("DELETE", "/v1/auth/delete", alias, body)
 	tc.invalidateResolvedUser(alias)
 	return err
 }

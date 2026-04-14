@@ -5,17 +5,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/dto"
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // ActionCardResponse handles a user's response to an action card.
 // POST /v1/workspaces/{workspaceId}/messages/{id}/action
-//
-// Kept on the plain http.HandlerFunc form because the missing-field error
-// path uses httpserver.WriteErrorMessage for a specific non-enveloped 400,
-// which the AuthedHandler decorator would not reproduce.
 func ActionCardResponse(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, mErr := c.CurrentUser(r)
@@ -27,8 +24,8 @@ func ActionCardResponse(c *Context) http.HandlerFunc {
 		workspaceID := chi.URLParam(r, "workspaceId")
 		messageID := chi.URLParam(r, "id")
 
-		var req dto.ActionCardRequest
-		if err := DecodeJSON(r, &req); err != nil || req.ActionID == "" {
+		var req mobilev1.ActionCardRequest
+		if err := DecodeProtoJSON(r, &req); err != nil || req.GetActionId() == "" {
 			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "action_id is required")
 			return
 		}
@@ -37,13 +34,13 @@ func ActionCardResponse(c *Context) http.HandlerFunc {
 			UserID:      user.ID,
 			WorkspaceID: workspaceID,
 			MessageID:   messageID,
-			ActionID:    req.ActionID,
+			ActionID:    req.GetActionId(),
 		})
 		if mErr != nil {
 			WriteError(w, mErr)
 			return
 		}
 
-		WriteSuccess(w, http.StatusOK, dto.ToMessageResponse(msg))
+		WriteProtoSuccess(w, http.StatusOK, convert.MessageToProto(msg))
 	}
 }

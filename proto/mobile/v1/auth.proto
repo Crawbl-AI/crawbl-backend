@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+import "google/protobuf/timestamp.proto";
+
+// AuthDeleteRequest represents the request body for account deletion.
+message AuthDeleteRequest {
+  string reason = 1;
+  string description = 2;
+}
+
+// SavePushTokenRequest represents the request body for saving a FCM push token.
+message SavePushTokenRequest {
+  string push_token = 1;
+}
+
+// SavePushTokenResponse indicates the result of saving a push token.
+message SavePushTokenResponse {
+  bool success = 1;
+}
+
+// UserPreferencesResponse represents user preference settings.
+message UserPreferencesResponse {
+  string platform_theme = 1;
+  string platform_language = 2;
+  string currency_code = 3;
+}
+
+// UserSubscriptionResponse represents subscription details.
+message UserSubscriptionResponse {
+  string name = 1;
+  string code = 2;
+  optional google.protobuf.Timestamp expires_at = 3;
+}
+
+// UserProfileResponse contains the complete user profile.
+message UserProfileResponse {
+  string email = 1;
+  string firebase_uid = 2;
+  string nickname = 3;
+  string name = 4;
+  string surname = 5;
+  string avatar_url = 6;
+  string country_code = 7;
+  optional google.protobuf.Timestamp date_of_birth = 8;
+  google.protobuf.Timestamp created_at = 9;
+  bool is_deleted = 10;
+  bool is_banned = 11;
+  bool has_agreed_with_terms = 12;
+  bool has_agreed_with_privacy_policy = 13;
+  UserPreferencesResponse preferences = 14;
+  UserSubscriptionResponse subscription = 15;
+}
+
+// UserUpdatePreferencesRequest represents updatable preference fields.
+message UserUpdatePreferencesRequest {
+  optional string platform_theme = 1;
+  optional string platform_language = 2;
+  optional string currency_code = 3;
+}
+
+// UserUpdateRequest represents the request body for updating user profile.
+message UserUpdateRequest {
+  optional string nickname = 1;
+  optional string name = 2;
+  optional string surname = 3;
+  optional string country_code = 4;
+  optional string date_of_birth = 5;
+  optional UserUpdatePreferencesRequest preferences = 6;
+}
+
+// UserLegalResponse combines legal documents with the user's acceptance status.
+message UserLegalResponse {
+  string terms_of_service = 1;
+  string privacy_policy = 2;
+  string terms_of_service_version = 3;
+  string privacy_policy_version = 4;
+  bool has_agreed_with_terms = 5;
+  bool has_agreed_with_privacy_policy = 6;
+}
+
+// UserLegalAcceptRequest represents the request body for accepting legal documents.
+message UserLegalAcceptRequest {
+  optional string terms_of_service_version = 1;
+  optional string privacy_policy_version = 2;
+}

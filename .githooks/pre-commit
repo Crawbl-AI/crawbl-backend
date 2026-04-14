@@ -4,10 +4,27 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
+# --- Proto regeneration check ---
+# If any .proto files are staged, regenerate Go types and stage the output.
+staged_proto_files=$(git diff --cached --name-only --diff-filter=d -- '*.proto' || true)
+if [ -n "${staged_proto_files}" ]; then
+  echo "Proto files changed, regenerating Go types..."
+  if command -v buf &>/dev/null; then
+    buf lint || { echo "buf lint failed"; exit 1; }
+    buf generate || { echo "buf generate failed"; exit 1; }
+    # Stage any regenerated files so the commit includes fresh output.
+    git add internal/generated/proto/
+    echo "Proto regeneration complete."
+  else
+    echo "Warning: buf not found, skipping proto regeneration. Run 'mise install' to install buf."
+  fi
+fi
+
+# --- Go lint check ---
 echo "Running golangci-lint on staged files..."
 
-# Get staged .go files (excluding deleted and vendor).
-staged_go_files=$(git diff --cached --name-only --diff-filter=d -- '*.go' | grep -v '^vendor/' || true)
+# Get staged .go files (excluding deleted, vendor, and generated proto).
+staged_go_files=$(git diff --cached --name-only --diff-filter=d -- '*.go' | grep -v '^vendor/' | grep -v '^internal/generated/' || true)
 if [ -z "${staged_go_files}" ]; then
   echo "No Go files staged, skipping lint."
   exit 0

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gocraft/dbr/v2"
+	"google.golang.org/protobuf/proto"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
@@ -71,7 +72,13 @@ func WriteError(w http.ResponseWriter, mErr *merrors.Error) {
 }
 
 // WriteSuccess writes a success response wrapped in {"data": ...} envelope.
+// If data implements proto.Message, it uses protojson for wire-compatible
+// snake_case field naming. Otherwise falls back to encoding/json.
 func WriteSuccess(w http.ResponseWriter, status int, data any) {
+	if msg, ok := data.(proto.Message); ok {
+		WriteProtoSuccess(w, status, msg)
+		return
+	}
 	httpserver.WriteSuccessResponse(w, status, data)
 }
 

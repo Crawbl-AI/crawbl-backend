@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/cucumber/godog"
 	"github.com/tidwall/gjson"
 )
@@ -84,8 +85,8 @@ func (tc *testContext) userSavesAgentMemory(alias, key, content, slug string) er
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"key": key, "content": content}
-	_, err = tc.doRequest("POST", pathAgents+id+pathMemories, alias, body)
+	body := &mobilev1.CreateAgentMemoryRequest{Key: key, Content: content}
+	_, err = tc.doProtoRequest("POST", pathAgents+id+pathMemories, alias, body)
 	return err
 }
 
@@ -94,7 +95,7 @@ func (tc *testContext) userDeletesAgentMemory(alias, key, slug string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tc.doRequest("DELETE", pathAgents+id+"/memories/"+key, alias, map[string]any{})
+	_, err = tc.doRequest("DELETE", pathAgents+id+"/memories/"+key, alias, nil)
 	return err
 }
 

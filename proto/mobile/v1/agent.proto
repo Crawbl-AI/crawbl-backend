@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package crawbl.mobile.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
+
+import "google/protobuf/timestamp.proto";
+import "mobile/v1/common.proto";
+
+// AgentResponse represents an AI agent in API responses.
+message AgentResponse {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  string slug = 4;
+  string avatar = 5;
+  string status = 6;
+}
+
+// AgentStatsResponse contains aggregate statistics for an agent.
+message AgentStatsResponse {
+  int64 total_messages = 1;
+  int64 total_tokens_used = 2;
+  int64 total_prompt_tokens = 3;
+  int64 total_completion_tokens = 4;
+  int64 total_requests = 5;
+}
+
+// AgentDetailResponse is the full agent profile.
+message AgentDetailResponse {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  string role = 4;
+  string slug = 5;
+  google.protobuf.Timestamp created_at = 6;
+  optional google.protobuf.Timestamp updated_at = 7;
+  string description = 8;
+  string avatar_url = 9;
+  string status = 10;
+  int32 sort_order = 11;
+  repeated string skills = 12;
+  AgentStatsResponse stats = 13;
+}
+
+// AgentToolCategoryResponse represents the category of an agent tool.
+message AgentToolCategoryResponse {
+  string id = 1;
+  string name = 2;
+  string image_url = 3;
+}
+
+// AgentToolResponse represents a tool available to an agent.
+message AgentToolResponse {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  AgentToolCategoryResponse category = 4;
+  string icon_url = 5;
+}
+
+// AgentModelResponse represents an LLM model available to an agent.
+message AgentModelResponse {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+// AgentPromptResponse represents a prompt configured for an agent.
+message AgentPromptResponse {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string content = 4;
+}
+
+// AgentSettingsResponse represents the settings for an agent.
+message AgentSettingsResponse {
+  string model = 1;
+  string response_length = 2;
+  repeated AgentPromptResponse prompts = 3;
+}
+
+// AgentHistoryItemResponse represents a single item in an agent's conversation history.
+message AgentHistoryItemResponse {
+  string conversation_id = 1;
+  string title = 2;
+  string subtitle = 3;
+  optional google.protobuf.Timestamp created_at = 4;
+}
+
+// AgentHistoryResponse is the response envelope for agent history.
+message AgentHistoryResponse {
+  repeated AgentHistoryItemResponse items = 1;
+  OffsetPagination pagination = 2;
+}
+
+// AgentToolsResponse is the response body for agent tools.
+message AgentToolsResponse {
+  repeated AgentToolResponse tools = 1;
+  OffsetPagination pagination = 2;
+}
+
+// AgentMemoryResponse is the response for a single memory entry.
+message AgentMemoryResponse {
+  string key = 1;
+  string content = 2;
+  string category = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+
+// AgentMemoriesListResponse is the paginated response for listing agent memories.
+message AgentMemoriesListResponse {
+  repeated AgentMemoryResponse memories = 1;
+  OffsetPagination pagination = 2;
+}
+
+// CreateAgentMemoryRequest is the request body for creating a memory.
+message CreateAgentMemoryRequest {
+  string key = 1;
+  string content = 2;
+  string category = 3;
+}
