@@ -7,11 +7,12 @@
 package mobilev1
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -22,11 +23,13 @@ const (
 )
 
 // OffsetPagination provides offset-based pagination metadata.
+// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
+// not strings. The Flutter client decodes these as num.
 type OffsetPagination struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Total         int64                  `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`
-	Limit         int64                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Total         int32                  `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
 	HasNext       bool                   `protobuf:"varint,4,opt,name=has_next,json=hasNext,proto3" json:"has_next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -62,21 +65,21 @@ func (*OffsetPagination) Descriptor() ([]byte, []int) {
 	return file_mobile_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *OffsetPagination) GetTotal() int64 {
+func (x *OffsetPagination) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *OffsetPagination) GetLimit() int64 {
+func (x *OffsetPagination) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *OffsetPagination) GetOffset() int64 {
+func (x *OffsetPagination) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
@@ -218,9 +221,9 @@ const file_mobile_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"\x16mobile/v1/common.proto\x12\x10crawbl.mobile.v1\"q\n" +
 	"\x10OffsetPagination\x12\x14\n" +
-	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x03R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x19\n" +
+	"\x05total\x18\x01 \x01(\x05R\x05total\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x05R\x06offset\x12\x19\n" +
 	"\bhas_next\x18\x04 \x01(\bR\ahasNext\"G\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06online\x18\x01 \x01(\bR\x06online\x12\x18\n" +

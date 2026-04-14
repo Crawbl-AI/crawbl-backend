@@ -76,11 +76,14 @@ type workspaceOwnerChecker interface {
 }
 
 // chatSender is the subset of chat service methods socketio calls into.
-// Consumer-side narrowing: only SendMessage is ever invoked from here,
-// but holding a small interface keeps SIP compliance and shields us
-// from growing a wider producer interface.
+// Consumer-side narrowing keeps SIP compliance and shields us from growing
+// a wider producer interface.
 type chatSender interface {
 	SendMessage(ctx context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error)
+
+	// RespondToQuestions records user answers to a questions message and
+	// broadcasts message.updated plus a synthesized follow-up message.new.
+	RespondToQuestions(ctx context.Context, opts *orchestratorservice.RespondToQuestionsOpts) (*orchestrator.Message, *merrors.Error)
 }
 
 // authResolver is the subset of auth service methods socketio calls
@@ -160,6 +163,13 @@ const (
 	eventMessageSendErr = "message.send.error"
 )
 
+// Socket event names for answer submission over WebSocket.
+const (
+	eventMessageAnswers    = "message.answers"
+	eventMessageAnswersAck = "message.answers.ack"
+	eventMessageAnswersErr = "message.answers.error"
+)
+
 // messageSendPayload is the JSON payload for the message.send event from the client.
 type messageSendPayload struct {
 	WorkspaceID    string                  `json:"workspace_id"`
@@ -207,4 +217,18 @@ type messageSendErrPayload struct {
 	LocalID        string `json:"local_id"`
 	ConversationID string `json:"conversation_id"`
 	Error          string `json:"error"`
+}
+
+// messageAnswersAckPayload is the JSON payload for the message.answers.ack event to the client.
+type messageAnswersAckPayload struct {
+	LocalID   string `json:"local_id"`
+	MessageID string `json:"message_id"`
+	Status    string `json:"status"`
+}
+
+// messageAnswersErrPayload is the JSON payload for the message.answers.error event to the client.
+type messageAnswersErrPayload struct {
+	LocalID   string `json:"local_id"`
+	MessageID string `json:"message_id"`
+	Error     string `json:"error"`
 }

@@ -18,12 +18,14 @@ message AgentResponse {
 }
 
 // AgentStatsResponse contains aggregate statistics for an agent.
+// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
+// not strings. The Flutter client decodes these as num.
 message AgentStatsResponse {
-  int64 total_messages = 1;
-  int64 total_tokens_used = 2;
-  int64 total_prompt_tokens = 3;
-  int64 total_completion_tokens = 4;
-  int64 total_requests = 5;
+  int32 total_messages = 1;
+  int32 total_tokens_used = 2;
+  int32 total_prompt_tokens = 3;
+  int32 total_completion_tokens = 4;
+  int32 total_requests = 5;
 }
 
 // AgentDetailResponse is the full agent profile.
@@ -38,7 +40,7 @@ message AgentDetailResponse {
   string description = 8;
   string avatar_url = 9;
   string status = 10;
-  int64 sort_order = 11;
+  int32 sort_order = 11;
   repeated string skills = 12;
   AgentStatsResponse stats = 13;
 }

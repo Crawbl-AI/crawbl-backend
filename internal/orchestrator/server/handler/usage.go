@@ -37,11 +37,11 @@ func UserUsageSummary(c *Context) http.HandlerFunc {
 
 		WriteProtoSuccess(w, http.StatusOK, &mobilev1.UserUsageSummaryResponse{
 			CurrentPeriod:        period,
-			TokensUsed:           tokensUsed,
-			PromptTokensUsed:     counters.PromptTokensUsed,
-			CompletionTokensUsed: counters.CompletionTokensUsed,
-			RequestCount:         int64(counters.RequestCount),
-			TokenLimit:           tokenLimit,
+			TokensUsed:           int32(tokensUsed),                    // #nosec G115 -- token count within int32 range for display
+			PromptTokensUsed:     int32(counters.PromptTokensUsed),     // #nosec G115 -- token count within int32 range for display
+			CompletionTokensUsed: int32(counters.CompletionTokensUsed), // #nosec G115 -- token count within int32 range for display
+			RequestCount:         int32(counters.RequestCount),         // #nosec G115 -- request count fits in int32
+			TokenLimit:           int32(tokenLimit),                    // #nosec G115 -- token limit within int32 range for display
 			PlanId:               counters.PlanID,
 		})
 	}
@@ -83,11 +83,11 @@ func WorkspaceUsage(c *Context) http.HandlerFunc {
 
 		WriteProtoSuccess(w, http.StatusOK, &mobilev1.WorkspaceUsageResponse{
 			Period:               period,
-			TokensUsed:           counters.TokensUsed,
-			PromptTokensUsed:     counters.PromptTokensUsed,
-			CompletionTokensUsed: counters.CompletionTokensUsed,
-			RequestCount:         int64(counters.RequestCount),
-			TokenLimit:           tokenLimit,
+			TokensUsed:           int32(counters.TokensUsed),           // #nosec G115 -- token count within int32 range for display
+			PromptTokensUsed:     int32(counters.PromptTokensUsed),     // #nosec G115 -- token count within int32 range for display
+			CompletionTokensUsed: int32(counters.CompletionTokensUsed), // #nosec G115 -- token count within int32 range for display
+			RequestCount:         int32(counters.RequestCount),         // #nosec G115 -- request count fits in int32
+			TokenLimit:           int32(tokenLimit),                    // #nosec G115 -- token limit within int32 range for display
 		})
 	}
 }

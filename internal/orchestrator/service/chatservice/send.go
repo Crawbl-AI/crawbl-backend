@@ -193,15 +193,15 @@ func (s *Service) executeParallel(
 			agentSess := s.db.NewSession(nil)
 			agentCtx := database.ContextWithSession(ctx, agentSess)
 			replies, err := s.callAgentStreaming(callAgentStreamingOpts{
-					ctx:          agentCtx,
-					sendOpts:     opts,
-					pm:           pm,
-					conversation: conversation,
-					runtimeState: runtimeState,
-					agent:        ag,
-					lookups:      lookups,
-					extraContext: "",
-				})
+				ctx:          agentCtx,
+				sendOpts:     opts,
+				pm:           pm,
+				conversation: conversation,
+				runtimeState: runtimeState,
+				agent:        ag,
+				lookups:      lookups,
+				extraContext: "",
+			})
 			results[idx] = agentResult{replies: replies, err: err}
 		}(i, agent)
 	}

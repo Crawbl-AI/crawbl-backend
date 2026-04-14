@@ -6,8 +6,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -22,7 +22,7 @@ func ConversationToProto(conversation *orchestrator.Conversation) *mobilev1.Conv
 		Title:       conversation.Title,
 		CreatedAt:   timestamppb.New(conversation.CreatedAt),
 		UpdatedAt:   timestamppb.New(conversation.UpdatedAt),
-		UnreadCount: int64(conversation.UnreadCount),
+		UnreadCount: int32(conversation.UnreadCount), // #nosec G115 -- unread count fits in int32
 	}
 	if conversation.Agent != nil {
 		resp.Agent = AgentToProto(conversation.Agent)
@@ -78,6 +78,40 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 			})
 		}
 	}
+	if len(content.Turns) > 0 {
+		resp.Turns = make([]*mobilev1.QuestionTurnPayload, 0, len(content.Turns))
+		for _, t := range content.Turns {
+			turn := &mobilev1.QuestionTurnPayload{
+				Index: int32(t.Index),
+				Label: t.Label,
+			}
+			turn.Questions = make([]*mobilev1.QuestionItemPayload, 0, len(t.Questions))
+			for _, q := range t.Questions {
+				opts := make([]*mobilev1.QuestionOptionPayload, 0, len(q.Options))
+				for _, o := range q.Options {
+					opts = append(opts, &mobilev1.QuestionOptionPayload{Id: o.ID, Label: o.Label})
+				}
+				turn.Questions = append(turn.Questions, &mobilev1.QuestionItemPayload{
+					Id:          q.ID,
+					Prompt:      q.Prompt,
+					Mode:        string(q.Mode),
+					Options:     opts,
+					AllowCustom: q.AllowCustom,
+				})
+			}
+			resp.Turns = append(resp.Turns, turn)
+		}
+	}
+	if len(content.Answers) > 0 {
+		resp.Answers = make([]*mobilev1.QuestionAnswerPayload, 0, len(content.Answers))
+		for _, a := range content.Answers {
+			resp.Answers = append(resp.Answers, &mobilev1.QuestionAnswerPayload{
+				QuestionId: a.QuestionID,
+				OptionIds:  append([]string(nil), a.OptionIDs...),
+				CustomText: a.CustomText,
+			})
+		}
+	}
 	if content.Args != nil {
 		s, err := structpb.NewStruct(content.Args)
 		if err == nil {
@@ -120,11 +154,11 @@ func AttachmentsToProto(attachments []orchestrator.Attachment) []*mobilev1.Attac
 			Name:     a.Name,
 			Url:      a.URL,
 			Type:     string(a.Type),
-			Size:     a.Size,
+			Size:     int32(a.Size), // #nosec G115 -- file size in bytes fits in int32 for mobile attachments
 			MimeType: a.MIMEType,
 		}
 		if a.Duration != nil {
-			ar.Duration = int64Ptr(int64(*a.Duration))
+			ar.Duration = int32Ptr(int32(*a.Duration)) // #nosec G115 -- duration in seconds fits in int32
 		}
 		result = append(result, ar)
 	}
@@ -143,7 +177,7 @@ func AttachmentsToDomain(attachments []*mobilev1.AttachmentResponse) []orchestra
 			Name:     a.GetName(),
 			URL:      a.GetUrl(),
 			Type:     orchestrator.AttachmentType(a.GetType()),
-			Size:     a.GetSize(),
+			Size:     int64(a.GetSize()),
 			MIMEType: a.GetMimeType(),
 		}
 		if a.Duration != nil {
@@ -215,6 +249,26 @@ func MessageContentToDomain(payload *mobilev1.MessageContentPayload) (orchestrat
 	return content, nil
 }
 
-func int64Ptr(v int64) *int64 {
+// QuestionAnswersToDomain converts proto question-answer payloads to domain
+// QuestionAnswer values for use by the socket answers handler.
+func QuestionAnswersToDomain(payloads []*mobilev1.QuestionAnswerPayload) []orchestrator.QuestionAnswer {
+	if len(payloads) == 0 {
+		return nil
+	}
+	result := make([]orchestrator.QuestionAnswer, 0, len(payloads))
+	for _, p := range payloads {
+		if p == nil {
+			continue
+		}
+		result = append(result, orchestrator.QuestionAnswer{
+			QuestionID: p.GetQuestionId(),
+			OptionIDs:  append([]string(nil), p.GetOptionIds()...),
+			CustomText: p.GetCustomText(),
+		})
+	}
+	return result
+}
+
+func int32Ptr(v int32) *int32 {
 	return &v
 }

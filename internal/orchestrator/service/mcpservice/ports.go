@@ -38,7 +38,9 @@ type agentHistoryStore interface {
 }
 
 // messageStore is the message subset mcpservice uses: recent-message
-// listing for the conversation-context tool.
+// listing for the conversation-context tool and message persistence for
+// agent-authored structured content (e.g. questions cards).
 type messageStore interface {
 	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
+	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error
 }

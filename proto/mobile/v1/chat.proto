@@ -26,14 +26,45 @@ message ActionItemResponse {
 }
 
 // AttachmentResponse represents a file attached to a message.
+// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
+// not strings. The Flutter client decodes these as num.
 message AttachmentResponse {
   string id = 1;
   string name = 2;
   string url = 3;
   string type = 4;
-  int64 size = 5;
+  int32 size = 5;
   string mime_type = 6;
-  optional int64 duration = 7;
+  optional int32 duration = 7;
+}
+
+// QuestionOptionPayload is a selectable answer option for a question.
+message QuestionOptionPayload {
+  string id = 1;
+  string label = 2;
+}
+
+// QuestionItemPayload is a single question in an interactive card.
+message QuestionItemPayload {
+  string id = 1;
+  string prompt = 2;
+  string mode = 3;
+  repeated QuestionOptionPayload options = 4;
+  bool allow_custom = 5;
+}
+
+// QuestionTurnPayload groups questions shown as one turn block.
+message QuestionTurnPayload {
+  int32 index = 1;
+  string label = 2;
+  repeated QuestionItemPayload questions = 3;
+}
+
+// QuestionAnswerPayload captures a user response to a question.
+message QuestionAnswerPayload {
+  string question_id = 1;
+  repeated string option_ids = 2;
+  string custom_text = 3;
 }
 
 // MessageContentPayload represents the content of a message.
@@ -52,6 +83,8 @@ message MessageContentPayload {
   optional ContentAgent to = 12;
   string status = 13;
   string task_preview = 14;
+  repeated QuestionTurnPayload turns = 15;
+  repeated QuestionAnswerPayload answers = 16;
 }
 
 // MessageResponse represents a message in API responses.
@@ -89,7 +122,7 @@ message ConversationResponse {
   string title = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
-  int64 unread_count = 6;
+  int32 unread_count = 6;
   optional AgentResponse agent = 7;
   optional MessageResponse last_message = 8;
 }
@@ -102,11 +135,13 @@ message CreateConversationRequest {
 }
 
 // MentionPayload represents an @-mention of an agent in a message.
+// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
+// not strings. The Flutter client decodes these as num.
 message MentionPayload {
   string agent_id = 1;
   string agent_name = 2;
-  int64 offset = 3;
-  int64 length = 4;
+  int32 offset = 3;
+  int32 length = 4;
 }
 
 // SendMessageRequest represents the request body for sending a new message.
@@ -120,4 +155,12 @@ message SendMessageRequest {
 // ActionCardRequest represents the request body for responding to an action card.
 message ActionCardRequest {
   string action_id = 1;
+}
+
+// MessageAnswersRequest is the payload for the Socket.IO `message.answers` event.
+message MessageAnswersRequest {
+  string workspace_id = 1;
+  string message_id = 2;
+  string local_id = 3;
+  repeated QuestionAnswerPayload answers = 4;
 }

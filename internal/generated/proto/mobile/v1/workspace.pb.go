@@ -7,12 +7,13 @@
 package mobilev1
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -85,11 +86,13 @@ func (x *LastMessagePreviewResponse) GetTimestamp() *timestamppb.Timestamp {
 
 // WorkspaceRuntimeResponse represents the swarm runtime status for a workspace.
 type WorkspaceRuntimeResponse struct {
-	state              protoimpl.MessageState      `protogen:"open.v1"`
-	Status             string                      `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	Phase              string                      `protobuf:"bytes,2,opt,name=phase,proto3" json:"phase,omitempty"`
-	Verified           bool                        `protobuf:"varint,3,opt,name=verified,proto3" json:"verified,omitempty"`
-	TotalAgents        int64                       `protobuf:"varint,4,opt,name=total_agents,json=totalAgents,proto3" json:"total_agents,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Status   string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Phase    string                 `protobuf:"bytes,2,opt,name=phase,proto3" json:"phase,omitempty"`
+	Verified bool                   `protobuf:"varint,3,opt,name=verified,proto3" json:"verified,omitempty"`
+	// int32 (not int64) so the JSON encoding is a number, not a string —
+	// the mobile Dart client decodes this field as num.
+	TotalAgents        int32                       `protobuf:"varint,4,opt,name=total_agents,json=totalAgents,proto3" json:"total_agents,omitempty"`
 	LastMessagePreview *LastMessagePreviewResponse `protobuf:"bytes,5,opt,name=last_message_preview,json=lastMessagePreview,proto3,oneof" json:"last_message_preview,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -146,7 +149,7 @@ func (x *WorkspaceRuntimeResponse) GetVerified() bool {
 	return false
 }
 
-func (x *WorkspaceRuntimeResponse) GetTotalAgents() int64 {
+func (x *WorkspaceRuntimeResponse) GetTotalAgents() int32 {
 	if x != nil {
 		return x.TotalAgents
 	}
@@ -251,7 +254,7 @@ const file_mobile_v1_workspace_proto_rawDesc = "" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x14\n" +
 	"\x05phase\x18\x02 \x01(\tR\x05phase\x12\x1a\n" +
 	"\bverified\x18\x03 \x01(\bR\bverified\x12!\n" +
-	"\ftotal_agents\x18\x04 \x01(\x03R\vtotalAgents\x12c\n" +
+	"\ftotal_agents\x18\x04 \x01(\x05R\vtotalAgents\x12c\n" +
 	"\x14last_message_preview\x18\x05 \x01(\v2,.crawbl.mobile.v1.LastMessagePreviewResponseH\x00R\x12lastMessagePreview\x88\x01\x01B\x17\n" +
 	"\x15_last_message_preview\"\x84\x02\n" +
 	"\x11WorkspaceResponse\x12\x0e\n" +
