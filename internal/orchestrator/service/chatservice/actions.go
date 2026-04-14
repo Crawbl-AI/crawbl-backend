@@ -19,6 +19,17 @@ import (
 // oversized payloads are rejected before we mutate any persistence.
 const maxCustomTextLen = 4096
 
+// questionPrefix is the common prefix for per-question validation error messages.
+const questionPrefix = "question "
+
+// questionErrorf returns a bad-request merrors.Error whose message starts with
+// "question <id>: <formatted detail>". Centralising the prefix here eliminates
+// repeated literal duplication and makes the format consistent.
+func questionErrorf(id string, format string, args ...any) *merrors.Error {
+	msg := questionPrefix + id + ": " + fmt.Sprintf(format, args...)
+	return merrors.NewBusinessError(msg, merrors.ErrCodeBadRequest)
+}
+
 // RespondToActionCard records the user's selection for an action card message.
 // It fetches the message by ID, sets the selected_action_id in its content,
 // updates the timestamp, and persists the change.
@@ -162,48 +173,80 @@ func validateQuestionAnswers(msg *orchestrator.Message, answers []orchestratorse
 	}
 
 	for _, ans := range answers {
-		q, ok := questions[ans.QuestionID]
-		if !ok {
-			return merrors.NewBusinessError("unknown question id: "+ans.QuestionID, merrors.ErrCodeBadRequest)
-		}
-
-		// Must select or type something.
-		if len(ans.OptionIDs) == 0 && strings.TrimSpace(ans.CustomText) == "" {
-			return merrors.NewBusinessError("question "+q.ID+": at least one option or custom text required", merrors.ErrCodeBadRequest)
-		}
-
-		// Per-question option-count cap matches the question definition.
-		if len(ans.OptionIDs) > len(q.Options) {
-			return merrors.NewBusinessError("question "+q.ID+": more option ids than the question defines", merrors.ErrCodeBadRequest)
-		}
-
-		validOpts := make(map[string]struct{}, len(q.Options))
-		for _, o := range q.Options {
-			validOpts[o.ID] = struct{}{}
-		}
-		for _, oid := range ans.OptionIDs {
-			if _, exists := validOpts[oid]; !exists {
-				return merrors.NewBusinessError("unknown option id: "+oid, merrors.ErrCodeBadRequest)
-			}
-		}
-
-		if q.Mode == orchestrator.QuestionModeSingle && len(ans.OptionIDs) > 1 {
-			return merrors.NewBusinessError("question "+q.ID+" is single-select but received multiple options", merrors.ErrCodeBadRequest)
-		}
-
-		if ans.CustomText != "" {
-			if !q.AllowCustom {
-				return merrors.NewBusinessError("question "+q.ID+" does not allow custom text", merrors.ErrCodeBadRequest)
-			}
-			if len(ans.CustomText) > maxCustomTextLen {
-				return merrors.NewBusinessError(
-					fmt.Sprintf("question %s: custom text exceeds %d characters", q.ID, maxCustomTextLen),
-					merrors.ErrCodeBadRequest,
-				)
-			}
+		if mErr := validateAnswer(msg, questions, ans); mErr != nil {
+			return mErr
 		}
 	}
 
+	return nil
+}
+
+// validateAnswer validates a single QuestionAnswerInput against the known questions map.
+func validateAnswer(msg *orchestrator.Message, questions map[string]*orchestrator.QuestionItem, ans orchestratorservice.QuestionAnswerInput) *merrors.Error {
+	q, ok := questions[ans.QuestionID]
+	if !ok {
+		return merrors.NewBusinessError("unknown question id: "+ans.QuestionID, merrors.ErrCodeBadRequest)
+	}
+
+	if mErr := checkRequiredContent(q, ans); mErr != nil {
+		return mErr
+	}
+	if mErr := checkOptionIDs(q, ans); mErr != nil {
+		return mErr
+	}
+	if mErr := checkSingleMode(q, ans); mErr != nil {
+		return mErr
+	}
+	return checkCustomText(msg, q, ans)
+}
+
+// checkRequiredContent ensures the answer has at least one option or custom text.
+func checkRequiredContent(q *orchestrator.QuestionItem, ans orchestratorservice.QuestionAnswerInput) *merrors.Error {
+	if len(ans.OptionIDs) == 0 && strings.TrimSpace(ans.CustomText) == "" {
+		return questionErrorf(q.ID, "at least one option or custom text required")
+	}
+	return nil
+}
+
+// checkOptionIDs validates that all provided option IDs exist on the question
+// and that the count does not exceed the number of defined options.
+func checkOptionIDs(q *orchestrator.QuestionItem, ans orchestratorservice.QuestionAnswerInput) *merrors.Error {
+	if len(ans.OptionIDs) > len(q.Options) {
+		return questionErrorf(q.ID, "more option ids than the question defines")
+	}
+
+	validOpts := make(map[string]struct{}, len(q.Options))
+	for _, o := range q.Options {
+		validOpts[o.ID] = struct{}{}
+	}
+	for _, oid := range ans.OptionIDs {
+		if _, exists := validOpts[oid]; !exists {
+			return merrors.NewBusinessError("unknown option id: "+oid, merrors.ErrCodeBadRequest)
+		}
+	}
+	return nil
+}
+
+// checkSingleMode ensures single-select questions receive at most one option.
+func checkSingleMode(q *orchestrator.QuestionItem, ans orchestratorservice.QuestionAnswerInput) *merrors.Error {
+	if q.Mode == orchestrator.QuestionModeSingle && len(ans.OptionIDs) > 1 {
+		return questionErrorf(q.ID, "is single-select but received multiple options")
+	}
+	return nil
+}
+
+// checkCustomText validates custom text: it must not be provided unless the
+// question permits it, and must not exceed the character cap.
+func checkCustomText(_ *orchestrator.Message, q *orchestrator.QuestionItem, ans orchestratorservice.QuestionAnswerInput) *merrors.Error {
+	if ans.CustomText == "" {
+		return nil
+	}
+	if !q.AllowCustom {
+		return questionErrorf(q.ID, "does not allow custom text")
+	}
+	if len(ans.CustomText) > maxCustomTextLen {
+		return questionErrorf(q.ID, "custom text exceeds %d characters", maxCustomTextLen)
+	}
 	return nil
 }
 
@@ -228,22 +271,28 @@ func formatAnswersAsUserMessage(msg *orchestrator.Message, answers []orchestrato
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		prompt := questionPrompts[ans.QuestionID]
-		fmt.Fprintf(&sb, "%s: ", prompt)
-
-		parts := make([]string, 0, len(ans.OptionIDs)+1)
-		for _, oid := range ans.OptionIDs {
-			if label, ok := optionLabels[ans.QuestionID][oid]; ok {
-				parts = append(parts, label)
-			} else {
-				parts = append(parts, oid)
-			}
-		}
-		if ans.CustomText != "" {
-			parts = append(parts, ans.CustomText)
-		}
-		sb.WriteString(strings.Join(parts, ", "))
+		sb.WriteString(formatAnswerLine(questionPrompts[ans.QuestionID], optionLabels[ans.QuestionID], ans))
 	}
 
+	return sb.String()
+}
+
+// formatAnswerLine formats a single answer as "<prompt>: <labels joined by comma>".
+func formatAnswerLine(prompt string, labels map[string]string, ans orchestratorservice.QuestionAnswerInput) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s: ", prompt)
+
+	parts := make([]string, 0, len(ans.OptionIDs)+1)
+	for _, oid := range ans.OptionIDs {
+		if label, ok := labels[oid]; ok {
+			parts = append(parts, label)
+		} else {
+			parts = append(parts, oid)
+		}
+	}
+	if ans.CustomText != "" {
+		parts = append(parts, ans.CustomText)
+	}
+	sb.WriteString(strings.Join(parts, ", "))
 	return sb.String()
 }

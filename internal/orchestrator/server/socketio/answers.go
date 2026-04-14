@@ -229,20 +229,35 @@ func parseMessageAnswersPayload(raw any) (*mobilev1.MessageAnswersRequest, error
 			if !ok {
 				continue
 			}
-			ans := &mobilev1.QuestionAnswerPayload{}
-			ans.QuestionId, _ = am["question_id"].(string)
-			ans.CustomText, _ = am["custom_text"].(string)
-			if rawIDs, ok := am["option_ids"].([]any); ok {
-				ans.OptionIds = make([]string, 0, len(rawIDs))
-				for _, id := range rawIDs {
-					if s, ok := id.(string); ok {
-						ans.OptionIds = append(ans.OptionIds, s)
-					}
-				}
-			}
-			req.Answers = append(req.Answers, ans)
+			req.Answers = append(req.Answers, parseAnswerEntry(am))
 		}
 	}
 
 	return req, nil
+}
+
+// parseAnswerEntry converts a single raw answer map into a QuestionAnswerPayload.
+// Malformed or missing fields are silently skipped to preserve existing behaviour.
+func parseAnswerEntry(am map[string]any) *mobilev1.QuestionAnswerPayload {
+	ans := &mobilev1.QuestionAnswerPayload{}
+	ans.QuestionId, _ = am["question_id"].(string)
+	ans.CustomText, _ = am["custom_text"].(string)
+	ans.OptionIds = parseOptionIDs(am["option_ids"])
+	return ans
+}
+
+// parseOptionIDs extracts a []string from a raw []any option_ids value.
+// Non-string elements are silently skipped.
+func parseOptionIDs(raw any) []string {
+	rawIDs, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(rawIDs))
+	for _, id := range rawIDs {
+		if s, ok := id.(string); ok {
+			ids = append(ids, s)
+		}
+	}
+	return ids
 }

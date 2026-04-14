@@ -68,63 +68,88 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 	if content.SelectedActionID != nil {
 		resp.SelectedActionId = content.SelectedActionID
 	}
-	if len(content.Actions) > 0 {
-		resp.Actions = make([]*mobilev1.ActionItemResponse, 0, len(content.Actions))
-		for _, action := range content.Actions {
-			resp.Actions = append(resp.Actions, &mobilev1.ActionItemResponse{
-				Id:    action.ID,
-				Label: action.Label,
-				Style: string(action.Style),
-			})
-		}
-	}
-	if len(content.Turns) > 0 {
-		resp.Turns = make([]*mobilev1.QuestionTurnPayload, 0, len(content.Turns))
-		for _, t := range content.Turns {
-			turn := &mobilev1.QuestionTurnPayload{
-				Index: int32(t.Index),
-				Label: t.Label,
-			}
-			turn.Questions = make([]*mobilev1.QuestionItemPayload, 0, len(t.Questions))
-			for _, q := range t.Questions {
-				opts := make([]*mobilev1.QuestionOptionPayload, 0, len(q.Options))
-				for _, o := range q.Options {
-					opts = append(opts, &mobilev1.QuestionOptionPayload{Id: o.ID, Label: o.Label})
-				}
-				turn.Questions = append(turn.Questions, &mobilev1.QuestionItemPayload{
-					Id:          q.ID,
-					Prompt:      q.Prompt,
-					Mode:        string(q.Mode),
-					Options:     opts,
-					AllowCustom: q.AllowCustom,
-				})
-			}
-			resp.Turns = append(resp.Turns, turn)
-		}
-	}
-	if len(content.Answers) > 0 {
-		resp.Answers = make([]*mobilev1.QuestionAnswerPayload, 0, len(content.Answers))
-		for _, a := range content.Answers {
-			resp.Answers = append(resp.Answers, &mobilev1.QuestionAnswerPayload{
-				QuestionId: a.QuestionID,
-				OptionIds:  append([]string(nil), a.OptionIDs...),
-				CustomText: a.CustomText,
-			})
-		}
-	}
-	if content.Args != nil {
-		s, err := structpb.NewStruct(content.Args)
-		if err == nil {
-			resp.Args = s
-		}
-	}
-	if content.From != nil {
-		resp.From = ContentAgentToProto(content.From)
-	}
-	if content.To != nil {
-		resp.To = ContentAgentToProto(content.To)
-	}
+	resp.Actions = actionsToProto(content.Actions)
+	resp.Turns = questionsToProto(content.Turns)
+	resp.Answers = questionAnswersToProto(content.Answers)
+	resp.Args = argsToStructProto(content.Args)
+	resp.From = ContentAgentToProto(content.From)
+	resp.To = ContentAgentToProto(content.To)
 	return resp
+}
+
+// actionsToProto converts a slice of domain ActionItems to proto responses.
+func actionsToProto(actions []orchestrator.ActionItem) []*mobilev1.ActionItemResponse {
+	if len(actions) == 0 {
+		return nil
+	}
+	result := make([]*mobilev1.ActionItemResponse, 0, len(actions))
+	for _, action := range actions {
+		result = append(result, &mobilev1.ActionItemResponse{
+			Id:    action.ID,
+			Label: action.Label,
+			Style: string(action.Style),
+		})
+	}
+	return result
+}
+
+// questionsToProto converts a slice of domain QuestionTurns to proto payloads.
+func questionsToProto(turns []orchestrator.QuestionTurn) []*mobilev1.QuestionTurnPayload {
+	if len(turns) == 0 {
+		return nil
+	}
+	result := make([]*mobilev1.QuestionTurnPayload, 0, len(turns))
+	for _, t := range turns {
+		turn := &mobilev1.QuestionTurnPayload{
+			Index: int32(t.Index), // #nosec G115 -- turn index fits in int32 NOSONAR
+			Label: t.Label,
+		}
+		turn.Questions = make([]*mobilev1.QuestionItemPayload, 0, len(t.Questions))
+		for _, q := range t.Questions {
+			opts := make([]*mobilev1.QuestionOptionPayload, 0, len(q.Options))
+			for _, o := range q.Options {
+				opts = append(opts, &mobilev1.QuestionOptionPayload{Id: o.ID, Label: o.Label})
+			}
+			turn.Questions = append(turn.Questions, &mobilev1.QuestionItemPayload{
+				Id:          q.ID,
+				Prompt:      q.Prompt,
+				Mode:        string(q.Mode),
+				Options:     opts,
+				AllowCustom: q.AllowCustom,
+			})
+		}
+		result = append(result, turn)
+	}
+	return result
+}
+
+// questionAnswersToProto converts a slice of domain QuestionAnswers to proto payloads.
+func questionAnswersToProto(answers []orchestrator.QuestionAnswer) []*mobilev1.QuestionAnswerPayload {
+	if len(answers) == 0 {
+		return nil
+	}
+	result := make([]*mobilev1.QuestionAnswerPayload, 0, len(answers))
+	for _, a := range answers {
+		result = append(result, &mobilev1.QuestionAnswerPayload{
+			QuestionId: a.QuestionID,
+			OptionIds:  append([]string(nil), a.OptionIDs...),
+			CustomText: a.CustomText,
+		})
+	}
+	return result
+}
+
+// argsToStructProto converts a map[string]any to a structpb.Struct.
+// Returns nil if the map is nil or conversion fails.
+func argsToStructProto(args map[string]any) *structpb.Struct {
+	if args == nil {
+		return nil
+	}
+	s, err := structpb.NewStruct(args)
+	if err != nil {
+		return nil
+	}
+	return s
 }
 
 // ContentAgentToProto converts a domain ContentAgent to the proto type.
