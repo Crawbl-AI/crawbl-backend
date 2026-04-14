@@ -16,7 +16,7 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 
-	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1"
+	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/agentruntime/v1"
 )
 
 // validateSendOpts enforces the common preconditions for SendText and

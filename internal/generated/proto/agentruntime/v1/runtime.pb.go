@@ -809,7 +809,7 @@ const file_agentruntime_v1_runtime_proto_rawDesc = "" +
 	"\rcached_tokens\x18\b \x01(\x05R\fcachedTokens\x12#\n" +
 	"\rcall_sequence\x18\t \x01(\x05R\fcallSequence2n\n" +
 	"\fAgentRuntime\x12^\n" +
-	"\bConverse\x12'.crawbl.agentruntime.v1.ConverseRequest\x1a%.crawbl.agentruntime.v1.ConverseEvent(\x010\x01BNZLgithub.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1;runtimev1b\x06proto3"
+	"\bConverse\x12'.crawbl.agentruntime.v1.ConverseRequest\x1a%.crawbl.agentruntime.v1.ConverseEvent(\x010\x01BXZVgithub.com/Crawbl-AI/crawbl-backend/internal/generated/proto/agentruntime/v1;runtimev1b\x06proto3"
 
 var (
 	file_agentruntime_v1_runtime_proto_rawDescOnce sync.Once

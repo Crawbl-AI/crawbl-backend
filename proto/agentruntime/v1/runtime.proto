@@ -18,7 +18,7 @@ syntax = "proto3";
 
 package crawbl.agentruntime.v1;
 
-option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/proto/v1;runtimev1";
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/agentruntime/v1;runtimev1";
 
 // AgentRuntime is the per-workspace runtime service. Orchestrator clients
 // open a Converse bidi stream, send ConverseRequest messages from the mobile
