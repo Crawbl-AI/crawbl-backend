@@ -179,8 +179,8 @@ func (tc *testContext) userMentionsAgentInSwarmConversation(alias, role, text st
 		"local_id":    tc.nextLocalID(alias, "mention"),
 		"content":     map[string]any{"type": "text", "text": text},
 		"attachments": []any{},
-		"mentions": []map[string]string{
-			{"id": agentID, "name": agentName, "type": "agent"},
+		"mentions": []map[string]any{
+			{"agent_id": agentID, "agent_name": agentName, "offset": 0, "length": len(agentName) + 1},
 		},
 	}
 	if _, err = tc.doRequest("POST", pathWorkspaces+state.workspaceID+pathConversations+state.currentConversation+pathMessages, alias, body); err != nil {
