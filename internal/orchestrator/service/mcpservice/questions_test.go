@@ -2,6 +2,7 @@ package mcpservice
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -159,8 +160,8 @@ func TestAskQuestions_HappyPath(t *testing.T) {
 		Turns: []AskQuestionsTurn{
 			{
 				Questions: []AskQuestionsQuestion{
-					{Prompt: "Pick a colour", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"Red", "Green", "Blue"}},
-					{Prompt: "Pick fruits", Mode: string(orchestrator.QuestionModeMulti), Options: []string{"Apple", "Banana", "Cherry"}},
+					{Prompt: "Pick a colour", Mode: orchestrator.QuestionModeSingle, Options: []string{"Red", "Green", "Blue"}, AllowCustom: true},
+					{Prompt: "Pick fruits", Mode: orchestrator.QuestionModeMulti, Options: []string{"Apple", "Banana", "Cherry"}, AllowCustom: true},
 				},
 			},
 		},
@@ -279,7 +280,7 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 				ConversationID: "conv-1",
 				Turns: []AskQuestionsTurn{{
 					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"OnlyOne"}},
+						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"OnlyOne"}},
 					},
 				}},
 			},
@@ -291,7 +292,7 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 				ConversationID: "conv-1",
 				Turns: []AskQuestionsTurn{{
 					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: func() []string {
+						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: func() []string {
 							opts := make([]string, 27)
 							for i := range opts {
 								opts[i] = "opt"
@@ -309,7 +310,7 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 				ConversationID: "conv-1",
 				Turns: []AskQuestionsTurn{{
 					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: "invalid", Options: twoOptions},
+						{Prompt: "Q?", Mode: orchestrator.QuestionMode("invalid"), Options: twoOptions},
 					},
 				}},
 			},
@@ -321,7 +322,7 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 				ConversationID: "conv-1",
 				Turns: []AskQuestionsTurn{{
 					Questions: []AskQuestionsQuestion{
-						{Prompt: "   ", Mode: string(orchestrator.QuestionModeSingle), Options: twoOptions},
+						{Prompt: "   ", Mode: orchestrator.QuestionModeSingle, Options: twoOptions},
 					},
 				}},
 			},
@@ -333,7 +334,88 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 				ConversationID: "conv-1",
 				Turns: []AskQuestionsTurn{{
 					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"Valid", ""}},
+						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"Valid", ""}},
+					},
+				}},
+			},
+		},
+		{
+			name: "too many turns",
+			params: &AskQuestionsParams{
+				AgentSlug:      "bot",
+				ConversationID: "conv-1",
+				Turns: func() []AskQuestionsTurn {
+					turns := make([]AskQuestionsTurn, maxTurnsPerMessage+1)
+					for i := range turns {
+						turns[i] = AskQuestionsTurn{
+							Questions: []AskQuestionsQuestion{
+								{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: twoOptions},
+							},
+						}
+					}
+					return turns
+				}(),
+			},
+		},
+		{
+			name: "too many questions in a turn",
+			params: &AskQuestionsParams{
+				AgentSlug:      "bot",
+				ConversationID: "conv-1",
+				Turns: []AskQuestionsTurn{{
+					Questions: func() []AskQuestionsQuestion {
+						qs := make([]AskQuestionsQuestion, maxQuestionsPerTurn+1)
+						for i := range qs {
+							qs[i] = AskQuestionsQuestion{
+								Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: twoOptions,
+							}
+						}
+						return qs
+					}(),
+				}},
+			},
+		},
+		{
+			name: "prompt too long",
+			params: &AskQuestionsParams{
+				AgentSlug:      "bot",
+				ConversationID: "conv-1",
+				Turns: []AskQuestionsTurn{{
+					Questions: []AskQuestionsQuestion{
+						{
+							Prompt:  strings.Repeat("x", maxPromptLen+1),
+							Mode:    orchestrator.QuestionModeSingle,
+							Options: twoOptions,
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "option label too long",
+			params: &AskQuestionsParams{
+				AgentSlug:      "bot",
+				ConversationID: "conv-1",
+				Turns: []AskQuestionsTurn{{
+					Questions: []AskQuestionsQuestion{
+						{
+							Prompt:  "Q?",
+							Mode:    orchestrator.QuestionModeSingle,
+							Options: []string{"ok", strings.Repeat("y", maxOptionLabelLen+1)},
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "turn label too long",
+			params: &AskQuestionsParams{
+				AgentSlug:      "bot",
+				ConversationID: "conv-1",
+				Turns: []AskQuestionsTurn{{
+					Label: strings.Repeat("z", maxTurnLabelLen+1),
+					Questions: []AskQuestionsQuestion{
+						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: twoOptions},
 					},
 				}},
 			},
@@ -363,7 +445,7 @@ func TestAskQuestions_UnknownAgentSlug(t *testing.T) {
 		ConversationID: "conv-1",
 		Turns: []AskQuestionsTurn{{
 			Questions: []AskQuestionsQuestion{
-				{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"A", "B"}},
+				{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"A", "B"}},
 			},
 		}},
 	}
@@ -385,7 +467,7 @@ func TestAskQuestions_ConversationNotFound(t *testing.T) {
 		ConversationID: "conv-missing",
 		Turns: []AskQuestionsTurn{{
 			Questions: []AskQuestionsQuestion{
-				{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"A", "B"}},
+				{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"A", "B"}},
 			},
 		}},
 	}

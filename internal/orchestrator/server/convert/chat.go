@@ -154,7 +154,7 @@ func AttachmentsToProto(attachments []orchestrator.Attachment) []*mobilev1.Attac
 			Name:     a.Name,
 			Url:      a.URL,
 			Type:     string(a.Type),
-			Size:     int32(a.Size), // #nosec G115 -- file size in bytes fits in int32 for mobile attachments
+			Size:     float64(a.Size),
 			MimeType: a.MIMEType,
 		}
 		if a.Duration != nil {
@@ -247,26 +247,6 @@ func MessageContentToDomain(payload *mobilev1.MessageContentPayload) (orchestrat
 	}
 
 	return content, nil
-}
-
-// QuestionAnswersToDomain converts proto question-answer payloads to domain
-// QuestionAnswer values for use by the socket answers handler.
-func QuestionAnswersToDomain(payloads []*mobilev1.QuestionAnswerPayload) []orchestrator.QuestionAnswer {
-	if len(payloads) == 0 {
-		return nil
-	}
-	result := make([]orchestrator.QuestionAnswer, 0, len(payloads))
-	for _, p := range payloads {
-		if p == nil {
-			continue
-		}
-		result = append(result, orchestrator.QuestionAnswer{
-			QuestionID: p.GetQuestionId(),
-			OptionIDs:  append([]string(nil), p.GetOptionIds()...),
-			CustomText: p.GetCustomText(),
-		})
-	}
-	return result
 }
 
 func int32Ptr(v int32) *int32 {

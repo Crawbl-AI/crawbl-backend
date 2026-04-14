@@ -3,7 +3,6 @@ package convert
 import (
 	"testing"
 
-	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
 
@@ -180,93 +179,5 @@ func TestMessageContentToProto_Questions_EmptyTurnsOmitted(t *testing.T) {
 	}
 	if resp.Answers != nil {
 		t.Errorf("Answers = %v, want nil", resp.Answers)
-	}
-}
-
-func TestQuestionAnswersToDomain(t *testing.T) {
-	t.Parallel()
-
-	t.Run("NilInput", func(t *testing.T) {
-		t.Parallel()
-		got := QuestionAnswersToDomain(nil)
-		if got != nil {
-			t.Errorf("got %v, want nil", got)
-		}
-	})
-
-	t.Run("EmptySlice", func(t *testing.T) {
-		t.Parallel()
-		got := QuestionAnswersToDomain([]*mobilev1.QuestionAnswerPayload{})
-		if got != nil {
-			t.Errorf("got %v, want nil", got)
-		}
-	})
-
-	t.Run("SkipsNilEntries", func(t *testing.T) {
-		t.Parallel()
-		valid := &mobilev1.QuestionAnswerPayload{
-			QuestionId: "q1",
-			OptionIds:  []string{"A"},
-			CustomText: "hello",
-		}
-		got := QuestionAnswersToDomain([]*mobilev1.QuestionAnswerPayload{nil, valid})
-		if len(got) != 1 {
-			t.Fatalf("len = %d, want 1", len(got))
-		}
-		if got[0].QuestionID != "q1" {
-			t.Errorf("QuestionID = %q, want %q", got[0].QuestionID, "q1")
-		}
-	})
-
-	t.Run("CopiesFields", func(t *testing.T) {
-		t.Parallel()
-		p := &mobilev1.QuestionAnswerPayload{
-			QuestionId: "t1q1",
-			OptionIds:  []string{"X", "Y"},
-			CustomText: "free text",
-		}
-		got := QuestionAnswersToDomain([]*mobilev1.QuestionAnswerPayload{p})
-		if len(got) != 1 {
-			t.Fatalf("len = %d, want 1", len(got))
-		}
-		qa := got[0]
-		if qa.QuestionID != p.GetQuestionId() {
-			t.Errorf("QuestionID = %q, want %q", qa.QuestionID, p.GetQuestionId())
-		}
-		if qa.CustomText != p.GetCustomText() {
-			t.Errorf("CustomText = %q, want %q", qa.CustomText, p.GetCustomText())
-		}
-		if len(qa.OptionIDs) != len(p.GetOptionIds()) {
-			t.Fatalf("len(OptionIDs) = %d, want %d", len(qa.OptionIDs), len(p.GetOptionIds()))
-		}
-		for i, id := range p.GetOptionIds() {
-			if qa.OptionIDs[i] != id {
-				t.Errorf("OptionIDs[%d] = %q, want %q", i, qa.OptionIDs[i], id)
-			}
-		}
-	})
-}
-
-// TestQuestionAnswersToDomain_DeepCopyOptionIDs verifies that mutating the
-// returned OptionIDs slice does not affect the original proto payload.
-func TestQuestionAnswersToDomain_DeepCopyOptionIDs(t *testing.T) {
-	t.Parallel()
-
-	p := &mobilev1.QuestionAnswerPayload{
-		QuestionId: "q1",
-		OptionIds:  []string{"A", "B", "C"},
-	}
-
-	got := QuestionAnswersToDomain([]*mobilev1.QuestionAnswerPayload{p})
-	if len(got) != 1 {
-		t.Fatalf("len = %d, want 1", len(got))
-	}
-
-	// Mutate the returned slice.
-	got[0].OptionIDs[0] = "MUTATED"
-
-	// Original proto must be unchanged.
-	if p.OptionIds[0] != "A" {
-		t.Errorf("original OptionIds[0] = %q after mutation, want %q", p.OptionIds[0], "A")
 	}
 }

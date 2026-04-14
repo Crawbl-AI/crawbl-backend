@@ -3,6 +3,7 @@ package chatservice
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,6 +14,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
+
+// Inbound answer payload caps. Keeping these at the service boundary means
+// oversized payloads are rejected before we mutate any persistence.
+const maxCustomTextLen = 4096
 
 // RespondToActionCard records the user's selection for an action card message.
 // It fetches the message by ID, sets the selected_action_id in its content,
@@ -54,6 +59,11 @@ func (s *Service) RespondToActionCard(ctx context.Context, opts *orchestratorser
 // RespondToQuestions records user answers to a questions message, persists them,
 // broadcasts a message.updated event, and dispatches a plain-text follow-up
 // that summarises the answers so the agent can continue the conversation.
+//
+// If the follow-up SendMessage fails after answers are persisted, the DB state
+// is intentionally preserved (the answers ARE recorded) and the caller receives
+// a typed merrors error coded ErrCodeQuestionFollowupFailed so the transport
+// layer can signal "recorded but follow-up did not fire".
 func (s *Service) RespondToQuestions(ctx context.Context, opts *orchestratorservice.RespondToQuestionsOpts) (*orchestrator.Message, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput
@@ -75,6 +85,11 @@ func (s *Service) RespondToQuestions(ctx context.Context, opts *orchestratorserv
 
 	if msg.Content.Type != orchestrator.MessageContentTypeQuestions {
 		return nil, merrors.ErrUnsupportedMessage
+	}
+
+	// Idempotency: reject replays on an already-answered card.
+	if len(msg.Content.Answers) > 0 {
+		return nil, merrors.NewBusinessError("question already answered", merrors.ErrCodeQuestionAlreadyAnswered)
 	}
 
 	if mErr := validateQuestionAnswers(msg, opts.Answers); mErr != nil {
@@ -99,7 +114,11 @@ func (s *Service) RespondToQuestions(ctx context.Context, opts *orchestratorserv
 	s.broadcaster.EmitMessageUpdated(ctx, opts.WorkspaceID, msg)
 
 	summary := formatAnswersAsUserMessage(msg, opts.Answers)
-	_, _ = s.SendMessage(ctx, &orchestratorservice.SendMessageOpts{
+	sendFn := s.sendMessageFn
+	if sendFn == nil {
+		sendFn = s.SendMessage
+	}
+	if _, sendErr := sendFn(ctx, &orchestratorservice.SendMessageOpts{
 		UserID:         opts.UserID,
 		WorkspaceID:    opts.WorkspaceID,
 		ConversationID: msg.ConversationID,
@@ -108,16 +127,32 @@ func (s *Service) RespondToQuestions(ctx context.Context, opts *orchestratorserv
 			Type: orchestrator.MessageContentTypeText,
 			Text: summary,
 		},
-	})
+	}); sendErr != nil {
+		// Do not roll back: answers are recorded. Signal the failure to the
+		// caller so the transport can emit a distinct "follow-up failed"
+		// event; the client knows the save succeeded but the reply is blocked.
+		slog.ErrorContext(ctx, "answers recorded but follow-up SendMessage failed",
+			"workspace_id", opts.WorkspaceID,
+			"message_id", msg.ID,
+			"conversation_id", msg.ConversationID,
+			"error", sendErr.Error(),
+		)
+		return msg, merrors.NewBusinessError("answers recorded but follow-up dispatch failed", merrors.ErrCodeQuestionFollowupFailed)
+	}
 
 	return msg, nil
 }
 
 // validateQuestionAnswers checks that every answer references a known question,
 // that selected option IDs exist on that question, that single-mode questions
-// receive at most one option, and that custom text is only provided when the
+// receive at most one option, that every answer contributes either an option
+// selection or custom text, and that custom text is only provided when the
 // question permits it.
 func validateQuestionAnswers(msg *orchestrator.Message, answers []orchestratorservice.QuestionAnswerInput) *merrors.Error {
+	if len(answers) == 0 {
+		return merrors.NewBusinessError("at least one answer is required", merrors.ErrCodeBadRequest)
+	}
+
 	questions := make(map[string]*orchestrator.QuestionItem)
 	for ti := range msg.Content.Turns {
 		for qi := range msg.Content.Turns[ti].Questions {
@@ -132,12 +167,22 @@ func validateQuestionAnswers(msg *orchestrator.Message, answers []orchestratorse
 			return merrors.NewBusinessError("unknown question id: "+ans.QuestionID, merrors.ErrCodeBadRequest)
 		}
 
-		opts := make(map[string]struct{}, len(q.Options))
+		// Must select or type something.
+		if len(ans.OptionIDs) == 0 && strings.TrimSpace(ans.CustomText) == "" {
+			return merrors.NewBusinessError("question "+q.ID+": at least one option or custom text required", merrors.ErrCodeBadRequest)
+		}
+
+		// Per-question option-count cap matches the question definition.
+		if len(ans.OptionIDs) > len(q.Options) {
+			return merrors.NewBusinessError("question "+q.ID+": more option ids than the question defines", merrors.ErrCodeBadRequest)
+		}
+
+		validOpts := make(map[string]struct{}, len(q.Options))
 		for _, o := range q.Options {
-			opts[o.ID] = struct{}{}
+			validOpts[o.ID] = struct{}{}
 		}
 		for _, oid := range ans.OptionIDs {
-			if _, exists := opts[oid]; !exists {
+			if _, exists := validOpts[oid]; !exists {
 				return merrors.NewBusinessError("unknown option id: "+oid, merrors.ErrCodeBadRequest)
 			}
 		}
@@ -146,8 +191,16 @@ func validateQuestionAnswers(msg *orchestrator.Message, answers []orchestratorse
 			return merrors.NewBusinessError("question "+q.ID+" is single-select but received multiple options", merrors.ErrCodeBadRequest)
 		}
 
-		if ans.CustomText != "" && !q.AllowCustom {
-			return merrors.NewBusinessError("question "+q.ID+" does not allow custom text", merrors.ErrCodeBadRequest)
+		if ans.CustomText != "" {
+			if !q.AllowCustom {
+				return merrors.NewBusinessError("question "+q.ID+" does not allow custom text", merrors.ErrCodeBadRequest)
+			}
+			if len(ans.CustomText) > maxCustomTextLen {
+				return merrors.NewBusinessError(
+					fmt.Sprintf("question %s: custom text exceeds %d characters", q.ID, maxCustomTextLen),
+					merrors.ErrCodeBadRequest,
+				)
+			}
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
@@ -22,9 +23,10 @@ type askQuestionsTurn struct {
 }
 
 type askQuestionsQuestion struct {
-	Prompt  string               `json:"prompt"`
-	Mode    string               `json:"mode"    jsonschema:"single or multi"`
-	Options []askQuestionsOption `json:"options" jsonschema:"2-26 options"`
+	Prompt      string               `json:"prompt"`
+	Mode        string               `json:"mode"                   jsonschema:"single or multi"`
+	Options     []askQuestionsOption `json:"options"                jsonschema:"2-26 options"`
+	AllowCustom bool                 `json:"allow_custom,omitempty" jsonschema:"whether the user may also provide free-text input (default false)"`
 }
 
 type askQuestionsOption struct {
@@ -72,9 +74,10 @@ func askQuestionsInputToParams(in askQuestionsInput) *mcpservice.AskQuestionsPar
 				options = append(options, o.Label)
 			}
 			questions = append(questions, mcpservice.AskQuestionsQuestion{
-				Prompt:  q.Prompt,
-				Mode:    q.Mode,
-				Options: options,
+				Prompt:      q.Prompt,
+				Mode:        orchestrator.QuestionMode(q.Mode),
+				Options:     options,
+				AllowCustom: q.AllowCustom,
 			})
 		}
 		turns = append(turns, mcpservice.AskQuestionsTurn{

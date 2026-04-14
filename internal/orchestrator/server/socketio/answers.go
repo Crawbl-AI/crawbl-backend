@@ -13,7 +13,13 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
+
+// errInternalAnswersProcessing is the wire-safe fallback shown to clients when
+// a non-business error reaches the socket boundary. The detailed cause is
+// logged server-side and never leaked to the client.
+const errInternalAnswersProcessing = "failed to process answers"
 
 // errInvalidAnswersPayload is returned by parseMessageAnswersPayload when the
 // raw Socket.IO argument cannot be cast to map[string]any.
@@ -121,13 +127,13 @@ func (h *answersHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 			"subject", principal.Subject,
 			"error", mErr.Error(),
 		)
-		h.emitError(s, localID, req.MessageId, "user not found")
+		h.emitMerror(s, localID, req.MessageId, mErr, "user not found")
 		return
 	}
 
-	// Map wire answers to domain inputs inline — convert.QuestionAnswersToDomain returns
-	// []orchestrator.QuestionAnswer, but RespondToQuestionsOpts requires
-	// []orchestratorservice.QuestionAnswerInput.
+	// Map wire answers to service-layer inputs. The opts struct expects
+	// []orchestratorservice.QuestionAnswerInput; we copy OptionIds defensively
+	// so later mutation of the request does not leak into the service layer.
 	inputs := make([]orchestratorservice.QuestionAnswerInput, 0, len(req.Answers))
 	for _, a := range req.Answers {
 		input := orchestratorservice.QuestionAnswerInput{
@@ -153,9 +159,21 @@ func (h *answersHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 			"user_id", user.ID,
 			"workspace_id", req.WorkspaceId,
 			"message_id", req.MessageId,
+			"error_code", mErr.Code,
 			"error", mErr.Error(),
 		)
-		h.emitError(s, localID, req.MessageId, mErr.Error())
+		// Distinct wire signal when answers were recorded but the synthesized
+		// follow-up failed — the client knows the save succeeded, the reply
+		// did not fire, and it should not retry.
+		if merrors.IsCode(mErr, merrors.ErrCodeQuestionFollowupFailed) {
+			messageID := req.MessageId
+			if updated != nil {
+				messageID = updated.ID
+			}
+			h.emitError(s, localID, messageID, mErr.Message)
+			return
+		}
+		h.emitMerror(s, localID, req.MessageId, mErr, errInternalAnswersProcessing)
 		return
 	}
 
@@ -164,6 +182,20 @@ func (h *answersHandler) dispatch(s *socket.Socket, principal *orchestrator.Prin
 		MessageID: updated.ID,
 		Status:    "recorded",
 	})
+}
+
+// emitMerror writes a wire-safe message.answers.error based on the error type.
+// Business errors carry a safe, client-facing message and are exposed as-is;
+// server errors (and anything else) are masked with genericMsg while the
+// underlying detail is logged at the call site.
+func (h *answersHandler) emitMerror(s *socket.Socket, localID, messageID string, mErr *merrors.Error, genericMsg string) {
+	if merrors.IsBusinessError(mErr) {
+		if msg := merrors.PublicMessage(mErr); msg != "" {
+			h.emitError(s, localID, messageID, msg)
+			return
+		}
+	}
+	h.emitError(s, localID, messageID, genericMsg)
 }
 
 // emitError sends a message.answers.error event to the sender socket.

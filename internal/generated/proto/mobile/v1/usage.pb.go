@@ -23,16 +23,17 @@ const (
 )
 
 // WorkspaceUsageResponse is the response for workspace usage.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded counters use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision.
 type WorkspaceUsageResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Period               string                 `protobuf:"bytes,1,opt,name=period,proto3" json:"period,omitempty"`
-	TokensUsed           int32                  `protobuf:"varint,2,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
-	PromptTokensUsed     int32                  `protobuf:"varint,3,opt,name=prompt_tokens_used,json=promptTokensUsed,proto3" json:"prompt_tokens_used,omitempty"`
-	CompletionTokensUsed int32                  `protobuf:"varint,4,opt,name=completion_tokens_used,json=completionTokensUsed,proto3" json:"completion_tokens_used,omitempty"`
-	RequestCount         int32                  `protobuf:"varint,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
-	TokenLimit           int32                  `protobuf:"varint,6,opt,name=token_limit,json=tokenLimit,proto3" json:"token_limit,omitempty"`
+	TokensUsed           float64                `protobuf:"fixed64,2,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
+	PromptTokensUsed     float64                `protobuf:"fixed64,3,opt,name=prompt_tokens_used,json=promptTokensUsed,proto3" json:"prompt_tokens_used,omitempty"`
+	CompletionTokensUsed float64                `protobuf:"fixed64,4,opt,name=completion_tokens_used,json=completionTokensUsed,proto3" json:"completion_tokens_used,omitempty"`
+	RequestCount         float64                `protobuf:"fixed64,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	TokenLimit           float64                `protobuf:"fixed64,6,opt,name=token_limit,json=tokenLimit,proto3" json:"token_limit,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -74,35 +75,35 @@ func (x *WorkspaceUsageResponse) GetPeriod() string {
 	return ""
 }
 
-func (x *WorkspaceUsageResponse) GetTokensUsed() int32 {
+func (x *WorkspaceUsageResponse) GetTokensUsed() float64 {
 	if x != nil {
 		return x.TokensUsed
 	}
 	return 0
 }
 
-func (x *WorkspaceUsageResponse) GetPromptTokensUsed() int32 {
+func (x *WorkspaceUsageResponse) GetPromptTokensUsed() float64 {
 	if x != nil {
 		return x.PromptTokensUsed
 	}
 	return 0
 }
 
-func (x *WorkspaceUsageResponse) GetCompletionTokensUsed() int32 {
+func (x *WorkspaceUsageResponse) GetCompletionTokensUsed() float64 {
 	if x != nil {
 		return x.CompletionTokensUsed
 	}
 	return 0
 }
 
-func (x *WorkspaceUsageResponse) GetRequestCount() int32 {
+func (x *WorkspaceUsageResponse) GetRequestCount() float64 {
 	if x != nil {
 		return x.RequestCount
 	}
 	return 0
 }
 
-func (x *WorkspaceUsageResponse) GetTokenLimit() int32 {
+func (x *WorkspaceUsageResponse) GetTokenLimit() float64 {
 	if x != nil {
 		return x.TokenLimit
 	}
@@ -110,16 +111,17 @@ func (x *WorkspaceUsageResponse) GetTokenLimit() int32 {
 }
 
 // UserUsageSummaryResponse is the response for user usage summary.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded counters use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision.
 type UserUsageSummaryResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	CurrentPeriod        string                 `protobuf:"bytes,1,opt,name=current_period,json=currentPeriod,proto3" json:"current_period,omitempty"`
-	TokensUsed           int32                  `protobuf:"varint,2,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
-	PromptTokensUsed     int32                  `protobuf:"varint,3,opt,name=prompt_tokens_used,json=promptTokensUsed,proto3" json:"prompt_tokens_used,omitempty"`
-	CompletionTokensUsed int32                  `protobuf:"varint,4,opt,name=completion_tokens_used,json=completionTokensUsed,proto3" json:"completion_tokens_used,omitempty"`
-	RequestCount         int32                  `protobuf:"varint,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
-	TokenLimit           int32                  `protobuf:"varint,6,opt,name=token_limit,json=tokenLimit,proto3" json:"token_limit,omitempty"`
+	TokensUsed           float64                `protobuf:"fixed64,2,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
+	PromptTokensUsed     float64                `protobuf:"fixed64,3,opt,name=prompt_tokens_used,json=promptTokensUsed,proto3" json:"prompt_tokens_used,omitempty"`
+	CompletionTokensUsed float64                `protobuf:"fixed64,4,opt,name=completion_tokens_used,json=completionTokensUsed,proto3" json:"completion_tokens_used,omitempty"`
+	RequestCount         float64                `protobuf:"fixed64,5,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	TokenLimit           float64                `protobuf:"fixed64,6,opt,name=token_limit,json=tokenLimit,proto3" json:"token_limit,omitempty"`
 	PlanId               string                 `protobuf:"bytes,7,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
@@ -162,35 +164,35 @@ func (x *UserUsageSummaryResponse) GetCurrentPeriod() string {
 	return ""
 }
 
-func (x *UserUsageSummaryResponse) GetTokensUsed() int32 {
+func (x *UserUsageSummaryResponse) GetTokensUsed() float64 {
 	if x != nil {
 		return x.TokensUsed
 	}
 	return 0
 }
 
-func (x *UserUsageSummaryResponse) GetPromptTokensUsed() int32 {
+func (x *UserUsageSummaryResponse) GetPromptTokensUsed() float64 {
 	if x != nil {
 		return x.PromptTokensUsed
 	}
 	return 0
 }
 
-func (x *UserUsageSummaryResponse) GetCompletionTokensUsed() int32 {
+func (x *UserUsageSummaryResponse) GetCompletionTokensUsed() float64 {
 	if x != nil {
 		return x.CompletionTokensUsed
 	}
 	return 0
 }
 
-func (x *UserUsageSummaryResponse) GetRequestCount() int32 {
+func (x *UserUsageSummaryResponse) GetRequestCount() float64 {
 	if x != nil {
 		return x.RequestCount
 	}
 	return 0
 }
 
-func (x *UserUsageSummaryResponse) GetTokenLimit() int32 {
+func (x *UserUsageSummaryResponse) GetTokenLimit() float64 {
 	if x != nil {
 		return x.TokenLimit
 	}
@@ -211,21 +213,21 @@ const file_mobile_v1_usage_proto_rawDesc = "" +
 	"\x15mobile/v1/usage.proto\x12\x10crawbl.mobile.v1\"\xfb\x01\n" +
 	"\x16WorkspaceUsageResponse\x12\x16\n" +
 	"\x06period\x18\x01 \x01(\tR\x06period\x12\x1f\n" +
-	"\vtokens_used\x18\x02 \x01(\x05R\n" +
+	"\vtokens_used\x18\x02 \x01(\x01R\n" +
 	"tokensUsed\x12,\n" +
-	"\x12prompt_tokens_used\x18\x03 \x01(\x05R\x10promptTokensUsed\x124\n" +
-	"\x16completion_tokens_used\x18\x04 \x01(\x05R\x14completionTokensUsed\x12#\n" +
-	"\rrequest_count\x18\x05 \x01(\x05R\frequestCount\x12\x1f\n" +
-	"\vtoken_limit\x18\x06 \x01(\x05R\n" +
+	"\x12prompt_tokens_used\x18\x03 \x01(\x01R\x10promptTokensUsed\x124\n" +
+	"\x16completion_tokens_used\x18\x04 \x01(\x01R\x14completionTokensUsed\x12#\n" +
+	"\rrequest_count\x18\x05 \x01(\x01R\frequestCount\x12\x1f\n" +
+	"\vtoken_limit\x18\x06 \x01(\x01R\n" +
 	"tokenLimit\"\xa5\x02\n" +
 	"\x18UserUsageSummaryResponse\x12%\n" +
 	"\x0ecurrent_period\x18\x01 \x01(\tR\rcurrentPeriod\x12\x1f\n" +
-	"\vtokens_used\x18\x02 \x01(\x05R\n" +
+	"\vtokens_used\x18\x02 \x01(\x01R\n" +
 	"tokensUsed\x12,\n" +
-	"\x12prompt_tokens_used\x18\x03 \x01(\x05R\x10promptTokensUsed\x124\n" +
-	"\x16completion_tokens_used\x18\x04 \x01(\x05R\x14completionTokensUsed\x12#\n" +
-	"\rrequest_count\x18\x05 \x01(\x05R\frequestCount\x12\x1f\n" +
-	"\vtoken_limit\x18\x06 \x01(\x05R\n" +
+	"\x12prompt_tokens_used\x18\x03 \x01(\x01R\x10promptTokensUsed\x124\n" +
+	"\x16completion_tokens_used\x18\x04 \x01(\x01R\x14completionTokensUsed\x12#\n" +
+	"\rrequest_count\x18\x05 \x01(\x01R\frequestCount\x12\x1f\n" +
+	"\vtoken_limit\x18\x06 \x01(\x01R\n" +
 	"tokenLimit\x12\x17\n" +
 	"\aplan_id\x18\a \x01(\tR\x06planIdBQZOgithub.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1b\x06proto3"
 

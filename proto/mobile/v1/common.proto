@@ -5,12 +5,13 @@ package crawbl.mobile.v1;
 option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
 
 // OffsetPagination provides offset-based pagination metadata.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded counters use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision. Bounded fields (limit) keep int32.
 message OffsetPagination {
-  int32 total = 1;
+  double total = 1;
   int32 limit = 2;
-  int32 offset = 3;
+  double offset = 3;
   bool has_next = 4;
 }
 

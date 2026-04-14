@@ -11,10 +11,25 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// Option-ID generation uses sequential uppercase ASCII letters (A..Z). The
+// cap on options per question is therefore fixed at the size of that range.
 const (
+	optionIDBase          = 'A'
+	maxOptionsPerQuestion = 'Z' - optionIDBase + 1 // 26 — one letter per option
 	minOptionsPerQuestion = 2
-	maxOptionsPerQuestion = 26
 )
+
+// Input caps for the ask_questions MCP tool. Kept as named constants so the
+// limits are discoverable and easy to tune without touching validation logic.
+const (
+	maxTurnsPerMessage  = 10
+	maxQuestionsPerTurn = 20
+	maxPromptLen        = 2048
+	maxOptionLabelLen   = 256
+	maxTurnLabelLen     = 128
+)
+
+const errCodeInvalidInput = "invalid_input"
 
 // AskQuestions creates an interactive questions message for the given conversation,
 // persists it with role=agent and content.type="questions", and broadcasts it.
@@ -29,7 +44,7 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 	}
 
 	if _, mErr := s.repos.Conversation.GetByID(ctx, sess, workspaceID, params.ConversationID); mErr != nil {
-		return nil, fmt.Errorf("conversation not found in this workspace")
+		return nil, merrors.NewBusinessError("conversation not found in this workspace", merrors.ErrCodeConversationNotFound)
 	}
 
 	if err := validateAskQuestionsParams(params); err != nil {
@@ -56,7 +71,7 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 	}
 
 	if mErr := s.repos.Message.Save(ctx, sess, msg); mErr != nil {
-		return nil, fmt.Errorf("save questions message: %s", mErr.Error())
+		return nil, fmt.Errorf("save questions message: %w", mErr)
 	}
 
 	if s.infra.Broadcaster != nil {
@@ -70,37 +85,103 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 // before any domain objects are built.
 func validateAskQuestionsParams(params *AskQuestionsParams) error {
 	if len(params.Turns) < 1 {
-		return merrors.NewBusinessError("at least one turn is required", "invalid_input")
+		return merrors.NewBusinessError("at least one turn is required", errCodeInvalidInput)
+	}
+	if len(params.Turns) > maxTurnsPerMessage {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("too many turns: got %d, max %d", len(params.Turns), maxTurnsPerMessage),
+			errCodeInvalidInput,
+		)
 	}
 	for ti, t := range params.Turns {
-		if len(t.Questions) < 1 {
-			return merrors.NewBusinessError(fmt.Sprintf("turn %d must have at least one question", ti+1), "invalid_input")
+		if err := validateAskQuestionsTurn(ti, t); err != nil {
+			return err
 		}
-		for qi, q := range t.Questions {
-			prompt := strings.TrimSpace(q.Prompt)
-			if prompt == "" {
-				return merrors.NewBusinessError(fmt.Sprintf("turn %d question %d prompt must not be empty", ti+1, qi+1), "invalid_input")
-			}
-			if q.Mode != string(orchestrator.QuestionModeSingle) && q.Mode != string(orchestrator.QuestionModeMulti) {
-				return merrors.NewBusinessError(fmt.Sprintf("turn %d question %d mode must be \"single\" or \"multi\"", ti+1, qi+1), "invalid_input")
-			}
-			if len(q.Options) < minOptionsPerQuestion {
-				return merrors.NewBusinessError(fmt.Sprintf("turn %d question %d must have at least %d options", ti+1, qi+1, minOptionsPerQuestion), "invalid_input")
-			}
-			if len(q.Options) > maxOptionsPerQuestion {
-				return merrors.NewBusinessError(fmt.Sprintf("turn %d question %d must have at most %d options", ti+1, qi+1, maxOptionsPerQuestion), "invalid_input")
-			}
-			for oi, label := range q.Options {
-				if strings.TrimSpace(label) == "" {
-					return merrors.NewBusinessError(fmt.Sprintf("turn %d question %d option %d label must not be empty", ti+1, qi+1, oi+1), "invalid_input")
-				}
-			}
+	}
+	return nil
+}
+
+// validateAskQuestionsTurn validates a single turn and every question within it.
+func validateAskQuestionsTurn(ti int, t AskQuestionsTurn) error {
+	if len(strings.TrimSpace(t.Label)) > maxTurnLabelLen {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d: label exceeds %d characters", ti+1, maxTurnLabelLen),
+			errCodeInvalidInput,
+		)
+	}
+	if len(t.Questions) < 1 {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d: at least one question required", ti+1),
+			errCodeInvalidInput,
+		)
+	}
+	if len(t.Questions) > maxQuestionsPerTurn {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d: too many questions, got %d, max %d", ti+1, len(t.Questions), maxQuestionsPerTurn),
+			errCodeInvalidInput,
+		)
+	}
+	for qi, q := range t.Questions {
+		if err := validateAskQuestionsQuestion(ti, qi, q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateAskQuestionsQuestion validates a single question and its options.
+func validateAskQuestionsQuestion(ti, qi int, q AskQuestionsQuestion) error {
+	prompt := strings.TrimSpace(q.Prompt)
+	if prompt == "" {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d question %d: prompt must not be empty", ti+1, qi+1),
+			errCodeInvalidInput,
+		)
+	}
+	if len(prompt) > maxPromptLen {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d question %d: prompt exceeds %d characters", ti+1, qi+1, maxPromptLen),
+			errCodeInvalidInput,
+		)
+	}
+	if q.Mode != orchestrator.QuestionModeSingle && q.Mode != orchestrator.QuestionModeMulti {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d question %d: mode must be single or multi", ti+1, qi+1),
+			errCodeInvalidInput,
+		)
+	}
+	if len(q.Options) < minOptionsPerQuestion {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d question %d: at least %d options required", ti+1, qi+1, minOptionsPerQuestion),
+			errCodeInvalidInput,
+		)
+	}
+	if len(q.Options) > maxOptionsPerQuestion {
+		return merrors.NewBusinessError(
+			fmt.Sprintf("turn %d question %d: at most %d options allowed", ti+1, qi+1, maxOptionsPerQuestion),
+			errCodeInvalidInput,
+		)
+	}
+	for oi, label := range q.Options {
+		trimmed := strings.TrimSpace(label)
+		if trimmed == "" {
+			return merrors.NewBusinessError(
+				fmt.Sprintf("turn %d question %d option %d: label must not be empty", ti+1, qi+1, oi+1),
+				errCodeInvalidInput,
+			)
+		}
+		if len(trimmed) > maxOptionLabelLen {
+			return merrors.NewBusinessError(
+				fmt.Sprintf("turn %d question %d option %d: label exceeds %d characters", ti+1, qi+1, oi+1, maxOptionLabelLen),
+				errCodeInvalidInput,
+			)
 		}
 	}
 	return nil
 }
 
 // buildQuestionTurns converts the service-layer input slices into domain QuestionTurn values.
+// Option IDs are sequential uppercase ASCII letters (A..Z) indexed from optionIDBase.
 func buildQuestionTurns(input []AskQuestionsTurn) []orchestrator.QuestionTurn {
 	turns := make([]orchestrator.QuestionTurn, 0, len(input))
 	for ti, t := range input {
@@ -109,21 +190,21 @@ func buildQuestionTurns(input []AskQuestionsTurn) []orchestrator.QuestionTurn {
 			options := make([]orchestrator.QuestionOption, 0, len(q.Options))
 			for oi, label := range q.Options {
 				options = append(options, orchestrator.QuestionOption{
-					ID:    string(rune('A' + oi)),
+					ID:    string(rune(optionIDBase + oi)),
 					Label: strings.TrimSpace(label),
 				})
 			}
 			questions = append(questions, orchestrator.QuestionItem{
 				ID:          fmt.Sprintf("t%dq%d", ti+1, qi+1),
 				Prompt:      strings.TrimSpace(q.Prompt),
-				Mode:        orchestrator.QuestionMode(q.Mode),
+				Mode:        q.Mode,
 				Options:     options,
-				AllowCustom: true,
+				AllowCustom: q.AllowCustom,
 			})
 		}
 		turns = append(turns, orchestrator.QuestionTurn{
 			Index:     ti + 1,
-			Label:     t.Label,
+			Label:     strings.TrimSpace(t.Label),
 			Questions: questions,
 		})
 	}

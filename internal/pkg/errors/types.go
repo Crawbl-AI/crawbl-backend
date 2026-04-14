@@ -47,10 +47,12 @@ const (
 	ErrCodeConversationNotFound = "CHT0001" // Conversation does not exist
 
 	// Message error codes (MSGxxxx)
-	ErrCodeMessageNotFound    = "MSG0001" // Message does not exist
-	ErrCodeUnsupportedMessage = "MSG0002" // Message type is not supported
-	ErrCodeEmptyMessageText   = "MSG0003" // Message text is empty
-	ErrCodeMessageTextTooLong = "MSG0004" // Message text exceeds maximum allowed length
+	ErrCodeMessageNotFound         = "MSG0001" // Message does not exist
+	ErrCodeUnsupportedMessage      = "MSG0002" // Message type is not supported
+	ErrCodeEmptyMessageText        = "MSG0003" // Message text is empty
+	ErrCodeMessageTextTooLong      = "MSG0004" // Message text exceeds maximum allowed length
+	ErrCodeQuestionAlreadyAnswered = "MSG0005" // Questions message has already been answered
+	ErrCodeQuestionFollowupFailed  = "MSG0006" // Answers saved but follow-up dispatch failed
 
 	// Quota error codes (QTAxxxx)
 	ErrCodeQuotaExceeded = "QTA0001" // User has exceeded their monthly token quota

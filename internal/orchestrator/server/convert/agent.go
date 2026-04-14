@@ -40,11 +40,11 @@ func AgentDetailToProto(d *orchestrator.AgentDetails) *mobilev1.AgentDetailRespo
 		SortOrder:   int32(d.SortOrder), // #nosec G115 -- sort order is a small UI ordering value, well within int32 range
 		Skills:      []string{},
 		Stats: &mobilev1.AgentStatsResponse{
-			TotalMessages:         int32(d.Stats.TotalMessages),         // #nosec G115 -- message count per agent fits in int32
-			TotalTokensUsed:       int32(d.Stats.TotalTokensUsed),       // #nosec G115 -- token counter within int32 range for display
-			TotalPromptTokens:     int32(d.Stats.TotalPromptTokens),     // #nosec G115 -- token counter within int32 range for display
-			TotalCompletionTokens: int32(d.Stats.TotalCompletionTokens), // #nosec G115 -- token counter within int32 range for display
-			TotalRequests:         int32(d.Stats.TotalRequests),         // #nosec G115 -- request count per agent fits in int32
+			TotalMessages:         float64(d.Stats.TotalMessages),
+			TotalTokensUsed:       float64(d.Stats.TotalTokensUsed),
+			TotalPromptTokens:     float64(d.Stats.TotalPromptTokens),
+			TotalCompletionTokens: float64(d.Stats.TotalCompletionTokens),
+			TotalRequests:         float64(d.Stats.TotalRequests),
 		},
 	}
 	if !d.UpdatedAt.IsZero() {
@@ -72,9 +72,9 @@ func AgentToolToProto(t orchestrator.AgentTool) *mobilev1.AgentToolResponse {
 // OffsetPaginationToProto converts a domain OffsetPagination to the proto response.
 func OffsetPaginationToProto(p orchestrator.OffsetPagination) *mobilev1.OffsetPagination {
 	return &mobilev1.OffsetPagination{
-		Total:   int32(p.Total),  // #nosec G115 -- page total count fits in int32
-		Limit:   int32(p.Limit),  // #nosec G115 -- page size fits in int32
-		Offset:  int32(p.Offset), // #nosec G115 -- page offset fits in int32
+		Total:   float64(p.Total),
+		Limit:   int32(p.Limit), // #nosec G115 -- page size fits in int32
+		Offset:  float64(p.Offset),
 		HasNext: p.HasNext,
 	}
 }

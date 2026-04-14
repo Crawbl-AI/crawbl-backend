@@ -5,26 +5,28 @@ package crawbl.mobile.v1;
 option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1;mobilev1";
 
 // WorkspaceUsageResponse is the response for workspace usage.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded counters use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision.
 message WorkspaceUsageResponse {
   string period = 1;
-  int32 tokens_used = 2;
-  int32 prompt_tokens_used = 3;
-  int32 completion_tokens_used = 4;
-  int32 request_count = 5;
-  int32 token_limit = 6;
+  double tokens_used = 2;
+  double prompt_tokens_used = 3;
+  double completion_tokens_used = 4;
+  double request_count = 5;
+  double token_limit = 6;
 }
 
 // UserUsageSummaryResponse is the response for user usage summary.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded counters use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision.
 message UserUsageSummaryResponse {
   string current_period = 1;
-  int32 tokens_used = 2;
-  int32 prompt_tokens_used = 3;
-  int32 completion_tokens_used = 4;
-  int32 request_count = 5;
-  int32 token_limit = 6;
+  double tokens_used = 2;
+  double prompt_tokens_used = 3;
+  double completion_tokens_used = 4;
+  double request_count = 5;
+  double token_limit = 6;
   string plan_id = 7;
 }

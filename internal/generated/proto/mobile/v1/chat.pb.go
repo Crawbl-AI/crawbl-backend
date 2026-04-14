@@ -171,15 +171,16 @@ func (x *ActionItemResponse) GetStyle() string {
 }
 
 // AttachmentResponse represents a file attached to a message.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded numeric fields use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision. Genuinely bounded fields keep int32.
 type AttachmentResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Url           string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
 	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	Size          int32                  `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	Size          float64                `protobuf:"fixed64,5,opt,name=size,proto3" json:"size,omitempty"`
 	MimeType      string                 `protobuf:"bytes,6,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
 	Duration      *int32                 `protobuf:"varint,7,opt,name=duration,proto3,oneof" json:"duration,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -244,7 +245,7 @@ func (x *AttachmentResponse) GetType() string {
 	return ""
 }
 
-func (x *AttachmentResponse) GetSize() int32 {
+func (x *AttachmentResponse) GetSize() float64 {
 	if x != nil {
 		return x.Size
 	}
@@ -1358,7 +1359,7 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
 	"\x03url\x18\x03 \x01(\tR\x03url\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
-	"\x04size\x18\x05 \x01(\x05R\x04size\x12\x1b\n" +
+	"\x04size\x18\x05 \x01(\x01R\x04size\x12\x1b\n" +
 	"\tmime_type\x18\x06 \x01(\tR\bmimeType\x12\x1f\n" +
 	"\bduration\x18\a \x01(\x05H\x00R\bduration\x88\x01\x01B\v\n" +
 	"\t_duration\"=\n" +

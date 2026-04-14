@@ -168,6 +168,24 @@ func (s *spyActionsBroadcaster) EmitMessageNew(_ context.Context, _ string, _ an
 	s.newCalls++
 }
 
+// successSendFn returns a sendMessageFunc that always succeeds, capturing
+// the opts passed to it for optional assertion.
+func successSendFn(captured *[]*orchestratorservice.SendMessageOpts) sendMessageFunc {
+	return func(_ context.Context, opts *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error) {
+		if captured != nil {
+			*captured = append(*captured, opts)
+		}
+		return []*orchestrator.Message{{ID: "follow-" + opts.LocalID}}, nil
+	}
+}
+
+// failingSendFn returns a sendMessageFunc that always fails with a typed error.
+func failingSendFn() sendMessageFunc {
+	return func(_ context.Context, _ *orchestratorservice.SendMessageOpts) ([]*orchestrator.Message, *merrors.Error) {
+		return nil, merrors.NewBusinessError("simulated send failure", merrors.ErrCodeBadRequest)
+	}
+}
+
 // buildActionsService constructs a Service for actions testing.
 // The dbr.Connection is a zero-value placeholder; it is only used in SendMessage's
 // streaming path which is not exercised in these unit tests.
@@ -176,6 +194,19 @@ func buildActionsService(
 	conv *actionsConversationStore,
 	msgs *actionsMessageStore,
 	broadcaster realtime.Broadcaster,
+) *Service {
+	return buildActionsServiceWithSendFn(ws, conv, msgs, broadcaster, successSendFn(nil))
+}
+
+// buildActionsServiceWithSendFn constructs a Service with a custom follow-up
+// sender injected. Lets tests simulate send success/failure without the full
+// streaming pipeline.
+func buildActionsServiceWithSendFn(
+	ws *actionsWorkspaceStore,
+	conv *actionsConversationStore,
+	msgs *actionsMessageStore,
+	broadcaster realtime.Broadcaster,
+	sendFn sendMessageFunc,
 ) *Service {
 	return &Service{
 		db:                &dbr.Connection{},
@@ -191,6 +222,7 @@ func buildActionsService(
 		runtimeClient:     userswarmclient.NewFakeClient(userswarmclient.Config{}),
 		broadcaster:       broadcaster,
 		defaultAgents:     orchestrator.GetDefaultAgents(),
+		sendMessageFn:     sendFn,
 	}
 }
 
@@ -389,6 +421,103 @@ func TestRespondToQuestions_ValidationErrors(t *testing.T) {
 				t.Fatalf("error code = %q, want %q", mErr.Code, tc.wantErr.Code)
 			}
 		})
+	}
+}
+
+func TestRespondToQuestions_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	msgs := newActionsMessageStore()
+	qMsg := buildQuestionsMessage("msg-dup", "ws-1")
+	// Pre-existing answers on the card simulate an already-answered state.
+	qMsg.Content.Answers = []orchestrator.QuestionAnswer{
+		{QuestionID: "t1q1", OptionIDs: []string{"A"}},
+	}
+	msgs.register(qMsg)
+
+	ws := &actionsWorkspaceStore{ws: &orchestrator.Workspace{ID: "ws-1", UserID: "user-1"}}
+	conv := &actionsConversationStore{conv: &orchestrator.Conversation{ID: "conv-1", WorkspaceID: "ws-1"}}
+	svc := buildActionsService(ws, conv, msgs, realtime.NopBroadcaster{})
+
+	opts := &orchestratorservice.RespondToQuestionsOpts{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+		MessageID:   "msg-dup",
+		Answers: []orchestratorservice.QuestionAnswerInput{
+			{QuestionID: "t1q1", OptionIDs: []string{"B"}},
+		},
+	}
+
+	_, mErr := svc.RespondToQuestions(ctxWithNilSession(), opts)
+	if mErr == nil {
+		t.Fatal("expected already-answered error, got nil")
+	}
+	if mErr.Code != merrors.ErrCodeQuestionAlreadyAnswered {
+		t.Fatalf("error code = %q, want %q", mErr.Code, merrors.ErrCodeQuestionAlreadyAnswered)
+	}
+}
+
+func TestRespondToQuestions_ZeroSelection(t *testing.T) {
+	t.Parallel()
+
+	msgs := newActionsMessageStore()
+	msgs.register(buildQuestionsMessage("msg-zero", "ws-1"))
+
+	ws := &actionsWorkspaceStore{ws: &orchestrator.Workspace{ID: "ws-1", UserID: "user-1"}}
+	conv := &actionsConversationStore{conv: &orchestrator.Conversation{ID: "conv-1", WorkspaceID: "ws-1"}}
+	svc := buildActionsService(ws, conv, msgs, realtime.NopBroadcaster{})
+
+	opts := &orchestratorservice.RespondToQuestionsOpts{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+		MessageID:   "msg-zero",
+		Answers: []orchestratorservice.QuestionAnswerInput{
+			// Neither option IDs nor custom text — must be rejected.
+			{QuestionID: "t1q1"},
+		},
+	}
+
+	_, mErr := svc.RespondToQuestions(ctxWithNilSession(), opts)
+	if mErr == nil {
+		t.Fatal("expected zero-selection validation error, got nil")
+	}
+}
+
+func TestRespondToQuestions_FollowupSendFails(t *testing.T) {
+	t.Parallel()
+
+	msgs := newActionsMessageStore()
+	msgs.register(buildQuestionsMessage("msg-follow-fail", "ws-1"))
+
+	ws := &actionsWorkspaceStore{ws: &orchestrator.Workspace{ID: "ws-1", UserID: "user-1"}}
+	conv := &actionsConversationStore{conv: &orchestrator.Conversation{ID: "conv-1", WorkspaceID: "ws-1"}}
+	svc := buildActionsServiceWithSendFn(ws, conv, msgs, realtime.NopBroadcaster{}, failingSendFn())
+
+	opts := &orchestratorservice.RespondToQuestionsOpts{
+		UserID:      "user-1",
+		WorkspaceID: "ws-1",
+		MessageID:   "msg-follow-fail",
+		Answers: []orchestratorservice.QuestionAnswerInput{
+			{QuestionID: "t1q1", OptionIDs: []string{"A"}},
+		},
+	}
+
+	result, mErr := svc.RespondToQuestions(ctxWithNilSession(), opts)
+	if mErr == nil {
+		t.Fatal("expected follow-up failure error, got nil")
+	}
+	if mErr.Code != merrors.ErrCodeQuestionFollowupFailed {
+		t.Fatalf("error code = %q, want %q", mErr.Code, merrors.ErrCodeQuestionFollowupFailed)
+	}
+	// Answers must still be recorded despite the follow-up failure.
+	if result == nil {
+		t.Fatal("expected the updated message to be returned even on follow-up failure")
+	}
+	if len(result.Content.Answers) != 1 {
+		t.Fatalf("answers count = %d, want 1", len(result.Content.Answers))
+	}
+	if len(msgs.saved) < 1 {
+		t.Fatal("expected the message to have been saved")
 	}
 }
 

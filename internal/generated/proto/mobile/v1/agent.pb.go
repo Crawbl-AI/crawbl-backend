@@ -109,15 +109,16 @@ func (x *AgentResponse) GetStatus() string {
 }
 
 // AgentStatsResponse contains aggregate statistics for an agent.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded counters use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision.
 type AgentStatsResponse struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
-	TotalMessages         int32                  `protobuf:"varint,1,opt,name=total_messages,json=totalMessages,proto3" json:"total_messages,omitempty"`
-	TotalTokensUsed       int32                  `protobuf:"varint,2,opt,name=total_tokens_used,json=totalTokensUsed,proto3" json:"total_tokens_used,omitempty"`
-	TotalPromptTokens     int32                  `protobuf:"varint,3,opt,name=total_prompt_tokens,json=totalPromptTokens,proto3" json:"total_prompt_tokens,omitempty"`
-	TotalCompletionTokens int32                  `protobuf:"varint,4,opt,name=total_completion_tokens,json=totalCompletionTokens,proto3" json:"total_completion_tokens,omitempty"`
-	TotalRequests         int32                  `protobuf:"varint,5,opt,name=total_requests,json=totalRequests,proto3" json:"total_requests,omitempty"`
+	TotalMessages         float64                `protobuf:"fixed64,1,opt,name=total_messages,json=totalMessages,proto3" json:"total_messages,omitempty"`
+	TotalTokensUsed       float64                `protobuf:"fixed64,2,opt,name=total_tokens_used,json=totalTokensUsed,proto3" json:"total_tokens_used,omitempty"`
+	TotalPromptTokens     float64                `protobuf:"fixed64,3,opt,name=total_prompt_tokens,json=totalPromptTokens,proto3" json:"total_prompt_tokens,omitempty"`
+	TotalCompletionTokens float64                `protobuf:"fixed64,4,opt,name=total_completion_tokens,json=totalCompletionTokens,proto3" json:"total_completion_tokens,omitempty"`
+	TotalRequests         float64                `protobuf:"fixed64,5,opt,name=total_requests,json=totalRequests,proto3" json:"total_requests,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -152,35 +153,35 @@ func (*AgentStatsResponse) Descriptor() ([]byte, []int) {
 	return file_mobile_v1_agent_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *AgentStatsResponse) GetTotalMessages() int32 {
+func (x *AgentStatsResponse) GetTotalMessages() float64 {
 	if x != nil {
 		return x.TotalMessages
 	}
 	return 0
 }
 
-func (x *AgentStatsResponse) GetTotalTokensUsed() int32 {
+func (x *AgentStatsResponse) GetTotalTokensUsed() float64 {
 	if x != nil {
 		return x.TotalTokensUsed
 	}
 	return 0
 }
 
-func (x *AgentStatsResponse) GetTotalPromptTokens() int32 {
+func (x *AgentStatsResponse) GetTotalPromptTokens() float64 {
 	if x != nil {
 		return x.TotalPromptTokens
 	}
 	return 0
 }
 
-func (x *AgentStatsResponse) GetTotalCompletionTokens() int32 {
+func (x *AgentStatsResponse) GetTotalCompletionTokens() float64 {
 	if x != nil {
 		return x.TotalCompletionTokens
 	}
 	return 0
 }
 
-func (x *AgentStatsResponse) GetTotalRequests() int32 {
+func (x *AgentStatsResponse) GetTotalRequests() float64 {
 	if x != nil {
 		return x.TotalRequests
 	}
@@ -1036,11 +1037,11 @@ const file_mobile_v1_agent_proto_rawDesc = "" +
 	"\x06avatar\x18\x05 \x01(\tR\x06avatar\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\"\xf6\x01\n" +
 	"\x12AgentStatsResponse\x12%\n" +
-	"\x0etotal_messages\x18\x01 \x01(\x05R\rtotalMessages\x12*\n" +
-	"\x11total_tokens_used\x18\x02 \x01(\x05R\x0ftotalTokensUsed\x12.\n" +
-	"\x13total_prompt_tokens\x18\x03 \x01(\x05R\x11totalPromptTokens\x126\n" +
-	"\x17total_completion_tokens\x18\x04 \x01(\x05R\x15totalCompletionTokens\x12%\n" +
-	"\x0etotal_requests\x18\x05 \x01(\x05R\rtotalRequests\"\xda\x03\n" +
+	"\x0etotal_messages\x18\x01 \x01(\x01R\rtotalMessages\x12*\n" +
+	"\x11total_tokens_used\x18\x02 \x01(\x01R\x0ftotalTokensUsed\x12.\n" +
+	"\x13total_prompt_tokens\x18\x03 \x01(\x01R\x11totalPromptTokens\x126\n" +
+	"\x17total_completion_tokens\x18\x04 \x01(\x01R\x15totalCompletionTokens\x12%\n" +
+	"\x0etotal_requests\x18\x05 \x01(\x01R\rtotalRequests\"\xda\x03\n" +
 	"\x13AgentDetailResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x12\n" +

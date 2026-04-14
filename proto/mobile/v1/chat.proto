@@ -26,14 +26,15 @@ message ActionItemResponse {
 }
 
 // AttachmentResponse represents a file attached to a message.
-// Integer fields use int32 (not int64) so proto3 JSON encodes them as numbers,
-// not strings. The Flutter client decodes these as num.
+// Unbounded numeric fields use double so proto3 JSON encodes them as numbers
+// (not strings) and the Flutter client decodes them as num with 53-bit
+// precision. Genuinely bounded fields keep int32.
 message AttachmentResponse {
   string id = 1;
   string name = 2;
   string url = 3;
   string type = 4;
-  int32 size = 5;
+  double size = 5;
   string mime_type = 6;
   optional int32 duration = 7;
 }

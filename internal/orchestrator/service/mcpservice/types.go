@@ -243,9 +243,10 @@ type AskQuestionsTurn struct {
 
 // AskQuestionsQuestion describes one question with its allowed options.
 type AskQuestionsQuestion struct {
-	Prompt  string
-	Mode    string   // "single" or "multi"
-	Options []string // option labels; service assigns A, B, C, …
+	Prompt      string
+	Mode        orchestrator.QuestionMode
+	Options     []string // option labels; service assigns A, B, C, …
+	AllowCustom bool     // whether the user may also provide free-text input
 }
 
 // AskQuestionsResult is returned by AskQuestions.
