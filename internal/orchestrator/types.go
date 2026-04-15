@@ -726,6 +726,7 @@ type ArtifactRef struct {
 	Title       string `json:"title"`
 	ContentType string `json:"content_type,omitempty"`
 	Action      string `json:"action"` // created | updated | reviewed
+	Status      string `json:"status"`
 	AgentSlug   string `json:"agent_slug,omitempty"`
 	AgentName   string `json:"agent_name,omitempty"`
 }

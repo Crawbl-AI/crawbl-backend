@@ -52,7 +52,7 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
 		Tool: chunk.Tool, Status: realtime.AgentToolStatusRunning,
-		Query: parsed.Query, Args: wireArgs,
+		CallID: chunk.CallID, Query: parsed.Query, Args: wireArgs,
 		CreatedAt: toolCreatedAt,
 	})
 }
@@ -79,7 +79,7 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
-		Query: matched.args.Query, Args: doneArgs,
+		CallID: chunk.CallID, Query: matched.args.Query, Args: doneArgs,
 	})
 
 	// Update persisted tool_status message to completed.

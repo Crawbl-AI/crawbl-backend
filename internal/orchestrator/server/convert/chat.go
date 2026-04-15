@@ -86,6 +86,7 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 			Title:       content.Artifact.Title,
 			ContentType: content.Artifact.ContentType,
 			Action:      content.Artifact.Action,
+			Status:      content.Artifact.Status,
 			AgentSlug:   content.Artifact.AgentSlug,
 			AgentName:   content.Artifact.AgentName,
 		}
