@@ -2,6 +2,7 @@ package chatservice
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,12 +18,24 @@ import (
 func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 	toolAgentID := resolveToolAgentID(ss.primary, ss.lookups, chunk.AgentID)
 	parsed := parseToolCallArgs(chunk.Tool, chunk.Args)
+	// Per the agent.tool contract the wire carries exactly one
+	// human-readable description in args.description. The LLM writes
+	// this itself as part of every tool call (enforced by the agent
+	// system prompt); we just pass it through — no server-side
+	// switch/lookup, no per-tool hardcoded phrasing. The per-tool
+	// typed fields (path, url, pattern, agent_name, …) are dropped
+	// at this boundary because mobile no longer consumes them.
+	// Query keeps its top-level slot because it's still used as a
+	// dedup key between the ephemeral event and the persisted message.
+	wireArgs := map[string]any{
+		"description": toolDescription(parsed.Parsed, chunk.Tool, parsed.Query),
+	}
 
 	// Persist tool_status message (state: running).
 	var toolMsgID string
 	var toolCreatedAt string
 	if chunk.Tool != agentruntimetools.ToolTransferToAgent {
-		toolMsg := ss.newToolStatusMessage(toolAgentID, chunk.Tool, orchestrator.ToolStateRunning, parsed)
+		toolMsg := ss.newToolStatusMessage(toolAgentID, chunk.Tool, orchestrator.ToolStateRunning, parsed, wireArgs)
 		if mErr := ss.svc.savePlaceholder(ss.ctx, ss.sess, toolMsg); mErr == nil {
 			toolMsgID = toolMsg.ID
 			toolCreatedAt = toolMsg.CreatedAt.UTC().Format(time.RFC3339Nano)
@@ -40,7 +53,7 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
 		Tool: chunk.Tool, Status: realtime.AgentToolStatusRunning,
-		Query: parsed.Query, Args: parsed.Parsed,
+		Query: parsed.Query, Args: wireArgs,
 		CreatedAt: toolCreatedAt,
 	})
 }
@@ -57,9 +70,17 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 
 	toolAgentID := ss.resolveToolResultAgentID(matched, chunk.AgentID)
 
+	// Mirror the description from the paired running event so mobile
+	// renders the same sentence on both transitions — required by the
+	// agent.tool contract (every event carries args.description).
+	doneArgs := map[string]any{
+		"description": toolDescription(matched.args.Parsed, matched.tool, matched.args.Query),
+	}
+
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
+		Query: matched.args.Query, Args: doneArgs,
 	})
 
 	// Update persisted tool_status message to completed.
@@ -118,8 +139,37 @@ func (ss *streamSession) handleTransferToAgent(matched pendingToolCall) {
 	}()
 }
 
+// toolDescription returns the human-readable description for an
+// agent.tool event. Happy path: the LLM supplied args.description —
+// enforced by the agent system prompt — and we pass it through
+// verbatim after trimming. Fallback path (LLM forgot / prompt not yet
+// rolled out): synthesize a generic "Running <tool>" sentence so mobile
+// never lands on its last-resort label-only render. A description
+// arriving from the model is trusted as-is; no server-side l10n, no
+// switch statement.
+func toolDescription(args map[string]any, tool, query string) string {
+	if args != nil {
+		if d, ok := args["description"].(string); ok {
+			if trimmed := strings.TrimSpace(d); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	humanTool := strings.ReplaceAll(tool, "_", " ")
+	if humanTool == "" {
+		humanTool = "tool"
+	}
+	if q := strings.TrimSpace(query); q != "" {
+		return "Running " + humanTool + ": " + q
+	}
+	return "Running " + humanTool
+}
+
 // newToolStatusMessage creates a tool_status message for persistence.
-func (ss *streamSession) newToolStatusMessage(agentID, tool string, state orchestrator.ToolState, parsed toolCallArgs) *orchestrator.Message {
+// wireArgs is the minimal {description} map the client actually consumes;
+// the full parsed args are dropped at this boundary because mobile no
+// longer reads the per-tool typed fields.
+func (ss *streamSession) newToolStatusMessage(agentID, tool string, state orchestrator.ToolState, parsed toolCallArgs, wireArgs map[string]any) *orchestrator.Message {
 	now := time.Now().UTC()
 	return &orchestrator.Message{
 		ID:             uuid.NewString(),
@@ -130,7 +180,7 @@ func (ss *streamSession) newToolStatusMessage(agentID, tool string, state orches
 			Tool:  tool,
 			State: state,
 			Query: parsed.Query,
-			Args:  parsed.Parsed,
+			Args:  wireArgs,
 		},
 		Status:      orchestrator.MessageStatusDelivered,
 		AgentID:     &agentID,
