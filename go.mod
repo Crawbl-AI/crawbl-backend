@@ -7,7 +7,7 @@ require (
 	firebase.google.com/go/v4 v4.19.0
 	github.com/ClickHouse/clickhouse-go/v2 v2.45.0
 	github.com/achetronic/adk-utils-go v0.13.0
-	github.com/alitto/pond/v2 v2.7.0
+	github.com/alitto/pond/v2 v2.7.1
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.14
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.0

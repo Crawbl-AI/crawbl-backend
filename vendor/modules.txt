@@ -150,7 +150,7 @@ github.com/achetronic/adk-utils-go/genai/openai
 # github.com/agext/levenshtein v1.2.3
 ## explicit
 github.com/agext/levenshtein
-# github.com/alitto/pond/v2 v2.7.0
+# github.com/alitto/pond/v2 v2.7.1
 ## explicit; go 1.20
 github.com/alitto/pond/v2
 github.com/alitto/pond/v2/internal/future
