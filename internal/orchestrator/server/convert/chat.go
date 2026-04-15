@@ -79,26 +79,14 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 	resp.Args = argsToStructProto(content.Args)
 	resp.From = ContentAgentToProto(content.From)
 	resp.To = ContentAgentToProto(content.To)
-	if content.Artifact != nil {
-		resp.Artifact = &mobilev1.ArtifactRefPayload{
-			ArtifactId:  content.Artifact.ArtifactID,
-			Version:     int32(content.Artifact.Version), // #nosec G115 -- version fits in int32
-			Title:       content.Artifact.Title,
-			ContentType: content.Artifact.ContentType,
-			Action:      content.Artifact.Action,
-			Status:      content.Artifact.Status,
-			AgentSlug:   content.Artifact.AgentSlug,
-			AgentName:   content.Artifact.AgentName,
-		}
-	}
-	if content.Workflow != nil {
-		resp.Workflow = &mobilev1.WorkflowRefPayload{
-			WorkflowId:  content.Workflow.WorkflowID,
-			ExecutionId: content.Workflow.ExecutionID,
-			Name:        content.Workflow.Name,
-			Status:      content.Workflow.Status,
-		}
-	}
+	resp.ArtifactId = content.ArtifactID
+	resp.Version = int32(content.Version) // #nosec G115 -- version fits in int32
+	resp.AgentSlug = content.AgentSlug
+	resp.AgentName = content.AgentName
+	resp.ContentPreview = content.ContentPreview
+	resp.WorkflowId = content.WorkflowID
+	resp.WorkflowName = content.WorkflowName
+	resp.ExecutionId = content.ExecutionID
 	return resp
 }
 

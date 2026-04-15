@@ -68,26 +68,6 @@ message QuestionAnswerPayload {
   string custom_text = 3;
 }
 
-// ArtifactRefPayload is the compact artifact reference embedded in chat messages.
-message ArtifactRefPayload {
-  string artifact_id = 1;
-  int32 version = 2;
-  string title = 3;
-  string content_type = 4;
-  string action = 5;
-  string agent_slug = 6;
-  string agent_name = 7;
-  string status = 8;
-}
-
-// WorkflowRefPayload is the compact workflow reference embedded in chat messages.
-message WorkflowRefPayload {
-  string workflow_id = 1;
-  string execution_id = 2;
-  string name = 3;
-  string status = 4;
-}
-
 // MessageContentPayload represents the content of a message.
 message MessageContentPayload {
   string type = 1;
@@ -106,8 +86,22 @@ message MessageContentPayload {
   string task_preview = 14;
   repeated QuestionTurnPayload turns = 15;
   repeated QuestionAnswerPayload answers = 16;
-  optional ArtifactRefPayload artifact = 17;
-  optional WorkflowRefPayload workflow = 18;
+  // Field numbers 17 and 18 are reserved (previously artifact/workflow ref messages).
+  reserved 17, 18;
+
+  // Artifact fields (type = "artifact"). title and status reuse the
+  // existing MessageContentPayload fields.
+  string artifact_id = 19;
+  int32 version = 20;
+  string agent_slug = 21;
+  string agent_name = 22;
+  string content_preview = 23;
+
+  // Workflow fields (type = "workflow"). status reuses the
+  // MessageContentPayload status field.
+  string workflow_id = 24;
+  string workflow_name = 25;
+  string execution_id = 26;
 }
 
 // MessageResponse represents a message in API responses.

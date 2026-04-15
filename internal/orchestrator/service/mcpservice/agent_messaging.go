@@ -100,7 +100,7 @@ func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareO
 	}
 	newDepth := currentDepth + 1
 	if newDepth >= maxAgentDepth {
-		return "", fmt.Errorf("agent chain depth limit reached (%d/%d). Cannot delegate further.", newDepth, maxAgentDepth)
+		return "", fmt.Errorf("agent chain depth limit reached (%d/%d): cannot delegate further", newDepth, maxAgentDepth)
 	}
 
 	msgID := uuid.NewString()
