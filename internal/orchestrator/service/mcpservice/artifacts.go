@@ -90,7 +90,7 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		ArtifactID:  artifactID,
 		Title:       params.Title,
 		ContentType: contentType,
-		Action:      "created",
+		Action:      artifactrepo.ArtifactActionCreated,
 		Version:     1,
 	})
 
@@ -211,7 +211,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		ArtifactID:  params.ArtifactID,
 		Title:       artifact.Title,
 		ContentType: artifact.ContentType,
-		Action:      "updated",
+		Action:      artifactrepo.ArtifactActionUpdated,
 		Version:     newVersion,
 	})
 
@@ -277,7 +277,7 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		ArtifactID:  params.ArtifactID,
 		Title:       artifact.Title,
 		ContentType: artifact.ContentType,
-		Action:      "reviewed",
+		Action:      artifactrepo.ArtifactActionReviewed,
 		Version:     reviewVersion,
 	})
 
@@ -333,7 +333,7 @@ type persistArtifactMessageOpts struct {
 	ArtifactID  string
 	Title       string
 	ContentType string
-	Action      string // created | updated | reviewed
+	Action      artifactrepo.ArtifactAction
 	Version     int
 }
 
@@ -373,7 +373,7 @@ func (s *service) persistArtifactMessage(ctx contextT, sess sessionT, opts persi
 				Version:     opts.Version,
 				Title:       opts.Title,
 				ContentType: opts.ContentType,
-				Action:      opts.Action,
+				Action:      string(opts.Action),
 				AgentSlug:   agentSlug,
 				AgentName:   agentName,
 			},
