@@ -27,9 +27,7 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 	// at this boundary because mobile no longer consumes them.
 	// Query keeps its top-level slot because it's still used as a
 	// dedup key between the ephemeral event and the persisted message.
-	wireArgs := map[string]any{
-		"description": toolDescription(parsed.Parsed, chunk.Tool, parsed.Query),
-	}
+	wireArgs := buildWireArgs(parsed.Parsed)
 
 	// Persist tool_status message (state: running).
 	var toolMsgID string
@@ -71,11 +69,11 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	toolAgentID := ss.resolveToolResultAgentID(matched, chunk.AgentID)
 
 	// Mirror the description from the paired running event so mobile
-	// renders the same sentence on both transitions — required by the
-	// agent.tool contract (every event carries args.description).
-	doneArgs := map[string]any{
-		"description": toolDescription(matched.args.Parsed, matched.tool, matched.args.Query),
-	}
+	// renders the same sentence on both transitions. If the LLM didn't
+	// provide one, the map stays empty and mobile's own fallback chain
+	// (query → localized tool label) takes over — we never synthesize
+	// an English sentence BE-side because it would dodge mobile l10n.
+	doneArgs := buildWireArgs(matched.args.Parsed)
 
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
@@ -139,30 +137,26 @@ func (ss *streamSession) handleTransferToAgent(matched pendingToolCall) {
 	}()
 }
 
-// toolDescription returns the human-readable description for an
-// agent.tool event. Happy path: the LLM supplied args.description —
-// enforced by the agent system prompt — and we pass it through
-// verbatim after trimming. Fallback path (LLM forgot / prompt not yet
-// rolled out): synthesize a generic "Running <tool>" sentence so mobile
-// never lands on its last-resort label-only render. A description
-// arriving from the model is trusted as-is; no server-side l10n, no
-// switch statement.
-func toolDescription(args map[string]any, tool, query string) string {
-	if args != nil {
-		if d, ok := args["description"].(string); ok {
-			if trimmed := strings.TrimSpace(d); trimmed != "" {
-				return trimmed
-			}
+// buildWireArgs assembles the args map for the agent.tool socket event
+// and the persisted tool_status message. Contract: if the LLM supplied
+// a description (enforced by the agent system prompt), forward it
+// verbatim; otherwise emit NO description key at all so the mobile
+// falls back through its own i18n chain (query → localized tool
+// label). We never synthesize an English string here because mobile
+// cannot translate a BE-origin string — doing so would hard-code
+// English into every non-English client. A missing description is a
+// BE/LLM bug to fix upstream, not a gap to paper over at the edge.
+func buildWireArgs(args map[string]any) map[string]any {
+	out := map[string]any{}
+	if args == nil {
+		return out
+	}
+	if d, ok := args["description"].(string); ok {
+		if trimmed := strings.TrimSpace(d); trimmed != "" {
+			out["description"] = trimmed
 		}
 	}
-	humanTool := strings.ReplaceAll(tool, "_", " ")
-	if humanTool == "" {
-		humanTool = "tool"
-	}
-	if q := strings.TrimSpace(query); q != "" {
-		return "Running " + humanTool + ": " + q
-	}
-	return "Running " + humanTool
+	return out
 }
 
 // newToolStatusMessage creates a tool_status message for persistence.
