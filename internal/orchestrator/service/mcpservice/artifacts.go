@@ -83,8 +83,16 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
-	s.persistArtifactMessage(ctx, sess, workspaceID, agentID, convID,
-		artifactID, params.Title, contentType, "created", 1)
+	s.persistArtifactMessage(ctx, sess, persistArtifactMessageOpts{
+		WorkspaceID: workspaceID,
+		AgentID:     agentID,
+		ConvID:      convID,
+		ArtifactID:  artifactID,
+		Title:       params.Title,
+		ContentType: contentType,
+		Action:      "created",
+		Version:     1,
+	})
 
 	return &CreateArtifactResult{ArtifactID: artifactID, Version: 1}, nil
 }
@@ -196,8 +204,16 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
-	s.persistArtifactMessage(ctx, sess, workspaceID, agentID, artifact.ConversationID,
-		params.ArtifactID, artifact.Title, artifact.ContentType, "updated", newVersion)
+	s.persistArtifactMessage(ctx, sess, persistArtifactMessageOpts{
+		WorkspaceID: workspaceID,
+		AgentID:     agentID,
+		ConvID:      artifact.ConversationID,
+		ArtifactID:  params.ArtifactID,
+		Title:       artifact.Title,
+		ContentType: artifact.ContentType,
+		Action:      "updated",
+		Version:     newVersion,
+	})
 
 	return &UpdateArtifactResult{Version: newVersion}, nil
 }
@@ -254,8 +270,16 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
-	s.persistArtifactMessage(ctx, sess, workspaceID, agentID, artifact.ConversationID,
-		params.ArtifactID, artifact.Title, artifact.ContentType, "reviewed", reviewVersion)
+	s.persistArtifactMessage(ctx, sess, persistArtifactMessageOpts{
+		WorkspaceID: workspaceID,
+		AgentID:     agentID,
+		ConvID:      artifact.ConversationID,
+		ArtifactID:  params.ArtifactID,
+		Title:       artifact.Title,
+		ContentType: artifact.ContentType,
+		Action:      "reviewed",
+		Version:     reviewVersion,
+	})
 
 	return &ReviewArtifactResult{Reviewed: true}, nil
 }
@@ -297,27 +321,38 @@ func stringFromPtr(s *string) string {
 	return *s
 }
 
-// persistArtifactMessage writes an artifact-type chat message and broadcasts
-// it. When convID is nil the artifact isn't tied to a conversation, so no
-// chat message is persisted (nothing to attach it to).
-func (s *service) persistArtifactMessage(
-	ctx contextT, sess sessionT,
-	workspaceID, agentID string,
-	convID *string,
-	artifactID, title, contentType, action string,
-	version int,
-) {
-	if convID == nil || *convID == "" {
+// persistArtifactMessageOpts groups every field persistArtifactMessage
+// needs. Grouping keeps the function signature under the project's
+// 4-5 param limit (and SonarQube's go:S107 limit of 7) and makes the
+// call sites read as a labelled struct literal instead of a long
+// positional argument list where a string mix-up is silent.
+type persistArtifactMessageOpts struct {
+	WorkspaceID string
+	AgentID     string
+	ConvID      *string
+	ArtifactID  string
+	Title       string
+	ContentType string
+	Action      string // created | updated | reviewed
+	Version     int
+}
+
+// persistArtifactMessage writes an artifact-type chat message and
+// broadcasts it. When opts.ConvID is nil the artifact isn't tied to a
+// conversation, so no chat message is persisted (nothing to attach it
+// to).
+func (s *service) persistArtifactMessage(ctx contextT, sess sessionT, opts persistArtifactMessageOpts) {
+	if opts.ConvID == nil || *opts.ConvID == "" {
 		return
 	}
 	// Resolve the agent up-front so both the ArtifactRef payload and the
 	// message-level Agent pointer carry matching identity. Mobile reads
 	// agent_slug+agent_name from the ref directly; the Agent pointer is
 	// used by UserAvatar for the bubble.
-	agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, agentID)
+	agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
 		s.infra.Logger.Warn("persist artifact message: agent lookup failed",
-			"artifact_id", artifactID, "agent_id", agentID, "error", mErr.Error())
+			"artifact_id", opts.ArtifactID, "agent_id", opts.AgentID, "error", mErr.Error())
 	}
 	var agentSlug, agentName string
 	if agent != nil {
@@ -325,19 +360,20 @@ func (s *service) persistArtifactMessage(
 		agentName = agent.Name
 	}
 	now := time.Now().UTC()
+	agentID := opts.AgentID
 	msg := &orchestrator.Message{
 		ID:             uuid.NewString(),
-		ConversationID: *convID,
+		ConversationID: *opts.ConvID,
 		Role:           orchestrator.MessageRoleAgent,
 		Content: orchestrator.MessageContent{
 			Type:  orchestrator.MessageContentTypeArtifact,
-			Title: title,
+			Title: opts.Title,
 			Artifact: &orchestrator.ArtifactRef{
-				ArtifactID:  artifactID,
-				Version:     version,
-				Title:       title,
-				ContentType: contentType,
-				Action:      action,
+				ArtifactID:  opts.ArtifactID,
+				Version:     opts.Version,
+				Title:       opts.Title,
+				ContentType: opts.ContentType,
+				Action:      opts.Action,
 				AgentSlug:   agentSlug,
 				AgentName:   agentName,
 			},
@@ -350,10 +386,10 @@ func (s *service) persistArtifactMessage(
 	}
 	if saveErr := s.repos.Message.Save(ctx, sess, msg); saveErr != nil {
 		s.infra.Logger.Warn("persist artifact message failed",
-			"artifact_id", artifactID, "error", saveErr.Error())
+			"artifact_id", opts.ArtifactID, "error", saveErr.Error())
 		return
 	}
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitMessageNew(ctx, workspaceID, msg)
+		s.infra.Broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, msg)
 	}
 }
