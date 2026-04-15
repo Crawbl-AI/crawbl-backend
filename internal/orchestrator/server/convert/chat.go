@@ -69,6 +69,16 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 	}
 	if content.Status != "" {
 		resp.Status = ptr.Of(content.Status)
+	} else if content.Type == orchestrator.MessageContentTypeArtifact ||
+		content.Type == orchestrator.MessageContentTypeWorkflow {
+		// Mobile's Freezed decoder for ArtifactContent / WorkflowContent
+		// marks status as a non-nullable String. Historical rows persisted
+		// before the flat-field migration have no Status on the content
+		// JSONB blob; without this fallback the proto wire drops the
+		// field entirely, mobile gets null on an "as String" cast, and
+		// the whole message list fails to decode. Emit an explicit empty
+		// string so the cast succeeds even on legacy data.
+		resp.Status = ptr.Of("")
 	}
 	if content.SelectedActionID != nil {
 		resp.SelectedActionId = content.SelectedActionID
