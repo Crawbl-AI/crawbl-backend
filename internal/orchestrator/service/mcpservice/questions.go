@@ -74,6 +74,14 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 		return nil, fmt.Errorf("save questions message: %w", mErr)
 	}
 
+	// Hydrate msg.Agent so the wire payload carries {name, avatar} — the mobile
+	// bubble renders the generic placeholder when this field is nil. Other
+	// broadcast paths (stream_finalize, stream_tools) do the same via their
+	// agent-lookup map; here we fetch directly since this path isn't streaming.
+	if agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, agentID); mErr == nil {
+		msg.Agent = agent
+	}
+
 	if s.infra.Broadcaster != nil {
 		s.infra.Broadcaster.EmitMessageNew(ctx, workspaceID, msg)
 	}

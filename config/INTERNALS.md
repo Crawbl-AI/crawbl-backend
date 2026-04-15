@@ -27,11 +27,11 @@ Adding a tool here auto-enables it in the mobile app AND the agent runtime's aut
 | `cron_update` | Update Schedule | scheduling |
 | `cron_run` | Run Now | scheduling |
 | `cron_runs` | Run History | scheduling |
-| `orchestrator__send_push_notification` | Push Notification | notification |
-| `orchestrator__get_user_profile` | User Profile | context |
-| `orchestrator__get_workspace_info` | Workspace Info | context |
-| `orchestrator__list_conversations` | Conversations | context |
-| `orchestrator__search_past_messages` | Search Messages | context |
+| `send_push_notification` | Push Notification | notification |
+| `get_user_profile` | User Profile | context |
+| `get_workspace_info` | Workspace Info | context |
+| `list_conversations` | Conversations | context |
+| `search_past_messages` | Search Messages | context |
 | `calculator` | Calculator | utility |
 | `weather` | Weather | utility |
 | `image_info` | Image Info | utility |

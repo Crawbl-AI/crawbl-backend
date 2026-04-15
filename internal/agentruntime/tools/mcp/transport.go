@@ -1,5 +1,5 @@
 // Package mcp bridges orchestrator-mediated tools into the
-// crawbl-agent-runtime. The runtime never implements orchestrator__*
+// crawbl-agent-runtime. The runtime never implements orchestrator MCP
 // tools locally; instead, it opens an MCP client session against the
 // orchestrator's `/mcp/v1` streamable HTTP endpoint and forwards every
 // call with a per-request HMAC bearer token.

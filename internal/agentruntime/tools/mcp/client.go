@@ -22,8 +22,8 @@ import (
 //
 //   - Calls ListTools on the orchestrator's MCP server to discover the
 //     full tool set dynamically. Adding a tool on the orchestrator side
-//     (e.g. a new orchestrator__foo handler) means the runtime picks it
-//     up on next reconnect — no runtime code changes required.
+//     means the runtime picks it up on next reconnect — no runtime code
+//     changes required.
 //   - Converts each MCP Tool into an adk tool.Tool with the correct
 //     jsonschema input/output types, so the LLM's tool-calling format
 //     works unchanged and results come back as structured data, not

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -81,6 +82,9 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 			AgentSlug:      params.AgentSlug,
 		})
 	}
+
+	s.persistArtifactMessage(ctx, sess, workspaceID, agentID, convID,
+		artifactID, params.Title, contentType, "created", 1)
 
 	return &CreateArtifactResult{ArtifactID: artifactID, Version: 1}, nil
 }
@@ -192,6 +196,9 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
+	s.persistArtifactMessage(ctx, sess, workspaceID, agentID, artifact.ConversationID,
+		params.ArtifactID, artifact.Title, artifact.ContentType, "updated", newVersion)
+
 	return &UpdateArtifactResult{Version: newVersion}, nil
 }
 
@@ -247,6 +254,9 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
+	s.persistArtifactMessage(ctx, sess, workspaceID, agentID, artifact.ConversationID,
+		params.ArtifactID, artifact.Title, artifact.ContentType, "reviewed", reviewVersion)
+
 	return &ReviewArtifactResult{Reviewed: true}, nil
 }
 
@@ -285,4 +295,65 @@ func stringFromPtr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// persistArtifactMessage writes an artifact-type chat message and broadcasts
+// it. When convID is nil the artifact isn't tied to a conversation, so no
+// chat message is persisted (nothing to attach it to).
+func (s *service) persistArtifactMessage(
+	ctx contextT, sess sessionT,
+	workspaceID, agentID string,
+	convID *string,
+	artifactID, title, contentType, action string,
+	version int,
+) {
+	if convID == nil || *convID == "" {
+		return
+	}
+	// Resolve the agent up-front so both the ArtifactRef payload and the
+	// message-level Agent pointer carry matching identity. Mobile reads
+	// agent_slug+agent_name from the ref directly; the Agent pointer is
+	// used by UserAvatar for the bubble.
+	agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, agentID)
+	if mErr != nil {
+		s.infra.Logger.Warn("persist artifact message: agent lookup failed",
+			"artifact_id", artifactID, "agent_id", agentID, "error", mErr.Error())
+	}
+	var agentSlug, agentName string
+	if agent != nil {
+		agentSlug = agent.Slug
+		agentName = agent.Name
+	}
+	now := time.Now().UTC()
+	msg := &orchestrator.Message{
+		ID:             uuid.NewString(),
+		ConversationID: *convID,
+		Role:           orchestrator.MessageRoleAgent,
+		Content: orchestrator.MessageContent{
+			Type:  orchestrator.MessageContentTypeArtifact,
+			Title: title,
+			Artifact: &orchestrator.ArtifactRef{
+				ArtifactID:  artifactID,
+				Version:     version,
+				Title:       title,
+				ContentType: contentType,
+				Action:      action,
+				AgentSlug:   agentSlug,
+				AgentName:   agentName,
+			},
+		},
+		Status:    orchestrator.MessageStatusDelivered,
+		AgentID:   &agentID,
+		Agent:     agent,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if saveErr := s.repos.Message.Save(ctx, sess, msg); saveErr != nil {
+		s.infra.Logger.Warn("persist artifact message failed",
+			"artifact_id", artifactID, "error", saveErr.Error())
+		return
+	}
+	if s.infra.Broadcaster != nil {
+		s.infra.Broadcaster.EmitMessageNew(ctx, workspaceID, msg)
+	}
 }

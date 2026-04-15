@@ -517,6 +517,168 @@ func (x *QuestionAnswerPayload) GetCustomText() string {
 	return ""
 }
 
+// ArtifactRefPayload is the compact artifact reference embedded in chat messages.
+type ArtifactRefPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	ContentType   string                 `protobuf:"bytes,4,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	Action        string                 `protobuf:"bytes,5,opt,name=action,proto3" json:"action,omitempty"`
+	AgentSlug     string                 `protobuf:"bytes,6,opt,name=agent_slug,json=agentSlug,proto3" json:"agent_slug,omitempty"`
+	AgentName     string                 `protobuf:"bytes,7,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArtifactRefPayload) Reset() {
+	*x = ArtifactRefPayload{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArtifactRefPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArtifactRefPayload) ProtoMessage() {}
+
+func (x *ArtifactRefPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArtifactRefPayload.ProtoReflect.Descriptor instead.
+func (*ArtifactRefPayload) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ArtifactRefPayload) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ArtifactRefPayload) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *ArtifactRefPayload) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ArtifactRefPayload) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *ArtifactRefPayload) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *ArtifactRefPayload) GetAgentSlug() string {
+	if x != nil {
+		return x.AgentSlug
+	}
+	return ""
+}
+
+func (x *ArtifactRefPayload) GetAgentName() string {
+	if x != nil {
+		return x.AgentName
+	}
+	return ""
+}
+
+// WorkflowRefPayload is the compact workflow reference embedded in chat messages.
+type WorkflowRefPayload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	ExecutionId   string                 `protobuf:"bytes,2,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowRefPayload) Reset() {
+	*x = WorkflowRefPayload{}
+	mi := &file_mobile_v1_chat_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowRefPayload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowRefPayload) ProtoMessage() {}
+
+func (x *WorkflowRefPayload) ProtoReflect() protoreflect.Message {
+	mi := &file_mobile_v1_chat_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowRefPayload.ProtoReflect.Descriptor instead.
+func (*WorkflowRefPayload) Descriptor() ([]byte, []int) {
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *WorkflowRefPayload) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *WorkflowRefPayload) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *WorkflowRefPayload) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *WorkflowRefPayload) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
 // MessageContentPayload represents the content of a message.
 type MessageContentPayload struct {
 	state            protoimpl.MessageState   `protogen:"open.v1"`
@@ -536,13 +698,15 @@ type MessageContentPayload struct {
 	TaskPreview      string                   `protobuf:"bytes,14,opt,name=task_preview,json=taskPreview,proto3" json:"task_preview,omitempty"`
 	Turns            []*QuestionTurnPayload   `protobuf:"bytes,15,rep,name=turns,proto3" json:"turns,omitempty"`
 	Answers          []*QuestionAnswerPayload `protobuf:"bytes,16,rep,name=answers,proto3" json:"answers,omitempty"`
+	Artifact         *ArtifactRefPayload      `protobuf:"bytes,17,opt,name=artifact,proto3,oneof" json:"artifact,omitempty"`
+	Workflow         *WorkflowRefPayload      `protobuf:"bytes,18,opt,name=workflow,proto3,oneof" json:"workflow,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
 func (x *MessageContentPayload) Reset() {
 	*x = MessageContentPayload{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[7]
+	mi := &file_mobile_v1_chat_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -554,7 +718,7 @@ func (x *MessageContentPayload) String() string {
 func (*MessageContentPayload) ProtoMessage() {}
 
 func (x *MessageContentPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[7]
+	mi := &file_mobile_v1_chat_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -567,7 +731,7 @@ func (x *MessageContentPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageContentPayload.ProtoReflect.Descriptor instead.
 func (*MessageContentPayload) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{7}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MessageContentPayload) GetType() string {
@@ -682,6 +846,20 @@ func (x *MessageContentPayload) GetAnswers() []*QuestionAnswerPayload {
 	return nil
 }
 
+func (x *MessageContentPayload) GetArtifact() *ArtifactRefPayload {
+	if x != nil {
+		return x.Artifact
+	}
+	return nil
+}
+
+func (x *MessageContentPayload) GetWorkflow() *WorkflowRefPayload {
+	if x != nil {
+		return x.Workflow
+	}
+	return nil
+}
+
 // MessageResponse represents a message in API responses.
 type MessageResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -701,7 +879,7 @@ type MessageResponse struct {
 
 func (x *MessageResponse) Reset() {
 	*x = MessageResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[8]
+	mi := &file_mobile_v1_chat_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -713,7 +891,7 @@ func (x *MessageResponse) String() string {
 func (*MessageResponse) ProtoMessage() {}
 
 func (x *MessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[8]
+	mi := &file_mobile_v1_chat_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -726,7 +904,7 @@ func (x *MessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageResponse.ProtoReflect.Descriptor instead.
 func (*MessageResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{8}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MessageResponse) GetId() string {
@@ -812,7 +990,7 @@ type MessagesPaginationResponse struct {
 
 func (x *MessagesPaginationResponse) Reset() {
 	*x = MessagesPaginationResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[9]
+	mi := &file_mobile_v1_chat_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -824,7 +1002,7 @@ func (x *MessagesPaginationResponse) String() string {
 func (*MessagesPaginationResponse) ProtoMessage() {}
 
 func (x *MessagesPaginationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[9]
+	mi := &file_mobile_v1_chat_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -837,7 +1015,7 @@ func (x *MessagesPaginationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessagesPaginationResponse.ProtoReflect.Descriptor instead.
 func (*MessagesPaginationResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{9}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MessagesPaginationResponse) GetNextScrollId() string {
@@ -879,7 +1057,7 @@ type MessagesListResponse struct {
 
 func (x *MessagesListResponse) Reset() {
 	*x = MessagesListResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[10]
+	mi := &file_mobile_v1_chat_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -891,7 +1069,7 @@ func (x *MessagesListResponse) String() string {
 func (*MessagesListResponse) ProtoMessage() {}
 
 func (x *MessagesListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[10]
+	mi := &file_mobile_v1_chat_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -904,7 +1082,7 @@ func (x *MessagesListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessagesListResponse.ProtoReflect.Descriptor instead.
 func (*MessagesListResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{10}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *MessagesListResponse) GetMessages() []*MessageResponse {
@@ -938,7 +1116,7 @@ type ConversationResponse struct {
 
 func (x *ConversationResponse) Reset() {
 	*x = ConversationResponse{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[11]
+	mi := &file_mobile_v1_chat_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -950,7 +1128,7 @@ func (x *ConversationResponse) String() string {
 func (*ConversationResponse) ProtoMessage() {}
 
 func (x *ConversationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[11]
+	mi := &file_mobile_v1_chat_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -963,7 +1141,7 @@ func (x *ConversationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationResponse.ProtoReflect.Descriptor instead.
 func (*ConversationResponse) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{11}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ConversationResponse) GetId() string {
@@ -1034,7 +1212,7 @@ type CreateConversationRequest struct {
 
 func (x *CreateConversationRequest) Reset() {
 	*x = CreateConversationRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[12]
+	mi := &file_mobile_v1_chat_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1046,7 +1224,7 @@ func (x *CreateConversationRequest) String() string {
 func (*CreateConversationRequest) ProtoMessage() {}
 
 func (x *CreateConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[12]
+	mi := &file_mobile_v1_chat_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1059,7 +1237,7 @@ func (x *CreateConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateConversationRequest.ProtoReflect.Descriptor instead.
 func (*CreateConversationRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{12}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateConversationRequest) GetType() string {
@@ -1098,7 +1276,7 @@ type MentionPayload struct {
 
 func (x *MentionPayload) Reset() {
 	*x = MentionPayload{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[13]
+	mi := &file_mobile_v1_chat_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1288,7 @@ func (x *MentionPayload) String() string {
 func (*MentionPayload) ProtoMessage() {}
 
 func (x *MentionPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[13]
+	mi := &file_mobile_v1_chat_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1301,7 @@ func (x *MentionPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MentionPayload.ProtoReflect.Descriptor instead.
 func (*MentionPayload) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{13}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MentionPayload) GetAgentId() string {
@@ -1167,7 +1345,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[14]
+	mi := &file_mobile_v1_chat_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1179,7 +1357,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[14]
+	mi := &file_mobile_v1_chat_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1192,7 +1370,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{14}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SendMessageRequest) GetLocalId() string {
@@ -1233,7 +1411,7 @@ type ActionCardRequest struct {
 
 func (x *ActionCardRequest) Reset() {
 	*x = ActionCardRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[15]
+	mi := &file_mobile_v1_chat_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1245,7 +1423,7 @@ func (x *ActionCardRequest) String() string {
 func (*ActionCardRequest) ProtoMessage() {}
 
 func (x *ActionCardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[15]
+	mi := &file_mobile_v1_chat_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1258,7 +1436,7 @@ func (x *ActionCardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionCardRequest.ProtoReflect.Descriptor instead.
 func (*ActionCardRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{15}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ActionCardRequest) GetActionId() string {
@@ -1281,7 +1459,7 @@ type MessageAnswersRequest struct {
 
 func (x *MessageAnswersRequest) Reset() {
 	*x = MessageAnswersRequest{}
-	mi := &file_mobile_v1_chat_proto_msgTypes[16]
+	mi := &file_mobile_v1_chat_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1293,7 +1471,7 @@ func (x *MessageAnswersRequest) String() string {
 func (*MessageAnswersRequest) ProtoMessage() {}
 
 func (x *MessageAnswersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mobile_v1_chat_proto_msgTypes[16]
+	mi := &file_mobile_v1_chat_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1306,7 +1484,7 @@ func (x *MessageAnswersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageAnswersRequest.ProtoReflect.Descriptor instead.
 func (*MessageAnswersRequest) Descriptor() ([]byte, []int) {
-	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{16}
+	return file_mobile_v1_chat_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *MessageAnswersRequest) GetWorkspaceId() string {
@@ -1382,7 +1560,24 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"option_ids\x18\x02 \x03(\tR\toptionIds\x12\x1f\n" +
 	"\vcustom_text\x18\x03 \x01(\tR\n" +
-	"customText\"\xc6\x05\n" +
+	"customText\"\xde\x01\n" +
+	"\x12ArtifactRefPayload\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12!\n" +
+	"\fcontent_type\x18\x04 \x01(\tR\vcontentType\x12\x16\n" +
+	"\x06action\x18\x05 \x01(\tR\x06action\x12\x1d\n" +
+	"\n" +
+	"agent_slug\x18\x06 \x01(\tR\tagentSlug\x12\x1d\n" +
+	"\n" +
+	"agent_name\x18\a \x01(\tR\tagentName\"\x84\x01\n" +
+	"\x12WorkflowRefPayload\x12\x1f\n" +
+	"\vworkflow_id\x18\x01 \x01(\tR\n" +
+	"workflowId\x12!\n" +
+	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\"\xee\x06\n" +
 	"\x15MessageContentPayload\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x14\n" +
@@ -1400,12 +1595,16 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\x06status\x18\r \x01(\tH\x04R\x06status\x88\x01\x01\x12!\n" +
 	"\ftask_preview\x18\x0e \x01(\tR\vtaskPreview\x12;\n" +
 	"\x05turns\x18\x0f \x03(\v2%.crawbl.mobile.v1.QuestionTurnPayloadR\x05turns\x12A\n" +
-	"\aanswers\x18\x10 \x03(\v2'.crawbl.mobile.v1.QuestionAnswerPayloadR\aanswersB\x15\n" +
+	"\aanswers\x18\x10 \x03(\v2'.crawbl.mobile.v1.QuestionAnswerPayloadR\aanswers\x12E\n" +
+	"\bartifact\x18\x11 \x01(\v2$.crawbl.mobile.v1.ArtifactRefPayloadH\x05R\bartifact\x88\x01\x01\x12E\n" +
+	"\bworkflow\x18\x12 \x01(\v2$.crawbl.mobile.v1.WorkflowRefPayloadH\x06R\bworkflow\x88\x01\x01B\x15\n" +
 	"\x13_selected_action_idB\b\n" +
 	"\x06_stateB\a\n" +
 	"\x05_fromB\x05\n" +
 	"\x03_toB\t\n" +
-	"\a_status\"\xea\x03\n" +
+	"\a_statusB\v\n" +
+	"\t_artifactB\v\n" +
+	"\t_workflow\"\xea\x03\n" +
 	"\x0fMessageResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\x12\n" +
@@ -1482,7 +1681,7 @@ func file_mobile_v1_chat_proto_rawDescGZIP() []byte {
 	return file_mobile_v1_chat_proto_rawDescData
 }
 
-var file_mobile_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_mobile_v1_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_mobile_v1_chat_proto_goTypes = []any{
 	(*ContentAgent)(nil),               // 0: crawbl.mobile.v1.ContentAgent
 	(*ActionItemResponse)(nil),         // 1: crawbl.mobile.v1.ActionItemResponse
@@ -1491,49 +1690,53 @@ var file_mobile_v1_chat_proto_goTypes = []any{
 	(*QuestionItemPayload)(nil),        // 4: crawbl.mobile.v1.QuestionItemPayload
 	(*QuestionTurnPayload)(nil),        // 5: crawbl.mobile.v1.QuestionTurnPayload
 	(*QuestionAnswerPayload)(nil),      // 6: crawbl.mobile.v1.QuestionAnswerPayload
-	(*MessageContentPayload)(nil),      // 7: crawbl.mobile.v1.MessageContentPayload
-	(*MessageResponse)(nil),            // 8: crawbl.mobile.v1.MessageResponse
-	(*MessagesPaginationResponse)(nil), // 9: crawbl.mobile.v1.MessagesPaginationResponse
-	(*MessagesListResponse)(nil),       // 10: crawbl.mobile.v1.MessagesListResponse
-	(*ConversationResponse)(nil),       // 11: crawbl.mobile.v1.ConversationResponse
-	(*CreateConversationRequest)(nil),  // 12: crawbl.mobile.v1.CreateConversationRequest
-	(*MentionPayload)(nil),             // 13: crawbl.mobile.v1.MentionPayload
-	(*SendMessageRequest)(nil),         // 14: crawbl.mobile.v1.SendMessageRequest
-	(*ActionCardRequest)(nil),          // 15: crawbl.mobile.v1.ActionCardRequest
-	(*MessageAnswersRequest)(nil),      // 16: crawbl.mobile.v1.MessageAnswersRequest
-	(*structpb.Struct)(nil),            // 17: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
-	(*AgentResponse)(nil),              // 19: crawbl.mobile.v1.AgentResponse
+	(*ArtifactRefPayload)(nil),         // 7: crawbl.mobile.v1.ArtifactRefPayload
+	(*WorkflowRefPayload)(nil),         // 8: crawbl.mobile.v1.WorkflowRefPayload
+	(*MessageContentPayload)(nil),      // 9: crawbl.mobile.v1.MessageContentPayload
+	(*MessageResponse)(nil),            // 10: crawbl.mobile.v1.MessageResponse
+	(*MessagesPaginationResponse)(nil), // 11: crawbl.mobile.v1.MessagesPaginationResponse
+	(*MessagesListResponse)(nil),       // 12: crawbl.mobile.v1.MessagesListResponse
+	(*ConversationResponse)(nil),       // 13: crawbl.mobile.v1.ConversationResponse
+	(*CreateConversationRequest)(nil),  // 14: crawbl.mobile.v1.CreateConversationRequest
+	(*MentionPayload)(nil),             // 15: crawbl.mobile.v1.MentionPayload
+	(*SendMessageRequest)(nil),         // 16: crawbl.mobile.v1.SendMessageRequest
+	(*ActionCardRequest)(nil),          // 17: crawbl.mobile.v1.ActionCardRequest
+	(*MessageAnswersRequest)(nil),      // 18: crawbl.mobile.v1.MessageAnswersRequest
+	(*structpb.Struct)(nil),            // 19: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),      // 20: google.protobuf.Timestamp
+	(*AgentResponse)(nil),              // 21: crawbl.mobile.v1.AgentResponse
 }
 var file_mobile_v1_chat_proto_depIdxs = []int32{
 	3,  // 0: crawbl.mobile.v1.QuestionItemPayload.options:type_name -> crawbl.mobile.v1.QuestionOptionPayload
 	4,  // 1: crawbl.mobile.v1.QuestionTurnPayload.questions:type_name -> crawbl.mobile.v1.QuestionItemPayload
 	1,  // 2: crawbl.mobile.v1.MessageContentPayload.actions:type_name -> crawbl.mobile.v1.ActionItemResponse
-	17, // 3: crawbl.mobile.v1.MessageContentPayload.args:type_name -> google.protobuf.Struct
+	19, // 3: crawbl.mobile.v1.MessageContentPayload.args:type_name -> google.protobuf.Struct
 	0,  // 4: crawbl.mobile.v1.MessageContentPayload.from:type_name -> crawbl.mobile.v1.ContentAgent
 	0,  // 5: crawbl.mobile.v1.MessageContentPayload.to:type_name -> crawbl.mobile.v1.ContentAgent
 	5,  // 6: crawbl.mobile.v1.MessageContentPayload.turns:type_name -> crawbl.mobile.v1.QuestionTurnPayload
 	6,  // 7: crawbl.mobile.v1.MessageContentPayload.answers:type_name -> crawbl.mobile.v1.QuestionAnswerPayload
-	7,  // 8: crawbl.mobile.v1.MessageResponse.content:type_name -> crawbl.mobile.v1.MessageContentPayload
-	18, // 9: crawbl.mobile.v1.MessageResponse.created_at:type_name -> google.protobuf.Timestamp
-	18, // 10: crawbl.mobile.v1.MessageResponse.updated_at:type_name -> google.protobuf.Timestamp
-	19, // 11: crawbl.mobile.v1.MessageResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
-	2,  // 12: crawbl.mobile.v1.MessageResponse.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
-	8,  // 13: crawbl.mobile.v1.MessagesListResponse.messages:type_name -> crawbl.mobile.v1.MessageResponse
-	9,  // 14: crawbl.mobile.v1.MessagesListResponse.pagination:type_name -> crawbl.mobile.v1.MessagesPaginationResponse
-	18, // 15: crawbl.mobile.v1.ConversationResponse.created_at:type_name -> google.protobuf.Timestamp
-	18, // 16: crawbl.mobile.v1.ConversationResponse.updated_at:type_name -> google.protobuf.Timestamp
-	19, // 17: crawbl.mobile.v1.ConversationResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
-	8,  // 18: crawbl.mobile.v1.ConversationResponse.last_message:type_name -> crawbl.mobile.v1.MessageResponse
-	7,  // 19: crawbl.mobile.v1.SendMessageRequest.content:type_name -> crawbl.mobile.v1.MessageContentPayload
-	2,  // 20: crawbl.mobile.v1.SendMessageRequest.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
-	13, // 21: crawbl.mobile.v1.SendMessageRequest.mentions:type_name -> crawbl.mobile.v1.MentionPayload
-	6,  // 22: crawbl.mobile.v1.MessageAnswersRequest.answers:type_name -> crawbl.mobile.v1.QuestionAnswerPayload
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	7,  // 8: crawbl.mobile.v1.MessageContentPayload.artifact:type_name -> crawbl.mobile.v1.ArtifactRefPayload
+	8,  // 9: crawbl.mobile.v1.MessageContentPayload.workflow:type_name -> crawbl.mobile.v1.WorkflowRefPayload
+	9,  // 10: crawbl.mobile.v1.MessageResponse.content:type_name -> crawbl.mobile.v1.MessageContentPayload
+	20, // 11: crawbl.mobile.v1.MessageResponse.created_at:type_name -> google.protobuf.Timestamp
+	20, // 12: crawbl.mobile.v1.MessageResponse.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 13: crawbl.mobile.v1.MessageResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
+	2,  // 14: crawbl.mobile.v1.MessageResponse.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
+	10, // 15: crawbl.mobile.v1.MessagesListResponse.messages:type_name -> crawbl.mobile.v1.MessageResponse
+	11, // 16: crawbl.mobile.v1.MessagesListResponse.pagination:type_name -> crawbl.mobile.v1.MessagesPaginationResponse
+	20, // 17: crawbl.mobile.v1.ConversationResponse.created_at:type_name -> google.protobuf.Timestamp
+	20, // 18: crawbl.mobile.v1.ConversationResponse.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 19: crawbl.mobile.v1.ConversationResponse.agent:type_name -> crawbl.mobile.v1.AgentResponse
+	10, // 20: crawbl.mobile.v1.ConversationResponse.last_message:type_name -> crawbl.mobile.v1.MessageResponse
+	9,  // 21: crawbl.mobile.v1.SendMessageRequest.content:type_name -> crawbl.mobile.v1.MessageContentPayload
+	2,  // 22: crawbl.mobile.v1.SendMessageRequest.attachments:type_name -> crawbl.mobile.v1.AttachmentResponse
+	15, // 23: crawbl.mobile.v1.SendMessageRequest.mentions:type_name -> crawbl.mobile.v1.MentionPayload
+	6,  // 24: crawbl.mobile.v1.MessageAnswersRequest.answers:type_name -> crawbl.mobile.v1.QuestionAnswerPayload
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_mobile_v1_chat_proto_init() }
@@ -1544,17 +1747,17 @@ func file_mobile_v1_chat_proto_init() {
 	file_mobile_v1_agent_proto_init()
 	file_mobile_v1_chat_proto_msgTypes[0].OneofWrappers = []any{}
 	file_mobile_v1_chat_proto_msgTypes[2].OneofWrappers = []any{}
-	file_mobile_v1_chat_proto_msgTypes[7].OneofWrappers = []any{}
-	file_mobile_v1_chat_proto_msgTypes[8].OneofWrappers = []any{}
-	file_mobile_v1_chat_proto_msgTypes[11].OneofWrappers = []any{}
-	file_mobile_v1_chat_proto_msgTypes[12].OneofWrappers = []any{}
+	file_mobile_v1_chat_proto_msgTypes[9].OneofWrappers = []any{}
+	file_mobile_v1_chat_proto_msgTypes[10].OneofWrappers = []any{}
+	file_mobile_v1_chat_proto_msgTypes[13].OneofWrappers = []any{}
+	file_mobile_v1_chat_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mobile_v1_chat_proto_rawDesc), len(file_mobile_v1_chat_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

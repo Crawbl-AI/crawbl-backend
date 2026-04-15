@@ -12,9 +12,8 @@
 //     (web_fetch, web_search_tool, file_read, file_write). Additional
 //     local tools will drop in here as they are implemented.
 //   - tools/mcp   — tools that bridge to the orchestrator's MCP server
-//     at /mcp/v1 (orchestrator__* prefix). The runtime never
-//     implements these locally; it forwards every call to the
-//     orchestrator with an HMAC bearer token.
+//     at /mcp/v1. The runtime never implements these locally; it
+//     forwards every call to the orchestrator with an HMAC bearer token.
 //
 // To add a tool, append an entry to migrations/orchestrator/seed/tools.json
 // with `"implemented": false`, land the implementation in
@@ -63,22 +62,22 @@ const (
 	ToolShell      = "shell"
 
 	// Orchestrator MCP
-	ToolSendPushNotification = "orchestrator__send_push_notification"
-	ToolGetUserProfile       = "orchestrator__get_user_profile"
-	ToolGetWorkspaceInfo     = "orchestrator__get_workspace_info"
-	ToolListConversations    = "orchestrator__list_conversations"
-	ToolSearchPastMessages   = "orchestrator__search_past_messages"
-	ToolCreateAgentHistory   = "orchestrator__create_agent_history"
-	ToolSendMessageToAgent   = "orchestrator__send_message_to_agent"
-	ToolCreateArtifact       = "orchestrator__create_artifact"
-	ToolReadArtifact         = "orchestrator__read_artifact"
-	ToolUpdateArtifact       = "orchestrator__update_artifact"
-	ToolReviewArtifact       = "orchestrator__review_artifact"
-	ToolCreateWorkflow       = "orchestrator__create_workflow"
-	ToolTriggerWorkflow      = "orchestrator__trigger_workflow"
-	ToolCheckWorkflowStatus  = "orchestrator__check_workflow_status"
-	ToolListWorkflows        = "orchestrator__list_workflows"
-	ToolAskQuestions         = "orchestrator__ask_questions"
+	ToolSendPushNotification = "send_push_notification"
+	ToolGetUserProfile       = "get_user_profile"
+	ToolGetWorkspaceInfo     = "get_workspace_info"
+	ToolListConversations    = "list_conversations"
+	ToolSearchPastMessages   = "search_past_messages"
+	ToolCreateAgentHistory   = "create_agent_history"
+	ToolSendMessageToAgent   = "send_message_to_agent"
+	ToolCreateArtifact       = "create_artifact"
+	ToolReadArtifact         = "read_artifact"
+	ToolUpdateArtifact       = "update_artifact"
+	ToolReviewArtifact       = "review_artifact"
+	ToolCreateWorkflow       = "create_workflow"
+	ToolTriggerWorkflow      = "trigger_workflow"
+	ToolCheckWorkflowStatus  = "check_workflow_status"
+	ToolListWorkflows        = "list_workflows"
+	ToolAskQuestions         = "ask_questions"
 )
 
 // ToolQueryField maps tool names to the JSON arg field(s) that contain
