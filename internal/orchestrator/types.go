@@ -167,7 +167,7 @@ const (
 	// MessageContentTypeDelegation renders an agent-to-agent delegation
 	// card in the mobile chat. Emitted inline when the Manager (or
 	// any agent) hands a task off to a sub-agent via the streaming
-	// pipeline or the orchestrator__send_message_to_agent MCP tool.
+	// pipeline or the send_message_to_agent MCP tool.
 	// See BACKEND_REQUIREMENTS.md §11.
 	MessageContentTypeDelegation MessageContentType = "delegation"
 
@@ -677,6 +677,12 @@ type MessageContent struct {
 	// Questions fields (type = "questions").
 	Turns   []QuestionTurn   `json:"turns,omitempty"`
 	Answers []QuestionAnswer `json:"answers,omitempty"`
+
+	// Artifact reference (type = "artifact").
+	Artifact *ArtifactRef `json:"artifact,omitempty"`
+
+	// Workflow reference (type = "workflow").
+	Workflow *WorkflowRef `json:"workflow,omitempty"`
 }
 
 // ContentAgent is the agent summary embedded in delegation and workflow
@@ -704,6 +710,30 @@ func ContentAgentFromAgent(a *Agent) *ContentAgent {
 		Avatar: a.AvatarURL,
 		Status: a.Status,
 	}
+}
+
+// ArtifactRef is the compact reference embedded in chat messages for
+// artifact events. The mobile renders the card by fetching full
+// artifact detail via the artifact_id. Both AgentSlug and AgentName
+// are included so the mobile can render the author label without a
+// lookup against its in-memory agents cache.
+type ArtifactRef struct {
+	ArtifactID  string `json:"artifact_id"`
+	Version     int    `json:"version"`
+	Title       string `json:"title"`
+	ContentType string `json:"content_type,omitempty"`
+	Action      string `json:"action"` // created | updated | reviewed
+	AgentSlug   string `json:"agent_slug,omitempty"`
+	AgentName   string `json:"agent_name,omitempty"`
+}
+
+// WorkflowRef is the compact reference embedded in chat messages for
+// workflow events.
+type WorkflowRef struct {
+	WorkflowID  string `json:"workflow_id"`
+	ExecutionID string `json:"execution_id"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
 }
 
 // ActionItem represents an interactive button in an action card message.

@@ -10,8 +10,8 @@ package local
 // stories replace them one at a time; adding a real implementation is a
 // drop-in replacement — no catalog changes, no agent rebinding.
 //
-// Tools that bridge to the orchestrator MCP server (orchestrator__*
-// prefix) are handled in tools/mcp/, not here.
+// Tools that bridge to the orchestrator MCP server are handled in
+// tools/mcp/, not here.
 
 import "context"
 

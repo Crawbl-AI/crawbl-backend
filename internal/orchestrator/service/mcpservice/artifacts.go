@@ -8,6 +8,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -81,6 +82,17 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 			AgentSlug:      params.AgentSlug,
 		})
 	}
+
+	s.persistArtifactMessage(ctx, sess, persistArtifactMessageOpts{
+		WorkspaceID: workspaceID,
+		AgentID:     agentID,
+		ConvID:      convID,
+		ArtifactID:  artifactID,
+		Title:       params.Title,
+		ContentType: contentType,
+		Action:      artifactrepo.ArtifactActionCreated,
+		Version:     1,
+	})
 
 	return &CreateArtifactResult{ArtifactID: artifactID, Version: 1}, nil
 }
@@ -192,6 +204,17 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
+	s.persistArtifactMessage(ctx, sess, persistArtifactMessageOpts{
+		WorkspaceID: workspaceID,
+		AgentID:     agentID,
+		ConvID:      artifact.ConversationID,
+		ArtifactID:  params.ArtifactID,
+		Title:       artifact.Title,
+		ContentType: artifact.ContentType,
+		Action:      artifactrepo.ArtifactActionUpdated,
+		Version:     newVersion,
+	})
+
 	return &UpdateArtifactResult{Version: newVersion}, nil
 }
 
@@ -247,6 +270,17 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 
+	s.persistArtifactMessage(ctx, sess, persistArtifactMessageOpts{
+		WorkspaceID: workspaceID,
+		AgentID:     agentID,
+		ConvID:      artifact.ConversationID,
+		ArtifactID:  params.ArtifactID,
+		Title:       artifact.Title,
+		ContentType: artifact.ContentType,
+		Action:      artifactrepo.ArtifactActionReviewed,
+		Version:     reviewVersion,
+	})
+
 	return &ReviewArtifactResult{Reviewed: true}, nil
 }
 
@@ -285,4 +319,77 @@ func stringFromPtr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// persistArtifactMessageOpts groups every field persistArtifactMessage
+// needs. Grouping keeps the function signature under the project's
+// 4-5 param limit (and SonarQube's go:S107 limit of 7) and makes the
+// call sites read as a labelled struct literal instead of a long
+// positional argument list where a string mix-up is silent.
+type persistArtifactMessageOpts struct {
+	WorkspaceID string
+	AgentID     string
+	ConvID      *string
+	ArtifactID  string
+	Title       string
+	ContentType string
+	Action      artifactrepo.ArtifactAction
+	Version     int
+}
+
+// persistArtifactMessage writes an artifact-type chat message and
+// broadcasts it. When opts.ConvID is nil the artifact isn't tied to a
+// conversation, so no chat message is persisted (nothing to attach it
+// to).
+func (s *service) persistArtifactMessage(ctx contextT, sess sessionT, opts persistArtifactMessageOpts) {
+	if opts.ConvID == nil || *opts.ConvID == "" {
+		return
+	}
+	// Resolve the agent up-front so both the ArtifactRef payload and the
+	// message-level Agent pointer carry matching identity. Mobile reads
+	// agent_slug+agent_name from the ref directly; the Agent pointer is
+	// used by UserAvatar for the bubble.
+	agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, opts.AgentID)
+	if mErr != nil {
+		s.infra.Logger.Warn("persist artifact message: agent lookup failed",
+			"artifact_id", opts.ArtifactID, "agent_id", opts.AgentID, "error", mErr.Error())
+	}
+	var agentSlug, agentName string
+	if agent != nil {
+		agentSlug = agent.Slug
+		agentName = agent.Name
+	}
+	now := time.Now().UTC()
+	agentID := opts.AgentID
+	msg := &orchestrator.Message{
+		ID:             uuid.NewString(),
+		ConversationID: *opts.ConvID,
+		Role:           orchestrator.MessageRoleAgent,
+		Content: orchestrator.MessageContent{
+			Type:  orchestrator.MessageContentTypeArtifact,
+			Title: opts.Title,
+			Artifact: &orchestrator.ArtifactRef{
+				ArtifactID:  opts.ArtifactID,
+				Version:     opts.Version,
+				Title:       opts.Title,
+				ContentType: opts.ContentType,
+				Action:      string(opts.Action),
+				AgentSlug:   agentSlug,
+				AgentName:   agentName,
+			},
+		},
+		Status:    orchestrator.MessageStatusDelivered,
+		AgentID:   &agentID,
+		Agent:     agent,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if saveErr := s.repos.Message.Save(ctx, sess, msg); saveErr != nil {
+		s.infra.Logger.Warn("persist artifact message failed",
+			"artifact_id", opts.ArtifactID, "error", saveErr.Error())
+		return
+	}
+	if s.infra.Broadcaster != nil {
+		s.infra.Broadcaster.EmitMessageNew(ctx, opts.WorkspaceID, msg)
+	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -92,6 +93,8 @@ func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspace
 		return nil, fmt.Errorf("create execution: %s", mErr.Error())
 	}
 
+	s.persistWorkflowMessage(ctx, sess, workspaceID, convID, params.WorkflowID, execID, definition.Name)
+
 	if s.infra.RuntimeClient == nil {
 		return nil, fmt.Errorf("runtime client not configured")
 	}
@@ -171,6 +174,60 @@ func (s *service) CheckWorkflowStatus(ctx contextT, sess sessionT, workspaceID, 
 		Error:       errMsg,
 		Steps:       stepBriefs,
 	}, nil
+}
+
+// persistWorkflowMessage writes a workflow-type chat message and broadcasts it.
+// When convID is nil the workflow isn't tied to a conversation, so no message
+// is persisted. The manager agent is fetched to hydrate msg.Agent.
+func (s *service) persistWorkflowMessage(
+	ctx contextT, sess sessionT,
+	workspaceID string,
+	convID *string,
+	workflowID, execID, name string,
+) {
+	if convID == nil || *convID == "" {
+		return
+	}
+	now := time.Now().UTC()
+	msg := &orchestrator.Message{
+		ID:             uuid.NewString(),
+		ConversationID: *convID,
+		Role:           orchestrator.MessageRoleAgent,
+		Content: orchestrator.MessageContent{
+			Type:  orchestrator.MessageContentTypeWorkflow,
+			Title: name,
+			Workflow: &orchestrator.WorkflowRef{
+				WorkflowID:  workflowID,
+				ExecutionID: execID,
+				Name:        name,
+				Status:      string(workflowrepo.WorkflowStatusPending),
+			},
+		},
+		Status:    orchestrator.MessageStatusDelivered,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	// Hydrate with the manager agent if one exists in this workspace.
+	agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, workspaceID)
+	if mErr == nil {
+		for _, a := range agents {
+			if a.Role == string(orchestrator.AgentRoleManager) {
+				msg.AgentID = &a.ID
+				msg.Agent = a
+				break
+			}
+		}
+	}
+
+	if mErr := s.repos.Message.Save(ctx, sess, msg); mErr != nil {
+		s.infra.Logger.Warn("persist workflow message failed",
+			"workflow_id", workflowID, "execution_id", execID, "error", mErr.Error())
+		return
+	}
+	if s.infra.Broadcaster != nil {
+		s.infra.Broadcaster.EmitMessageNew(ctx, workspaceID, msg)
+	}
 }
 
 func (s *service) ListWorkflows(ctx contextT, sess sessionT, userID, workspaceID string) ([]WorkflowBriefResult, error) {
