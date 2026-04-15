@@ -349,9 +349,9 @@ func (s *service) persistArtifactMessage(ctx contextT, sess sessionT, opts persi
 	if opts.ConvID == nil || *opts.ConvID == "" {
 		return
 	}
-	// Resolve the agent up-front so both the ArtifactRef payload and the
+	// Resolve the agent up-front so both the flat artifact fields and the
 	// message-level Agent pointer carry matching identity. Mobile reads
-	// agent_slug+agent_name from the ref directly; the Agent pointer is
+	// agent_slug+agent_name directly from the content; the Agent pointer is
 	// used by UserAvatar for the bubble.
 	agent, mErr := s.repos.Agent.GetByIDGlobal(ctx, sess, opts.AgentID)
 	if mErr != nil {
@@ -370,18 +370,13 @@ func (s *service) persistArtifactMessage(ctx contextT, sess sessionT, opts persi
 		ConversationID: *opts.ConvID,
 		Role:           orchestrator.MessageRoleAgent,
 		Content: orchestrator.MessageContent{
-			Type:  orchestrator.MessageContentTypeArtifact,
-			Title: opts.Title,
-			Artifact: &orchestrator.ArtifactRef{
-				ArtifactID:  opts.ArtifactID,
-				Version:     opts.Version,
-				Title:       opts.Title,
-				ContentType: opts.ContentType,
-				Action:      string(opts.Action),
-				Status:      opts.Status,
-				AgentSlug:   agentSlug,
-				AgentName:   agentName,
-			},
+			Type:       orchestrator.MessageContentTypeArtifact,
+			Title:      opts.Title,
+			Status:     opts.Status,
+			ArtifactID: opts.ArtifactID,
+			Version:    opts.Version,
+			AgentSlug:  agentSlug,
+			AgentName:  agentName,
 		},
 		Status:    orchestrator.MessageStatusDelivered,
 		AgentID:   &agentID,

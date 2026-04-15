@@ -672,20 +672,40 @@ type MessageContent struct {
 	Args  map[string]any `json:"args,omitempty"`
 
 	// Delegation fields (type = "delegation").
-	From        *ContentAgent `json:"from,omitempty"`
-	To          *ContentAgent `json:"to,omitempty"`
-	Status      string        `json:"status,omitempty"`
-	TaskPreview string        `json:"task_preview,omitempty"`
+	From *ContentAgent `json:"from,omitempty"`
+	To   *ContentAgent `json:"to,omitempty"`
+
+	// Status is shared across delegation / artifact / workflow content
+	// types; the mobile decoder discriminates by Type, so the vocabulary
+	// overlaps safely. Per type:
+	//   delegation → "running" | "delegated" | "failed"
+	//   artifact   → artifactrepo.ArtifactStatus (e.g. "draft", "approved")
+	//   workflow   → workflowrepo.WorkflowStatus (e.g. "pending", "completed", "failed")
+	// "failed" intentionally overlaps between delegation and workflow —
+	// same semantic, different source.
+	Status      string `json:"status,omitempty"`
+	TaskPreview string `json:"task_preview,omitempty"`
 
 	// Questions fields (type = "questions").
 	Turns   []QuestionTurn   `json:"turns,omitempty"`
 	Answers []QuestionAnswer `json:"answers,omitempty"`
 
-	// Artifact reference (type = "artifact").
-	Artifact *ArtifactRef `json:"artifact,omitempty"`
+	// Artifact fields (type = "artifact"). Title and Status reuse the
+	// existing MessageContent-level fields. Kept flat (not nested under
+	// an artifact ref) because the mobile Freezed union decoder reads
+	// them at the top level of the content object.
+	ArtifactID     string `json:"artifact_id,omitempty"`
+	Version        int    `json:"version,omitempty"`
+	AgentSlug      string `json:"agent_slug,omitempty"`
+	AgentName      string `json:"agent_name,omitempty"`
+	ContentPreview string `json:"content_preview,omitempty"`
 
-	// Workflow reference (type = "workflow").
-	Workflow *WorkflowRef `json:"workflow,omitempty"`
+	// Workflow fields (type = "workflow"). Status reuses the
+	// MessageContent-level Status field; name lives on WorkflowName
+	// because Title is already used for artifact/questions.
+	WorkflowID   string `json:"workflow_id,omitempty"`
+	WorkflowName string `json:"workflow_name,omitempty"`
+	ExecutionID  string `json:"execution_id,omitempty"`
 }
 
 // ContentAgent is the agent summary embedded in delegation and workflow
@@ -713,31 +733,6 @@ func ContentAgentFromAgent(a *Agent) *ContentAgent {
 		Avatar: a.AvatarURL,
 		Status: a.Status,
 	}
-}
-
-// ArtifactRef is the compact reference embedded in chat messages for
-// artifact events. The mobile renders the card by fetching full
-// artifact detail via the artifact_id. Both AgentSlug and AgentName
-// are included so the mobile can render the author label without a
-// lookup against its in-memory agents cache.
-type ArtifactRef struct {
-	ArtifactID  string `json:"artifact_id"`
-	Version     int    `json:"version"`
-	Title       string `json:"title"`
-	ContentType string `json:"content_type,omitempty"`
-	Action      string `json:"action"` // created | updated | reviewed
-	Status      string `json:"status"`
-	AgentSlug   string `json:"agent_slug,omitempty"`
-	AgentName   string `json:"agent_name,omitempty"`
-}
-
-// WorkflowRef is the compact reference embedded in chat messages for
-// workflow events.
-type WorkflowRef struct {
-	WorkflowID  string `json:"workflow_id"`
-	ExecutionID string `json:"execution_id"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
 }
 
 // ActionItem represents an interactive button in an action card message.

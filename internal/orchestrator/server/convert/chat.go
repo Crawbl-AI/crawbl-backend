@@ -79,25 +79,25 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 	resp.Args = argsToStructProto(content.Args)
 	resp.From = ContentAgentToProto(content.From)
 	resp.To = ContentAgentToProto(content.To)
-	if content.Artifact != nil {
-		resp.Artifact = &mobilev1.ArtifactRefPayload{
-			ArtifactId:  content.Artifact.ArtifactID,
-			Version:     int32(content.Artifact.Version), // #nosec G115 -- version fits in int32
-			Title:       content.Artifact.Title,
-			ContentType: content.Artifact.ContentType,
-			Action:      content.Artifact.Action,
-			Status:      content.Artifact.Status,
-			AgentSlug:   content.Artifact.AgentSlug,
-			AgentName:   content.Artifact.AgentName,
-		}
-	}
-	if content.Workflow != nil {
-		resp.Workflow = &mobilev1.WorkflowRefPayload{
-			WorkflowId:  content.Workflow.WorkflowID,
-			ExecutionId: content.Workflow.ExecutionID,
-			Name:        content.Workflow.Name,
-			Status:      content.Workflow.Status,
-		}
+	// Type-guard the variant-specific flat fields so the wire payload
+	// only carries artifact fields on artifact content, workflow fields
+	// on workflow content, etc. proto3 already omits zero values with
+	// the current MarshalOptions, but the explicit guard documents
+	// intent and keeps the domain/wire mapping unambiguous for future
+	// readers.
+	switch content.Type {
+	case orchestrator.MessageContentTypeArtifact:
+		resp.ArtifactId = content.ArtifactID
+		resp.Version = int32(content.Version) // #nosec G115 -- version fits in int32
+		resp.AgentSlug = content.AgentSlug
+		resp.AgentName = content.AgentName
+		resp.ContentPreview = content.ContentPreview
+	case orchestrator.MessageContentTypeWorkflow:
+		resp.WorkflowId = content.WorkflowID
+		resp.WorkflowName = content.WorkflowName
+		resp.ExecutionId = content.ExecutionID
+		resp.AgentSlug = content.AgentSlug
+		resp.AgentName = content.AgentName
 	}
 	return resp
 }
