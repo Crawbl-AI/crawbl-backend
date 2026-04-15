@@ -1627,7 +1627,7 @@ google.golang.org/adk/tool
 google.golang.org/adk/tool/functiontool
 google.golang.org/adk/tool/mcptoolset
 google.golang.org/adk/tool/toolconfirmation
-# google.golang.org/api v0.275.0
+# google.golang.org/api v0.276.0
 ## explicit; go 1.25.0
 google.golang.org/api/googleapi
 google.golang.org/api/googleapi/transport
