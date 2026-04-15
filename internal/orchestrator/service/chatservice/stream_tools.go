@@ -18,16 +18,17 @@ import (
 func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 	toolAgentID := resolveToolAgentID(ss.primary, ss.lookups, chunk.AgentID)
 	parsed := parseToolCallArgs(chunk.Tool, chunk.Args)
-	// Per the agent.tool contract the wire carries exactly one
-	// human-readable description in args.description. The LLM writes
-	// this itself as part of every tool call (enforced by the agent
-	// system prompt); we just pass it through — no server-side
-	// switch/lookup, no per-tool hardcoded phrasing. The per-tool
-	// typed fields (path, url, pattern, agent_name, …) are dropped
-	// at this boundary because mobile no longer consumes them.
-	// Query keeps its top-level slot because it's still used as a
-	// dedup key between the ephemeral event and the persisted message.
-	wireArgs := buildWireArgs(parsed.Parsed)
+	// Per the agent.tool contract the wire carries a human-readable
+	// args.description written by the LLM itself (enforced by the
+	// agent system prompt) — we pass it through, no server-side
+	// switch or hardcoded phrasing. For web tools (web_fetch,
+	// http_request) we also forward args.url so mobile can render
+	// the target as a tappable link. Every other per-tool field
+	// (path, pattern, agent_name, …) is dropped at this boundary
+	// because mobile no longer consumes them. Query keeps its
+	// top-level slot as a dedup key between the ephemeral event
+	// and the persisted message.
+	wireArgs := buildWireArgs(chunk.Tool, parsed.Parsed)
 
 	// Persist tool_status message (state: running).
 	var toolMsgID string
@@ -73,7 +74,7 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	// provide one, the map stays empty and mobile's own fallback chain
 	// (query → localized tool label) takes over — we never synthesize
 	// an English sentence BE-side because it would dodge mobile l10n.
-	doneArgs := buildWireArgs(matched.args.Parsed)
+	doneArgs := buildWireArgs(matched.tool, matched.args.Parsed)
 
 	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
 		AgentID: toolAgentID, ConversationID: ss.convID,
@@ -138,25 +139,55 @@ func (ss *streamSession) handleTransferToAgent(matched pendingToolCall) {
 }
 
 // buildWireArgs assembles the args map for the agent.tool socket event
-// and the persisted tool_status message. Contract: if the LLM supplied
-// a description (enforced by the agent system prompt), forward it
-// verbatim; otherwise emit NO description key at all so the mobile
-// falls back through its own i18n chain (query → localized tool
-// label). We never synthesize an English string here because mobile
-// cannot translate a BE-origin string — doing so would hard-code
-// English into every non-English client. A missing description is a
-// BE/LLM bug to fix upstream, not a gap to paper over at the edge.
-func buildWireArgs(args map[string]any) map[string]any {
-	out := map[string]any{}
+// and the persisted tool_status message. Contract:
+//
+//  1. args.description — if the LLM supplied one (enforced by the
+//     agent system prompt), forward verbatim after trimming. Missing
+//     description means mobile falls back through its own l10n chain
+//     (query → localized tool label). We never synthesize an English
+//     string here because mobile cannot translate a BE-origin string.
+//  2. args.url — for web tools only (web_fetch, http_request), forward
+//     the target URL so mobile can render it as a tappable link. For
+//     every other tool the URL key is stripped so the field never
+//     leaks as dead weight.
+//
+// A nil return (not an empty map) is what callers should receive when
+// there is nothing to send; an allocated empty map would still round-
+// trip through structpb and end up as `{}` on the wire for every tool
+// call, which is avoidable noise.
+func buildWireArgs(tool string, args map[string]any) map[string]any {
 	if args == nil {
-		return out
+		return nil
 	}
+	out := map[string]any{}
 	if d, ok := args["description"].(string); ok {
 		if trimmed := strings.TrimSpace(d); trimmed != "" {
 			out["description"] = trimmed
 		}
 	}
+	if isWebTool(tool) {
+		if u, ok := args["url"].(string); ok {
+			if trimmed := strings.TrimSpace(u); trimmed != "" {
+				out["url"] = trimmed
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
+}
+
+// isWebTool reports whether the tool is a web/HTTP action whose target
+// URL mobile renders as a tappable link. Kept as a tiny allowlist so
+// adding a new web tool is a one-line change and no tool can silently
+// opt in by having a `url` arg.
+func isWebTool(tool string) bool {
+	switch tool {
+	case agentruntimetools.ToolWebFetch, agentruntimetools.ToolHTTPRequest:
+		return true
+	}
+	return false
 }
 
 // newToolStatusMessage creates a tool_status message for persistence.
