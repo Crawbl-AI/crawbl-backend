@@ -92,6 +92,7 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		ContentType: contentType,
 		Action:      artifactrepo.ArtifactActionCreated,
 		Version:     1,
+		Status:      string(artifactrepo.ArtifactStatusDraft),
 	})
 
 	return &CreateArtifactResult{ArtifactID: artifactID, Version: 1}, nil
@@ -213,6 +214,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		ContentType: artifact.ContentType,
 		Action:      artifactrepo.ArtifactActionUpdated,
 		Version:     newVersion,
+		Status:      artifact.Status,
 	})
 
 	return &UpdateArtifactResult{Version: newVersion}, nil
@@ -279,6 +281,7 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		ContentType: artifact.ContentType,
 		Action:      artifactrepo.ArtifactActionReviewed,
 		Version:     reviewVersion,
+		Status:      artifact.Status,
 	})
 
 	return &ReviewArtifactResult{Reviewed: true}, nil
@@ -335,6 +338,7 @@ type persistArtifactMessageOpts struct {
 	ContentType string
 	Action      artifactrepo.ArtifactAction
 	Version     int
+	Status      string
 }
 
 // persistArtifactMessage writes an artifact-type chat message and
@@ -374,6 +378,7 @@ func (s *service) persistArtifactMessage(ctx contextT, sess sessionT, opts persi
 				Title:       opts.Title,
 				ContentType: opts.ContentType,
 				Action:      string(opts.Action),
+				Status:      opts.Status,
 				AgentSlug:   agentSlug,
 				AgentName:   agentName,
 			},

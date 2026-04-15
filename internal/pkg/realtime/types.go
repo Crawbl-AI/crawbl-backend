@@ -118,6 +118,7 @@ type AgentToolPayload struct {
 	ConversationID string         `json:"conversation_id"`
 	Tool           string         `json:"tool"`
 	Status         string         `json:"status"` // "running" or "done"
+	CallID         string         `json:"call_id,omitempty"`
 	Query          string         `json:"query,omitempty"`
 	Args           map[string]any `json:"args,omitempty"`
 	CreatedAt      string         `json:"created_at,omitempty"`

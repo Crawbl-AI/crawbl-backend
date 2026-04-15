@@ -527,6 +527,7 @@ type ArtifactRefPayload struct {
 	Action        string                 `protobuf:"bytes,5,opt,name=action,proto3" json:"action,omitempty"`
 	AgentSlug     string                 `protobuf:"bytes,6,opt,name=agent_slug,json=agentSlug,proto3" json:"agent_slug,omitempty"`
 	AgentName     string                 `protobuf:"bytes,7,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	Status        string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -606,6 +607,13 @@ func (x *ArtifactRefPayload) GetAgentSlug() string {
 func (x *ArtifactRefPayload) GetAgentName() string {
 	if x != nil {
 		return x.AgentName
+	}
+	return ""
+}
+
+func (x *ArtifactRefPayload) GetStatus() string {
+	if x != nil {
+		return x.Status
 	}
 	return ""
 }
@@ -1560,7 +1568,7 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"option_ids\x18\x02 \x03(\tR\toptionIds\x12\x1f\n" +
 	"\vcustom_text\x18\x03 \x01(\tR\n" +
-	"customText\"\xde\x01\n" +
+	"customText\"\xf6\x01\n" +
 	"\x12ArtifactRefPayload\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x18\n" +
@@ -1571,7 +1579,8 @@ const file_mobile_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"agent_slug\x18\x06 \x01(\tR\tagentSlug\x12\x1d\n" +
 	"\n" +
-	"agent_name\x18\a \x01(\tR\tagentName\"\x84\x01\n" +
+	"agent_name\x18\a \x01(\tR\tagentName\x12\x16\n" +
+	"\x06status\x18\b \x01(\tR\x06status\"\x84\x01\n" +
 	"\x12WorkflowRefPayload\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12!\n" +
