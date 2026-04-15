@@ -15,6 +15,7 @@ type askQuestionsInput struct {
 	AgentSlug      string             `json:"agent_slug,omitempty"      jsonschema:"slug of the asking agent"`
 	ConversationID string             `json:"conversation_id,omitempty" jsonschema:"optional; defaults to the current conversation if the runtime provided it — agents should not set this"`
 	Turns          []askQuestionsTurn `json:"turns"                     jsonschema:"ordered list of turn groups"`
+	Description    string             `json:"description,omitempty"     jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type askQuestionsTurn struct {

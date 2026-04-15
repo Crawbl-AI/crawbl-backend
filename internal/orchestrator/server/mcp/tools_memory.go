@@ -21,7 +21,9 @@ const (
 
 // --- Input/output types: Read tools ---
 
-type memoryStatusInput struct{}
+type memoryStatusInput struct {
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
+}
 
 type memoryStatusOutput struct {
 	TotalDrawers int                `json:"total_drawers"`
@@ -29,31 +31,37 @@ type memoryStatusOutput struct {
 	Rooms        []memory.RoomCount `json:"rooms"`
 }
 
-type memoryListWingsInput struct{}
+type memoryListWingsInput struct {
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
+}
 
 type memoryListWingsOutput struct {
 	Wings []memory.WingCount `json:"wings"`
 }
 
 type memoryListRoomsInput struct {
-	Wing string `json:"wing,omitempty" jsonschema:"optional wing filter"`
+	Wing        string `json:"wing,omitempty" jsonschema:"optional wing filter"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryListRoomsOutput struct {
 	Rooms []memory.RoomCount `json:"rooms"`
 }
 
-type memoryGetTaxonomyInput struct{}
+type memoryGetTaxonomyInput struct {
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
+}
 
 type memoryGetTaxonomyOutput struct {
 	Taxonomy map[string]map[string]int `json:"taxonomy"`
 }
 
 type memorySearchInput struct {
-	Query string `json:"query" jsonschema:"what to search for"`
-	Limit int    `json:"limit,omitempty" jsonschema:"max results (default 5)"`
-	Wing  string `json:"wing,omitempty" jsonschema:"optional wing filter"`
-	Room  string `json:"room,omitempty" jsonschema:"optional room filter"`
+	Query       string `json:"query" jsonschema:"what to search for"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"max results (default 5)"`
+	Wing        string `json:"wing,omitempty" jsonschema:"optional wing filter"`
+	Room        string `json:"room,omitempty" jsonschema:"optional room filter"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memorySearchOutput struct {
@@ -73,8 +81,9 @@ type memorySearchResultBrief struct {
 }
 
 type memoryCheckDuplicateInput struct {
-	Content   string  `json:"content" jsonschema:"content to check for duplicates"`
-	Threshold float64 `json:"threshold,omitempty" jsonschema:"similarity threshold (default 0.9)"`
+	Content     string  `json:"content" jsonschema:"content to check for duplicates"`
+	Threshold   float64 `json:"threshold,omitempty" jsonschema:"similarity threshold (default 0.9)"`
+	Description string  `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryCheckDuplicateOutput struct {
@@ -83,8 +92,9 @@ type memoryCheckDuplicateOutput struct {
 }
 
 type memoryTraverseInput struct {
-	StartRoom string `json:"start_room" jsonschema:"room to start traversal from"`
-	MaxHops   int    `json:"max_hops,omitempty" jsonschema:"maximum hops (default 3)"`
+	StartRoom   string `json:"start_room" jsonschema:"room to start traversal from"`
+	MaxHops     int    `json:"max_hops,omitempty" jsonschema:"maximum hops (default 3)"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryTraverseOutput struct {
@@ -102,8 +112,9 @@ type traversalBrief struct {
 }
 
 type memoryFindTunnelsInput struct {
-	WingA string `json:"wing_a,omitempty" jsonschema:"first wing filter"`
-	WingB string `json:"wing_b,omitempty" jsonschema:"second wing filter"`
+	WingA       string `json:"wing_a,omitempty" jsonschema:"first wing filter"`
+	WingB       string `json:"wing_b,omitempty" jsonschema:"second wing filter"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryFindTunnelsOutput struct {
@@ -118,7 +129,9 @@ type tunnelBrief struct {
 	Count int      `json:"count"`
 }
 
-type memoryGraphStatsInput struct{}
+type memoryGraphStatsInput struct {
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
+}
 
 type memoryGraphStatsOutput struct {
 	TotalRooms   int            `json:"total_rooms"`
@@ -131,11 +144,12 @@ type memoryGraphStatsOutput struct {
 // --- Input/output types: Write tools ---
 
 type memoryAddDrawerInput struct {
-	Wing       string `json:"wing" jsonschema:"wing to file the drawer in"`
-	Room       string `json:"room" jsonschema:"room within the wing"`
-	Content    string `json:"content" jsonschema:"the content to store"`
-	SourceFile string `json:"source_file,omitempty" jsonschema:"optional source file reference"`
-	AddedBy    string `json:"added_by,omitempty" jsonschema:"who added this memory"`
+	Wing        string `json:"wing" jsonschema:"wing to file the drawer in"`
+	Room        string `json:"room" jsonschema:"room within the wing"`
+	Content     string `json:"content" jsonschema:"the content to store"`
+	SourceFile  string `json:"source_file,omitempty" jsonschema:"optional source file reference"`
+	AddedBy     string `json:"added_by,omitempty" jsonschema:"who added this memory"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryAddDrawerOutput struct {
@@ -145,7 +159,8 @@ type memoryAddDrawerOutput struct {
 }
 
 type memoryDeleteDrawerInput struct {
-	DrawerID string `json:"drawer_id" jsonschema:"ID of the drawer to delete"`
+	DrawerID    string `json:"drawer_id" jsonschema:"ID of the drawer to delete"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryDeleteDrawerOutput struct {
@@ -154,7 +169,8 @@ type memoryDeleteDrawerOutput struct {
 }
 
 type memorySetIdentityInput struct {
-	Content string `json:"content" jsonschema:"the identity text for this workspace"`
+	Content     string `json:"content" jsonschema:"the identity text for this workspace"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memorySetIdentityOutput struct {
@@ -164,9 +180,10 @@ type memorySetIdentityOutput struct {
 // --- Input/output types: Knowledge Graph tools ---
 
 type memoryKGQueryInput struct {
-	Entity    string `json:"entity" jsonschema:"entity name to query"`
-	AsOf      string `json:"as_of,omitempty" jsonschema:"optional date filter (YYYY-MM-DD)"`
-	Direction string `json:"direction,omitempty" jsonschema:"outgoing, incoming, or both (default both)"`
+	Entity      string `json:"entity" jsonschema:"entity name to query"`
+	AsOf        string `json:"as_of,omitempty" jsonschema:"optional date filter (YYYY-MM-DD)"`
+	Direction   string `json:"direction,omitempty" jsonschema:"outgoing, incoming, or both (default both)"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryKGQueryOutput struct {
@@ -191,6 +208,7 @@ type memoryKGAddInput struct {
 	Object       string `json:"object" jsonschema:"object entity name"`
 	ValidFrom    string `json:"valid_from,omitempty" jsonschema:"when the fact became true (YYYY-MM-DD)"`
 	SourceCloset string `json:"source_closet,omitempty" jsonschema:"source drawer/closet ID"`
+	Description  string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryKGAddOutput struct {
@@ -199,10 +217,11 @@ type memoryKGAddOutput struct {
 }
 
 type memoryKGInvalidateInput struct {
-	Subject   string `json:"subject" jsonschema:"subject entity name"`
-	Predicate string `json:"predicate" jsonschema:"relationship type"`
-	Object    string `json:"object" jsonschema:"object entity name"`
-	Ended     string `json:"ended,omitempty" jsonschema:"when the fact ended (YYYY-MM-DD, default now)"`
+	Subject     string `json:"subject" jsonschema:"subject entity name"`
+	Predicate   string `json:"predicate" jsonschema:"relationship type"`
+	Object      string `json:"object" jsonschema:"object entity name"`
+	Ended       string `json:"ended,omitempty" jsonschema:"when the fact ended (YYYY-MM-DD, default now)"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryKGInvalidateOutput struct {
@@ -210,7 +229,8 @@ type memoryKGInvalidateOutput struct {
 }
 
 type memoryKGTimelineInput struct {
-	Entity string `json:"entity,omitempty" jsonschema:"optional entity to filter timeline"`
+	Entity      string `json:"entity,omitempty" jsonschema:"optional entity to filter timeline"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryKGTimelineOutput struct {
@@ -218,7 +238,9 @@ type memoryKGTimelineOutput struct {
 	Count  int               `json:"count"`
 }
 
-type memoryKGStatsInput struct{}
+type memoryKGStatsInput struct {
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
+}
 
 type memoryKGStatsOutput struct {
 	Entities          int      `json:"entities"`
@@ -231,9 +253,10 @@ type memoryKGStatsOutput struct {
 // --- Input/output types: Diary tools ---
 
 type memoryDiaryWriteInput struct {
-	AgentName string `json:"agent_name" jsonschema:"name of the agent writing the diary entry"`
-	Entry     string `json:"entry" jsonschema:"the diary entry text"`
-	Topic     string `json:"topic,omitempty" jsonschema:"optional topic/tag for the entry"`
+	AgentName   string `json:"agent_name" jsonschema:"name of the agent writing the diary entry"`
+	Entry       string `json:"entry" jsonschema:"the diary entry text"`
+	Topic       string `json:"topic,omitempty" jsonschema:"optional topic/tag for the entry"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryDiaryWriteOutput struct {
@@ -242,8 +265,9 @@ type memoryDiaryWriteOutput struct {
 }
 
 type memoryDiaryReadInput struct {
-	AgentName string `json:"agent_name" jsonschema:"name of the agent whose diary to read"`
-	LastN     int    `json:"last_n,omitempty" jsonschema:"number of recent entries (default 10)"`
+	AgentName   string `json:"agent_name" jsonschema:"name of the agent whose diary to read"`
+	LastN       int    `json:"last_n,omitempty" jsonschema:"number of recent entries (default 10)"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type memoryDiaryReadOutput struct {

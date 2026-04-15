@@ -15,6 +15,7 @@ type createAgentHistoryInput struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 	Title          string `json:"title"`
 	Subtitle       string `json:"subtitle,omitempty"`
+	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type createAgentHistoryOutput struct {

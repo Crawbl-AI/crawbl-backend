@@ -8,8 +8,9 @@ import (
 )
 
 type pushInput struct {
-	Title   string `json:"title" jsonschema:"the notification title shown on the device"`
-	Message string `json:"message" jsonschema:"the notification body text"`
+	Title       string `json:"title" jsonschema:"the notification title shown on the device"`
+	Message     string `json:"message" jsonschema:"the notification body text"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type pushOutput struct {
