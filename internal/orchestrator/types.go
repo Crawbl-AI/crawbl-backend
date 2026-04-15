@@ -445,7 +445,10 @@ type Agent struct {
 	AvatarURL string `json:"avatar"`
 
 	// Status indicates the current operational status of the agent.
-	Status AgentStatus `json:"status"`
+	// Emitted with omitempty so an unset status serialises as no field
+	// at all (not "") — mobile's AgentStatus enum parse would otherwise
+	// reject an empty string on incoming socket events.
+	Status AgentStatus `json:"status,omitempty"`
 
 	// SystemPrompt is the LLM system message for this agent's personality.
 	SystemPrompt string `json:"system_prompt,omitempty"`
@@ -694,7 +697,7 @@ type ContentAgent struct {
 	Role   string      `json:"role"`
 	Slug   string      `json:"slug"`
 	Avatar string      `json:"avatar"`
-	Status AgentStatus `json:"status"`
+	Status AgentStatus `json:"status,omitempty"`
 }
 
 // ContentAgentFromAgent converts an Agent to a ContentAgent summary.

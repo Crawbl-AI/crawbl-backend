@@ -11,7 +11,8 @@ import (
 )
 
 type listConversationsInput struct {
-	IncludeArchived bool `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
+	IncludeArchived bool   `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
+	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type listConversationsOutput struct {
@@ -54,6 +55,7 @@ type searchMessagesInput struct {
 	ConversationID string `json:"conversation_id" jsonschema:"ID of the conversation to search in"`
 	Query          string `json:"query" jsonschema:"search keyword or phrase"`
 	Limit          int    `json:"limit" jsonschema:"maximum results to return (default 20, max 50)"`
+	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type searchMessagesOutput struct {
@@ -101,6 +103,7 @@ type sendMessageInput struct {
 	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the target agent (e.g. 'wally', 'eve')"`
 	Message        string `json:"message" jsonschema:"the message/task to send to the target agent"`
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID for context"`
+	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type sendMessageOutput struct {

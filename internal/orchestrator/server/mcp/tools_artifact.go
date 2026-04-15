@@ -20,6 +20,7 @@ type createArtifactInput struct {
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation to associate the artifact with"`
 	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the agent creating the artifact (fast path)"`
 	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the agent creating the artifact"`
+	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type createArtifactOutput struct {
@@ -29,8 +30,9 @@ type createArtifactOutput struct {
 }
 
 type readArtifactInput struct {
-	ArtifactID string `json:"artifact_id" jsonschema:"the ID of the artifact to read"`
-	Version    int    `json:"version,omitempty" jsonschema:"specific version to read (default: latest)"`
+	ArtifactID  string `json:"artifact_id" jsonschema:"the ID of the artifact to read"`
+	Version     int    `json:"version,omitempty" jsonschema:"specific version to read (default: latest)"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type readArtifactOutput struct {
@@ -57,6 +59,7 @@ type updateArtifactInput struct {
 	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"for optimistic locking — update fails if current version differs"`
 	AgentID         string `json:"agent_id,omitempty" jsonschema:"UUID of the agent making the update (fast path)"`
 	AgentSlug       string `json:"agent_slug,omitempty" jsonschema:"slug of the agent making the update"`
+	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type updateArtifactOutput struct {
@@ -65,12 +68,13 @@ type updateArtifactOutput struct {
 }
 
 type reviewArtifactInput struct {
-	ArtifactID string `json:"artifact_id" jsonschema:"the ID of the artifact to review"`
-	Outcome    string `json:"outcome" jsonschema:"review outcome: approved, changes_requested, or commented"`
-	Comments   string `json:"comments" jsonschema:"review comments explaining the outcome"`
-	Version    int    `json:"version,omitempty" jsonschema:"specific version to review (default: current)"`
-	AgentID    string `json:"agent_id,omitempty" jsonschema:"UUID of the reviewing agent (fast path)"`
-	AgentSlug  string `json:"agent_slug,omitempty" jsonschema:"slug of the reviewing agent"`
+	ArtifactID  string `json:"artifact_id" jsonschema:"the ID of the artifact to review"`
+	Outcome     string `json:"outcome" jsonschema:"review outcome: approved, changes_requested, or commented"`
+	Comments    string `json:"comments" jsonschema:"review comments explaining the outcome"`
+	Version     int    `json:"version,omitempty" jsonschema:"specific version to review (default: current)"`
+	AgentID     string `json:"agent_id,omitempty" jsonschema:"UUID of the reviewing agent (fast path)"`
+	AgentSlug   string `json:"agent_slug,omitempty" jsonschema:"slug of the reviewing agent"`
+	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type reviewArtifactOutput struct {

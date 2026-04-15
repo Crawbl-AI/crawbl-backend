@@ -10,7 +10,8 @@ import (
 )
 
 type userProfileInput struct {
-	IncludePreferences bool `json:"include_preferences,omitempty" jsonschema:"include user preferences in response"`
+	IncludePreferences bool   `json:"include_preferences,omitempty" jsonschema:"include user preferences in response"`
+	Description        string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type userProfileOutput struct {
@@ -31,7 +32,8 @@ type userPrefs struct {
 }
 
 type workspaceInfoInput struct {
-	IncludeAgents bool `json:"include_agents,omitempty" jsonschema:"include agent list in response"`
+	IncludeAgents bool   `json:"include_agents,omitempty" jsonschema:"include agent list in response"`
+	Description   string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 type workspaceInfoOutput struct {
