@@ -188,6 +188,26 @@ func (s *service) persistWorkflowMessage(
 	if convID == nil || *convID == "" {
 		return
 	}
+
+	// Resolve the manager up-front so the agent_slug+agent_name on the
+	// MessageContent carry matching identity — mirrors the artifact path
+	// and lets mobile attribute the card without a lookup against its
+	// in-memory agents cache.
+	var manager *orchestrator.Agent
+	if agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, workspaceID); mErr == nil {
+		for _, a := range agents {
+			if a.Role == string(orchestrator.AgentRoleManager) {
+				manager = a
+				break
+			}
+		}
+	}
+	var agentSlug, agentName string
+	if manager != nil {
+		agentSlug = manager.Slug
+		agentName = manager.Name
+	}
+
 	now := time.Now().UTC()
 	msg := &orchestrator.Message{
 		ID:             uuid.NewString(),
@@ -200,22 +220,16 @@ func (s *service) persistWorkflowMessage(
 			WorkflowID:   workflowID,
 			WorkflowName: name,
 			ExecutionID:  execID,
+			AgentSlug:    agentSlug,
+			AgentName:    agentName,
 		},
 		Status:    orchestrator.MessageStatusDelivered,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-
-	// Hydrate with the manager agent if one exists in this workspace.
-	agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, workspaceID)
-	if mErr == nil {
-		for _, a := range agents {
-			if a.Role == string(orchestrator.AgentRoleManager) {
-				msg.AgentID = &a.ID
-				msg.Agent = a
-				break
-			}
-		}
+	if manager != nil {
+		msg.AgentID = &manager.ID
+		msg.Agent = manager
 	}
 
 	if mErr := s.repos.Message.Save(ctx, sess, msg); mErr != nil {
