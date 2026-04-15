@@ -251,6 +251,13 @@ func NewAgentRow(agent *orchestrator.Agent, sortOrder int) *AgentRow {
 }
 
 // ToDomain converts an AgentRow to its domain model representation.
+// Status is not a persisted column — it's a transient activity state
+// (online, thinking, writing, …) that arrives via agent.status socket
+// events. Defaulting here to AgentStatusOffline guarantees every
+// repo-loaded agent carries a valid enum value; a live event can
+// still overwrite it. Without this default the zero-value empty
+// string reaches the wire on message.new payloads and crashes the
+// mobile AgentStatus enum parser.
 func (r *AgentRow) ToDomain() *orchestrator.Agent {
 	return &orchestrator.Agent{
 		ID:           r.ID,
@@ -261,6 +268,7 @@ func (r *AgentRow) ToDomain() *orchestrator.Agent {
 		AvatarURL:    r.AvatarURL,
 		SystemPrompt: r.SystemPrompt,
 		Description:  r.Description,
+		Status:       orchestrator.AgentStatusOffline,
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
 	}
