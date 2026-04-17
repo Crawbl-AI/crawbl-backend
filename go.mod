@@ -25,7 +25,7 @@ require (
 	github.com/openai/openai-go/v3 v3.31.0
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pulumi/pulumi-cloudflare/sdk/v5 v5.49.1
-	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.63.0
+	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.64.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.28.0
 	github.com/pulumi/pulumi/sdk/v3 v3.230.0
 	github.com/redis/go-redis/v9 v9.18.0

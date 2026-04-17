@@ -36,7 +36,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			_, err := digitalocean.LookupVpc(ctx, &digitalocean.LookupVpcArgs{
+//			_, err := digitalocean.GetVpc(ctx, &digitalocean.LookupVpcArgs{
 //				Name: pulumi.StringRef("example-network"),
 //			}, nil)
 //			if err != nil {
@@ -62,7 +62,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			example, err := digitalocean.LookupVpc(ctx, &digitalocean.LookupVpcArgs{
+//			example, err := digitalocean.GetVpc(ctx, &digitalocean.LookupVpcArgs{
 //				Name: pulumi.StringRef("example-network"),
 //			}, nil)
 //			if err != nil {
@@ -73,7 +73,7 @@ import (
 //				Size:    pulumi.String(digitalocean.DropletSlugDropletS1VCPU1GB),
 //				Image:   pulumi.String("ubuntu-18-04-x64"),
 //				Region:  pulumi.String(digitalocean.RegionNYC3),
-//				VpcUuid: pulumi.String(example.Id),
+//				VpcUuid: pulumi.String(pulumi.String(example.Id)),
 //			})
 //			if err != nil {
 //				return err

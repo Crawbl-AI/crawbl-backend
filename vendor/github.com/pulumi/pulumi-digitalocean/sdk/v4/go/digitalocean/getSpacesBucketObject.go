@@ -35,7 +35,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			bootstrapScript, err := digitalocean.LookupSpacesBucketObject(ctx, &digitalocean.LookupSpacesBucketObjectArgs{
+//			bootstrapScript, err := digitalocean.GetSpacesBucketObject(ctx, &digitalocean.LookupSpacesBucketObjectArgs{
 //				Bucket: "ourcorp-deploy-config",
 //				Region: "nyc3",
 //				Key:    "droplet-bootstrap-script.sh",
@@ -48,7 +48,7 @@ import (
 //				Name:     pulumi.String("web-1"),
 //				Region:   pulumi.String(digitalocean.RegionNYC2),
 //				Size:     pulumi.String(digitalocean.DropletSlugDropletS1VCPU1GB),
-//				UserData: pulumi.String(bootstrapScript.Body),
+//				UserData: pulumi.String(pulumi.String(bootstrapScript.Body)),
 //			})
 //			if err != nil {
 //				return err

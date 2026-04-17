@@ -124,7 +124,7 @@ import (
 //				Name:        pulumi.String("foo"),
 //				Region:      pulumi.String(digitalocean.RegionNYC1),
 //				AutoUpgrade: pulumi.Bool(true),
-//				Version:     pulumi.String(example.LatestVersion),
+//				Version:     pulumi.String(pulumi.String(example.LatestVersion)),
 //				MaintenancePolicy: &digitalocean.KubernetesClusterMaintenancePolicyArgs{
 //					StartTime: pulumi.String("04:00"),
 //					Day:       pulumi.String("sunday"),
@@ -174,7 +174,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			_, err := digitalocean.LookupKubernetesCluster(ctx, &digitalocean.LookupKubernetesClusterArgs{
+//			_, err := digitalocean.GetKubernetesCluster(ctx, &digitalocean.LookupKubernetesClusterArgs{
 //				Name: "prod-cluster-01",
 //			}, nil)
 //			if err != nil {

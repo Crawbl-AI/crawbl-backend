@@ -34,7 +34,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			example, err := digitalocean.LookupSshKey(ctx, &digitalocean.LookupSshKeyArgs{
+//			example, err := digitalocean.GetSshKey(ctx, &digitalocean.LookupSshKeyArgs{
 //				Name: "example",
 //			}, nil)
 //			if err != nil {
@@ -46,7 +46,7 @@ import (
 //				Region: pulumi.String(digitalocean.RegionNYC2),
 //				Size:   pulumi.String(digitalocean.DropletSlugDropletS1VCPU1GB),
 //				SshKeys: pulumi.StringArray{
-//					pulumi.Int(example.Id),
+//					pulumi.String(pulumi.Int(example.Id)),
 //				},
 //			})
 //			if err != nil {

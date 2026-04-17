@@ -33,7 +33,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			example, err := digitalocean.LookupTag(ctx, &digitalocean.LookupTagArgs{
+//			example, err := digitalocean.GetTag(ctx, &digitalocean.LookupTagArgs{
 //				Name: "example",
 //			}, nil)
 //			if err != nil {
@@ -45,7 +45,7 @@ import (
 //				Region: pulumi.String(digitalocean.RegionNYC2),
 //				Size:   pulumi.String(digitalocean.DropletSlugDropletS1VCPU1GB),
 //				Tags: pulumi.StringArray{
-//					pulumi.String(example.Name),
+//					pulumi.String(pulumi.String(example.Name)),
 //				},
 //			})
 //			if err != nil {
