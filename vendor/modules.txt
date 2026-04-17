@@ -1004,7 +1004,7 @@ github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/storagemigration/v1alph
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/storagemigration/v1beta1
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/utilities
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/yaml
-# github.com/pulumi/pulumi/sdk/v3 v3.230.0
+# github.com/pulumi/pulumi/sdk/v3 v3.231.0
 ## explicit; go 1.25.8
 github.com/pulumi/pulumi/sdk/v3
 github.com/pulumi/pulumi/sdk/v3/go/auto
