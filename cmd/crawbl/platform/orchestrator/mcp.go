@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -21,7 +19,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcpserver"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 )
 
 func newMCPCommand() *cobra.Command {
@@ -39,29 +36,8 @@ func newMCPCommand() *cobra.Command {
 // repos, embedder, runtime client) and does NOT run Socket.IO, River
 // workers, auth/chat/agent services, NATS, ClickHouse, or autoingest.
 func runMCP(ctx context.Context) error {
-	logLevel := slog.LevelInfo
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "warn", "warning":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
-	slog.SetDefault(logger)
-
-	telemetryShutdown, tErr := telemetry.Init(ctx, telemetry.ConfigFromEnv("orchestrator-mcp", os.Getenv("CRAWBL_VERSION")), logger)
-	if tErr != nil {
-		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := telemetryShutdown(shutdownCtx); err != nil {
-			logger.Warn("telemetry shutdown returned error", "error", err)
-		}
-	}()
+	logger, telemetryCleanup := initLogging(ctx, "orchestrator-mcp")
+	defer telemetryCleanup()
 
 	db, repos, cleanup := mustBuildRepos(logger)
 	defer cleanup()
