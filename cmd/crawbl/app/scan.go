@@ -115,8 +115,13 @@ func runScan(ctx context.Context) error {
 // runStaticcheck runs staticcheck with JSON output and converts the results
 // to SonarQube's generic issue import format.
 func runStaticcheck(ctx context.Context, rootDir, reportPath string) error {
+	scPath, err := exec.LookPath("staticcheck")
+	if err != nil {
+		return fmt.Errorf("staticcheck not found in PATH: %w", err)
+	}
+
 	var buf bytes.Buffer
-	scCmd := exec.CommandContext(ctx, "staticcheck", "-f", "json", "./...")
+	scCmd := exec.CommandContext(ctx, scPath, "-f", "json", "./...")
 	scCmd.Dir = rootDir
 	scCmd.Stdout = &buf
 	scCmd.Stderr = os.Stderr
