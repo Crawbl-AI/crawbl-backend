@@ -2,7 +2,11 @@
 // for real-time workspace event delivery.
 package realtime
 
-import "context"
+import (
+	"context"
+
+	realtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/realtime/v1"
+)
 
 // Broadcaster defines the interface for emitting real-time events to connected clients.
 // Implementations may use in-memory rooms, Redis pub/sub, or other transport mechanisms.
@@ -61,13 +65,7 @@ type MessageEventPayload struct {
 }
 
 // AgentStatusPayload is the flat payload for agent.status events.
-// ConversationID is set when the status is tied to a specific conversation
-// (e.g. "reading", "thinking"). Omitted for workspace-wide statuses like "online".
-type AgentStatusPayload struct {
-	AgentID        string `json:"agent_id"`
-	Status         string `json:"status"`
-	ConversationID string `json:"conversation_id,omitempty"`
-}
+type AgentStatusPayload = realtimev1.AgentStatusPayload
 
 // Streaming event names for token-by-token delivery.
 const (
@@ -97,40 +95,16 @@ const (
 const EventUsageUpdate = "usage.update"
 
 // MessageChunkPayload is emitted for each streamed text token.
-type MessageChunkPayload struct {
-	MessageID      string `json:"message_id"`
-	ConversationID string `json:"conversation_id"`
-	AgentID        string `json:"agent_id"`
-	Chunk          string `json:"chunk"`
-}
+type MessageChunkPayload = realtimev1.MessageChunkPayload
 
 // MessageDonePayload signals stream completion.
-type MessageDonePayload struct {
-	MessageID      string `json:"message_id"`
-	ConversationID string `json:"conversation_id"`
-	AgentID        string `json:"agent_id"`
-	Status         string `json:"status"` // "delivered" or "failed"
-}
+type MessageDonePayload = realtimev1.MessageDonePayload
 
 // AgentToolPayload reports tool call activity during streaming.
-type AgentToolPayload struct {
-	AgentID        string         `json:"agent_id"`
-	ConversationID string         `json:"conversation_id"`
-	Tool           string         `json:"tool"`
-	Status         string         `json:"status"` // "running" or "done"
-	CallID         string         `json:"call_id,omitempty"`
-	Query          string         `json:"query,omitempty"`
-	Args           map[string]any `json:"args,omitempty"`
-	CreatedAt      string         `json:"created_at,omitempty"`
-}
+type AgentToolPayload = realtimev1.AgentToolPayload
 
 // MessageStatusPayload is emitted when a message's delivery status changes.
-type MessageStatusPayload struct {
-	MessageID      string `json:"message_id"`
-	ConversationID string `json:"conversation_id"`
-	LocalID        string `json:"local_id,omitempty"`
-	Status         string `json:"status"` // "sent", "delivered", "read"
-}
+type MessageStatusPayload = realtimev1.MessageStatusPayload
 
 // AgentDelegationStatus values carried on AgentDelegationPayload.Status
 // and persisted to the agent_delegations / agent_messages DB rows.
@@ -151,62 +125,16 @@ const (
 )
 
 // DelegationAgent is the agent summary nested in delegation socket events.
-// Matches the JSON shape of orchestrator.ContentAgent and the agent objects
-// the mobile already parses in message bubbles.
-type DelegationAgent struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Role   string `json:"role"`
-	Slug   string `json:"slug"`
-	Avatar string `json:"avatar"`
-	Status string `json:"status"`
-}
+type DelegationAgent = realtimev1.DelegationAgent
 
 // AgentDelegationPayload reports agent-to-agent delegation activity.
-type AgentDelegationPayload struct {
-	From           *DelegationAgent `json:"from"`
-	To             *DelegationAgent `json:"to"`
-	ConversationID string           `json:"conversation_id"`
-	CreatedAt      string           `json:"created_at,omitempty"`
-	// Status is one of AgentDelegationStatus* (running | completed | failed).
-	Status         string `json:"status"`
-	MessagePreview string `json:"message_preview,omitempty"`
-	MessageID      string `json:"message_id,omitempty"`
-}
+type AgentDelegationPayload = realtimev1.AgentDelegationPayload
 
 // ArtifactEventPayload reports artifact creation/update/review activity.
-type ArtifactEventPayload struct {
-	ArtifactID     string `json:"artifact_id"`
-	ConversationID string `json:"conversation_id,omitempty"`
-	Title          string `json:"title"`
-	Version        int    `json:"version"`
-	Action         string `json:"action"` // "created", "updated", "reviewed"
-	AgentID        string `json:"agent_id"`
-	AgentSlug      string `json:"agent_slug"`
-}
+type ArtifactEventPayload = realtimev1.ArtifactEventPayload
 
 // UsageUpdatePayload reports per-LLM-call token usage to connected clients.
-// Emitted inline during streaming so mobile can show real-time token counters.
-type UsageUpdatePayload struct {
-	AgentID          string `json:"agent_id"`
-	ConversationID   string `json:"conversation_id"`
-	MessageID        string `json:"message_id"`
-	Model            string `json:"model"`
-	PromptTokens     int32  `json:"prompt_tokens"`
-	CompletionTokens int32  `json:"completion_tokens"`
-	TotalTokens      int32  `json:"total_tokens"`
-	CallSequence     int32  `json:"call_sequence"`
-}
+type UsageUpdatePayload = realtimev1.UsageUpdatePayload
 
 // WorkflowEventPayload reports workflow execution progress.
-type WorkflowEventPayload struct {
-	WorkflowID     string `json:"workflow_id"`
-	ExecutionID    string `json:"execution_id"`
-	WorkflowName   string `json:"workflow_name"`
-	ConversationID string `json:"conversation_id,omitempty"`
-	Status         string `json:"status"` // varies by event type
-	StepIndex      int    `json:"step_index,omitempty"`
-	StepName       string `json:"step_name,omitempty"`
-	AgentSlug      string `json:"agent_slug,omitempty"`
-	Error          string `json:"error,omitempty"`
-}
+type WorkflowEventPayload = realtimev1.WorkflowEventPayload

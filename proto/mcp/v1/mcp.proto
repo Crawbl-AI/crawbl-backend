@@ -1,0 +1,238 @@
+syntax = "proto3";
+
+package crawbl.mcp.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1;mcpv1";
+
+import "google/protobuf/timestamp.proto";
+
+// UserPreferences holds optional user preference fields.
+message UserPreferences {
+  optional string theme = 1;
+  optional string language = 2;
+  optional string currency = 3;
+}
+
+// UserProfileResult is returned by GetUserProfile.
+message UserProfileResult {
+  string id = 1;
+  string email = 2;
+  string nickname = 3;
+  string name = 4;
+  string surname = 5;
+  optional string country_code = 6;
+  google.protobuf.Timestamp created_at = 7;
+  optional UserPreferences preferences = 8;
+}
+
+// AgentBrief is a lightweight agent summary for MCP responses.
+message AgentBrief {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  string slug = 4;
+  string avatar_url = 5;
+  string status = 6;
+}
+
+// WorkspaceInfoResult is returned by GetWorkspaceInfo.
+message WorkspaceInfoResult {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  repeated AgentBrief agents = 4;
+}
+
+// MessageBrief is a search result item.
+message MessageBrief {
+  string id = 1;
+  string role = 2;
+  string text = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// CreateAgentHistoryParams holds input for creating an agent history entry.
+message CreateAgentHistoryParams {
+  string agent_id = 1;
+  string agent_slug = 2;
+  string conversation_id = 3;
+  string title = 4;
+  string subtitle = 5;
+}
+
+// SendAgentMessageParams holds input for the send_message_to_agent flow.
+message SendAgentMessageParams {
+  string user_id = 1;
+  string workspace_id = 2;
+  string session_id = 3;
+  string agent_slug = 4;
+  string message = 5;
+  string conversation_id = 6;
+}
+
+// SendAgentMessageResult is returned by SendMessageToAgent.
+message SendAgentMessageResult {
+  bool success = 1;
+  string agent_slug = 2;
+  string response = 3;
+  string message_id = 4;
+  string error = 5;
+}
+
+// CreateArtifactParams holds input for creating an artifact.
+message CreateArtifactParams {
+  string title = 1;
+  string content = 2;
+  string content_type = 3;
+  string conversation_id = 4;
+  string agent_id = 5;
+  string agent_slug = 6;
+}
+
+// CreateArtifactResult is returned by CreateArtifact.
+message CreateArtifactResult {
+  string artifact_id = 1;
+  int32 version = 2;
+}
+
+// ReadArtifactResult is returned by ReadArtifact.
+message ReadArtifactResult {
+  string artifact_id = 1;
+  string title = 2;
+  string content_type = 3;
+  string content = 4;
+  int32 version = 5;
+  string status = 6;
+  repeated ArtifactReviewBrief reviews = 7;
+}
+
+// ArtifactReviewBrief summarises a single review.
+message ArtifactReviewBrief {
+  string reviewer_agent_slug = 1;
+  string outcome = 2;
+  string comments = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// UpdateArtifactParams holds input for updating an artifact.
+message UpdateArtifactParams {
+  string artifact_id = 1;
+  string content = 2;
+  string change_summary = 3;
+  int32 expected_version = 4;
+  string agent_id = 5;
+  string agent_slug = 6;
+}
+
+// UpdateArtifactResult is returned by UpdateArtifact.
+message UpdateArtifactResult {
+  int32 version = 1;
+}
+
+// ReviewArtifactParams holds input for reviewing an artifact.
+message ReviewArtifactParams {
+  string artifact_id = 1;
+  string outcome = 2;
+  string comments = 3;
+  int32 version = 4;
+  string agent_id = 5;
+  string agent_slug = 6;
+}
+
+// ReviewArtifactResult is returned by ReviewArtifact.
+message ReviewArtifactResult {
+  bool reviewed = 1;
+}
+
+// AskQuestionsParams holds input for creating an interactive questions message.
+message AskQuestionsParams {
+  string agent_id = 1;
+  string agent_slug = 2;
+  string conversation_id = 3;
+  repeated AskQuestionsTurn turns = 4;
+}
+
+// AskQuestionsTurn describes one turn group to present to the user.
+message AskQuestionsTurn {
+  string label = 1;
+  repeated AskQuestionsQuestion questions = 2;
+}
+
+// AskQuestionsQuestion describes one question with its allowed options.
+message AskQuestionsQuestion {
+  string prompt = 1;
+  string mode = 2;
+  repeated string options = 3;
+  bool allow_custom = 4;
+}
+
+// AskQuestionsResult is returned by AskQuestions.
+message AskQuestionsResult {
+  string message_id = 1;
+}
+
+// CreateWorkflowParams holds input for creating a workflow definition.
+message CreateWorkflowParams {
+  string name = 1;
+  string description = 2;
+  string steps_json = 3;
+}
+
+// CreateWorkflowResult is returned by CreateWorkflow.
+message CreateWorkflowResult {
+  string workflow_id = 1;
+  int32 step_count = 2;
+}
+
+// TriggerWorkflowParams holds input for triggering a workflow.
+message TriggerWorkflowParams {
+  string workflow_id = 1;
+  string conversation_id = 2;
+  string initial_context = 3;
+}
+
+// TriggerWorkflowResult is returned by TriggerWorkflow.
+message TriggerWorkflowResult {
+  string execution_id = 1;
+  string workflow_name = 2;
+}
+
+// WorkflowStatusResult is returned by CheckWorkflowStatus.
+message WorkflowStatusResult {
+  string execution_id = 1;
+  string status = 2;
+  int32 current_step = 3;
+  string error = 4;
+  repeated StepStatusBrief steps = 5;
+}
+
+// StepStatusBrief summarises a single workflow step execution.
+message StepStatusBrief {
+  int32 step_index = 1;
+  string step_name = 2;
+  string agent_slug = 3;
+  string status = 4;
+  optional int32 duration_ms = 5;
+}
+
+// WorkflowBriefResult summarises a workflow definition.
+message WorkflowBriefResult {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool is_active = 4;
+  int32 step_count = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// WorkflowStep describes a single step within a workflow definition.
+message WorkflowStep {
+  string name = 1;
+  string agent_slug = 2;
+  string prompt_template = 3;
+  int32 timeout_secs = 4;
+  bool requires_approval = 5;
+  string on_failure = 6;
+  string output_key = 7;
+  int32 max_retries = 8;
+}

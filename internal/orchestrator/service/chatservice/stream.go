@@ -207,8 +207,8 @@ func (ss *streamSession) handleText(chunk userswarmclient.StreamChunk) {
 	st.chunkCount++
 	ss.totalChunks++
 	ss.svc.broadcaster.EmitMessageChunk(ss.ctx, ss.wsID, realtime.MessageChunkPayload{
-		MessageID: st.placeholder.ID, ConversationID: ss.convID,
-		AgentID: st.agent.ID, Chunk: chunk.Delta,
+		MessageId: st.placeholder.ID, ConversationId: ss.convID,
+		AgentId: st.agent.ID, Chunk: chunk.Delta,
 	})
 }
 
@@ -246,9 +246,9 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 
 	// Emit real-time usage update to mobile via Socket.IO.
 	ss.svc.broadcaster.EmitUsageUpdate(ss.ctx, ss.wsID, realtime.UsageUpdatePayload{
-		AgentID:          chunk.AgentID,
-		ConversationID:   ss.convID,
-		MessageID:        usageMessageID,
+		AgentId:          chunk.AgentID,
+		ConversationId:   ss.convID,
+		MessageId:        usageMessageID,
 		Model:            chunk.Model,
 		PromptTokens:     chunk.PromptTokens,
 		CompletionTokens: chunk.CompletionTokens,
@@ -347,8 +347,8 @@ func (ss *streamSession) emitDelivered() {
 	}
 	ss.deliveredOnce.Do(func() {
 		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, realtime.MessageStatusPayload{
-			MessageID: ss.userMessageID, ConversationID: ss.convID,
-			LocalID: ss.localID, Status: string(orchestrator.MessageStatusDelivered),
+			MessageId: ss.userMessageID, ConversationId: ss.convID,
+			LocalId: ss.localID, Status: string(orchestrator.MessageStatusDelivered),
 		})
 		if mErr := ss.svc.messageRepo.UpdateStatus(ss.ctx, ss.sess, ss.userMessageID, orchestrator.MessageStatusDelivered); mErr != nil {
 			slog.Warn("failed to update delivered status", "msg", ss.userMessageID, "error", mErr.Error())
@@ -363,8 +363,8 @@ func (ss *streamSession) emitRead() {
 	}
 	ss.readOnce.Do(func() {
 		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, realtime.MessageStatusPayload{
-			MessageID: ss.userMessageID, ConversationID: ss.convID,
-			LocalID: ss.localID, Status: string(orchestrator.MessageStatusRead),
+			MessageId: ss.userMessageID, ConversationId: ss.convID,
+			LocalId: ss.localID, Status: string(orchestrator.MessageStatusRead),
 		})
 	})
 }

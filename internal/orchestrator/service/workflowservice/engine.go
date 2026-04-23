@@ -70,7 +70,7 @@ func (e *workflowEmitter) Completed(ctx context.Context) {
 // Failed emits a workflow.failed event with status=failed and an error reason.
 func (e *workflowEmitter) Failed(ctx context.Context, stepIndex int, stepName, reason string) {
 	e.emit(ctx, realtime.EventWorkflowFailed, workflowrepo.WorkflowStatusFailed, realtime.WorkflowEventPayload{
-		StepIndex: stepIndex,
+		StepIndex: int32(stepIndex),
 		StepName:  stepName,
 		Error:     reason,
 	})
@@ -79,7 +79,7 @@ func (e *workflowEmitter) Failed(ctx context.Context, stepIndex int, stepName, r
 // StepStarted emits a workflow.step.started event with status=running.
 func (e *workflowEmitter) StepStarted(ctx context.Context, stepIndex int, stepName, agentSlug string) {
 	e.emit(ctx, realtime.EventWorkflowStepStarted, workflowrepo.WorkflowStatusRunning, realtime.WorkflowEventPayload{
-		StepIndex: stepIndex,
+		StepIndex: int32(stepIndex),
 		StepName:  stepName,
 		AgentSlug: agentSlug,
 	})
@@ -88,7 +88,7 @@ func (e *workflowEmitter) StepStarted(ctx context.Context, stepIndex int, stepNa
 // StepCompleted emits a workflow.step.completed event with status=completed.
 func (e *workflowEmitter) StepCompleted(ctx context.Context, stepIndex int, stepName, agentSlug string) {
 	e.emit(ctx, realtime.EventWorkflowStepCompleted, workflowrepo.WorkflowStatusCompleted, realtime.WorkflowEventPayload{
-		StepIndex: stepIndex,
+		StepIndex: int32(stepIndex),
 		StepName:  stepName,
 		AgentSlug: agentSlug,
 	})
@@ -97,7 +97,7 @@ func (e *workflowEmitter) StepCompleted(ctx context.Context, stepIndex int, step
 // WaitingApproval emits a workflow.step.approval_required event with status=waiting_approval.
 func (e *workflowEmitter) WaitingApproval(ctx context.Context, stepIndex int, stepName, agentSlug string) {
 	e.emit(ctx, realtime.EventWorkflowStepApproval, workflowrepo.WorkflowStatusWaitingApproval, realtime.WorkflowEventPayload{
-		StepIndex: stepIndex,
+		StepIndex: int32(stepIndex),
 		StepName:  stepName,
 		AgentSlug: agentSlug,
 	})
@@ -107,10 +107,10 @@ func (e *workflowEmitter) WaitingApproval(ctx context.Context, stepIndex int, st
 // and delegates to the broadcaster.
 func (e *workflowEmitter) emit(ctx context.Context, eventName string, status workflowrepo.WorkflowStatus, extra realtime.WorkflowEventPayload) {
 	payload := realtime.WorkflowEventPayload{
-		WorkflowID:     e.workflowID,
+		WorkflowId:     e.workflowID,
 		WorkflowName:   e.workflowName,
-		ExecutionID:    e.executionID,
-		ConversationID: e.conversationID,
+		ExecutionId:    e.executionID,
+		ConversationId: e.conversationID,
 		Status:         string(status),
 		StepIndex:      extra.StepIndex,
 		StepName:       extra.StepName,

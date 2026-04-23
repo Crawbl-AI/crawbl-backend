@@ -31,8 +31,8 @@ func (ss *streamSession) createSubAgentStream(sub *orchestrator.Agent) *subAgent
 	ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, realtime.AgentDelegationPayload{
 		From:           delegationAgent(ss.primary),
 		To:             delegationAgent(sub),
-		ConversationID: ss.convID, Status: realtime.AgentDelegationStatusRunning,
-		MessageID: delegationMsgID,
+		ConversationId: ss.convID, Status: realtime.AgentDelegationStatusRunning,
+		MessageId: delegationMsgID,
 		CreatedAt: delegationCreatedAt,
 	})
 	// Manager handed off -- clear thinking status so mobile stops showing

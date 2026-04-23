@@ -8,6 +8,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
@@ -23,11 +24,6 @@ type createWorkflowInput struct {
 	Steps       string `json:"steps" jsonschema:"JSON array of workflow steps, each with name, agent_slug, prompt_template, and optional timeout_secs, requires_approval, on_failure, output_key, max_retries"`
 }
 
-type createWorkflowOutput struct {
-	WorkflowID string `json:"workflow_id"`
-	Info       string `json:"info"`
-}
-
 type triggerWorkflowInput struct {
 	WorkflowID     string `json:"workflow_id" jsonschema:"ID of the workflow definition to execute"`
 	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID to associate with the execution"`
@@ -35,31 +31,9 @@ type triggerWorkflowInput struct {
 	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type triggerWorkflowOutput struct {
-	ExecutionID string `json:"execution_id"`
-	Info        string `json:"info"`
-}
-
 type checkWorkflowStatusInput struct {
 	ExecutionID string `json:"execution_id" jsonschema:"ID of the workflow execution to check"`
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type checkWorkflowStatusOutput struct {
-	ExecutionID string            `json:"execution_id"`
-	Status      string            `json:"status"`
-	CurrentStep int               `json:"current_step"`
-	Error       string            `json:"error,omitempty"`
-	Steps       []stepStatusBrief `json:"steps,omitempty"`
-	Info        string            `json:"info,omitempty"`
-}
-
-type stepStatusBrief struct {
-	StepIndex  int    `json:"step_index"`
-	StepName   string `json:"step_name"`
-	AgentSlug  string `json:"agent_slug"`
-	Status     string `json:"status"`
-	DurationMs *int   `json:"duration_ms,omitempty"`
 }
 
 type listWorkflowsInput struct {
@@ -67,50 +41,36 @@ type listWorkflowsInput struct {
 	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type listWorkflowsOutput struct {
-	Workflows []workflowBrief `json:"workflows"`
-	Info      string          `json:"info,omitempty"`
-}
-
-type workflowBrief struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	IsActive    bool   `json:"is_active"`
-	StepCount   int    `json:"step_count"`
-	CreatedAt   string `json:"created_at"`
-}
-
 // newCreateWorkflowHandler returns the MCP tool handler for the create_workflow tool.
-func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowInput, createWorkflowOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createWorkflowInput) (*sdkmcp.CallToolResult, createWorkflowOutput, error) {
+func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowInput, *mcpv1.CreateWorkflowToolOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createWorkflowInput) (*sdkmcp.CallToolResult, *mcpv1.CreateWorkflowToolOutput, error) {
 		if input.Name == "" || input.Steps == "" {
-			return nil, createWorkflowOutput{Info: "name and steps are required"}, nil
+			return nil, &mcpv1.CreateWorkflowToolOutput{Info: "name and steps are required"}, nil
 		}
 		if len(input.Steps) > maxWorkflowStepsLength {
-			return nil, createWorkflowOutput{Info: "steps exceeds maximum allowed size"}, nil
+			return nil, &mcpv1.CreateWorkflowToolOutput{Info: "steps exceeds maximum allowed size"}, nil
 		}
 
 		result, err := deps.MCPService.CreateWorkflow(ctx, sess, workspaceID, &mcpservice.CreateWorkflowParams{
 			Name:        input.Name,
 			Description: input.Description,
-			StepsJSON:   input.Steps,
+			StepsJson:   input.Steps,
 		})
 		if err != nil {
-			return nil, createWorkflowOutput{Info: err.Error()}, nil
+			return nil, &mcpv1.CreateWorkflowToolOutput{Info: err.Error()}, nil
 		}
 
-		return nil, createWorkflowOutput{
-			WorkflowID: result.WorkflowID,
+		return nil, &mcpv1.CreateWorkflowToolOutput{
+			WorkflowId: result.WorkflowId,
 			Info:       fmt.Sprintf("workflow %q created with %d steps", input.Name, result.StepCount),
 		}, nil
 	})
 }
 
-func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflowInput, triggerWorkflowOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input triggerWorkflowInput) (*sdkmcp.CallToolResult, triggerWorkflowOutput, error) {
+func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflowInput, *mcpv1.TriggerWorkflowToolOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input triggerWorkflowInput) (*sdkmcp.CallToolResult, *mcpv1.TriggerWorkflowToolOutput, error) {
 		if input.WorkflowID == "" {
-			return nil, triggerWorkflowOutput{Info: "workflow_id is required"}, nil
+			return nil, &mcpv1.TriggerWorkflowToolOutput{Info: "workflow_id is required"}, nil
 		}
 		// Default to the active conversation when the agent did not
 		// override; mirrors create_artifact / ask_questions.
@@ -119,35 +79,35 @@ func newTriggerWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[triggerWorkflow
 		}
 
 		result, err := deps.MCPService.TriggerWorkflow(ctx, sess, userID, workspaceID, &mcpservice.TriggerWorkflowParams{
-			WorkflowID:     input.WorkflowID,
-			ConversationID: input.ConversationID,
+			WorkflowId:     input.WorkflowID,
+			ConversationId: input.ConversationID,
 			InitialContext: input.InitialContext,
 		})
 		if err != nil {
-			return nil, triggerWorkflowOutput{Info: err.Error()}, nil
+			return nil, &mcpv1.TriggerWorkflowToolOutput{Info: err.Error()}, nil
 		}
 
-		return nil, triggerWorkflowOutput{
-			ExecutionID: result.ExecutionID,
-			Info:        fmt.Sprintf("workflow %q triggered, execution %s started", result.WorkflowName, result.ExecutionID),
+		return nil, &mcpv1.TriggerWorkflowToolOutput{
+			ExecutionId: result.ExecutionId,
+			Info:        fmt.Sprintf("workflow %q triggered, execution %s started", result.WorkflowName, result.ExecutionId),
 		}, nil
 	})
 }
 
-func newCheckWorkflowStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[checkWorkflowStatusInput, checkWorkflowStatusOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input checkWorkflowStatusInput) (*sdkmcp.CallToolResult, checkWorkflowStatusOutput, error) {
+func newCheckWorkflowStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[checkWorkflowStatusInput, *mcpv1.CheckWorkflowStatusOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input checkWorkflowStatusInput) (*sdkmcp.CallToolResult, *mcpv1.CheckWorkflowStatusOutput, error) {
 		if input.ExecutionID == "" {
-			return nil, checkWorkflowStatusOutput{Info: "execution_id is required"}, nil
+			return nil, &mcpv1.CheckWorkflowStatusOutput{Info: "execution_id is required"}, nil
 		}
 
 		result, err := deps.MCPService.CheckWorkflowStatus(ctx, sess, workspaceID, input.ExecutionID)
 		if err != nil {
-			return nil, checkWorkflowStatusOutput{Info: err.Error()}, nil
+			return nil, &mcpv1.CheckWorkflowStatusOutput{Info: err.Error()}, nil
 		}
 
-		steps := make([]stepStatusBrief, 0, len(result.Steps))
+		steps := make([]*mcpv1.ToolStepStatusBrief, 0, len(result.Steps))
 		for _, s := range result.Steps {
-			steps = append(steps, stepStatusBrief{
+			steps = append(steps, &mcpv1.ToolStepStatusBrief{
 				StepIndex:  s.StepIndex,
 				StepName:   s.StepName,
 				AgentSlug:  s.AgentSlug,
@@ -156,8 +116,8 @@ func newCheckWorkflowStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[checkWorkfl
 			})
 		}
 
-		return nil, checkWorkflowStatusOutput{
-			ExecutionID: result.ExecutionID,
+		return nil, &mcpv1.CheckWorkflowStatusOutput{
+			ExecutionId: result.ExecutionId,
 			Status:      result.Status,
 			CurrentStep: result.CurrentStep,
 			Error:       result.Error,
@@ -166,26 +126,26 @@ func newCheckWorkflowStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[checkWorkfl
 	})
 }
 
-func newListWorkflowsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listWorkflowsInput, listWorkflowsOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listWorkflowsInput) (*sdkmcp.CallToolResult, listWorkflowsOutput, error) {
+func newListWorkflowsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listWorkflowsInput, *mcpv1.ListWorkflowsOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listWorkflowsInput) (*sdkmcp.CallToolResult, *mcpv1.ListWorkflowsOutput, error) {
 		results, err := deps.MCPService.ListWorkflows(ctx, sess, userID, workspaceID)
 		if err != nil {
-			return nil, listWorkflowsOutput{Info: err.Error()}, nil
+			return nil, &mcpv1.ListWorkflowsOutput{Info: err.Error()}, nil
 		}
 
-		briefs := make([]workflowBrief, 0, len(results))
-		for _, r := range results {
-			briefs = append(briefs, workflowBrief{
-				ID:          r.ID,
-				Name:        r.Name,
-				Description: r.Description,
-				IsActive:    r.IsActive,
-				StepCount:   r.StepCount,
-				CreatedAt:   r.CreatedAt.Format(time.RFC3339),
+		briefs := make([]*mcpv1.ToolWorkflowBrief, 0, len(results))
+		for i := range results {
+			briefs = append(briefs, &mcpv1.ToolWorkflowBrief{
+				Id:          results[i].Id,
+				Name:        results[i].Name,
+				Description: results[i].Description,
+				IsActive:    results[i].IsActive,
+				StepCount:   results[i].StepCount,
+				CreatedAt:   results[i].CreatedAt.AsTime().Format(time.RFC3339),
 			})
 		}
 
-		return nil, listWorkflowsOutput{Workflows: briefs}, nil
+		return nil, &mcpv1.ListWorkflowsOutput{Workflows: briefs}, nil
 	})
 }
 

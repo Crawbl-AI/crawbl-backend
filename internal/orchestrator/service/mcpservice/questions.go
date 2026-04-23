@@ -38,12 +38,12 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 		return nil, err
 	}
 
-	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentID, params.AgentSlug)
+	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentId, params.AgentSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, mErr := s.repos.Conversation.GetByID(ctx, sess, workspaceID, params.ConversationID); mErr != nil {
+	if _, mErr := s.repos.Conversation.GetByID(ctx, sess, workspaceID, params.ConversationId); mErr != nil {
 		return nil, merrors.NewBusinessError("conversation not found in this workspace", merrors.ErrCodeConversationNotFound)
 	}
 
@@ -58,7 +58,7 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 
 	msg := &orchestrator.Message{
 		ID:             msgID,
-		ConversationID: params.ConversationID,
+		ConversationID: params.ConversationId,
 		Role:           orchestrator.MessageRoleAgent,
 		Content: orchestrator.MessageContent{
 			Type:  orchestrator.MessageContentTypeQuestions,
@@ -86,7 +86,7 @@ func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID 
 		s.infra.Broadcaster.EmitMessageNew(ctx, workspaceID, msg)
 	}
 
-	return &AskQuestionsResult{MessageID: msgID}, nil
+	return &AskQuestionsResult{MessageId: msgID}, nil
 }
 
 // validateAskQuestionsParams checks that the params meet the structural requirements
@@ -110,7 +110,7 @@ func validateAskQuestionsParams(params *AskQuestionsParams) error {
 }
 
 // validateAskQuestionsTurn validates a single turn and every question within it.
-func validateAskQuestionsTurn(ti int, t AskQuestionsTurn) error {
+func validateAskQuestionsTurn(ti int, t *AskQuestionsTurn) error {
 	if len(strings.TrimSpace(t.Label)) > maxTurnLabelLen {
 		return merrors.NewBusinessError(
 			fmt.Sprintf("turn %d: label exceeds %d characters", ti+1, maxTurnLabelLen),
@@ -138,7 +138,7 @@ func validateAskQuestionsTurn(ti int, t AskQuestionsTurn) error {
 }
 
 // validateAskQuestionsQuestion validates a single question and its options.
-func validateAskQuestionsQuestion(ti, qi int, q AskQuestionsQuestion) error {
+func validateAskQuestionsQuestion(ti, qi int, q *AskQuestionsQuestion) error {
 	prompt := strings.TrimSpace(q.Prompt)
 	if prompt == "" {
 		return merrors.NewBusinessError(
@@ -152,7 +152,7 @@ func validateAskQuestionsQuestion(ti, qi int, q AskQuestionsQuestion) error {
 			errCodeInvalidInput,
 		)
 	}
-	if q.Mode != orchestrator.QuestionModeSingle && q.Mode != orchestrator.QuestionModeMulti {
+	if q.Mode != string(orchestrator.QuestionModeSingle) && q.Mode != string(orchestrator.QuestionModeMulti) {
 		return merrors.NewBusinessError(
 			fmt.Sprintf("turn %d question %d: mode must be single or multi", ti+1, qi+1),
 			errCodeInvalidInput,
@@ -190,7 +190,7 @@ func validateAskQuestionsQuestion(ti, qi int, q AskQuestionsQuestion) error {
 
 // buildQuestionTurns converts the service-layer input slices into domain QuestionTurn values.
 // Option IDs are sequential uppercase ASCII letters (A..Z) indexed from optionIDBase.
-func buildQuestionTurns(input []AskQuestionsTurn) []orchestrator.QuestionTurn {
+func buildQuestionTurns(input []*AskQuestionsTurn) []orchestrator.QuestionTurn {
 	turns := make([]orchestrator.QuestionTurn, 0, len(input))
 	for ti, t := range input {
 		questions := make([]orchestrator.QuestionItem, 0, len(t.Questions))
@@ -205,7 +205,7 @@ func buildQuestionTurns(input []AskQuestionsTurn) []orchestrator.QuestionTurn {
 			questions = append(questions, orchestrator.QuestionItem{
 				ID:          fmt.Sprintf("t%dq%d", ti+1, qi+1),
 				Prompt:      strings.TrimSpace(q.Prompt),
-				Mode:        q.Mode,
+				Mode:        orchestrator.QuestionMode(q.Mode),
 				Options:     options,
 				AllowCustom: q.AllowCustom,
 			})

@@ -11,6 +11,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
@@ -99,223 +100,44 @@ type logger interface {
 	ErrorContext(ctx context.Context, msg string, args ...any)
 }
 
-// UserProfileResult is returned by GetUserProfile.
-type UserProfileResult struct {
-	ID          string
-	Email       string
-	Nickname    string
-	Name        string
-	Surname     string
-	CountryCode *string
-	CreatedAt   time.Time
-	Preferences *UserPreferences
-}
-
-// UserPreferences holds optional user preference fields.
-type UserPreferences struct {
-	Theme    *string
-	Language *string
-	Currency *string
-}
+// Proto-generated type aliases. The canonical definitions live in
+// internal/generated/proto/mcp/v1/mcp.pb.go; these aliases keep
+// existing callers compiling without a package-wide import change.
+type (
+	UserPreferences        = mcpv1.UserPreferences
+	UserProfileResult      = mcpv1.UserProfileResult
+	MessageBrief           = mcpv1.MessageBrief
+	CreateAgentHistoryParams = mcpv1.CreateAgentHistoryParams
+	SendAgentMessageParams = mcpv1.SendAgentMessageParams
+	SendAgentMessageResult = mcpv1.SendAgentMessageResult
+	CreateArtifactParams   = mcpv1.CreateArtifactParams
+	CreateArtifactResult   = mcpv1.CreateArtifactResult
+	ReadArtifactResult     = mcpv1.ReadArtifactResult
+	ArtifactReviewBrief    = mcpv1.ArtifactReviewBrief
+	UpdateArtifactParams   = mcpv1.UpdateArtifactParams
+	UpdateArtifactResult   = mcpv1.UpdateArtifactResult
+	ReviewArtifactParams   = mcpv1.ReviewArtifactParams
+	ReviewArtifactResult   = mcpv1.ReviewArtifactResult
+	AskQuestionsParams     = mcpv1.AskQuestionsParams
+	AskQuestionsTurn       = mcpv1.AskQuestionsTurn
+	AskQuestionsQuestion   = mcpv1.AskQuestionsQuestion
+	AskQuestionsResult     = mcpv1.AskQuestionsResult
+	CreateWorkflowParams   = mcpv1.CreateWorkflowParams
+	CreateWorkflowResult   = mcpv1.CreateWorkflowResult
+	TriggerWorkflowParams  = mcpv1.TriggerWorkflowParams
+	TriggerWorkflowResult  = mcpv1.TriggerWorkflowResult
+	WorkflowStatusResult   = mcpv1.WorkflowStatusResult
+	StepStatusBrief        = mcpv1.StepStatusBrief
+	WorkflowBriefResult    = mcpv1.WorkflowBriefResult
+	WorkflowStep           = mcpv1.WorkflowStep
+)
 
 // WorkspaceInfoResult is returned by GetWorkspaceInfo.
+// Kept as a Go struct because Agents uses []*orchestrator.Agent which
+// does not match the proto AgentBrief type.
 type WorkspaceInfoResult struct {
 	ID        string
 	Name      string
 	CreatedAt time.Time
 	Agents    []*orchestrator.Agent
-}
-
-// MessageBrief is a search result item.
-type MessageBrief struct {
-	ID        string
-	Role      string
-	Text      string
-	CreatedAt time.Time
-}
-
-// CreateAgentHistoryParams holds input for creating an agent history entry.
-type CreateAgentHistoryParams struct {
-	AgentID        string
-	AgentSlug      string
-	ConversationID string
-	Title          string
-	Subtitle       string
-}
-
-// SendAgentMessageParams holds input for the send_message_to_agent flow.
-type SendAgentMessageParams struct {
-	UserID         string
-	WorkspaceID    string
-	SessionID      string
-	AgentSlug      string
-	Message        string
-	ConversationID string
-}
-
-// SendAgentMessageResult is returned by SendMessageToAgent.
-type SendAgentMessageResult struct {
-	Success   bool
-	AgentSlug string
-	Response  string
-	MessageID string
-	Error     string
-}
-
-// CreateArtifactParams holds input for creating an artifact.
-type CreateArtifactParams struct {
-	Title          string
-	Content        string
-	ContentType    string
-	ConversationID string
-	AgentID        string
-	AgentSlug      string
-}
-
-// CreateArtifactResult is returned by CreateArtifact.
-type CreateArtifactResult struct {
-	ArtifactID string
-	Version    int
-}
-
-// ReadArtifactResult is returned by ReadArtifact.
-type ReadArtifactResult struct {
-	ArtifactID  string
-	Title       string
-	ContentType string
-	Content     string
-	Version     int
-	Status      string
-	Reviews     []ArtifactReviewBrief
-}
-
-// ArtifactReviewBrief summarises a single review.
-type ArtifactReviewBrief struct {
-	ReviewerAgentSlug string
-	Outcome           string
-	Comments          string
-	CreatedAt         time.Time
-}
-
-// UpdateArtifactParams holds input for updating an artifact.
-type UpdateArtifactParams struct {
-	ArtifactID      string
-	Content         string
-	ChangeSummary   string
-	ExpectedVersion int
-	AgentID         string
-	AgentSlug       string
-}
-
-// UpdateArtifactResult is returned by UpdateArtifact.
-type UpdateArtifactResult struct {
-	Version int
-}
-
-// ReviewArtifactParams holds input for reviewing an artifact.
-type ReviewArtifactParams struct {
-	ArtifactID string
-	Outcome    string
-	Comments   string
-	Version    int
-	AgentID    string
-	AgentSlug  string
-}
-
-// ReviewArtifactResult is returned by ReviewArtifact.
-type ReviewArtifactResult struct {
-	Reviewed bool
-}
-
-// AskQuestionsParams holds input for creating an interactive questions message.
-type AskQuestionsParams struct {
-	AgentID        string
-	AgentSlug      string
-	ConversationID string
-	Turns          []AskQuestionsTurn
-}
-
-// AskQuestionsTurn describes one turn group to present to the user.
-type AskQuestionsTurn struct {
-	Label     string
-	Questions []AskQuestionsQuestion
-}
-
-// AskQuestionsQuestion describes one question with its allowed options.
-type AskQuestionsQuestion struct {
-	Prompt      string
-	Mode        orchestrator.QuestionMode
-	Options     []string // option labels; service assigns A, B, C, …
-	AllowCustom bool     // whether the user may also provide free-text input
-}
-
-// AskQuestionsResult is returned by AskQuestions.
-type AskQuestionsResult struct {
-	MessageID string
-}
-
-// CreateWorkflowParams holds input for creating a workflow definition.
-type CreateWorkflowParams struct {
-	Name        string
-	Description string
-	StepsJSON   string
-}
-
-// CreateWorkflowResult is returned by CreateWorkflow.
-type CreateWorkflowResult struct {
-	WorkflowID string
-	StepCount  int
-}
-
-// TriggerWorkflowParams holds input for triggering a workflow.
-type TriggerWorkflowParams struct {
-	WorkflowID     string
-	ConversationID string
-	InitialContext string
-}
-
-// TriggerWorkflowResult is returned by TriggerWorkflow.
-type TriggerWorkflowResult struct {
-	ExecutionID  string
-	WorkflowName string
-}
-
-// WorkflowStatusResult is returned by CheckWorkflowStatus.
-type WorkflowStatusResult struct {
-	ExecutionID string
-	Status      string
-	CurrentStep int
-	Error       string
-	Steps       []StepStatusBrief
-}
-
-// StepStatusBrief summarises a single workflow step execution.
-type StepStatusBrief struct {
-	StepIndex  int
-	StepName   string
-	AgentSlug  string
-	Status     string
-	DurationMs *int
-}
-
-// WorkflowBriefResult summarises a workflow definition.
-type WorkflowBriefResult struct {
-	ID          string
-	Name        string
-	Description string
-	IsActive    bool
-	StepCount   int
-	CreatedAt   time.Time
-}
-
-// WorkflowStep describes a single step within a workflow definition.
-type WorkflowStep struct {
-	Name             string `json:"name"`
-	AgentSlug        string `json:"agent_slug"`
-	PromptTemplate   string `json:"prompt_template"`
-	TimeoutSecs      int    `json:"timeout_secs,omitempty"`
-	RequiresApproval bool   `json:"requires_approval,omitempty"`
-	OnFailure        string `json:"on_failure,omitempty"`
-	OutputKey        string `json:"output_key,omitempty"`
-	MaxRetries       int    `json:"max_retries,omitempty"`
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
@@ -15,39 +16,26 @@ type listConversationsInput struct {
 	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type listConversationsOutput struct {
-	Conversations []conversationBrief `json:"conversations"`
-}
-
-type conversationBrief struct {
-	ID        string  `json:"id"`
-	Title     string  `json:"title"`
-	Type      string  `json:"type"`
-	AgentID   *string `json:"agent_id,omitempty"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
-}
-
-func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversationsInput, listConversationsOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listConversationsInput) (*sdkmcp.CallToolResult, listConversationsOutput, error) {
+func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversationsInput, *mcpv1.ListConversationsOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listConversationsInput) (*sdkmcp.CallToolResult, *mcpv1.ListConversationsOutput, error) {
 		conversations, err := deps.MCPService.ListConversations(ctx, sess, userID, workspaceID)
 		if err != nil {
-			return nil, listConversationsOutput{}, err
+			return nil, nil, err
 		}
 
-		briefs := make([]conversationBrief, 0, len(conversations))
+		briefs := make([]*mcpv1.ConversationBrief, 0, len(conversations))
 		for _, c := range conversations {
-			briefs = append(briefs, conversationBrief{
-				ID:        c.ID,
+			briefs = append(briefs, &mcpv1.ConversationBrief{
+				Id:        c.ID,
 				Title:     c.Title,
 				Type:      string(c.Type),
-				AgentID:   c.AgentID,
+				AgentId:   c.AgentID,
 				CreatedAt: c.CreatedAt.Format(time.RFC3339),
 				UpdatedAt: c.UpdatedAt.Format(time.RFC3339),
 			})
 		}
 
-		return nil, listConversationsOutput{Conversations: briefs}, nil
+		return nil, &mcpv1.ListConversationsOutput{Conversations: briefs}, nil
 	})
 }
 
@@ -58,20 +46,8 @@ type searchMessagesInput struct {
 	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type searchMessagesOutput struct {
-	Messages []messageBrief `json:"messages"`
-	Count    int            `json:"count"`
-}
-
-type messageBrief struct {
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"created_at"`
-}
-
-func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesInput, searchMessagesOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input searchMessagesInput) (*sdkmcp.CallToolResult, searchMessagesOutput, error) {
+func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesInput, *mcpv1.SearchMessagesOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input searchMessagesInput) (*sdkmcp.CallToolResult, *mcpv1.SearchMessagesOutput, error) {
 		limit := input.Limit
 		if limit <= 0 {
 			limit = defaultSearchLimit
@@ -82,20 +58,20 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 
 		results, err := deps.MCPService.SearchMessages(ctx, sess, userID, workspaceID, input.ConversationID, input.Query, limit)
 		if err != nil {
-			return nil, searchMessagesOutput{}, err
+			return nil, nil, err
 		}
 
-		briefs := make([]messageBrief, 0, len(results))
-		for _, r := range results {
-			briefs = append(briefs, messageBrief{
-				ID:        r.ID,
-				Role:      r.Role,
-				Text:      r.Text,
-				CreatedAt: r.CreatedAt.Format(time.RFC3339),
+		briefs := make([]*mcpv1.ToolMessageBrief, 0, len(results))
+		for i := range results {
+			briefs = append(briefs, &mcpv1.ToolMessageBrief{
+				Id:        results[i].Id,
+				Role:      results[i].Role,
+				Text:      results[i].Text,
+				CreatedAt: results[i].CreatedAt.AsTime().Format(time.RFC3339),
 			})
 		}
 
-		return nil, searchMessagesOutput{Messages: briefs, Count: len(briefs)}, nil
+		return nil, &mcpv1.SearchMessagesOutput{Messages: briefs, Count: int32(len(briefs))}, nil
 	})
 }
 
@@ -106,16 +82,8 @@ type sendMessageInput struct {
 	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type sendMessageOutput struct {
-	Success   bool   `json:"success"`
-	AgentSlug string `json:"agent_slug"`
-	Response  string `json:"response"`
-	MessageID string `json:"message_id"`
-	Error     string `json:"error,omitempty"`
-}
-
-func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, sendMessageOutput] {
-	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input sendMessageInput) (*sdkmcp.CallToolResult, sendMessageOutput, error) {
+func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, *mcpv1.SendMessageToolOutput] {
+	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input sendMessageInput) (*sdkmcp.CallToolResult, *mcpv1.SendMessageToolOutput, error) {
 		RecordAPICall(ctx, "RUNTIME:GRPC Converse")
 
 		// Fall back to the runtime-propagated conversation ID. The
@@ -127,22 +95,22 @@ func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, s
 		}
 
 		result, err := deps.MCPService.SendMessageToAgent(ctx, sess, &mcpservice.SendAgentMessageParams{
-			UserID:         userID,
-			WorkspaceID:    workspaceID,
-			SessionID:      sessionIDFromContext(ctx),
+			UserId:         userID,
+			WorkspaceId:    workspaceID,
+			SessionId:      sessionIDFromContext(ctx),
 			AgentSlug:      input.AgentSlug,
 			Message:        input.Message,
-			ConversationID: input.ConversationID,
+			ConversationId: input.ConversationID,
 		})
 		if err != nil {
-			return nil, sendMessageOutput{}, err
+			return nil, nil, err
 		}
 
-		return nil, sendMessageOutput{
+		return nil, &mcpv1.SendMessageToolOutput{
 			Success:   result.Success,
 			AgentSlug: result.AgentSlug,
 			Response:  result.Response,
-			MessageID: result.MessageID,
+			MessageId: result.MessageId,
 			Error:     result.Error,
 		}, nil
 	})

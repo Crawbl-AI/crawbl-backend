@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package crawbl.realtime.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/realtime/v1;realtimev1";
+
+import "google/protobuf/struct.proto";
+
+// AgentStatusPayload is the payload for agent.status events.
+message AgentStatusPayload {
+  string agent_id = 1;
+  string status = 2;
+  string conversation_id = 3;
+}
+
+// MessageChunkPayload is emitted for each streamed text token.
+message MessageChunkPayload {
+  string message_id = 1;
+  string conversation_id = 2;
+  string agent_id = 3;
+  string chunk = 4;
+}
+
+// MessageDonePayload signals stream completion.
+message MessageDonePayload {
+  string message_id = 1;
+  string conversation_id = 2;
+  string agent_id = 3;
+  string status = 4;
+}
+
+// AgentToolPayload reports tool call activity during streaming.
+message AgentToolPayload {
+  string agent_id = 1;
+  string conversation_id = 2;
+  string tool = 3;
+  string status = 4;
+  string call_id = 5;
+  string query = 6;
+  google.protobuf.Struct args = 7;
+  string created_at = 8;
+}
+
+// MessageStatusPayload is emitted when a message's delivery status changes.
+message MessageStatusPayload {
+  string message_id = 1;
+  string conversation_id = 2;
+  string local_id = 3;
+  string status = 4;
+}
+
+// DelegationAgent is the agent summary nested in delegation events.
+message DelegationAgent {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  string slug = 4;
+  string avatar = 5;
+  string status = 6;
+}
+
+// AgentDelegationPayload reports agent-to-agent delegation activity.
+message AgentDelegationPayload {
+  DelegationAgent from = 1;
+  DelegationAgent to = 2;
+  string conversation_id = 3;
+  string created_at = 4;
+  string status = 5;
+  string message_preview = 6;
+  string message_id = 7;
+}
+
+// ArtifactEventPayload reports artifact creation/update/review activity.
+message ArtifactEventPayload {
+  string artifact_id = 1;
+  string conversation_id = 2;
+  string title = 3;
+  int32 version = 4;
+  string action = 5;
+  string agent_id = 6;
+  string agent_slug = 7;
+}
+
+// UsageUpdatePayload reports per-LLM-call token usage to connected clients.
+message UsageUpdatePayload {
+  string agent_id = 1;
+  string conversation_id = 2;
+  string message_id = 3;
+  string model = 4;
+  int32 prompt_tokens = 5;
+  int32 completion_tokens = 6;
+  int32 total_tokens = 7;
+  int32 call_sequence = 8;
+}
+
+// WorkflowEventPayload reports workflow execution progress.
+message WorkflowEventPayload {
+  string workflow_id = 1;
+  string execution_id = 2;
+  string workflow_name = 3;
+  string conversation_id = 4;
+  string status = 5;
+  int32 step_index = 6;
+  string step_name = 7;
+  string agent_slug = 8;
+  string error = 9;
+}

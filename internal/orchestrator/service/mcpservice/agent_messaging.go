@@ -41,12 +41,12 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	}
 
 	// 1. Resolve target agent and calling agent from the workspace.
-	agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, params.WorkspaceID)
+	agents, mErr := s.repos.Agent.ListByWorkspaceID(ctx, sess, params.WorkspaceId)
 	if mErr != nil {
 		return &SendAgentMessageResult{Error: "failed to list agents: " + mErr.Error()}, nil
 	}
 
-	targetAgent, fromAgent, callingSlug, resolveErr := resolveAgents(agents, slug, params.SessionID)
+	targetAgent, fromAgent, callingSlug, resolveErr := resolveAgents(agents, slug, params.SessionId)
 	if resolveErr != "" {
 		return &SendAgentMessageResult{Error: resolveErr}, nil
 	}
@@ -65,7 +65,7 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	}
 
 	// 3. Emit Socket.IO delegation event then call agent runtime.
-	s.emitDelegationStarted(ctx, params.WorkspaceID, fromAgent, targetAgent, params.ConversationID, msgID, message)
+	s.emitDelegationStarted(ctx, params.WorkspaceId, fromAgent, targetAgent, params.ConversationId, msgID, message)
 
 	return s.callAgentRuntime(ctx, sess, callRuntimeOpts{
 		params:      params,
@@ -92,10 +92,10 @@ type prepareOpts struct {
 // Returns the new message ID, or an error when the depth limit is exceeded.
 func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareOpts) (string, error) {
 	params := opts.params
-	currentDepth, err := s.repos.MCP.GetMaxAgentMessageDepth(ctx, sess, params.WorkspaceID, params.ConversationID)
+	currentDepth, err := s.repos.MCP.GetMaxAgentMessageDepth(ctx, sess, params.WorkspaceId, params.ConversationId)
 	if err != nil {
 		s.infra.Logger.Warn("prepareAgentMessage: failed to get agent message depth, defaulting to 0",
-			"workspace_id", params.WorkspaceID, "conversation_id", params.ConversationID, "error", err)
+			"workspace_id", params.WorkspaceId, "conversation_id", params.ConversationId, "error", err)
 		currentDepth = -1
 	}
 	newDepth := currentDepth + 1
@@ -110,8 +110,8 @@ func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareO
 	}
 	if insertErr := s.repos.MCP.CreateAgentMessage(ctx, sess, &mcprepo.AgentMessageRow{
 		ID:             msgID,
-		WorkspaceID:    params.WorkspaceID,
-		ConversationID: params.ConversationID,
+		WorkspaceID:    params.WorkspaceId,
+		ConversationID: params.ConversationId,
 		FromAgentID:    fromAgentID,
 		FromAgentSlug:  opts.callingSlug,
 		ToAgentID:      opts.targetAgent.ID,
@@ -122,7 +122,7 @@ func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareO
 	}); insertErr != nil {
 		s.infra.Logger.Error("send_message_to_agent: failed to insert agent_messages",
 			"error", insertErr.Error(),
-			"workspace_id", params.WorkspaceID,
+			"workspace_id", params.WorkspaceId,
 		)
 	}
 	return msgID, nil
@@ -148,24 +148,24 @@ func (s *service) callAgentRuntime(ctx contextT, sess sessionT, opts callRuntime
 	fullMessage := s.buildFullMessage(ctx, sess, params, opts.message)
 
 	runtimeState, rErr := s.infra.RuntimeClient.EnsureRuntime(ctx, &userswarmclient.EnsureRuntimeOpts{
-		UserID:          params.UserID,
-		WorkspaceID:     params.WorkspaceID,
+		UserID:          params.UserId,
+		WorkspaceID:     params.WorkspaceId,
 		WaitForVerified: true,
 	})
 	if rErr != nil {
 		duration := time.Since(startTime).Milliseconds()
 		s.failAgentMessage(failAgentMessageOpts{
 			ctx: ctx, sess: sess, msgID: opts.msgID, errText: rErr.Error(),
-			durationMs: duration, workspaceID: params.WorkspaceID,
-			from: opts.fromAgent, to: opts.targetAgent, conversationID: params.ConversationID,
+			durationMs: duration, workspaceID: params.WorkspaceId,
+			from: opts.fromAgent, to: opts.targetAgent, conversationID: params.ConversationId,
 		})
-		return &SendAgentMessageResult{AgentSlug: opts.slug, Error: "runtime not ready: " + rErr.Error(), MessageID: opts.msgID}, nil
+		return &SendAgentMessageResult{AgentSlug: opts.slug, Error: "runtime not ready: " + rErr.Error(), MessageId: opts.msgID}, nil
 	}
 
 	turns, callErr := s.infra.RuntimeClient.SendText(ctx, &userswarmclient.SendTextOpts{
 		Runtime:   runtimeState,
 		Message:   fullMessage,
-		SessionID: params.ConversationID,
+		SessionID: params.ConversationId,
 		AgentID:   opts.slug,
 	})
 	duration := time.Since(startTime).Milliseconds()
@@ -173,10 +173,10 @@ func (s *service) callAgentRuntime(ctx contextT, sess sessionT, opts callRuntime
 	if callErr != nil {
 		s.failAgentMessage(failAgentMessageOpts{
 			ctx: ctx, sess: sess, msgID: opts.msgID, errText: callErr.Error(),
-			durationMs: duration, workspaceID: params.WorkspaceID,
-			from: opts.fromAgent, to: opts.targetAgent, conversationID: params.ConversationID,
+			durationMs: duration, workspaceID: params.WorkspaceId,
+			from: opts.fromAgent, to: opts.targetAgent, conversationID: params.ConversationId,
 		})
-		return &SendAgentMessageResult{AgentSlug: opts.slug, Error: callErr.Error(), MessageID: opts.msgID}, nil
+		return &SendAgentMessageResult{AgentSlug: opts.slug, Error: callErr.Error(), MessageId: opts.msgID}, nil
 	}
 
 	responseText := joinTurns(turns)
@@ -187,22 +187,22 @@ func (s *service) callAgentRuntime(ctx contextT, sess sessionT, opts callRuntime
 	if completeErr := s.repos.MCP.UpdateAgentMessageCompleted(ctx, sess, opts.msgID, storedText, duration); completeErr != nil {
 		s.infra.Logger.Warn("failed to mark agent message as completed", "error", completeErr.Error())
 	}
-	s.emitDelegationDone(ctx, params.WorkspaceID, opts.fromAgent, opts.targetAgent, params.ConversationID, opts.msgID, realtime.AgentDelegationStatusCompleted)
+	s.emitDelegationDone(ctx, params.WorkspaceId, opts.fromAgent, opts.targetAgent, params.ConversationId, opts.msgID, realtime.AgentDelegationStatusCompleted)
 	s.infra.Logger.Info("send_message_to_agent: completed",
 		slog.String("from_slug", opts.callingSlug),
 		slog.String("to_slug", opts.slug),
 		slog.Int64("duration_ms", duration),
 		slog.Int("response_len", len(responseText)),
 	)
-	return &SendAgentMessageResult{Success: true, AgentSlug: opts.slug, Response: responseText, MessageID: opts.msgID}, nil
+	return &SendAgentMessageResult{Success: true, AgentSlug: opts.slug, Response: responseText, MessageId: opts.msgID}, nil
 }
 
 // buildFullMessage prepends conversation context to the message when available.
 func (s *service) buildFullMessage(ctx contextT, sess sessionT, params *SendAgentMessageParams, message string) string {
-	if params.ConversationID == "" {
+	if params.ConversationId == "" {
 		return message
 	}
-	conversationContext := s.buildConversationContext(ctx, sess, params.WorkspaceID, params.ConversationID, contextMessageLimit)
+	conversationContext := s.buildConversationContext(ctx, sess, params.WorkspaceId, params.ConversationId, contextMessageLimit)
 	if conversationContext == "" {
 		return message
 	}
@@ -278,10 +278,10 @@ func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, 
 	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
 		From:           mcpDelegationAgent(from),
 		To:             mcpDelegationAgent(to),
-		ConversationID: conversationID,
+		ConversationId: conversationID,
 		Status:         realtime.AgentDelegationStatusRunning,
 		MessagePreview: truncateStr(message, delegationPreviewMaxRunes),
-		MessageID:      msgID,
+		MessageId:      msgID,
 	})
 	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusThinking), conversationID)
 }
@@ -294,9 +294,9 @@ func (s *service) emitDelegationDone(ctx contextT, workspaceID string, from, to 
 	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
 		From:           mcpDelegationAgent(from),
 		To:             mcpDelegationAgent(to),
-		ConversationID: conversationID,
+		ConversationId: conversationID,
 		Status:         status,
-		MessageID:      msgID,
+		MessageId:      msgID,
 	})
 }
 
@@ -305,7 +305,7 @@ func mcpDelegationAgent(a *orchestrator.Agent) *realtime.DelegationAgent {
 		return nil
 	}
 	return &realtime.DelegationAgent{
-		ID:     a.ID,
+		Id:     a.ID,
 		Name:   a.Name,
 		Role:   a.Role,
 		Slug:   a.Slug,

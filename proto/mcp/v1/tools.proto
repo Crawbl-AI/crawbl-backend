@@ -1,0 +1,675 @@
+syntax = "proto3";
+
+package crawbl.mcp.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1;mcpv1";
+
+// =============================================================================
+// User tools
+// =============================================================================
+
+// UserProfileInput is the input for the get_user_profile tool.
+message UserProfileInput {
+  bool include_preferences = 1;
+  string description = 2;
+}
+
+// UserPrefs holds user preference fields for tool output.
+message UserPrefs {
+  optional string theme = 1;
+  optional string language = 2;
+  optional string currency = 3;
+}
+
+// UserProfileOutput is the output for the get_user_profile tool.
+message UserProfileOutput {
+  string id = 1;
+  string email = 2;
+  string nickname = 3;
+  string name = 4;
+  string surname = 5;
+  optional string country_code = 6;
+  string created_at = 7;
+  optional UserPrefs preferences = 8;
+}
+
+// WorkspaceInfoInput is the input for the get_workspace_info tool.
+message WorkspaceInfoInput {
+  bool include_agents = 1;
+  string description = 2;
+}
+
+// ToolAgentBrief is a lightweight agent reference in tool output.
+message ToolAgentBrief {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  string slug = 4;
+}
+
+// WorkspaceInfoOutput is the output for the get_workspace_info tool.
+message WorkspaceInfoOutput {
+  string id = 1;
+  string name = 2;
+  string created_at = 3;
+  repeated ToolAgentBrief agents = 4;
+}
+
+// =============================================================================
+// Push tools
+// =============================================================================
+
+// PushInput is the input for the send_push_notification tool.
+message PushInput {
+  string title = 1;
+  string message = 2;
+  string description = 3;
+}
+
+// PushOutput is the output for the send_push_notification tool.
+message PushOutput {
+  bool sent = 1;
+  string info = 2;
+}
+
+// =============================================================================
+// Agent tools
+// =============================================================================
+
+// CreateAgentHistoryInput is the input for the create_agent_history tool.
+message CreateAgentHistoryInput {
+  string agent_id = 1;
+  string agent_slug = 2;
+  string conversation_id = 3;
+  string title = 4;
+  string subtitle = 5;
+  string description = 6;
+}
+
+// CreateAgentHistoryOutput is the output for the create_agent_history tool.
+message CreateAgentHistoryOutput {
+  bool created = 1;
+  string info = 2;
+}
+
+// =============================================================================
+// Chat tools
+// =============================================================================
+
+// ListConversationsInput is the input for the list_conversations tool.
+message ListConversationsInput {
+  bool include_archived = 1;
+  string description = 2;
+}
+
+// ConversationBrief is a conversation summary for tool output.
+message ConversationBrief {
+  string id = 1;
+  string title = 2;
+  string type = 3;
+  optional string agent_id = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+// ListConversationsOutput is the output for the list_conversations tool.
+message ListConversationsOutput {
+  repeated ConversationBrief conversations = 1;
+}
+
+// SearchMessagesInput is the input for the search_messages tool.
+message SearchMessagesInput {
+  string conversation_id = 1;
+  string query = 2;
+  int32 limit = 3;
+  string description = 4;
+}
+
+// ToolMessageBrief is a message search result for tool output.
+message ToolMessageBrief {
+  string id = 1;
+  string role = 2;
+  string text = 3;
+  string created_at = 4;
+}
+
+// SearchMessagesOutput is the output for the search_messages tool.
+message SearchMessagesOutput {
+  repeated ToolMessageBrief messages = 1;
+  int32 count = 2;
+}
+
+// SendMessageInput is the input for the send_message_to_agent tool.
+message SendMessageInput {
+  string agent_slug = 1;
+  string message = 2;
+  string conversation_id = 3;
+  string description = 4;
+}
+
+// SendMessageToolOutput is the output for the send_message_to_agent tool.
+message SendMessageToolOutput {
+  bool success = 1;
+  string agent_slug = 2;
+  string response = 3;
+  string message_id = 4;
+  string error = 5;
+}
+
+// =============================================================================
+// Artifact tools
+// =============================================================================
+
+// CreateArtifactInput is the input for the create_artifact tool.
+message CreateArtifactInput {
+  string title = 1;
+  string content = 2;
+  string content_type = 3;
+  string conversation_id = 4;
+  string agent_id = 5;
+  string agent_slug = 6;
+  string description = 7;
+}
+
+// CreateArtifactToolOutput is the output for the create_artifact tool.
+message CreateArtifactToolOutput {
+  string artifact_id = 1;
+  int32 version = 2;
+  string info = 3;
+}
+
+// ReadArtifactInput is the input for the read_artifact tool.
+message ReadArtifactInput {
+  string artifact_id = 1;
+  int32 version = 2;
+  string description = 3;
+}
+
+// ToolArtifactReviewBrief is a review summary for tool output.
+message ToolArtifactReviewBrief {
+  string reviewer_agent_slug = 1;
+  string outcome = 2;
+  string comments = 3;
+  string created_at = 4;
+}
+
+// ReadArtifactToolOutput is the output for the read_artifact tool.
+message ReadArtifactToolOutput {
+  string artifact_id = 1;
+  string title = 2;
+  string content_type = 3;
+  string content = 4;
+  int32 version = 5;
+  string status = 6;
+  repeated ToolArtifactReviewBrief reviews = 7;
+}
+
+// UpdateArtifactInput is the input for the update_artifact tool.
+message UpdateArtifactInput {
+  string artifact_id = 1;
+  string content = 2;
+  string change_summary = 3;
+  int32 expected_version = 4;
+  string agent_id = 5;
+  string agent_slug = 6;
+  string description = 7;
+}
+
+// UpdateArtifactToolOutput is the output for the update_artifact tool.
+message UpdateArtifactToolOutput {
+  int32 version = 1;
+  string info = 2;
+}
+
+// ReviewArtifactInput is the input for the review_artifact tool.
+message ReviewArtifactInput {
+  string artifact_id = 1;
+  string outcome = 2;
+  string comments = 3;
+  int32 version = 4;
+  string agent_id = 5;
+  string agent_slug = 6;
+  string description = 7;
+}
+
+// ReviewArtifactToolOutput is the output for the review_artifact tool.
+message ReviewArtifactToolOutput {
+  bool reviewed = 1;
+  string info = 2;
+}
+
+// =============================================================================
+// Questions tools
+// =============================================================================
+
+// AskQuestionsToolOption is a selectable option in a question.
+message AskQuestionsToolOption {
+  string label = 1;
+}
+
+// AskQuestionsToolQuestion is a single question within a turn.
+message AskQuestionsToolQuestion {
+  string prompt = 1;
+  string mode = 2;
+  repeated AskQuestionsToolOption options = 3;
+  bool allow_custom = 4;
+}
+
+// AskQuestionsToolTurn is a group of related questions.
+message AskQuestionsToolTurn {
+  string label = 1;
+  repeated AskQuestionsToolQuestion questions = 2;
+}
+
+// AskQuestionsToolInput is the input for the ask_questions tool.
+message AskQuestionsToolInput {
+  string agent_id = 1;
+  string agent_slug = 2;
+  string conversation_id = 3;
+  repeated AskQuestionsToolTurn turns = 4;
+  string description = 5;
+}
+
+// AskQuestionsToolOutput is the output for the ask_questions tool.
+message AskQuestionsToolOutput {
+  string message_id = 1;
+  string info = 2;
+}
+
+// =============================================================================
+// Workflow tools
+// =============================================================================
+
+// CreateWorkflowInput is the input for the create_workflow tool.
+message CreateWorkflowInput {
+  string name = 1;
+  string description = 2;
+  string steps = 3;
+}
+
+// CreateWorkflowToolOutput is the output for the create_workflow tool.
+message CreateWorkflowToolOutput {
+  string workflow_id = 1;
+  string info = 2;
+}
+
+// TriggerWorkflowInput is the input for the trigger_workflow tool.
+message TriggerWorkflowInput {
+  string workflow_id = 1;
+  string conversation_id = 2;
+  string initial_context = 3;
+  string description = 4;
+}
+
+// TriggerWorkflowToolOutput is the output for the trigger_workflow tool.
+message TriggerWorkflowToolOutput {
+  string execution_id = 1;
+  string info = 2;
+}
+
+// CheckWorkflowStatusInput is the input for the check_workflow_status tool.
+message CheckWorkflowStatusInput {
+  string execution_id = 1;
+  string description = 2;
+}
+
+// ToolStepStatusBrief summarises a workflow step for tool output.
+message ToolStepStatusBrief {
+  int32 step_index = 1;
+  string step_name = 2;
+  string agent_slug = 3;
+  string status = 4;
+  optional int32 duration_ms = 5;
+}
+
+// CheckWorkflowStatusOutput is the output for the check_workflow_status tool.
+message CheckWorkflowStatusOutput {
+  string execution_id = 1;
+  string status = 2;
+  int32 current_step = 3;
+  string error = 4;
+  repeated ToolStepStatusBrief steps = 5;
+  string info = 6;
+}
+
+// ToolWorkflowBrief summarises a workflow definition for tool output.
+message ToolWorkflowBrief {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool is_active = 4;
+  int32 step_count = 5;
+  string created_at = 6;
+}
+
+// ListWorkflowsInput is the input for the list_workflows tool.
+message ListWorkflowsInput {
+  bool include_inactive = 1;
+  string description = 2;
+}
+
+// ListWorkflowsOutput is the output for the list_workflows tool.
+message ListWorkflowsOutput {
+  repeated ToolWorkflowBrief workflows = 1;
+  string info = 2;
+}
+
+// =============================================================================
+// Memory tools
+// =============================================================================
+
+// MemoryStatusInput is the input for the memory_status tool.
+message MemoryStatusInput {
+  string description = 1;
+}
+
+// MemoryWingCount is a wing with its drawer count.
+message MemoryWingCount {
+  string wing = 1;
+  int32 count = 2;
+}
+
+// MemoryRoomCount is a room with its drawer count.
+message MemoryRoomCount {
+  string wing = 1;
+  string room = 2;
+  int32 count = 3;
+}
+
+// MemoryStatusOutput is the output for the memory_status tool.
+message MemoryStatusOutput {
+  int32 total_drawers = 1;
+  repeated MemoryWingCount wings = 2;
+  repeated MemoryRoomCount rooms = 3;
+}
+
+// MemoryListWingsInput is the input for the memory_list_wings tool.
+message MemoryListWingsInput {
+  string description = 1;
+}
+
+// MemoryListWingsOutput is the output for the memory_list_wings tool.
+message MemoryListWingsOutput {
+  repeated MemoryWingCount wings = 1;
+}
+
+// MemoryListRoomsInput is the input for the memory_list_rooms tool.
+message MemoryListRoomsInput {
+  string wing = 1;
+  string description = 2;
+}
+
+// MemoryListRoomsOutput is the output for the memory_list_rooms tool.
+message MemoryListRoomsOutput {
+  repeated MemoryRoomCount rooms = 1;
+}
+
+// MemoryGetTaxonomyInput is the input for the memory_get_taxonomy tool.
+message MemoryGetTaxonomyInput {
+  string description = 1;
+}
+
+// MemoryGetTaxonomyOutput is the output for the memory_get_taxonomy tool.
+message MemoryGetTaxonomyOutput {
+  map<string, MemoryTaxonomyWing> taxonomy = 1;
+}
+
+// MemoryTaxonomyWing is the rooms-to-count map for a wing.
+message MemoryTaxonomyWing {
+  map<string, int32> rooms = 1;
+}
+
+// MemorySearchInput is the input for the memory_search tool.
+message MemorySearchInput {
+  string query = 1;
+  int32 limit = 2;
+  string wing = 3;
+  string room = 4;
+  string description = 5;
+}
+
+// MemorySearchResultBrief is a search result item.
+message MemorySearchResultBrief {
+  string id = 1;
+  string wing = 2;
+  string room = 3;
+  string content = 4;
+  string memory_type = 5;
+  double importance = 6;
+  double similarity = 7;
+  string filed_at = 8;
+}
+
+// MemorySearchOutput is the output for the memory_search tool.
+message MemorySearchOutput {
+  repeated MemorySearchResultBrief results = 1;
+  int32 count = 2;
+}
+
+// MemoryCheckDuplicateInput is the input for the memory_check_duplicate tool.
+message MemoryCheckDuplicateInput {
+  string content = 1;
+  double threshold = 2;
+  string description = 3;
+}
+
+// MemoryCheckDuplicateOutput is the output for the memory_check_duplicate tool.
+message MemoryCheckDuplicateOutput {
+  repeated MemorySearchResultBrief duplicates = 1;
+  bool has_duplicate = 2;
+}
+
+// MemoryTraverseInput is the input for the memory_traverse tool.
+message MemoryTraverseInput {
+  string start_room = 1;
+  int32 max_hops = 2;
+  string description = 3;
+}
+
+// TraversalBrief is a room found during traversal.
+message TraversalBrief {
+  string room = 1;
+  repeated string wings = 2;
+  repeated string halls = 3;
+  int32 count = 4;
+  int32 hop = 5;
+  repeated string connected_via = 6;
+}
+
+// MemoryTraverseOutput is the output for the memory_traverse tool.
+message MemoryTraverseOutput {
+  repeated TraversalBrief rooms = 1;
+  int32 count = 2;
+}
+
+// MemoryFindTunnelsInput is the input for the memory_find_tunnels tool.
+message MemoryFindTunnelsInput {
+  string wing_a = 1;
+  string wing_b = 2;
+  string description = 3;
+}
+
+// TunnelBrief is a room that bridges wings.
+message TunnelBrief {
+  string room = 1;
+  repeated string wings = 2;
+  repeated string halls = 3;
+  int32 count = 4;
+}
+
+// MemoryFindTunnelsOutput is the output for the memory_find_tunnels tool.
+message MemoryFindTunnelsOutput {
+  repeated TunnelBrief tunnels = 1;
+  int32 count = 2;
+}
+
+// MemoryGraphStatsInput is the input for the memory_graph_stats tool.
+message MemoryGraphStatsInput {
+  string description = 1;
+}
+
+// MemoryGraphStatsOutput is the output for the memory_graph_stats tool.
+message MemoryGraphStatsOutput {
+  int32 total_rooms = 1;
+  int32 tunnel_rooms = 2;
+  int32 total_edges = 3;
+  map<string, int32> rooms_per_wing = 4;
+  repeated TunnelBrief top_tunnels = 5;
+}
+
+// MemoryAddDrawerInput is the input for the memory_add_drawer tool.
+message MemoryAddDrawerInput {
+  string wing = 1;
+  string room = 2;
+  string content = 3;
+  string source_file = 4;
+  string added_by = 5;
+  string description = 6;
+}
+
+// MemoryAddDrawerOutput is the output for the memory_add_drawer tool.
+message MemoryAddDrawerOutput {
+  string drawer_id = 1;
+  string memory_type = 2;
+  string info = 3;
+}
+
+// MemoryDeleteDrawerInput is the input for the memory_delete_drawer tool.
+message MemoryDeleteDrawerInput {
+  string drawer_id = 1;
+  string description = 2;
+}
+
+// MemoryDeleteDrawerOutput is the output for the memory_delete_drawer tool.
+message MemoryDeleteDrawerOutput {
+  bool deleted = 1;
+  string info = 2;
+}
+
+// MemorySetIdentityInput is the input for the memory_set_identity tool.
+message MemorySetIdentityInput {
+  string content = 1;
+  string description = 2;
+}
+
+// MemorySetIdentityOutput is the output for the memory_set_identity tool.
+message MemorySetIdentityOutput {
+  string info = 1;
+}
+
+// MemoryKGQueryInput is the input for the memory_kg_query tool.
+message MemoryKGQueryInput {
+  string entity = 1;
+  string as_of = 2;
+  string direction = 3;
+  string description = 4;
+}
+
+// TripleResultOut is a knowledge graph triple for tool output.
+message TripleResultOut {
+  string subject = 1;
+  string predicate = 2;
+  string object = 3;
+  string valid_from = 4;
+  string valid_to = 5;
+  string direction = 6;
+  bool current = 7;
+}
+
+// MemoryKGQueryOutput is the output for the memory_kg_query tool.
+message MemoryKGQueryOutput {
+  string entity = 1;
+  repeated TripleResultOut results = 2;
+  int32 count = 3;
+}
+
+// MemoryKGAddInput is the input for the memory_kg_add tool.
+message MemoryKGAddInput {
+  string subject = 1;
+  string predicate = 2;
+  string object = 3;
+  string valid_from = 4;
+  string source_closet = 5;
+  string description = 6;
+}
+
+// MemoryKGAddOutput is the output for the memory_kg_add tool.
+message MemoryKGAddOutput {
+  string triple_id = 1;
+  string info = 2;
+}
+
+// MemoryKGInvalidateInput is the input for the memory_kg_invalidate tool.
+message MemoryKGInvalidateInput {
+  string subject = 1;
+  string predicate = 2;
+  string object = 3;
+  string ended = 4;
+  string description = 5;
+}
+
+// MemoryKGInvalidateOutput is the output for the memory_kg_invalidate tool.
+message MemoryKGInvalidateOutput {
+  string info = 1;
+}
+
+// MemoryKGTimelineInput is the input for the memory_kg_timeline tool.
+message MemoryKGTimelineInput {
+  string entity = 1;
+  string description = 2;
+}
+
+// MemoryKGTimelineOutput is the output for the memory_kg_timeline tool.
+message MemoryKGTimelineOutput {
+  repeated TripleResultOut events = 1;
+  int32 count = 2;
+}
+
+// MemoryKGStatsInput is the input for the memory_kg_stats tool.
+message MemoryKGStatsInput {
+  string description = 1;
+}
+
+// MemoryKGStatsOutput is the output for the memory_kg_stats tool.
+message MemoryKGStatsOutput {
+  int32 entities = 1;
+  int32 triples = 2;
+  int32 current_facts = 3;
+  int32 expired_facts = 4;
+  repeated string relationship_types = 5;
+}
+
+// MemoryDiaryWriteInput is the input for the memory_diary_write tool.
+message MemoryDiaryWriteInput {
+  string agent_name = 1;
+  string entry = 2;
+  string topic = 3;
+  string description = 4;
+}
+
+// MemoryDiaryWriteOutput is the output for the memory_diary_write tool.
+message MemoryDiaryWriteOutput {
+  string drawer_id = 1;
+  string info = 2;
+}
+
+// MemoryDiaryReadInput is the input for the memory_diary_read tool.
+message MemoryDiaryReadInput {
+  string agent_name = 1;
+  int32 last_n = 2;
+  string description = 3;
+}
+
+// DiaryEntryBrief is a diary entry for tool output.
+message DiaryEntryBrief {
+  string id = 1;
+  string content = 2;
+  string hall = 3;
+  string filed_at = 4;
+}
+
+// MemoryDiaryReadOutput is the output for the memory_diary_read tool.
+message MemoryDiaryReadOutput {
+  repeated DiaryEntryBrief entries = 1;
+  int32 count = 2;
+}

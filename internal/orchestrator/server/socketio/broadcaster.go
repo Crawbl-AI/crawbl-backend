@@ -50,11 +50,11 @@ func (b *Broadcaster) EmitMessageUpdated(ctx context.Context, workspaceID string
 // the status to a specific conversation (e.g. "reading", "thinking").
 func (b *Broadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string, conversationID ...string) {
 	payload := realtime.AgentStatusPayload{
-		AgentID: agentID,
+		AgentId: agentID,
 		Status:  status,
 	}
 	if len(conversationID) > 0 {
-		payload.ConversationID = conversationID[0]
+		payload.ConversationId = conversationID[0]
 	}
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentStatus, payload)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
@@ -19,24 +20,14 @@ const (
 	defaultImportance       = 3.0
 )
 
-// --- Input/output types: Read tools ---
+// --- Input types: Read tools ---
 
 type memoryStatusInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryStatusOutput struct {
-	TotalDrawers int                `json:"total_drawers"`
-	Wings        []memory.WingCount `json:"wings"`
-	Rooms        []memory.RoomCount `json:"rooms"`
-}
-
 type memoryListWingsInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type memoryListWingsOutput struct {
-	Wings []memory.WingCount `json:"wings"`
 }
 
 type memoryListRoomsInput struct {
@@ -44,16 +35,8 @@ type memoryListRoomsInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryListRoomsOutput struct {
-	Rooms []memory.RoomCount `json:"rooms"`
-}
-
 type memoryGetTaxonomyInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type memoryGetTaxonomyOutput struct {
-	Taxonomy map[string]map[string]int `json:"taxonomy"`
 }
 
 type memorySearchInput struct {
@@ -64,31 +47,10 @@ type memorySearchInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memorySearchOutput struct {
-	Results []memorySearchResultBrief `json:"results"`
-	Count   int                       `json:"count"`
-}
-
-type memorySearchResultBrief struct {
-	ID         string  `json:"id"`
-	Wing       string  `json:"wing"`
-	Room       string  `json:"room"`
-	Content    string  `json:"content"`
-	MemoryType string  `json:"memory_type"`
-	Importance float64 `json:"importance"`
-	Similarity float64 `json:"similarity"`
-	FiledAt    string  `json:"filed_at"`
-}
-
 type memoryCheckDuplicateInput struct {
 	Content     string  `json:"content" jsonschema:"content to check for duplicates"`
 	Threshold   float64 `json:"threshold,omitempty" jsonschema:"similarity threshold (default 0.9)"`
 	Description string  `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type memoryCheckDuplicateOutput struct {
-	Duplicates []memorySearchResultBrief `json:"duplicates"`
-	HasDupe    bool                      `json:"has_duplicate"`
 }
 
 type memoryTraverseInput struct {
@@ -97,51 +59,17 @@ type memoryTraverseInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryTraverseOutput struct {
-	Rooms []traversalBrief `json:"rooms"`
-	Count int              `json:"count"`
-}
-
-type traversalBrief struct {
-	Room         string   `json:"room"`
-	Wings        []string `json:"wings"`
-	Halls        []string `json:"halls"`
-	Count        int      `json:"count"`
-	Hop          int      `json:"hop"`
-	ConnectedVia []string `json:"connected_via,omitempty"`
-}
-
 type memoryFindTunnelsInput struct {
 	WingA       string `json:"wing_a,omitempty" jsonschema:"first wing filter"`
 	WingB       string `json:"wing_b,omitempty" jsonschema:"second wing filter"`
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryFindTunnelsOutput struct {
-	Tunnels []tunnelBrief `json:"tunnels"`
-	Count   int           `json:"count"`
-}
-
-type tunnelBrief struct {
-	Room  string   `json:"room"`
-	Wings []string `json:"wings"`
-	Halls []string `json:"halls"`
-	Count int      `json:"count"`
-}
-
 type memoryGraphStatsInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryGraphStatsOutput struct {
-	TotalRooms   int            `json:"total_rooms"`
-	TunnelRooms  int            `json:"tunnel_rooms"`
-	TotalEdges   int            `json:"total_edges"`
-	RoomsPerWing map[string]int `json:"rooms_per_wing"`
-	TopTunnels   []tunnelBrief  `json:"top_tunnels"`
-}
-
-// --- Input/output types: Write tools ---
+// --- Input types: Write tools ---
 
 type memoryAddDrawerInput struct {
 	Wing        string `json:"wing" jsonschema:"wing to file the drawer in"`
@@ -152,20 +80,9 @@ type memoryAddDrawerInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryAddDrawerOutput struct {
-	DrawerID   string `json:"drawer_id"`
-	MemoryType string `json:"memory_type"`
-	Info       string `json:"info"`
-}
-
 type memoryDeleteDrawerInput struct {
 	DrawerID    string `json:"drawer_id" jsonschema:"ID of the drawer to delete"`
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type memoryDeleteDrawerOutput struct {
-	Deleted bool   `json:"deleted"`
-	Info    string `json:"info"`
 }
 
 type memorySetIdentityInput struct {
@@ -173,33 +90,13 @@ type memorySetIdentityInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memorySetIdentityOutput struct {
-	Info string `json:"info"`
-}
-
-// --- Input/output types: Knowledge Graph tools ---
+// --- Input types: Knowledge Graph tools ---
 
 type memoryKGQueryInput struct {
 	Entity      string `json:"entity" jsonschema:"entity name to query"`
 	AsOf        string `json:"as_of,omitempty" jsonschema:"optional date filter (YYYY-MM-DD)"`
 	Direction   string `json:"direction,omitempty" jsonschema:"outgoing, incoming, or both (default both)"`
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type memoryKGQueryOutput struct {
-	Entity  string            `json:"entity"`
-	Results []tripleResultOut `json:"results"`
-	Count   int               `json:"count"`
-}
-
-type tripleResultOut struct {
-	Subject   string `json:"subject"`
-	Predicate string `json:"predicate"`
-	Object    string `json:"object"`
-	ValidFrom string `json:"valid_from,omitempty"`
-	ValidTo   string `json:"valid_to,omitempty"`
-	Direction string `json:"direction"`
-	Current   bool   `json:"current"`
 }
 
 type memoryKGAddInput struct {
@@ -211,11 +108,6 @@ type memoryKGAddInput struct {
 	Description  string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryKGAddOutput struct {
-	TripleID string `json:"triple_id"`
-	Info     string `json:"info"`
-}
-
 type memoryKGInvalidateInput struct {
 	Subject     string `json:"subject" jsonschema:"subject entity name"`
 	Predicate   string `json:"predicate" jsonschema:"relationship type"`
@@ -224,33 +116,16 @@ type memoryKGInvalidateInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryKGInvalidateOutput struct {
-	Info string `json:"info"`
-}
-
 type memoryKGTimelineInput struct {
 	Entity      string `json:"entity,omitempty" jsonschema:"optional entity to filter timeline"`
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type memoryKGTimelineOutput struct {
-	Events []tripleResultOut `json:"events"`
-	Count  int               `json:"count"`
 }
 
 type memoryKGStatsInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryKGStatsOutput struct {
-	Entities          int      `json:"entities"`
-	Triples           int      `json:"triples"`
-	CurrentFacts      int      `json:"current_facts"`
-	ExpiredFacts      int      `json:"expired_facts"`
-	RelationshipTypes []string `json:"relationship_types"`
-}
-
-// --- Input/output types: Diary tools ---
+// --- Input types: Diary tools ---
 
 type memoryDiaryWriteInput struct {
 	AgentName   string `json:"agent_name" jsonschema:"name of the agent writing the diary entry"`
@@ -259,106 +134,89 @@ type memoryDiaryWriteInput struct {
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryDiaryWriteOutput struct {
-	DrawerID string `json:"drawer_id"`
-	Info     string `json:"info"`
-}
-
 type memoryDiaryReadInput struct {
 	AgentName   string `json:"agent_name" jsonschema:"name of the agent whose diary to read"`
 	LastN       int    `json:"last_n,omitempty" jsonschema:"number of recent entries (default 10)"`
 	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
-type memoryDiaryReadOutput struct {
-	Entries []diaryEntryBrief `json:"entries"`
-	Count   int               `json:"count"`
-}
-
-type diaryEntryBrief struct {
-	ID      string `json:"id"`
-	Content string `json:"content"`
-	Hall    string `json:"hall,omitempty"`
-	FiledAt string `json:"filed_at"`
-}
-
 // --- Handlers ---
 
-func newMemoryStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryStatusInput, memoryStatusOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryStatusInput) (*sdkmcp.CallToolResult, memoryStatusOutput, error) {
+func newMemoryStatusHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryStatusInput, *mcpv1.MemoryStatusOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryStatusInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryStatusOutput, error) {
 		count, err := deps.DrawerRepo.Count(ctx, sess, workspaceID)
 		if err != nil {
-			return nil, memoryStatusOutput{}, err
+			return nil, nil, err
 		}
 
 		wings, err := deps.DrawerRepo.ListWings(ctx, sess, workspaceID)
 		if err != nil {
-			return nil, memoryStatusOutput{}, err
+			return nil, nil, err
 		}
 
 		rooms, err := deps.DrawerRepo.ListRooms(ctx, sess, workspaceID, "")
 		if err != nil {
-			return nil, memoryStatusOutput{}, err
+			return nil, nil, err
 		}
 
-		return nil, memoryStatusOutput{
-			TotalDrawers: count,
-			Wings:        wings,
-			Rooms:        rooms,
+		return nil, &mcpv1.MemoryStatusOutput{
+			TotalDrawers: int32(count),
+			Wings:        toProtoWingCounts(wings),
+			Rooms:        toProtoRoomCounts(rooms),
 		}, nil
 	})
 }
 
-func newMemoryListWingsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryListWingsInput, memoryListWingsOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryListWingsInput) (*sdkmcp.CallToolResult, memoryListWingsOutput, error) {
+func newMemoryListWingsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryListWingsInput, *mcpv1.MemoryListWingsOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryListWingsInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryListWingsOutput, error) {
 		wings, err := deps.DrawerRepo.ListWings(ctx, sess, workspaceID)
 		if err != nil {
-			return nil, memoryListWingsOutput{}, err
+			return nil, nil, err
 		}
 
-		return nil, memoryListWingsOutput{Wings: wings}, nil
+		return nil, &mcpv1.MemoryListWingsOutput{Wings: toProtoWingCounts(wings)}, nil
 	})
 }
 
-func newMemoryListRoomsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryListRoomsInput, memoryListRoomsOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryListRoomsInput) (*sdkmcp.CallToolResult, memoryListRoomsOutput, error) {
+func newMemoryListRoomsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryListRoomsInput, *mcpv1.MemoryListRoomsOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryListRoomsInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryListRoomsOutput, error) {
 		rooms, err := deps.DrawerRepo.ListRooms(ctx, sess, workspaceID, input.Wing)
 		if err != nil {
-			return nil, memoryListRoomsOutput{}, err
+			return nil, nil, err
 		}
 
-		return nil, memoryListRoomsOutput{Rooms: rooms}, nil
+		return nil, &mcpv1.MemoryListRoomsOutput{Rooms: toProtoRoomCounts(rooms)}, nil
 	})
 }
 
-func newMemoryGetTaxonomyHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGetTaxonomyInput, memoryGetTaxonomyOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryGetTaxonomyInput) (*sdkmcp.CallToolResult, memoryGetTaxonomyOutput, error) {
+func newMemoryGetTaxonomyHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGetTaxonomyInput, *mcpv1.MemoryGetTaxonomyOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryGetTaxonomyInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryGetTaxonomyOutput, error) {
 		wings, err := deps.DrawerRepo.ListWings(ctx, sess, workspaceID)
 		if err != nil {
-			return nil, memoryGetTaxonomyOutput{}, err
+			return nil, nil, err
 		}
 
-		taxonomy := make(map[string]map[string]int, len(wings))
+		taxonomy := make(map[string]*mcpv1.MemoryTaxonomyWing, len(wings))
 		for _, w := range wings {
 			rooms, err := deps.DrawerRepo.ListRooms(ctx, sess, workspaceID, w.Wing)
 			if err != nil {
-				return nil, memoryGetTaxonomyOutput{}, err
+				return nil, nil, err
 			}
-			roomMap := make(map[string]int, len(rooms))
+			roomMap := make(map[string]int32, len(rooms))
 			for _, r := range rooms {
-				roomMap[r.Room] = r.Count
+				roomMap[r.Room] = int32(r.Count)
 			}
-			taxonomy[w.Wing] = roomMap
+			taxonomy[w.Wing] = &mcpv1.MemoryTaxonomyWing{Rooms: roomMap}
 		}
 
-		return nil, memoryGetTaxonomyOutput{Taxonomy: taxonomy}, nil
+		return nil, &mcpv1.MemoryGetTaxonomyOutput{Taxonomy: taxonomy}, nil
 	})
 }
 
-func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput, memorySearchOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memorySearchInput) (*sdkmcp.CallToolResult, memorySearchOutput, error) {
+func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput, *mcpv1.MemorySearchOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memorySearchInput) (*sdkmcp.CallToolResult, *mcpv1.MemorySearchOutput, error) {
 		if input.Query == "" {
-			return nil, memorySearchOutput{}, fmt.Errorf("query is required")
+			return nil, nil, fmt.Errorf("query is required")
 		}
 
 		limit := input.Limit
@@ -371,23 +229,23 @@ func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput,
 
 		embedding, err := deps.Embedder.Embed(ctx, input.Query)
 		if err != nil {
-			return nil, memorySearchOutput{}, fmt.Errorf("embedding failed: %w", err)
+			return nil, nil, fmt.Errorf("embedding failed: %w", err)
 		}
 
 		results, err := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, input.Wing, input.Room, limit)
 		if err != nil {
-			return nil, memorySearchOutput{}, err
+			return nil, nil, err
 		}
 
 		briefs := toMemorySearchResultBriefs(results)
-		return nil, memorySearchOutput{Results: briefs, Count: len(briefs)}, nil
+		return nil, &mcpv1.MemorySearchOutput{Results: briefs, Count: int32(len(briefs))}, nil
 	})
 }
 
-func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryCheckDuplicateInput, memoryCheckDuplicateOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryCheckDuplicateInput) (*sdkmcp.CallToolResult, memoryCheckDuplicateOutput, error) {
+func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryCheckDuplicateInput, *mcpv1.MemoryCheckDuplicateOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryCheckDuplicateInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryCheckDuplicateOutput, error) {
 		if input.Content == "" {
-			return nil, memoryCheckDuplicateOutput{}, fmt.Errorf("content is required")
+			return nil, nil, fmt.Errorf("content is required")
 		}
 
 		threshold := input.Threshold
@@ -397,26 +255,26 @@ func newMemoryCheckDuplicateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryChec
 
 		embedding, err := deps.Embedder.Embed(ctx, input.Content)
 		if err != nil {
-			return nil, memoryCheckDuplicateOutput{}, fmt.Errorf("embedding failed: %w", err)
+			return nil, nil, fmt.Errorf("embedding failed: %w", err)
 		}
 
 		results, err := deps.DrawerRepo.CheckDuplicate(ctx, sess, workspaceID, embedding, threshold, 5)
 		if err != nil {
-			return nil, memoryCheckDuplicateOutput{}, err
+			return nil, nil, err
 		}
 
 		briefs := toMemorySearchResultBriefs(results)
-		return nil, memoryCheckDuplicateOutput{
-			Duplicates: briefs,
-			HasDupe:    len(briefs) > 0,
+		return nil, &mcpv1.MemoryCheckDuplicateOutput{
+			Duplicates:   briefs,
+			HasDuplicate: len(briefs) > 0,
 		}, nil
 	})
 }
 
-func newMemoryTraverseHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryTraverseInput, memoryTraverseOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryTraverseInput) (*sdkmcp.CallToolResult, memoryTraverseOutput, error) {
+func newMemoryTraverseHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryTraverseInput, *mcpv1.MemoryTraverseOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryTraverseInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryTraverseOutput, error) {
 		if input.StartRoom == "" {
-			return nil, memoryTraverseOutput{}, fmt.Errorf("start_room is required")
+			return nil, nil, fmt.Errorf("start_room is required")
 		}
 
 		maxHops := input.MaxHops
@@ -429,68 +287,73 @@ func newMemoryTraverseHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryTraverseIn
 
 		results, err := deps.PalaceGraph.Traverse(ctx, sess, workspaceID, input.StartRoom, maxHops)
 		if err != nil {
-			return nil, memoryTraverseOutput{}, err
+			return nil, nil, err
 		}
 
-		briefs := make([]traversalBrief, 0, len(results))
+		briefs := make([]*mcpv1.TraversalBrief, 0, len(results))
 		for _, r := range results {
-			briefs = append(briefs, traversalBrief{
+			briefs = append(briefs, &mcpv1.TraversalBrief{
 				Room:         r.Room,
 				Wings:        r.Wings,
 				Halls:        r.Halls,
-				Count:        r.Count,
-				Hop:          r.Hop,
+				Count:        int32(r.Count),
+				Hop:          int32(r.Hop),
 				ConnectedVia: r.ConnectedVia,
 			})
 		}
 
-		return nil, memoryTraverseOutput{Rooms: briefs, Count: len(briefs)}, nil
+		return nil, &mcpv1.MemoryTraverseOutput{Rooms: briefs, Count: int32(len(briefs))}, nil
 	})
 }
 
-func newMemoryFindTunnelsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryFindTunnelsInput, memoryFindTunnelsOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryFindTunnelsInput) (*sdkmcp.CallToolResult, memoryFindTunnelsOutput, error) {
+func newMemoryFindTunnelsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryFindTunnelsInput, *mcpv1.MemoryFindTunnelsOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryFindTunnelsInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryFindTunnelsOutput, error) {
 		tunnels, err := deps.PalaceGraph.FindTunnels(ctx, sess, workspaceID, input.WingA, input.WingB)
 		if err != nil {
-			return nil, memoryFindTunnelsOutput{}, err
+			return nil, nil, err
 		}
 
-		briefs := make([]tunnelBrief, 0, len(tunnels))
+		briefs := make([]*mcpv1.TunnelBrief, 0, len(tunnels))
 		for _, t := range tunnels {
-			briefs = append(briefs, tunnelBrief{
+			briefs = append(briefs, &mcpv1.TunnelBrief{
 				Room:  t.Room,
 				Wings: t.Wings,
 				Halls: t.Halls,
-				Count: t.Count,
+				Count: int32(t.Count),
 			})
 		}
 
-		return nil, memoryFindTunnelsOutput{Tunnels: briefs, Count: len(briefs)}, nil
+		return nil, &mcpv1.MemoryFindTunnelsOutput{Tunnels: briefs, Count: int32(len(briefs))}, nil
 	})
 }
 
-func newMemoryGraphStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGraphStatsInput, memoryGraphStatsOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryGraphStatsInput) (*sdkmcp.CallToolResult, memoryGraphStatsOutput, error) {
+func newMemoryGraphStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryGraphStatsInput, *mcpv1.MemoryGraphStatsOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryGraphStatsInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryGraphStatsOutput, error) {
 		stats, err := deps.PalaceGraph.GraphStats(ctx, sess, workspaceID)
 		if err != nil {
-			return nil, memoryGraphStatsOutput{}, err
+			return nil, nil, err
 		}
 
-		topTunnels := make([]tunnelBrief, 0, len(stats.TopTunnels))
+		topTunnels := make([]*mcpv1.TunnelBrief, 0, len(stats.TopTunnels))
 		for _, t := range stats.TopTunnels {
-			topTunnels = append(topTunnels, tunnelBrief{
+			topTunnels = append(topTunnels, &mcpv1.TunnelBrief{
 				Room:  t.Room,
 				Wings: t.Wings,
 				Halls: t.Halls,
-				Count: t.Count,
+				Count: int32(t.Count),
 			})
 		}
 
-		return nil, memoryGraphStatsOutput{
-			TotalRooms:   stats.TotalRooms,
-			TunnelRooms:  stats.TunnelRooms,
-			TotalEdges:   stats.TotalEdges,
-			RoomsPerWing: stats.RoomsPerWing,
+		roomsPerWing := make(map[string]int32, len(stats.RoomsPerWing))
+		for k, v := range stats.RoomsPerWing {
+			roomsPerWing[k] = int32(v)
+		}
+
+		return nil, &mcpv1.MemoryGraphStatsOutput{
+			TotalRooms:   int32(stats.TotalRooms),
+			TunnelRooms:  int32(stats.TunnelRooms),
+			TotalEdges:   int32(stats.TotalEdges),
+			RoomsPerWing: roomsPerWing,
 			TopTunnels:   topTunnels,
 		}, nil
 	})
@@ -512,18 +375,18 @@ func bestEffortEmbed(ctx context.Context, deps *Deps, content string) []float32 
 
 // --- Write tool handlers ---
 
-func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawerInput, memoryAddDrawerOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryAddDrawerInput) (*sdkmcp.CallToolResult, memoryAddDrawerOutput, error) {
+func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawerInput, *mcpv1.MemoryAddDrawerOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryAddDrawerInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryAddDrawerOutput, error) {
 		if input.Wing == "" || input.Room == "" || input.Content == "" {
-			return nil, memoryAddDrawerOutput{Info: "wing, room, and content are required"}, nil
+			return nil, &mcpv1.MemoryAddDrawerOutput{Info: "wing, room, and content are required"}, nil
 		}
 		if len(input.Content) > memory.MaxContentLength {
-			return nil, memoryAddDrawerOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxContentLength)}, nil
+			return nil, &mcpv1.MemoryAddDrawerOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxContentLength)}, nil
 		}
 
 		// Reject trivial/noise content (greetings, short filler).
 		if deps.NoisePattern != nil && (len(input.Content) < deps.NoiseMinLength || deps.NoisePattern.MatchString(strings.TrimSpace(input.Content))) {
-			return nil, memoryAddDrawerOutput{Info: "content too short or trivial to store"}, nil
+			return nil, &mcpv1.MemoryAddDrawerOutput{Info: "content too short or trivial to store"}, nil
 		}
 
 		// Generate drawer ID.
@@ -552,14 +415,14 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 
 		if err := deps.DrawerRepo.AddIdempotent(ctx, sess, d, embedding); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to store drawer", "error", err)
-			return nil, memoryAddDrawerOutput{Info: "failed to store memory"}, nil
+			return nil, &mcpv1.MemoryAddDrawerOutput{Info: "failed to store memory"}, nil
 		}
 
 		// Reinforce similar memories.
 		reinforceSimilar(ctx, sess, deps, workspaceID, drawerID, embedding)
 
-		return nil, memoryAddDrawerOutput{
-			DrawerID:   drawerID,
+		return nil, &mcpv1.MemoryAddDrawerOutput{
+			DrawerId:   drawerID,
 			MemoryType: memoryType,
 			Info:       "drawer added",
 		}, nil
@@ -601,48 +464,48 @@ func reinforceSimilar(ctx context.Context, sess *dbr.Session, deps *Deps, worksp
 	}
 }
 
-func newMemoryDeleteDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDeleteDrawerInput, memoryDeleteDrawerOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDeleteDrawerInput) (*sdkmcp.CallToolResult, memoryDeleteDrawerOutput, error) {
+func newMemoryDeleteDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDeleteDrawerInput, *mcpv1.MemoryDeleteDrawerOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDeleteDrawerInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryDeleteDrawerOutput, error) {
 		if input.DrawerID == "" {
-			return nil, memoryDeleteDrawerOutput{Info: "drawer_id is required"}, nil
+			return nil, &mcpv1.MemoryDeleteDrawerOutput{Info: "drawer_id is required"}, nil
 		}
 
 		if err := deps.DrawerRepo.Delete(ctx, sess, workspaceID, input.DrawerID); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to delete drawer", "error", err)
-			return nil, memoryDeleteDrawerOutput{Info: "failed to delete drawer"}, nil
+			return nil, &mcpv1.MemoryDeleteDrawerOutput{Info: "failed to delete drawer"}, nil
 		}
 
-		return nil, memoryDeleteDrawerOutput{Deleted: true, Info: "drawer deleted"}, nil
+		return nil, &mcpv1.MemoryDeleteDrawerOutput{Deleted: true, Info: "drawer deleted"}, nil
 	})
 }
 
-func newMemorySetIdentityHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySetIdentityInput, memorySetIdentityOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memorySetIdentityInput) (*sdkmcp.CallToolResult, memorySetIdentityOutput, error) {
+func newMemorySetIdentityHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySetIdentityInput, *mcpv1.MemorySetIdentityOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memorySetIdentityInput) (*sdkmcp.CallToolResult, *mcpv1.MemorySetIdentityOutput, error) {
 		if input.Content == "" {
-			return nil, memorySetIdentityOutput{Info: "content is required"}, nil
+			return nil, &mcpv1.MemorySetIdentityOutput{Info: "content is required"}, nil
 		}
 		if len(input.Content) > memory.MaxIdentityLength {
-			return nil, memorySetIdentityOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxIdentityLength)}, nil
+			return nil, &mcpv1.MemorySetIdentityOutput{Info: fmt.Sprintf("content exceeds max length of %d", memory.MaxIdentityLength)}, nil
 		}
 
 		if deps.IdentityRepo == nil {
-			return nil, memorySetIdentityOutput{Info: "identity repo unavailable"}, nil
+			return nil, &mcpv1.MemorySetIdentityOutput{Info: "identity repo unavailable"}, nil
 		}
 		if err := deps.IdentityRepo.Set(ctx, sess, workspaceID, input.Content); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to set identity", "error", err)
-			return nil, memorySetIdentityOutput{Info: "failed to update identity"}, nil
+			return nil, &mcpv1.MemorySetIdentityOutput{Info: "failed to update identity"}, nil
 		}
 
-		return nil, memorySetIdentityOutput{Info: "identity set"}, nil
+		return nil, &mcpv1.MemorySetIdentityOutput{Info: "identity set"}, nil
 	})
 }
 
 // --- Knowledge Graph handlers ---
 
-func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInput, memoryKGQueryOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGQueryInput) (*sdkmcp.CallToolResult, memoryKGQueryOutput, error) {
+func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInput, *mcpv1.MemoryKGQueryOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGQueryInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryKGQueryOutput, error) {
 		if input.Entity == "" {
-			return nil, memoryKGQueryOutput{}, fmt.Errorf("entity is required")
+			return nil, nil, fmt.Errorf("entity is required")
 		}
 
 		direction := input.Direction
@@ -652,18 +515,18 @@ func newMemoryKGQueryHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGQueryInpu
 
 		results, err := deps.KG.QueryEntity(ctx, sess, workspaceID, input.Entity, input.AsOf, direction)
 		if err != nil {
-			return nil, memoryKGQueryOutput{}, err
+			return nil, nil, err
 		}
 
 		out := tripleResultsToWire(results)
-		return nil, memoryKGQueryOutput{Entity: input.Entity, Results: out, Count: len(out)}, nil
+		return nil, &mcpv1.MemoryKGQueryOutput{Entity: input.Entity, Results: out, Count: int32(len(out))}, nil
 	})
 }
 
-func newMemoryKGAddHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGAddInput, memoryKGAddOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGAddInput) (*sdkmcp.CallToolResult, memoryKGAddOutput, error) {
+func newMemoryKGAddHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGAddInput, *mcpv1.MemoryKGAddOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGAddInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryKGAddOutput, error) {
 		if input.Subject == "" || input.Predicate == "" || input.Object == "" {
-			return nil, memoryKGAddOutput{Info: "subject, predicate, and object are required"}, nil
+			return nil, &mcpv1.MemoryKGAddOutput{Info: "subject, predicate, and object are required"}, nil
 		}
 
 		t := &memory.Triple{
@@ -680,17 +543,17 @@ func newMemoryKGAddHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGAddInput, m
 		tripleID, err := deps.KG.AddTriple(ctx, sess, workspaceID, t)
 		if err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to add triple", "error", err)
-			return nil, memoryKGAddOutput{Info: "failed to update knowledge graph"}, nil
+			return nil, &mcpv1.MemoryKGAddOutput{Info: "failed to update knowledge graph"}, nil
 		}
 
-		return nil, memoryKGAddOutput{TripleID: tripleID, Info: "triple added"}, nil
+		return nil, &mcpv1.MemoryKGAddOutput{TripleId: tripleID, Info: "triple added"}, nil
 	})
 }
 
-func newMemoryKGInvalidateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGInvalidateInput, memoryKGInvalidateOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGInvalidateInput) (*sdkmcp.CallToolResult, memoryKGInvalidateOutput, error) {
+func newMemoryKGInvalidateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGInvalidateInput, *mcpv1.MemoryKGInvalidateOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGInvalidateInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryKGInvalidateOutput, error) {
 		if input.Subject == "" || input.Predicate == "" || input.Object == "" {
-			return nil, memoryKGInvalidateOutput{Info: "subject, predicate, and object are required"}, nil
+			return nil, &mcpv1.MemoryKGInvalidateOutput{Info: "subject, predicate, and object are required"}, nil
 		}
 
 		ended := input.Ended
@@ -700,37 +563,37 @@ func newMemoryKGInvalidateHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGInva
 
 		if err := deps.KG.Invalidate(ctx, sess, workspaceID, input.Subject, input.Predicate, input.Object, ended); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to invalidate triple", "error", err)
-			return nil, memoryKGInvalidateOutput{Info: "failed to update knowledge graph"}, nil
+			return nil, &mcpv1.MemoryKGInvalidateOutput{Info: "failed to update knowledge graph"}, nil
 		}
 
-		return nil, memoryKGInvalidateOutput{Info: "triple invalidated"}, nil
+		return nil, &mcpv1.MemoryKGInvalidateOutput{Info: "triple invalidated"}, nil
 	})
 }
 
-func newMemoryKGTimelineHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGTimelineInput, memoryKGTimelineOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGTimelineInput) (*sdkmcp.CallToolResult, memoryKGTimelineOutput, error) {
+func newMemoryKGTimelineHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGTimelineInput, *mcpv1.MemoryKGTimelineOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryKGTimelineInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryKGTimelineOutput, error) {
 		results, err := deps.KG.Timeline(ctx, sess, workspaceID, input.Entity)
 		if err != nil {
-			return nil, memoryKGTimelineOutput{}, err
+			return nil, nil, err
 		}
 
 		out := tripleResultsToWire(results)
-		return nil, memoryKGTimelineOutput{Events: out, Count: len(out)}, nil
+		return nil, &mcpv1.MemoryKGTimelineOutput{Events: out, Count: int32(len(out))}, nil
 	})
 }
 
-func newMemoryKGStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGStatsInput, memoryKGStatsOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryKGStatsInput) (*sdkmcp.CallToolResult, memoryKGStatsOutput, error) {
+func newMemoryKGStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGStatsInput, *mcpv1.MemoryKGStatsOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, _ memoryKGStatsInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryKGStatsOutput, error) {
 		stats, err := deps.KG.Stats(ctx, sess, workspaceID)
 		if err != nil {
-			return nil, memoryKGStatsOutput{}, err
+			return nil, nil, err
 		}
 
-		return nil, memoryKGStatsOutput{
-			Entities:          stats.Entities,
-			Triples:           stats.Triples,
-			CurrentFacts:      stats.CurrentFacts,
-			ExpiredFacts:      stats.ExpiredFacts,
+		return nil, &mcpv1.MemoryKGStatsOutput{
+			Entities:          int32(stats.Entities),
+			Triples:           int32(stats.Triples),
+			CurrentFacts:      int32(stats.CurrentFacts),
+			ExpiredFacts:      int32(stats.ExpiredFacts),
 			RelationshipTypes: stats.RelationshipTypes,
 		}, nil
 	})
@@ -738,13 +601,13 @@ func newMemoryKGStatsHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryKGStatsInpu
 
 // --- Diary handlers ---
 
-func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWriteInput, memoryDiaryWriteOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDiaryWriteInput) (*sdkmcp.CallToolResult, memoryDiaryWriteOutput, error) {
+func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWriteInput, *mcpv1.MemoryDiaryWriteOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDiaryWriteInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryDiaryWriteOutput, error) {
 		if input.AgentName == "" || input.Entry == "" {
-			return nil, memoryDiaryWriteOutput{Info: "agent_name and entry are required"}, nil
+			return nil, &mcpv1.MemoryDiaryWriteOutput{Info: "agent_name and entry are required"}, nil
 		}
 		if len(input.Entry) > memory.MaxContentLength {
-			return nil, memoryDiaryWriteOutput{Info: fmt.Sprintf("entry exceeds max length of %d", memory.MaxContentLength)}, nil
+			return nil, &mcpv1.MemoryDiaryWriteOutput{Info: fmt.Sprintf("entry exceeds max length of %d", memory.MaxContentLength)}, nil
 		}
 
 		agentName := strings.ToLower(strings.TrimSpace(input.AgentName))
@@ -782,17 +645,17 @@ func newMemoryDiaryWriteHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryWri
 
 		if err := deps.DrawerRepo.Add(ctx, sess, d, embedding); err != nil {
 			deps.Logger.ErrorContext(ctx, "failed to write diary entry", "error", err)
-			return nil, memoryDiaryWriteOutput{Info: "failed to write diary entry"}, nil
+			return nil, &mcpv1.MemoryDiaryWriteOutput{Info: "failed to write diary entry"}, nil
 		}
 
-		return nil, memoryDiaryWriteOutput{DrawerID: drawerID, Info: "diary entry written"}, nil
+		return nil, &mcpv1.MemoryDiaryWriteOutput{DrawerId: drawerID, Info: "diary entry written"}, nil
 	})
 }
 
-func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryReadInput, memoryDiaryReadOutput] {
-	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDiaryReadInput) (*sdkmcp.CallToolResult, memoryDiaryReadOutput, error) {
+func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryReadInput, *mcpv1.MemoryDiaryReadOutput] {
+	return authedTool(deps, func(ctx context.Context, sess *dbr.Session, workspaceID string, input memoryDiaryReadInput) (*sdkmcp.CallToolResult, *mcpv1.MemoryDiaryReadOutput, error) {
 		if input.AgentName == "" {
-			return nil, memoryDiaryReadOutput{}, fmt.Errorf("agent_name is required")
+			return nil, nil, fmt.Errorf("agent_name is required")
 		}
 
 		lastN := input.LastN
@@ -808,21 +671,21 @@ func newMemoryDiaryReadHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryDiaryRead
 
 		drawers, err := deps.DrawerRepo.GetByWingRoom(ctx, sess, workspaceID, wing, "diary", lastN)
 		if err != nil {
-			return nil, memoryDiaryReadOutput{}, err
+			return nil, nil, err
 		}
 
-		entries := make([]diaryEntryBrief, 0, len(drawers))
+		entries := make([]*mcpv1.DiaryEntryBrief, 0, len(drawers))
 		for i := range drawers {
 			d := &drawers[i]
-			entries = append(entries, diaryEntryBrief{
-				ID:      d.ID,
+			entries = append(entries, &mcpv1.DiaryEntryBrief{
+				Id:      d.ID,
 				Content: d.Content,
 				Hall:    d.Hall,
 				FiledAt: d.FiledAt.Format(time.RFC3339),
 			})
 		}
 
-		return nil, memoryDiaryReadOutput{Entries: entries, Count: len(entries)}, nil
+		return nil, &mcpv1.MemoryDiaryReadOutput{Entries: entries, Count: int32(len(entries))}, nil
 	})
 }
 
@@ -931,12 +794,12 @@ func registerMemoryTools(server *sdkmcp.Server, deps *Deps) {
 // toMemorySearchResultBriefs maps repo-layer DrawerSearchResult values
 // to the MCP wire shape. Used by both the memory_search and
 // memory_check_duplicate tool handlers so the field set can never drift.
-func toMemorySearchResultBriefs(results []memory.DrawerSearchResult) []memorySearchResultBrief {
-	briefs := make([]memorySearchResultBrief, 0, len(results))
+func toMemorySearchResultBriefs(results []memory.DrawerSearchResult) []*mcpv1.MemorySearchResultBrief {
+	briefs := make([]*mcpv1.MemorySearchResultBrief, 0, len(results))
 	for i := range results {
 		r := &results[i]
-		briefs = append(briefs, memorySearchResultBrief{
-			ID:         r.ID,
+		briefs = append(briefs, &mcpv1.MemorySearchResultBrief{
+			Id:         r.ID,
 			Wing:       r.Wing,
 			Room:       r.Room,
 			Content:    r.Content,
@@ -951,11 +814,11 @@ func toMemorySearchResultBriefs(results []memory.DrawerSearchResult) []memorySea
 
 // tripleResultsToWire maps repo-layer TripleResult values to the MCP
 // wire shape. Used by kg_query and kg_timeline handlers.
-func tripleResultsToWire(results []memory.TripleResult) []tripleResultOut {
-	out := make([]tripleResultOut, 0, len(results))
+func tripleResultsToWire(results []memory.TripleResult) []*mcpv1.TripleResultOut {
+	out := make([]*mcpv1.TripleResultOut, 0, len(results))
 	for i := range results {
 		r := &results[i]
-		tr := tripleResultOut{
+		tr := &mcpv1.TripleResultOut{
 			Subject:   r.SubjectName,
 			Predicate: r.Predicate,
 			Object:    r.ObjectName,
@@ -969,6 +832,24 @@ func tripleResultsToWire(results []memory.TripleResult) []tripleResultOut {
 			tr.ValidTo = *r.ValidTo
 		}
 		out = append(out, tr)
+	}
+	return out
+}
+
+// toProtoWingCounts converts repo-layer WingCount values to proto pointers.
+func toProtoWingCounts(wings []memory.WingCount) []*mcpv1.MemoryWingCount {
+	out := make([]*mcpv1.MemoryWingCount, 0, len(wings))
+	for _, w := range wings {
+		out = append(out, &mcpv1.MemoryWingCount{Wing: w.Wing, Count: int32(w.Count)})
+	}
+	return out
+}
+
+// toProtoRoomCounts converts repo-layer RoomCount values to proto pointers.
+func toProtoRoomCounts(rooms []memory.RoomCount) []*mcpv1.MemoryRoomCount {
+	out := make([]*mcpv1.MemoryRoomCount, 0, len(rooms))
+	for _, r := range rooms {
+		out = append(out, &mcpv1.MemoryRoomCount{Wing: r.Wing, Room: r.Room, Count: int32(r.Count)})
 	}
 	return out
 }
