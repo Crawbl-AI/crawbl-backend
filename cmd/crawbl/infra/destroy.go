@@ -296,7 +296,12 @@ func deletePersistentVolumeClaims(ctx context.Context) error {
 // given region via doctl. These are created by the K8s CSI driver for PVCs and
 // live outside Pulumi state.
 func deleteOrphanedDOVolumes(ctx context.Context, region string) error {
-	output, err := exec.CommandContext(ctx, "doctl", "compute", "volume", "list",
+	doctlPath, err := exec.LookPath("doctl")
+	if err != nil {
+		return fmt.Errorf("doctl not found in PATH: %w", err)
+	}
+
+	output, err := exec.CommandContext(ctx, doctlPath, "compute", "volume", "list",
 		"--region", region, "--format", "ID,Name", "--no-header").Output()
 	if err != nil {
 		return fmt.Errorf("list volumes: %w", err)
@@ -315,7 +320,7 @@ func deleteOrphanedDOVolumes(ctx context.Context, region string) error {
 		}
 		id, name := fields[0], fields[1]
 		out.Infof("Deleting volume %s (%s)...", name, id)
-		if delErr := exec.CommandContext(ctx, "doctl", "compute", "volume", "delete", id, "--force").Run(); delErr != nil {
+		if delErr := exec.CommandContext(ctx, doctlPath, "compute", "volume", "delete", id, "--force").Run(); delErr != nil {
 			out.Warning("Failed to delete volume %s: %v", name, delErr)
 		}
 	}
@@ -324,7 +329,12 @@ func deleteOrphanedDOVolumes(ctx context.Context, region string) error {
 
 // deleteOrphanedDOSnapshots deletes all volume snapshots via doctl.
 func deleteOrphanedDOSnapshots(ctx context.Context) error {
-	output, err := exec.CommandContext(ctx, "doctl", "compute", "snapshot", "list",
+	doctlPath, err := exec.LookPath("doctl")
+	if err != nil {
+		return fmt.Errorf("doctl not found in PATH: %w", err)
+	}
+
+	output, err := exec.CommandContext(ctx, doctlPath, "compute", "snapshot", "list",
 		"--resource", "volume", "--format", "ID,Name", "--no-header").Output()
 	if err != nil {
 		return fmt.Errorf("list snapshots: %w", err)
@@ -343,7 +353,7 @@ func deleteOrphanedDOSnapshots(ctx context.Context) error {
 		}
 		id, name := fields[0], fields[1]
 		out.Infof("Deleting snapshot %s (%s)...", name, id)
-		if delErr := exec.CommandContext(ctx, "doctl", "compute", "snapshot", "delete", id, "--force").Run(); delErr != nil {
+		if delErr := exec.CommandContext(ctx, doctlPath, "compute", "snapshot", "delete", id, "--force").Run(); delErr != nil {
 			out.Warning("Failed to delete snapshot %s: %v", name, delErr)
 		}
 	}
@@ -361,13 +371,18 @@ func deleteOrphanedDOSpaces(ctx context.Context, region string) error {
 		return nil
 	}
 
+	awsPath, err := exec.LookPath("aws")
+	if err != nil {
+		return fmt.Errorf("aws CLI not found in PATH: %w", err)
+	}
+
 	endpoint := fmt.Sprintf("https://%s.digitaloceanspaces.com", region)
 	spacesEnv := append(os.Environ(),
 		"AWS_ACCESS_KEY_ID="+keyID,
 		"AWS_SECRET_ACCESS_KEY="+secretKey,
 	)
 
-	cmd := exec.CommandContext(ctx, "aws", "s3", "ls", "--endpoint-url", endpoint)
+	cmd := exec.CommandContext(ctx, awsPath, "s3", "ls", "--endpoint-url", endpoint)
 	cmd.Env = spacesEnv
 	output, err := cmd.Output()
 	if err != nil {
@@ -388,7 +403,7 @@ func deleteOrphanedDOSpaces(ctx context.Context, region string) error {
 		}
 		bucket := fields[2]
 		out.Infof("Deleting Space %s...", bucket)
-		delCmd := exec.CommandContext(ctx, "aws", "s3", "rb",
+		delCmd := exec.CommandContext(ctx, awsPath, "s3", "rb",
 			fmt.Sprintf("s3://%s", bucket), "--force", "--endpoint-url", endpoint)
 		delCmd.Env = spacesEnv
 		if delErr := delCmd.Run(); delErr != nil {
