@@ -3,6 +3,9 @@ package infra
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -70,30 +73,104 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 		return fmt.Errorf("failed to create stack: %w", err)
 	}
 
-	// Before destroying the cluster, delete all LoadBalancer Services and PersistentVolumeClaims.
-	// DigitalOcean's cloud controller creates LBs and volumes outside Pulumi's state
-	// when K8s LoadBalancer Services or PVCs are provisioned.
-	// If we destroy the cluster with these resources still attached, they become orphaned
-	// in the DO account and must be cleaned up manually.
-	out.Step(style.Delete, "Cleaning up LoadBalancer Services before cluster destroy...")
-	if err := deleteLoadBalancerServices(ctx); err != nil {
-		out.Warning("Failed to clean up LoadBalancers: %v", err)
-		out.Warning("Proceeding anyway — check for orphaned load balancers in the DO console")
+	// Best-effort in-cluster cleanup: prevent orphaned DO LBs and Volumes.
+	if isClusterReachable(ctx) {
+		out.Step(style.Delete, "Suspending ArgoCD to prevent resource reconciliation...")
+		if err := suspendArgoCD(ctx); err != nil {
+			out.Warning("Failed to suspend ArgoCD: %v", err)
+		}
+
+		out.Step(style.Delete, "Cleaning up LoadBalancer Services...")
+		if err := deleteLoadBalancerServices(ctx); err != nil {
+			out.Warning("Failed to clean up LoadBalancers: %v", err)
+			out.Warning("Check for orphaned load balancers in the DO console")
+		}
+
+		out.Step(style.Delete, "Cleaning up PersistentVolumeClaims...")
+		if err := deletePersistentVolumeClaims(ctx); err != nil {
+			out.Warning("Failed to clean up PVCs: %v", err)
+			out.Warning("Check for orphaned volumes in the DO console")
+		}
+	} else {
+		out.Warning("Cluster is unreachable — skipping in-cluster cleanup")
+		out.Warning("Check the DO console for orphaned load balancers and volumes")
 	}
 
-	out.Step(style.Delete, "Cleaning up PersistentVolumeClaims before cluster destroy...")
-	if err := deletePersistentVolumeClaims(ctx); err != nil {
-		out.Warning("Failed to clean up PersistentVolumeClaims: %v", err)
-		out.Warning("Proceeding anyway — check for orphaned volumes in the DO console")
+	// Always strip K8s resources from Pulumi state before destroy.
+	// Pulumi's K8s provider uses its own stored kubeconfig which may be stale,
+	// and the Helm provider cannot uninstall releases on unreachable clusters
+	// regardless of PULUMI_K8S_DELETE_UNREACHABLE.
+	out.Step(style.Delete, "Cleaning K8s resources from Pulumi state...")
+	if err := stack.RemoveUnreachableK8sState(ctx); err != nil {
+		return fmt.Errorf("clean pulumi state: %w", err)
 	}
 
 	if err := stack.Destroy(ctx); err != nil {
 		return fmt.Errorf("destroy failed: %w", err)
 	}
 
+	// Post-destroy cleanup of cloud resources that live outside Pulumi state.
+	// Skipped for prod — those resources are managed separately.
+	if env != "prod" {
+		out.Step(style.Delete, "Cleaning up orphaned DigitalOcean volumes...")
+		if err := deleteOrphanedDOVolumes(ctx, region); err != nil {
+			out.Warning("Failed to clean up volumes: %v", err)
+		}
+
+		out.Step(style.Delete, "Cleaning up orphaned volume snapshots...")
+		if err := deleteOrphanedDOSnapshots(ctx); err != nil {
+			out.Warning("Failed to clean up snapshots: %v", err)
+		}
+
+		out.Step(style.Delete, "Cleaning up Spaces object storage...")
+		if err := deleteOrphanedDOSpaces(ctx, region); err != nil {
+			out.Warning("Failed to clean up Spaces: %v", err)
+		}
+	}
+
 	out.Ln()
 	out.Success("Destroy complete")
 	return nil
+}
+
+// isClusterReachable returns true if the K8s API server responds to a lightweight request.
+func isClusterReachable(ctx context.Context) bool {
+	clientset, err := buildK8sClient()
+	if err != nil {
+		return false
+	}
+	_, err = clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{Limit: 1})
+	return err == nil
+}
+
+// suspendArgoCD scales the ArgoCD application controller to zero replicas
+// and waits for the pod to terminate so it cannot reconcile deleted resources.
+func suspendArgoCD(ctx context.Context) error {
+	clientset, err := buildK8sClient()
+	if err != nil {
+		return err
+	}
+
+	zero := int32(0)
+	scale, err := clientset.AppsV1().StatefulSets("argocd").GetScale(ctx, "argocd-application-controller", metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get application-controller scale: %w", err)
+	}
+	scale.Spec.Replicas = zero
+	_, err = clientset.AppsV1().StatefulSets("argocd").UpdateScale(ctx, "argocd-application-controller", scale, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("scale application-controller to zero: %w", err)
+	}
+
+	return waitForResourceDeletion(ctx, "ArgoCD controller pod(s)", func(c context.Context) (int, error) {
+		pods, listErr := clientset.CoreV1().Pods("argocd").List(c, metav1.ListOptions{
+			LabelSelector: "app.kubernetes.io/name=argocd-application-controller",
+		})
+		if listErr != nil {
+			return 0, fmt.Errorf("list controller pods: %w", listErr)
+		}
+		return len(pods.Items), nil
+	}, 1*time.Minute, 3*time.Second)
 }
 
 // buildK8sClient builds a Kubernetes clientset from the default kubeconfig
@@ -159,16 +236,9 @@ func deleteLoadBalancerServices(ctx context.Context) error {
 	lbCount := deleteLBServices(ctx, clientset, svcs.Items)
 	if lbCount == 0 {
 		out.Infof("No LoadBalancer services found")
-		return nil
+	} else {
+		out.Infof("Requested deletion of %d LoadBalancer(s)", lbCount)
 	}
-
-	out.Step(style.Waiting, "Waiting for %d LoadBalancer(s) to terminate...", lbCount)
-	if err := waitForResourceDeletion(ctx, "LoadBalancer(s)", func(c context.Context) (int, error) {
-		return countLBServices(c, clientset)
-	}, 5*time.Minute, 5*time.Second); err != nil {
-		return err
-	}
-	out.Success("All LoadBalancers terminated")
 	return nil
 }
 
@@ -190,23 +260,7 @@ func deleteLBServices(ctx context.Context, clientset *kubernetes.Clientset, item
 	return count
 }
 
-// countLBServices returns the number of LoadBalancer-type Services currently in the cluster.
-func countLBServices(ctx context.Context, clientset *kubernetes.Clientset) (int, error) {
-	list, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return 0, fmt.Errorf("list services: %w", err)
-	}
-	count := 0
-	for i := range list.Items {
-		if list.Items[i].Spec.Type == corev1.ServiceTypeLoadBalancer {
-			count++
-		}
-	}
-	return count, nil
-}
-
-// deletePersistentVolumeClaims finds and deletes all PVCs across all namespaces,
-// then waits for the DO cloud controller to deprovision the associated volumes.
+// deletePersistentVolumeClaims finds and deletes all PVCs across all namespaces.
 func deletePersistentVolumeClaims(ctx context.Context) error {
 	clientset, err := buildK8sClient()
 	if err != nil {
@@ -232,20 +286,114 @@ func deletePersistentVolumeClaims(ctx context.Context) error {
 
 	if pvcCount == 0 {
 		out.Infof("No PersistentVolumeClaims found")
+	} else {
+		out.Infof("Requested deletion of %d PVC(s)", pvcCount)
+	}
+	return nil
+}
+
+// deleteOrphanedDOVolumes deletes all DigitalOcean block storage volumes in the
+// given region via doctl. These are created by the K8s CSI driver for PVCs and
+// live outside Pulumi state.
+func deleteOrphanedDOVolumes(ctx context.Context, region string) error {
+	output, err := exec.CommandContext(ctx, "doctl", "compute", "volume", "list",
+		"--region", region, "--format", "ID,Name", "--no-header").Output()
+	if err != nil {
+		return fmt.Errorf("list volumes: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		out.Infof("No volumes found in region %s", region)
 		return nil
 	}
 
-	out.Step(style.Waiting, "Waiting for %d PVC(s) to terminate...", pvcCount)
-	err = waitForResourceDeletion(ctx, "PVC(s)", func(c context.Context) (int, error) {
-		list, listErr := clientset.CoreV1().PersistentVolumeClaims("").List(c, metav1.ListOptions{})
-		if listErr != nil {
-			return 0, fmt.Errorf("list PVCs: %w", listErr)
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
 		}
-		return len(list.Items), nil
-	}, 5*time.Minute, 5*time.Second)
-	if err != nil {
-		return err
+		id, name := fields[0], fields[1]
+		out.Infof("Deleting volume %s (%s)...", name, id)
+		if delErr := exec.CommandContext(ctx, "doctl", "compute", "volume", "delete", id, "--force").Run(); delErr != nil {
+			out.Warning("Failed to delete volume %s: %v", name, delErr)
+		}
 	}
-	out.Success("All PVCs terminated")
+	return nil
+}
+
+// deleteOrphanedDOSnapshots deletes all volume snapshots via doctl.
+func deleteOrphanedDOSnapshots(ctx context.Context) error {
+	output, err := exec.CommandContext(ctx, "doctl", "compute", "snapshot", "list",
+		"--resource", "volume", "--format", "ID,Name", "--no-header").Output()
+	if err != nil {
+		return fmt.Errorf("list snapshots: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		out.Infof("No volume snapshots found")
+		return nil
+	}
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		id, name := fields[0], fields[1]
+		out.Infof("Deleting snapshot %s (%s)...", name, id)
+		if delErr := exec.CommandContext(ctx, "doctl", "compute", "snapshot", "delete", id, "--force").Run(); delErr != nil {
+			out.Warning("Failed to delete snapshot %s: %v", name, delErr)
+		}
+	}
+	return nil
+}
+
+// deleteOrphanedDOSpaces deletes all Spaces buckets in the given region using
+// the aws CLI with the DO S3-compatible endpoint. Requires DO_SPACES_ACCESS_KEY_ID
+// and DO_SPACES_SECRET_ACCESS_KEY environment variables.
+func deleteOrphanedDOSpaces(ctx context.Context, region string) error {
+	keyID := os.Getenv("DO_SPACES_ACCESS_KEY_ID")
+	secretKey := os.Getenv("DO_SPACES_SECRET_ACCESS_KEY")
+	if keyID == "" || secretKey == "" {
+		out.Warning("DO_SPACES_ACCESS_KEY_ID or DO_SPACES_SECRET_ACCESS_KEY not set — skipping Spaces cleanup")
+		return nil
+	}
+
+	endpoint := fmt.Sprintf("https://%s.digitaloceanspaces.com", region)
+	spacesEnv := append(os.Environ(),
+		"AWS_ACCESS_KEY_ID="+keyID,
+		"AWS_SECRET_ACCESS_KEY="+secretKey,
+	)
+
+	cmd := exec.CommandContext(ctx, "aws", "s3", "ls", "--endpoint-url", endpoint)
+	cmd.Env = spacesEnv
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("list spaces: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		out.Infof("No Spaces found in region %s", region)
+		return nil
+	}
+
+	// Output format: "2024-01-01 00:00:00 bucket-name"
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		bucket := fields[2]
+		out.Infof("Deleting Space %s...", bucket)
+		delCmd := exec.CommandContext(ctx, "aws", "s3", "rb",
+			fmt.Sprintf("s3://%s", bucket), "--force", "--endpoint-url", endpoint)
+		delCmd.Env = spacesEnv
+		if delErr := delCmd.Run(); delErr != nil {
+			out.Warning("Failed to delete Space %s: %v", bucket, delErr)
+		}
+	}
 	return nil
 }
