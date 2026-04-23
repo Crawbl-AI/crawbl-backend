@@ -24,7 +24,7 @@ import (
 func linkAndCount(
 	ctx context.Context,
 	sess database.SessionRunner,
-	kgRepo kgStore,
+	kgRepo KGStore,
 	workspaceID string,
 	hall string,
 	classification *extract.LLMClassification,

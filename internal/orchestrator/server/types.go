@@ -7,6 +7,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/handler"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
@@ -55,7 +56,7 @@ type Config struct {
 // NewServerOpts contains all dependencies required to create a new Server instance.
 // Each field is validated at server creation time to ensure proper initialization.
 //
-// Service fields use the consumer-side interfaces declared in ports.go so
+// Service fields use the consumer-side interfaces declared in handler/ports.go so
 // the server package never imports producer-owned service contracts.
 type NewServerOpts struct {
 	// DB is the database connection pool for all persistence operations.
@@ -65,16 +66,16 @@ type NewServerOpts struct {
 	Logger *slog.Logger
 
 	// AuthService handles user authentication, registration, and profile management.
-	AuthService authPort
+	AuthService handler.AuthPort
 
 	// WorkspaceService manages workspace provisioning and runtime state.
-	WorkspaceService workspacePort
+	WorkspaceService handler.WorkspacePort
 
 	// ChatService handles conversations, messages, and agent interactions.
-	ChatService chatPort
+	ChatService handler.ChatPort
 
 	// AgentService handles agent details, settings, tools, and history retrieval.
-	AgentService agentPort
+	AgentService handler.AgentPort
 
 	// HTTPMiddleware contains authentication and request middleware configuration.
 	HTTPMiddleware *middleware.MiddlewareConfig
@@ -97,7 +98,7 @@ type NewServerOpts struct {
 
 	// IntegrationService manages third-party OAuth connections.
 	// If nil, integration endpoints return service-unavailable errors.
-	IntegrationService integrationPort
+	IntegrationService handler.IntegrationPort
 
 	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
 	MCPSigningKey string
@@ -130,16 +131,16 @@ type Server struct {
 	logger *slog.Logger
 
 	// authService handles authentication operations including sign-in, sign-up, and profile management.
-	authService authPort
+	authService handler.AuthPort
 
 	// workspaceService manages workspace lifecycle and runtime state queries.
-	workspaceService workspacePort
+	workspaceService handler.WorkspacePort
 
 	// chatService handles conversations, messages, and agent interactions.
-	chatService chatPort
+	chatService handler.ChatPort
 
 	// agentService handles agent details, settings, tools, and history retrieval.
-	agentService agentPort
+	agentService handler.AgentPort
 
 	// httpMiddleware contains authentication and request processing middleware.
 	httpMiddleware *middleware.MiddlewareConfig
@@ -151,7 +152,7 @@ type Server struct {
 	runtimeClient userswarmclient.Client
 
 	// integrationService manages third-party OAuth connections.
-	integrationService integrationPort
+	integrationService handler.IntegrationPort
 
 	// mcpSigningKey is the HMAC signing key for internal bearer tokens.
 	mcpSigningKey string

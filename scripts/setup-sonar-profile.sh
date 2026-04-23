@@ -17,10 +17,8 @@ PROJECT="Crawbl-AI_crawbl-backend"
 PROFILE_NAME="Crawbl Go"
 LANGUAGE="go"
 
-auth="-u ${SONAR_TOKEN}:"
-
 echo "==> Checking for existing '${PROFILE_NAME}' profile..."
-existing=$(curl -s ${auth} \
+existing=$(curl -s -u "${SONAR_TOKEN}:" \
   "${SONAR_URL}/api/qualityprofiles/search?language=${LANGUAGE}&organization=${ORG}" \
   | python3 -c "
 import json,sys
@@ -36,8 +34,7 @@ if [ -n "${existing}" ]; then
   PROFILE_KEY="${existing}"
 else
   echo "==> Copying 'Sonar way' to '${PROFILE_NAME}'..."
-  # Find Sonar way key first.
-  sonar_way_key=$(curl -s ${auth} \
+  sonar_way_key=$(curl -s -u "${SONAR_TOKEN}:" \
     "${SONAR_URL}/api/qualityprofiles/search?language=${LANGUAGE}&organization=${ORG}" \
     | python3 -c "
 import json,sys
@@ -47,7 +44,7 @@ for p in data.get('profiles',[]):
         print(p['key'])
         break
 ")
-  PROFILE_KEY=$(curl -s ${auth} \
+  PROFILE_KEY=$(curl -s -u "${SONAR_TOKEN}:" \
     "${SONAR_URL}/api/qualityprofiles/copy" \
     -d "fromKey=${sonar_way_key}&toName=${PROFILE_NAME}" \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['key'])")
@@ -64,7 +61,7 @@ activate_rule() {
     data="${data}&params=${params}"
   fi
   local result
-  result=$(curl -s ${auth} "${SONAR_URL}/api/qualityprofiles/activate_rule" -d "${data}" 2>&1)
+  result=$(curl -s -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/qualityprofiles/activate_rule" -d "${data}" 2>&1)
   if [ -n "${result}" ] && echo "${result}" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'errors' in d else 1)" 2>/dev/null; then
     echo "    WARN: ${rule}: ${result}"
   else
@@ -88,7 +85,7 @@ activate_rule "S1145"                         # Useless if(true)
 activate_rule "S1151" "max=15"                # Switch case lines
 
 echo "==> Associating profile with project..."
-result=$(curl -s ${auth} \
+result=$(curl -s -u "${SONAR_TOKEN}:" \
   "${SONAR_URL}/api/qualityprofiles/add_project" \
   -d "key=${PROFILE_KEY}&project=${PROJECT}" 2>&1)
 if [ -n "${result}" ]; then
@@ -99,7 +96,7 @@ else
 fi
 
 echo "==> Verifying profile..."
-curl -s ${auth} \
+curl -s -u "${SONAR_TOKEN}:" \
   "${SONAR_URL}/api/qualityprofiles/search?language=${LANGUAGE}&organization=${ORG}" \
   | python3 -c "
 import json,sys

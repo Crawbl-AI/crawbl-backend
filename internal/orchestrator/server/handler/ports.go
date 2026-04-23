@@ -4,6 +4,9 @@
 // to a call site in a handler file. The concrete services exported
 // from internal/orchestrator/service/... satisfy these implicitly via
 // Go's structural typing.
+//
+// These interfaces are exported so the parent server package can reference
+// them directly, eliminating duplicate interface definitions.
 package handler
 
 import (
@@ -14,9 +17,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// authPort is the subset of the authentication service the HTTP
+// AuthPort is the subset of the authentication service the HTTP
 // handlers actually call into.
-type authPort interface {
+type AuthPort interface {
 	SignUp(ctx context.Context, opts *orchestratorservice.SignUpOpts) (*orchestrator.User, *merrors.Error)
 	SignIn(ctx context.Context, opts *orchestratorservice.SignInOpts) (*orchestrator.User, *merrors.Error)
 	Delete(ctx context.Context, opts *orchestratorservice.DeleteOpts) *merrors.Error
@@ -28,17 +31,17 @@ type authPort interface {
 	ClearPushToken(ctx context.Context, opts *orchestratorservice.ClearPushTokenOpts) *merrors.Error
 }
 
-// workspacePort is the subset of the workspace service the handlers
+// WorkspacePort is the subset of the workspace service the handlers
 // depend on.
-type workspacePort interface {
+type WorkspacePort interface {
 	ListByUserID(ctx context.Context, opts *orchestratorservice.ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error)
 	GetByID(ctx context.Context, opts *orchestratorservice.GetWorkspaceOpts) (*orchestrator.Workspace, *merrors.Error)
 }
 
-// chatPort is the subset of the chat service the HTTP handlers depend
+// ChatPort is the subset of the chat service the HTTP handlers depend
 // on: conversation/message/agent lookups + send/reply and workspace
 // summary rendering.
-type chatPort interface {
+type ChatPort interface {
 	ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error)
 	ListConversations(ctx context.Context, opts *orchestratorservice.ListConversationsOpts) ([]*orchestrator.Conversation, *merrors.Error)
 	GetConversation(ctx context.Context, opts *orchestratorservice.GetConversationOpts) (*orchestrator.Conversation, *merrors.Error)
@@ -51,8 +54,8 @@ type chatPort interface {
 	RespondToActionCard(ctx context.Context, opts *orchestratorservice.RespondToActionCardOpts) (*orchestrator.Message, *merrors.Error)
 }
 
-// agentPort is the subset of the agent service the handlers depend on.
-type agentPort interface {
+// AgentPort is the subset of the agent service the handlers depend on.
+type AgentPort interface {
 	GetAgent(ctx context.Context, opts *orchestratorservice.GetAgentOpts) (*orchestrator.Agent, *merrors.Error)
 	GetAgentDetails(ctx context.Context, opts *orchestratorservice.GetAgentDetailsOpts) (*orchestrator.AgentDetails, *merrors.Error)
 	GetAgentHistory(ctx context.Context, opts *orchestratorservice.GetAgentHistoryOpts) ([]orchestrator.AgentHistoryItem, *orchestrator.OffsetPagination, *merrors.Error)
@@ -63,9 +66,9 @@ type agentPort interface {
 	CreateAgentMemory(ctx context.Context, opts *orchestratorservice.CreateAgentMemoryOpts) (*orchestratorservice.AgentMemory, *merrors.Error)
 }
 
-// integrationPort is the subset of the integration service the handlers
+// IntegrationPort is the subset of the integration service the handlers
 // depend on.
-type integrationPort interface {
+type IntegrationPort interface {
 	ListIntegrations(ctx context.Context, opts *orchestratorservice.ListIntegrationsOpts) ([]*orchestrator.IntegrationItem, *merrors.Error)
 	GetOAuthConfig(ctx context.Context, opts *orchestratorservice.GetOAuthConfigOpts) (*orchestrator.OAuthConfig, *merrors.Error)
 	HandleOAuthCallback(ctx context.Context, opts *orchestratorservice.OAuthCallbackOpts) *merrors.Error

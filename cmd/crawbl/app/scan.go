@@ -149,7 +149,6 @@ func runStaticcheck(ctx context.Context, rootDir, reportPath string) error {
 // staticcheckDiag represents a single staticcheck JSON diagnostic.
 type staticcheckDiag struct {
 	Code     string `json:"code"`
-	Severity string `json:"severity"`
 	Location struct {
 		File   string `json:"file"`
 		Line   int    `json:"line"`
@@ -223,7 +222,7 @@ func convertStaticcheckToSonar(data []byte, rootDir string) ([]byte, error) {
 		report.Issues = append(report.Issues, sonarGenericIssue{
 			EngineID: "staticcheck",
 			RuleID:   diag.Code,
-			Severity: staticcheckSeverityToSonar(diag.Severity),
+			Severity: staticcheckSeverityFromCode(diag.Code),
 			Type:     staticcheckCodeToType(diag.Code),
 			PrimaryLocation: sonarGenericLocation{
 				Message:  diag.Message,
@@ -239,12 +238,19 @@ func convertStaticcheckToSonar(data []byte, rootDir string) ([]byte, error) {
 	return json.MarshalIndent(report, "", "  ")
 }
 
-func staticcheckSeverityToSonar(severity string) string {
-	switch severity {
-	case "error":
+// staticcheckSeverityFromCode derives SonarQube severity from the staticcheck
+// check code prefix. Staticcheck's JSON format does not include a severity
+// field, so we infer it from the code taxonomy.
+func staticcheckSeverityFromCode(code string) string {
+	switch {
+	case strings.HasPrefix(code, "SA"):
 		return "MAJOR"
-	case "warning":
+	case strings.HasPrefix(code, "S1"):
 		return "MINOR"
+	case strings.HasPrefix(code, "ST"):
+		return "MINOR"
+	case strings.HasPrefix(code, "QF"):
+		return "INFO"
 	default:
 		return "INFO"
 	}

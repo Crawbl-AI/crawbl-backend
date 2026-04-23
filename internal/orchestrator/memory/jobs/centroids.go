@@ -34,8 +34,8 @@ const (
 // the job layer never imports producer-owned interfaces.
 type CentroidRecomputeDeps struct {
 	DB           *dbr.Connection
-	DrawerRepo   drawerStore
-	CentroidRepo centroidStore
+	DrawerRepo   DrawerStore
+	CentroidRepo CentroidStore
 	Logger       *slog.Logger
 }
 

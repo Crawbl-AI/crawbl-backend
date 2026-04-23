@@ -35,6 +35,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
@@ -59,9 +60,9 @@ type Deps struct {
 	Logger *slog.Logger
 
 	// Memory domain.
-	DrawerRepo    drawerStore
-	KGRepo        kgStore
-	CentroidRepo  centroidStore
+	DrawerRepo    jobs.DrawerStore
+	KGRepo        jobs.KGStore
+	CentroidRepo  jobs.CentroidStore
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 

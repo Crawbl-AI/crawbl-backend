@@ -17,7 +17,7 @@ const decaySkipRecentDays = 7
 // DrawerRepo field uses the narrow consumer-side contract in ports.go.
 type MaintainDeps struct {
 	DB         *dbr.Connection
-	DrawerRepo drawerStore
+	DrawerRepo DrawerStore
 }
 
 // MaintainResult holds the outcome of a maintenance run.
