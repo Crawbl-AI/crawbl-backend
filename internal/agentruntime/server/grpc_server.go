@@ -77,10 +77,11 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 	// (grpcurl, evans) can enumerate services without a .proto file.
 	// Reflection paths are in crawblgrpc.DefaultAuthExemptMethods so
 	// they bypass HMAC auth, and reflection.Register is idempotent.
-	// Safe to leave on in production — it exposes service/method
-	// names (which are not secret) but does NOT expose any RPCs
-	// beyond what is already registered.
-	reflection.Register(grpcSrv)
+	// Gated by cfg.EnableReflection — disable in production via
+	// CRAWBL_ENABLE_REFLECTION=false to reduce information disclosure surface.
+	if cfg.EnableReflection {
+		reflection.Register(grpcSrv)
+	}
 
 	return &Server{
 		cfg:     cfg,

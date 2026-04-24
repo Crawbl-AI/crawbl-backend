@@ -24,5 +24,6 @@ func DefaultConfig() Config {
 			GracefulShutdownTimeout: DefaultGracefulShutdownTimeout,
 			BlueprintFetchTimeout:   DefaultBlueprintFetchTimeout,
 		},
+		EnableReflection: true,
 	}
 }

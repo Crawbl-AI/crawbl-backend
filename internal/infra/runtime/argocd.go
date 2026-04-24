@@ -96,11 +96,11 @@ func createRepoSecret(ctx *pulumi.Context, name string, cfg platform.Config, k8s
 			}),
 		},
 		Type: pulumi.String("Opaque"),
-		StringData: pulumi.StringMap{
+		StringData: pulumi.ToSecret(pulumi.StringMap{
 			"type":          pulumi.String("git"),
 			"url":           pulumi.String(cfg.ArgoCDAppsRepoURL),
 			"sshPrivateKey": pulumi.String(cfg.ArgoCDRepoSSHPrivateKey),
-		},
+		}).(pulumi.StringMapInput),
 	}, append(opts,
 		pulumi.Provider(k8sProvider),
 		pulumi.DependsOn(deps),
