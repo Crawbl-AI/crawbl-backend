@@ -40,7 +40,7 @@ func validateSendOpts(opts *SendTextOpts) *merrors.Error {
 func (c *userSwarmClient) dialRuntime(ctx context.Context, rt *orchestrator.RuntimeStatus) (
 	*grpc.ClientConn, context.Context, *merrors.Error,
 ) {
-	target := crawblgrpc.ClusterTarget(rt.ServiceName, rt.RuntimeNamespace, c.config.Port)
+	target := c.runtimeTarget(rt)
 	conn, err := c.grpcPool.Get(ctx, target)
 	if err != nil {
 		return nil, nil, wrapGRPCError(err, "dial runtime")
@@ -361,8 +361,7 @@ func (c *userSwarmClient) dropOnTransportError(err error, rt *orchestrator.Runti
 	}
 	switch st.Code() {
 	case codes.Unavailable, codes.Internal:
-		target := crawblgrpc.ClusterTarget(rt.ServiceName, rt.RuntimeNamespace, c.config.Port)
-		c.grpcPool.Drop(target)
+		c.grpcPool.Drop(c.runtimeTarget(rt))
 	}
 }
 

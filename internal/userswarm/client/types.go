@@ -164,6 +164,23 @@ type UserSwarmConfig struct {
 	// from CRAWBL_MCP_SIGNING_KEY at startup.
 	MCPSigningKey string
 
+	// RuntimeClusterKubeconfig is the path to a kubeconfig file for the
+	// remote runtime cluster. When empty, the client uses in-cluster
+	// config (single-cluster dev mode). When set, the client targets
+	// the remote cluster for CR management and uses mTLS for gRPC.
+	RuntimeClusterKubeconfig string
+
+	// TLSCertFile is the path to the client TLS certificate for mTLS
+	// gRPC connections to runtime pods in prod hybrid mode.
+	TLSCertFile string
+
+	// TLSKeyFile is the path to the client TLS private key.
+	TLSKeyFile string
+
+	// TLSCAFile is the path to the CA certificate for verifying runtime
+	// pod server certificates.
+	TLSCAFile string
+
 	// PollTimeout is how long EnsureRuntime waits for Verified=true.
 	PollTimeout time.Duration
 

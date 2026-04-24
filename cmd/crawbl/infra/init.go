@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/runtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
@@ -47,6 +48,36 @@ func runInit(ctx context.Context, env, region string) error {
 
 	out.Step(style.Infra, "Initializing the Pulumi stack for environment %q in region %q", env, region)
 
+	if env == "dev" {
+		return runInitRuntime(ctx, env, region)
+	}
+	return runInitDOKS(ctx, env, region)
+}
+
+// runInitRuntime initializes the Hetzner k3s runtime stack for the dev environment.
+func runInitRuntime(ctx context.Context, env, region string) error {
+	cfg, err := buildRuntimeConfig(env, region)
+	if err != nil {
+		return fmt.Errorf("build runtime config: %w", err)
+	}
+
+	stack, err := runtime.NewStack(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize runtime stack: %w", err)
+	}
+	_ = stack
+
+	out.Success("Stack initialized successfully")
+	out.Step(style.Config, "Pulumi ESC environment: %s", cfg.ESCEnvironment)
+	out.Step(style.Tip, "Next steps:")
+	out.Infof("crawbl infra plan    # Preview infrastructure changes")
+	out.Infof("crawbl infra update  # Apply infrastructure changes")
+
+	return nil
+}
+
+// runInitDOKS initializes the DOKS platform stack for non-dev environments.
+func runInitDOKS(ctx context.Context, env, region string) error {
 	config, err := buildConfig(env, region)
 	if err != nil {
 		return fmt.Errorf("build config: %w", err)

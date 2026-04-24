@@ -914,6 +914,10 @@ type RuntimeStatus struct {
 	// ServiceName is the Kubernetes service name for the swarm.
 	ServiceName string
 
+	// DirectEndpoint is the direct pod IP:port address for cross-cluster
+	// dialing when the runtime cluster is separate from the platform cluster.
+	DirectEndpoint string
+
 	// UserID is the platform user ID that owns this workspace. Populated
 	// by the runtime client on EnsureRuntime; used by downstream
 	// SendText/Memory calls to sign HMAC bearer tokens for gRPC auth

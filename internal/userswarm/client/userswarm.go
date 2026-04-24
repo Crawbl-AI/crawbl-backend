@@ -11,6 +11,10 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -20,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/tools/clientcmd"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
@@ -37,6 +42,11 @@ import (
 //  2. Load the in-cluster or kubeconfig REST config.
 //  3. Build a typed controller-runtime client.
 //  4. Fill in UserSwarmConfig defaults for any blank fields.
+//
+// When UserSwarmConfig.RuntimeClusterKubeconfig is set, a separate k8s
+// client is built for the remote runtime cluster and mTLS gRPC is used.
+// When empty, in-cluster config and insecure gRPC are used (single-cluster
+// dev mode) — existing behavior is fully preserved.
 //
 // Returns error (not *merrors.Error) because this is called at start-up
 // — the caller should treat a non-nil error as fatal.
@@ -61,6 +71,29 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 	}
 
 	userswarmCfg := cfg.UserSwarm
+
+	// When a remote runtime kubeconfig is configured, build a separate
+	// k8s client targeting that cluster for CR management.
+	runtimeK8s := k8sclient.Client(k8sClient)
+	if userswarmCfg.RuntimeClusterKubeconfig != "" {
+		runtimeK8s, err = buildRemoteK8sClient(userswarmCfg.RuntimeClusterKubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("build remote k8s client: %w", err)
+		}
+	}
+
+	// Select gRPC pool: mTLS for cross-cluster, insecure for same-cluster.
+	var pool *crawblgrpc.Pool
+	if userswarmCfg.RuntimeClusterKubeconfig != "" && userswarmCfg.TLSCertFile != "" {
+		tlsCfg, err := buildClientTLSConfig(userswarmCfg)
+		if err != nil {
+			return nil, fmt.Errorf("build tls config: %w", err)
+		}
+		pool = crawblgrpc.NewTLSHMACPool(userswarmCfg.MCPSigningKey, tlsCfg)
+	} else {
+		pool = crawblgrpc.NewInsecureHMACPool(userswarmCfg.MCPSigningKey)
+	}
+
 	if strings.TrimSpace(userswarmCfg.RuntimeNamespace) == "" {
 		userswarmCfg.RuntimeNamespace = DefaultRuntimeNamespace
 	}
@@ -76,12 +109,60 @@ func NewUserSwarmClient(cfg Config) (Client, error) {
 
 	cacheCtx, cacheCancel := context.WithCancel(context.Background())
 	return &userSwarmClient{
-		client:      k8sClient,
+		client:      runtimeK8s,
 		config:      userswarmCfg,
-		grpcPool:    crawblgrpc.NewInsecureHMACPool(userswarmCfg.MCPSigningKey),
+		grpcPool:    pool,
 		cache:       newRuntimeCache(cacheCtx),
 		cacheCancel: cacheCancel,
 	}, nil
+}
+
+// buildRemoteK8sClient creates a controller-runtime client targeting
+// a remote Kubernetes cluster via the provided kubeconfig path.
+func buildRemoteK8sClient(kubeconfigPath string) (k8sclient.Client, error) {
+	restCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("load kubeconfig %s: %w", kubeconfigPath, err)
+	}
+
+	scheme := runtime.NewScheme()
+	if err := crawblv1alpha1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("add crawbl scheme: %w", err)
+	}
+
+	client, err := k8sclient.New(restCfg, k8sclient.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("create k8s client: %w", err)
+	}
+	return client, nil
+}
+
+// buildClientTLSConfig creates a *tls.Config for the orchestrator's
+// gRPC client when connecting to runtime pods over mTLS.
+func buildClientTLSConfig(cfg UserSwarmConfig) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load client keypair: %w", err)
+	}
+
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS13,
+	}
+
+	if cfg.TLSCAFile != "" {
+		caCert, err := os.ReadFile(cfg.TLSCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read ca cert: %w", err)
+		}
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("parse ca cert: no valid certificates")
+		}
+		tlsCfg.RootCAs = caPool
+	}
+
+	return tlsCfg, nil
 }
 
 // Close releases every cached gRPC connection. Safe to call multiple
@@ -219,6 +300,7 @@ func (c *userSwarmClient) getRuntimeState(ctx context.Context, swarmName string)
 		SwarmName:        swarm.Name,
 		RuntimeNamespace: swarm.Status.RuntimeNamespace,
 		ServiceName:      swarm.Status.ServiceName,
+		DirectEndpoint:   swarm.Status.DirectEndpoint,
 		Phase:            swarm.Status.Phase,
 		Verified:         isConditionTrue(swarm.Status.Conditions, readyConditionType),
 		Status: orchestrator.ResolveRuntimeState(
@@ -300,6 +382,18 @@ func (c *userSwarmClient) desiredUserSwarm(ctx context.Context, opts *EnsureRunt
 	return sw
 }
 
+// runtimeTarget returns the gRPC dial target for a workspace's runtime pod.
+// It selects DirectEndpoint (cross-cluster PodIP dialing) when available,
+// falling back to ClusterTarget (in-cluster service DNS). This single
+// function is the authority for target resolution across dial, drop, and
+// connection eviction — never construct targets ad-hoc.
+func (c *userSwarmClient) runtimeTarget(status *orchestrator.RuntimeStatus) string {
+	if status.DirectEndpoint != "" {
+		return status.DirectEndpoint
+	}
+	return crawblgrpc.ClusterTarget(status.ServiceName, status.RuntimeNamespace, c.config.Port)
+}
+
 // DeleteRuntime removes the UserSwarm CR for the given workspace.
 // Idempotent: if the CR is already gone we return nil.
 func (c *userSwarmClient) DeleteRuntime(ctx context.Context, workspaceID string) *merrors.Error {
@@ -327,7 +421,11 @@ func (c *userSwarmClient) DeleteRuntime(ctx context.Context, workspaceID string)
 	// so a recreated pod does not inherit a dead connection from the
 	// pool. The service name is derived from the CR we just deleted.
 	if swarm.Status.ServiceName != "" && swarm.Status.RuntimeNamespace != "" {
-		target := crawblgrpc.ClusterTarget(swarm.Status.ServiceName, swarm.Status.RuntimeNamespace, c.config.Port)
+		target := c.runtimeTarget(&orchestrator.RuntimeStatus{
+			ServiceName:      swarm.Status.ServiceName,
+			RuntimeNamespace: swarm.Status.RuntimeNamespace,
+			DirectEndpoint:   swarm.Status.DirectEndpoint,
+		})
 		c.grpcPool.Drop(target)
 	}
 

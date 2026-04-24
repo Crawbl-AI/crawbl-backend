@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/runtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/cliexec"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
@@ -33,7 +34,8 @@ func newUpdateCommand() *cobra.Command {
 		Long: `Create or update infrastructure using Pulumi.
 
 Pulumi manages:
-  - DOKS cluster + VPC + container registry
+  - DOKS cluster + VPC + container registry (prod)
+  - Hetzner k3s server + firewall + cloud-init (dev)
   - Managed databases (PostgreSQL, Valkey, PgBouncer) — prod only
   - Cloudflare Tunnel + DNS — dev only
   - ArgoCD namespace + Helm release + repo secret + root Application
@@ -94,8 +96,70 @@ func runUpdate(ctx context.Context, opts updateOpts) error {
 		return nil
 	}
 
-	// Post-provision: save kubeconfig, verify DOCR, wait for ArgoCD.
+	// Post-provision kubeconfig and ArgoCD wait — branched by environment.
 	out.Ln()
+	if opts.env == "dev" {
+		return postUpdateDev(ctx, opts)
+	}
+	return postUpdateDOKS(ctx, opts)
+}
+
+// postUpdateDev saves kubeconfig from Pulumi stack outputs and waits for ArgoCD.
+// DOCR registry integration is not needed for the Hetzner k3s dev environment.
+func postUpdateDev(ctx context.Context, opts updateOpts) error {
+	out.Step(style.Infra, "Reading kubeconfig from Pulumi stack outputs...")
+
+	cfg, err := buildRuntimeConfig(opts.env, opts.region)
+	if err != nil {
+		return fmt.Errorf("build runtime config: %w", err)
+	}
+
+	stack, err := runtime.NewStack(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("create runtime stack: %w", err)
+	}
+
+	outputs, err := stack.Outputs(ctx)
+	if err != nil {
+		return fmt.Errorf("get stack outputs: %w", err)
+	}
+
+	kubeconfigRaw, ok := outputs["kubeconfig"]
+	if !ok {
+		return fmt.Errorf("kubeconfig output not found in stack outputs")
+	}
+	kubeconfig, ok := kubeconfigRaw.(string)
+	if !ok {
+		return fmt.Errorf("kubeconfig output is not a string")
+	}
+
+	kubeconfigPath := os.ExpandEnv("$HOME/.kube/config-crawbl-dev")
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil { // #nosec G306 -- kubeconfig requires 0600
+		return fmt.Errorf("write kubeconfig to %s: %w", kubeconfigPath, err)
+	}
+	out.Step(style.Check, "Kubeconfig saved to %s", kubeconfigPath)
+	out.Infof("Set KUBECONFIG=%s to use this cluster", kubeconfigPath)
+
+	out.Step(style.Infra, "Waiting for ArgoCD application-controller...")
+	if err := waitForController(ctx, opts.syncTimeout); err != nil {
+		return fmt.Errorf("controller readiness failed: %w", err)
+	}
+	out.Step(style.Ready, "ArgoCD application-controller is ready")
+
+	out.Step(style.Infra, "Waiting for all applications to sync...")
+	if err := waitForAppsSync(opts.syncTimeout); err != nil {
+		return fmt.Errorf("app sync wait failed: %w", err)
+	}
+	out.Step(style.Ready, "Applications are synced")
+
+	out.Ln()
+	out.Step(style.Celebrate, "Infrastructure update complete")
+	printAppStatus()
+	return nil
+}
+
+// postUpdateDOKS saves kubeconfig via doctl, verifies DOCR integration, and waits for ArgoCD.
+func postUpdateDOKS(ctx context.Context, opts updateOpts) error {
 	out.Step(style.Infra, "Saving kubeconfig for %s...", opts.clusterName)
 	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "kubeconfig", "save", opts.clusterName); err != nil {
 		return fmt.Errorf("kubeconfig save failed: %w", err)
@@ -126,14 +190,43 @@ func runUpdate(ctx context.Context, opts updateOpts) error {
 	return nil
 }
 
-// pulumiUp is the shared Pulumi apply logic used by both 'update' and 'bootstrap'.
+// pulumiUp routes to the correct Pulumi program based on environment.
 func pulumiUp(ctx context.Context, env, region string) error {
-	config, err := buildConfig(env, region)
+	if env == "dev" {
+		return pulumiUpRuntime(ctx, env, region)
+	}
+	return pulumiUpDOKS(ctx, env, region)
+}
+
+// pulumiUpRuntime runs Pulumi up for the Hetzner k3s dev environment.
+func pulumiUpRuntime(ctx context.Context, env, region string) error {
+	cfg, err := buildRuntimeConfig(env, region)
+	if err != nil {
+		return fmt.Errorf("build runtime config: %w", err)
+	}
+
+	stack, err := runtime.NewStack(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("create runtime stack: %w", err)
+	}
+
+	result, err := stack.Up(ctx)
+	if err != nil {
+		return fmt.Errorf("pulumi up failed: %w", err)
+	}
+
+	printRuntimeOutputs(result)
+	return nil
+}
+
+// pulumiUpDOKS runs Pulumi up for the DOKS platform (all non-dev environments).
+func pulumiUpDOKS(ctx context.Context, env, region string) error {
+	cfg, err := buildConfig(env, region)
 	if err != nil {
 		return fmt.Errorf("build config: %w", err)
 	}
 
-	stack, err := infra.NewStack(ctx, config)
+	stack, err := infra.NewStack(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create stack: %w", err)
 	}
@@ -247,6 +340,19 @@ func printAppStatus() {
 }
 
 func printOutputs(result *infra.UpResult) {
+	out.Ln()
+	out.Success("Apply complete")
+	if len(result.Outputs) == 0 {
+		return
+	}
+	out.Ln()
+	out.Step(style.Config, "Outputs:")
+	for name, output := range result.Outputs {
+		out.Infof("%s: %v", name, output)
+	}
+}
+
+func printRuntimeOutputs(result *runtime.UpResult) {
 	out.Ln()
 	out.Success("Apply complete")
 	if len(result.Outputs) == 0 {

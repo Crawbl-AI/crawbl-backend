@@ -123,6 +123,11 @@ type Config struct {
 
 	// Startup holds operational knobs (graceful shutdown window, timeouts).
 	Startup StartupConfig
+
+	// TLS holds optional mTLS settings for the gRPC server. When empty,
+	// the server runs without TLS (single-cluster dev mode). When set,
+	// the server serves gRPC over mTLS for prod hybrid cross-cluster traffic.
+	TLS TLSConfig
 }
 
 // SpacesConfig carries the DigitalOcean Spaces client settings the
@@ -159,6 +164,23 @@ type OpenAIConfig struct {
 	// for Ollama, OpenRouter, Azure OpenAI, etc. Empty means default
 	// "https://api.openai.com/v1".
 	BaseURL string
+}
+
+// TLSConfig holds optional TLS settings for the gRPC server. When all
+// fields are empty the server runs without TLS (cluster-internal dev mode).
+// When set, the server serves gRPC over mTLS for cross-cluster prod hybrid.
+type TLSConfig struct {
+	// CertFile is the path to the PEM-encoded server certificate.
+	CertFile string
+	// KeyFile is the path to the PEM-encoded server private key.
+	KeyFile string
+	// CAFile is the path to the PEM-encoded CA certificate for client verification.
+	CAFile string
+}
+
+// Enabled returns true when TLS certificate paths are configured.
+func (t TLSConfig) Enabled() bool {
+	return t.CertFile != "" && t.KeyFile != ""
 }
 
 // StartupConfig holds operational knobs for the server lifecycle.
