@@ -1,4 +1,4 @@
-// Package handler — ports.go declares the narrow service contracts the
+// Package handler — types.go declares the narrow service contracts the
 // HTTP handlers depend on. Per project convention, interfaces live at
 // the consumer, not the producer: each method listed here corresponds
 // to a call site in a handler file. The concrete services exported

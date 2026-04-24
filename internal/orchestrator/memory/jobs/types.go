@@ -1,4 +1,4 @@
-// Package jobs — ports.go declares the narrow repository contracts the
+// Package jobs — types.go declares the narrow repository contracts the
 // memory background jobs (process/maintain/enrich/centroid) depend on.
 // Per project convention, these interfaces live at the consumer, not
 // the producer: the concrete Postgres structs in

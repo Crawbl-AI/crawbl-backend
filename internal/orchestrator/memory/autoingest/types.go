@@ -15,8 +15,10 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
@@ -110,3 +112,17 @@ const (
 	defaultWorkers   = 16
 	defaultQueueSize = 1024
 )
+
+// drawerStore is the drawer subset the auto-ingest worker uses:
+// idempotent add for the hot path plus a duplicate-check probe before
+// inserting.
+type drawerStore interface {
+	AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
+	CheckDuplicate(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32, threshold float64, limit int) ([]memory.DrawerSearchResult, error)
+}
+
+// nearestTyper is the centroid subset used by the Phase-2 nearest-type
+// classifier. Optional at runtime — the worker no-ops when nil.
+type nearestTyper interface {
+	NearestType(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32) (memType string, similarity float64, ok bool, err error)
+}
