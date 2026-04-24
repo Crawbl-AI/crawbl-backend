@@ -32,9 +32,6 @@ import (
 	chatservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/chatservice"
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
-	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
 
 func newAPICommand() *cobra.Command {
@@ -76,9 +73,9 @@ func runAPI(ctx context.Context) error {
 	memoryStack, embedder := buildMemoryStack(logger, drawerRepo, identityRepo)
 
 	// NATS client for memory fan-out events (needed by auto-ingest pool).
-	natsCfg := crawblnats.DefaultConfig()
+	natsCfg := queue.DefaultNATSConfig()
 	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
-	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
+	natsClient, natsErr := queue.ConnectNATS(ctx, natsCfg, logger)
 	if natsErr != nil {
 		logger.Warn("NATS connect failed, memory publishing disabled", "error", natsErr)
 	}
@@ -89,13 +86,13 @@ func runAPI(ctx context.Context) error {
 	}()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
-	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
+	pricingCache := queue.NewPricingCache(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
 	// River client — API only publishes usage jobs, does not process them.
 	// The client is NOT started (no Start call) because Start requires
 	// Queues+Workers config. Insert/InsertTx work without Start.
-	riverClient, err := pkgriver.New(db.DB, nil)
+	riverClient, err := queue.NewRiverClient(db.DB, nil)
 	if err != nil {
 		logger.Error("river client construction failed", "error", err)
 		return fmt.Errorf("river client: %w", err)

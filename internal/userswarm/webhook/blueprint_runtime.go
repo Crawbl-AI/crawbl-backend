@@ -10,7 +10,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
 
 // This file holds the workload shape: a single Deployment (not a
@@ -29,7 +28,7 @@ func buildRuntimeDeployment(sw *crawblv1alpha1.UserSwarm, ns string, cfg *runtim
 	image := resolveRuntimeImage(sw, cfg)
 
 	return &appsv1.Deployment{
-		TypeMeta:   kube.TypeMeta("apps/v1", "Deployment"),
+		TypeMeta:   TypeMeta("apps/v1", "Deployment"),
 		ObjectMeta: objectMeta(runtimeDeploymentName(sw), ns, sw),
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -44,8 +43,8 @@ func buildRuntimeDeployment(sw *crawblv1alpha1.UserSwarm, ns string, cfg *runtim
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: runtimeLabels(sw),
 					Annotations: map[string]string{
-						"crawbl.ai/runtime-image": kube.ChecksumString(image),
-						"crawbl.ai/env-secret":    kube.ChecksumString(secretName),
+						"crawbl.ai/runtime-image": ChecksumString(image),
+						"crawbl.ai/env-secret":    ChecksumString(secretName),
 					},
 				},
 				Spec: buildRuntimePodSpec(sw, port, image, secretName, cfg),
@@ -201,7 +200,7 @@ func buildAgentRuntimeContainer(sw *crawblv1alpha1.UserSwarm, port int32, image,
 	}
 
 	if secretName != "" {
-		container.EnvFrom = kube.SecretEnvFrom(secretName)
+		container.EnvFrom = SecretEnvFrom(secretName)
 	}
 
 	// Literal env vars for Postgres + Redis connection settings. The

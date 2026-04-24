@@ -16,27 +16,27 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx/v5 database/sql driver registration
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 // ConfigFromEnv creates a Config from environment variables using the given prefix.
 // Environment variables are expected in the format: {PREFIX}_DATABASE_{FIELD}.
 // For example, with prefix "APP_", it looks for APP_DATABASE_HOST, APP_DATABASE_PORT, etc.
-// Secret values (User, Password) are retrieved using configenv.SecretString for secure handling.
+// Secret values (User, Password) are retrieved using config.SecretString for secure handling.
 // If environment variables are not set, default values from types.go are used.
 func ConfigFromEnv(prefix string) Config {
 	return Config{
-		Host:               configenv.StringOr(prefix+"DATABASE_HOST", DefaultHost),
-		Port:               configenv.StringOr(prefix+"DATABASE_PORT", DefaultPort),
-		User:               configenv.SecretString(prefix+"DATABASE_USER", DefaultUser),
-		Password:           configenv.SecretString(prefix+"DATABASE_PASSWORD", DefaultPassword),
-		Name:               configenv.StringOr(prefix+"DATABASE_NAME", DefaultName),
-		Schema:             configenv.StringOr(prefix+"DATABASE_SCHEMA", DefaultSchema),
-		SSLMode:            configenv.StringOr(prefix+"DATABASE_SSLMODE", DefaultSSLMode),
-		MaxOpenConnections: configenv.IntOr(prefix+"DATABASE_MAX_OPEN_CONNECTIONS", DefaultMaxOpenConnections),
-		MaxIdleConnections: configenv.IntOr(prefix+"DATABASE_MAX_IDLE_CONNECTIONS", DefaultMaxIdleConnections),
-		ConnMaxLifetime:    configenv.DurationOr(prefix+"DATABASE_CONN_MAX_LIFETIME", DefaultConnMaxLifetime),
-		ConnMaxIdleTime:    configenv.DurationOr(prefix+"DATABASE_CONN_MAX_IDLE_TIME", DefaultConnMaxIdleTime),
+		Host:               config.StringOr(prefix+"DATABASE_HOST", DefaultHost),
+		Port:               config.StringOr(prefix+"DATABASE_PORT", DefaultPort),
+		User:               config.SecretString(prefix+"DATABASE_USER", DefaultUser),
+		Password:           config.SecretString(prefix+"DATABASE_PASSWORD", DefaultPassword),
+		Name:               config.StringOr(prefix+"DATABASE_NAME", DefaultName),
+		Schema:             config.StringOr(prefix+"DATABASE_SCHEMA", DefaultSchema),
+		SSLMode:            config.StringOr(prefix+"DATABASE_SSLMODE", DefaultSSLMode),
+		MaxOpenConnections: config.IntOr(prefix+"DATABASE_MAX_OPEN_CONNECTIONS", DefaultMaxOpenConnections),
+		MaxIdleConnections: config.IntOr(prefix+"DATABASE_MAX_IDLE_CONNECTIONS", DefaultMaxIdleConnections),
+		ConnMaxLifetime:    config.DurationOr(prefix+"DATABASE_CONN_MAX_LIFETIME", DefaultConnMaxLifetime),
+		ConnMaxIdleTime:    config.DurationOr(prefix+"DATABASE_CONN_MAX_IDLE_TIME", DefaultConnMaxIdleTime),
 	}
 }
 
@@ -49,16 +49,16 @@ func ConfigFromEnv(prefix string) Config {
 // Returns:
 //   - A dbr.Connection ready for use with the PostgreSQL dialect.
 //   - An error if the connection cannot be established or pinged.
-func New(config Config) (*dbr.Connection, error) {
-	db, err := sql.Open("pgx", BuildDSN(config, true))
+func New(cfg Config) (*dbr.Connection, error) {
+	db, err := sql.Open("pgx", BuildDSN(cfg, true))
 	if err != nil {
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(config.MaxOpenConnections)
-	db.SetMaxIdleConns(config.MaxIdleConnections)
-	db.SetConnMaxLifetime(config.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(config.ConnMaxIdleTime)
+	db.SetMaxOpenConns(cfg.MaxOpenConnections)
+	db.SetMaxIdleConns(cfg.MaxIdleConnections)
+	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 	if err := pingWithRetry(context.Background(), db, DefaultPingAttempts, DefaultPingDelay); err != nil {
 		_ = db.Close()
@@ -80,8 +80,8 @@ func New(config Config) (*dbr.Connection, error) {
 // Returns:
 //   - An error if the connection fails or the schema creation fails.
 //   - nil if the schema already exists or was created successfully.
-func EnsureSchema(config Config) error {
-	schema := strings.TrimSpace(config.Schema)
+func EnsureSchema(cfg Config) error {
+	schema := strings.TrimSpace(cfg.Schema)
 	if schema == "" {
 		return nil
 	}
@@ -91,7 +91,7 @@ func EnsureSchema(config Config) error {
 		return fmt.Errorf("invalid schema name: contains NUL byte")
 	}
 
-	db, err := sql.Open("pgx", BuildDSN(config, false))
+	db, err := sql.Open("pgx", BuildDSN(cfg, false))
 	if err != nil {
 		return err
 	}
@@ -123,18 +123,18 @@ func EnsureSchema(config Config) error {
 // Both database/sql drivers (lib/pq historically, pgx/v5/stdlib now) accept
 // the URL form, and url.UserPassword percent-encodes credentials so special
 // characters in the password do not break parsing.
-func BuildDSN(config Config, includeSchema bool) string {
+func BuildDSN(cfg Config, includeSchema bool) string {
 	dsnURL := &url.URL{
 		Scheme: "postgres",
-		User:   url.UserPassword(config.User, config.Password),
-		Host:   net.JoinHostPort(config.Host, config.Port),
-		Path:   "/" + config.Name,
+		User:   url.UserPassword(cfg.User, cfg.Password),
+		Host:   net.JoinHostPort(cfg.Host, cfg.Port),
+		Path:   "/" + cfg.Name,
 	}
 
 	query := url.Values{}
-	query.Set("sslmode", config.SSLMode)
-	if includeSchema && strings.TrimSpace(config.Schema) != "" {
-		query.Set("search_path", config.Schema)
+	query.Set("sslmode", cfg.SSLMode)
+	if includeSchema && strings.TrimSpace(cfg.Schema) != "" {
+		query.Set("search_path", cfg.Schema)
 	}
 	dsnURL.RawQuery = query.Encode()
 

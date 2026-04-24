@@ -13,10 +13,10 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // socketSession holds per-socket cancellation state for in-flight dispatch goroutines.

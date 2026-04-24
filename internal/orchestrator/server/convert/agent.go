@@ -8,7 +8,6 @@ import (
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // AgentToProto converts a domain Agent to the proto response.
@@ -25,7 +24,7 @@ func AgentToProto(agent *orchestrator.Agent) *mobilev1.AgentResponse {
 		Avatar: agent.AvatarURL,
 	}
 	if s := string(agent.Status); s != "" {
-		out.Status = ptr.Of(s)
+		out.Status = &s
 	}
 	return out
 }

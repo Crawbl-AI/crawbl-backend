@@ -6,9 +6,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // ActionCardResponse handles a user's response to an action card.
@@ -26,7 +26,7 @@ func ActionCardResponse(c *Context) http.HandlerFunc {
 
 		var req mobilev1.ActionCardRequest
 		if err := DecodeProtoJSON(r, &req); err != nil || req.GetActionId() == "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "action_id is required")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "action_id is required")
 			return
 		}
 

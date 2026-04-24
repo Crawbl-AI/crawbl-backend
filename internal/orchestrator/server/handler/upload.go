@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
 )
 
 // FileUpload handles file uploads for chat attachments and avatars.
@@ -11,6 +11,6 @@ import (
 // Not yet implemented — real file storage (S3/DO Spaces) comes later.
 func FileUpload(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpserver.WriteErrorMessage(w, http.StatusNotImplemented, "file uploads are not yet available")
+		httputil.WriteErrorMessage(w, http.StatusNotImplemented, "file uploads are not yet available")
 	}
 }

@@ -57,18 +57,14 @@ import (
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/firebase"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/clickhouse"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
-	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -128,12 +124,12 @@ func runServer(ctx context.Context) error {
 	classifier := extract.NewClassifier()
 	memoryStack, embedder := buildMemoryStack(logger, memRepos.drawer, memRepos.identity)
 
-	if err := pkgriver.Migrate(ctx, db.DB); err != nil {
+	if err := queue.MigrateRiver(ctx, db.DB); err != nil {
 		return fmt.Errorf("river migration failed: %w", err)
 	}
 	logger.Info("river migrations applied")
 
-	clickhouseDB, err := clickhouse.Open(ctx, logger)
+	clickhouseDB, err := queue.OpenClickhouse(ctx, logger)
 	if err != nil {
 		return fmt.Errorf("clickhouse open: %w", err)
 	}
@@ -144,7 +140,7 @@ func runServer(ctx context.Context) error {
 	defer cleanupNATS()
 	memoryPublisher := queue.NewMemoryPublisher(natsClient, logger)
 
-	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
+	pricingCache := queue.NewPricingCache(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
 	riverClient, err := buildAndStartRiver(ctx, riverOpts{
@@ -159,7 +155,7 @@ func runServer(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer pkgriver.Shutdown(riverClient, logger)
+	defer queue.ShutdownRiver(riverClient, logger)
 
 	ingestPool, err := buildIngestPool(db, memRepos, classifier, embedder, memoryPublisher, logger)
 	if err != nil {
@@ -310,10 +306,10 @@ func closeIfNonNil(db *sql.DB) {
 // buildNATS connects to the NATS server for memory fan-out events. Returns a
 // nil client (safe for downstream) and a no-op cleanup when the connection
 // fails or the URL is unset.
-func buildNATS(ctx context.Context, logger *slog.Logger) (*crawblnats.Client, func()) {
-	natsCfg := crawblnats.DefaultConfig()
+func buildNATS(ctx context.Context, logger *slog.Logger) (*queue.NATSClient, func()) {
+	natsCfg := queue.DefaultNATSConfig()
 	natsCfg.URL = strings.TrimSpace(os.Getenv("CRAWBL_NATS_URL"))
-	natsClient, natsErr := crawblnats.Connect(ctx, natsCfg, logger)
+	natsClient, natsErr := queue.ConnectNATS(ctx, natsCfg, logger)
 	if natsErr != nil {
 		logger.Warn("NATS connect failed, memory publishing disabled", "error", natsErr)
 		return nil, noopCleanup
@@ -323,7 +319,7 @@ func buildNATS(ctx context.Context, logger *slog.Logger) (*crawblnats.Client, fu
 
 // buildAndStartRiver creates the River config, constructs the client, runs
 // schema migrations, and starts the background workers.
-func buildAndStartRiver(ctx context.Context, opts riverOpts) (*pkgriver.Client, error) {
+func buildAndStartRiver(ctx context.Context, opts riverOpts) (*queue.RiverClient, error) {
 	logger := opts.logger
 	db := opts.db
 	mem := opts.mem
@@ -348,7 +344,7 @@ func buildAndStartRiver(ctx context.Context, opts riverOpts) (*pkgriver.Client, 
 		return nil, fmt.Errorf("river config: %w", err)
 	}
 
-	riverClient, err := pkgriver.New(db.DB, riverCfg)
+	riverClient, err := queue.NewRiverClient(db.DB, riverCfg)
 	if err != nil {
 		return nil, fmt.Errorf("river client: %w", err)
 	}
@@ -396,7 +392,7 @@ func shutdownIngestPool(pool autoingest.Service, logger *slog.Logger) {
 
 // buildRiverUI constructs the River UI dashboard handler when enabled via
 // CRAWBL_RIVERUI_HOST. Returns (nil, "", nil) when disabled.
-func buildRiverUI(ctx context.Context, logger *slog.Logger, riverClient *pkgriver.Client) (http.Handler, string, error) {
+func buildRiverUI(ctx context.Context, logger *slog.Logger, riverClient *queue.RiverClient) (http.Handler, string, error) {
 	riverUIHost := strings.TrimSpace(os.Getenv("CRAWBL_RIVERUI_HOST"))
 	if riverUIHost == "" {
 		return nil, "", nil
@@ -743,4 +739,3 @@ func buildRealtime(shutdownCtx context.Context, logger *slog.Logger, rc rediscli
 	logger.Info("realtime enabled: socket.io + redis")
 	return broadcaster, handler, io, cleanup
 }
-

@@ -13,7 +13,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
 )
 
 func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceID string, params *CreateArtifactParams) (*CreateArtifactResult, error) {

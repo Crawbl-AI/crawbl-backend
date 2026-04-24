@@ -13,10 +13,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/buildtools"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 func newScanCommand() *cobra.Command {
@@ -38,12 +38,12 @@ Requires sonar-scanner, gosec, and staticcheck (install via mise install) and SO
 }
 
 func runScan(ctx context.Context) error {
-	token := configenv.StringOr("SONARQUBE_TOKEN", "")
+	token := config.StringOr("SONARQUBE_TOKEN", "")
 	if token == "" {
 		return fmt.Errorf("SONARQUBE_TOKEN is required (set in .env or environment)")
 	}
 
-	sonarURL := configenv.StringOr("SONARQUBE_URL", "https://sonar-dev.crawbl.com")
+	sonarURL := config.StringOr("SONARQUBE_URL", "https://sonar-dev.crawbl.com")
 
 	toolPaths := make(map[string]string)
 	for _, tool := range []string{"sonar-scanner", "gosec", "staticcheck"} {
@@ -54,7 +54,7 @@ func runScan(ctx context.Context) error {
 		toolPaths[tool] = p
 	}
 
-	rootDir, err := gitutil.RootDir()
+	rootDir, err := buildtools.RootDir()
 	if err != nil {
 		return fmt.Errorf("find repo root: %w", err)
 	}

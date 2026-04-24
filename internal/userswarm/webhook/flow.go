@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
 
 // driveSync is the top-level decision point for every callback.
@@ -44,7 +43,7 @@ func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runt
 			"runtimeNamespace":   runtimeNamespace,
 			"serviceName":        runtimeServiceName(swarm),
 			"readyReplicas":      observedReadyReplicas(req),
-			"conditions":         []any{kube.StatusCondition("Ready", readyStatus, readyReason, "")},
+			"conditions":         []any{StatusCondition("Ready", readyStatus, readyReason, "")},
 		},
 		Children:           children,
 		ResyncAfterSeconds: resyncPeriodSeconds,

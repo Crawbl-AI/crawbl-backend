@@ -5,7 +5,6 @@ import (
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // WorkspaceToProto converts a domain Workspace to the proto response.
@@ -22,10 +21,10 @@ func WorkspaceToProto(workspace *orchestrator.Workspace) *mobilev1.WorkspaceResp
 			Verified: workspace.Runtime.Verified,
 		}
 		if s := string(workspace.Runtime.Status); s != "" {
-			rt.Status = ptr.Of(s)
+			rt.Status = &s
 		}
-		if workspace.Runtime.Phase != "" {
-			rt.Phase = ptr.Of(workspace.Runtime.Phase)
+		if s := workspace.Runtime.Phase; s != "" {
+			rt.Phase = &s
 		}
 		resp.Runtime = rt
 	}

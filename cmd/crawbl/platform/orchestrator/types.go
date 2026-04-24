@@ -8,19 +8,19 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -73,7 +73,7 @@ type riverOpts struct {
 	mem          memoryRepoBundle
 	embedder     embed.Embedder
 	messageRepo  coreMessageRepo
-	pricingCache *pricing.Cache
+	pricingCache *queue.PricingCache
 	llmUsageRepo llmusagerepo.Inserter
 }
 

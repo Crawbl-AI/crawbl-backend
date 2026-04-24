@@ -6,9 +6,8 @@ import (
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // IntegrationsList returns both agent tools and third-party integrations
@@ -74,7 +73,7 @@ func IntegrationsList(c *Context) http.HandlerFunc {
 				IconUrl:     ig.IconURL,
 				CategoryId:  ig.CategoryID,
 				Type:        string(orchestrator.ItemTypeApp),
-				Provider:    ptr.Of(ig.Provider),
+				Provider:    &ig.Provider,
 				Enabled:     ig.IsEnabled,
 				IsConnected: ig.IsConnected,
 			})
@@ -100,7 +99,7 @@ func IntegrationConnect(c *Context) http.HandlerFunc {
 
 		var req mobilev1.IntegrationConnectRequest
 		if err := DecodeProtoJSON(r, &req); err != nil || req.GetProvider() == "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "provider is required")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "provider is required")
 			return
 		}
 
@@ -137,11 +136,11 @@ func IntegrationCallback(c *Context) http.HandlerFunc {
 
 		var req mobilev1.IntegrationCallbackRequest
 		if err := DecodeProtoJSON(r, &req); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 		if req.GetProvider() == "" || req.GetAuthorizationCode() == "" || req.GetCodeVerifier() == "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "provider, authorization_code, and code_verifier are required")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "provider, authorization_code, and code_verifier are required")
 			return
 		}
 

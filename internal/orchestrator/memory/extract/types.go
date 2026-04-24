@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 // ClassifiedMemory is a text chunk with its detected memory type.
@@ -95,7 +95,7 @@ const (
 	batchClassifyMaxTokens = 4096
 )
 
-var classifyTimeout = defaults.LongTimeout
+var classifyTimeout = config.LongTimeout
 
 // LLMClassifierConfig holds configuration for the OpenAI-compatible LLM classifier.
 type LLMClassifierConfig struct {

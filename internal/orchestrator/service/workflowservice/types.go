@@ -9,9 +9,9 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -33,7 +33,7 @@ const MaxWorkflowDuration = 30 * time.Minute
 var (
 	// WorkflowCleanupTimeout is the time budget for post-failure DB writes when
 	// the workflow context has already been cancelled.
-	WorkflowCleanupTimeout = defaults.ShortTimeout
+	WorkflowCleanupTimeout = config.ShortTimeout
 )
 
 // workflowEmitter wraps the realtime broadcaster for a single workflow

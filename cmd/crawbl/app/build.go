@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/buildtools"
 )
 
 func newBuildCommand() *cobra.Command {
@@ -109,7 +109,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
 			if tag == "" {
 				return errors.New(errTagRequired)
 			}
-			rootDir, err := gitutil.RootDir()
+			rootDir, err := buildtools.RootDir()
 			if err != nil {
 				return err
 			}

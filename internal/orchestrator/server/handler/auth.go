@@ -8,10 +8,10 @@ import (
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // HealthCheck returns the server health status and version.
@@ -53,7 +53,7 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
@@ -62,15 +62,15 @@ func SaveFCMToken(c *Context) http.HandlerFunc {
 
 		var reqBody mobilev1.SavePushTokenRequest
 		if err := DecodeProtoJSON(r, &reqBody); err != nil || reqBody.GetPushToken() == "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 		if len(reqBody.GetPushToken()) < minFCMTokenLength {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "push token is too short")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "push token is too short")
 			return
 		}
 		if len(reqBody.GetPushToken()) > maxFCMTokenLength {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "push token exceeds maximum allowed length")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "push token exceeds maximum allowed length")
 			return
 		}
 
@@ -93,7 +93,7 @@ func SignIn(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
@@ -110,7 +110,7 @@ func SignIn(c *Context) http.HandlerFunc {
 		c.Logger.Info("handleAuthSignIn: sign in succeeded", "user_id", user.ID)
 
 		seedWorkspaceRuntime(c, r.Context(), user.ID, "sign_in")
-		httpserver.WriteNoContent(w)
+		httputil.WriteNoContent(w)
 	}
 }
 
@@ -121,7 +121,7 @@ func SignUp(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
@@ -134,7 +134,7 @@ func SignUp(c *Context) http.HandlerFunc {
 		}
 
 		seedWorkspaceRuntime(c, r.Context(), user.ID, "sign_up")
-		httpserver.WriteNoContent(w)
+		httputil.WriteNoContent(w)
 	}
 }
 
@@ -153,13 +153,13 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
 		var reqBody mobilev1.AuthDeleteRequest
 		if err := DecodeProtoJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
@@ -175,7 +175,7 @@ func DeleteAccount(c *Context) http.HandlerFunc {
 		}
 
 		cleanupRuntimes(c, r, workspaces, principal.Subject)
-		httpserver.WriteNoContent(w)
+		httputil.WriteNoContent(w)
 	}
 }
 
@@ -236,18 +236,18 @@ func UpdateUser(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
 		var reqBody mobilev1.UserUpdateRequest
 		if err := DecodeProtoJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
 		if errMsg := validateUserUpdateProtoFields(&reqBody); errMsg != "" {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errMsg)
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, errMsg)
 			return
 		}
 
@@ -262,7 +262,7 @@ func UpdateUser(c *Context) http.HandlerFunc {
 
 		dateOfBirth, parseErr := parseDateOfBirth(reqBody.DateOfBirth)
 		if parseErr != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid date_of_birth format")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "invalid date_of_birth format")
 			return
 		}
 
@@ -279,7 +279,7 @@ func UpdateUser(c *Context) http.HandlerFunc {
 			return
 		}
 
-		httpserver.WriteNoContent(w)
+		httputil.WriteNoContent(w)
 	}
 }
 
@@ -357,13 +357,13 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, err := PrincipalFromRequest(r)
 		if err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteErrorMessage(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
 		var reqBody mobilev1.UserLegalAcceptRequest
 		if err := DecodeProtoJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, errInvalidRequestBody)
 			return
 		}
 
@@ -376,7 +376,7 @@ func AcceptLegal(c *Context) http.HandlerFunc {
 			return
 		}
 
-		httpserver.WriteNoContent(w)
+		httputil.WriteNoContent(w)
 	}
 }
 

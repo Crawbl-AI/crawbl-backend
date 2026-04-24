@@ -7,12 +7,12 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // Consts.
@@ -51,7 +51,7 @@ const decaySkipRecentDays = 7
 var (
 	// enrichPerDrawerTimeout bounds the single-drawer LLM extract call so
 	// one slow upstream response cannot stall the whole batch.
-	enrichPerDrawerTimeout = defaults.MediumTimeout
+	enrichPerDrawerTimeout = config.MediumTimeout
 )
 
 // Types — interfaces.

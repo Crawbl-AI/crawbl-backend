@@ -26,25 +26,26 @@ package queue
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/riverqueue/river"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
-	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
 
 // stalePendingFailer is the message subset used by the stale-pending cleanup
@@ -83,7 +84,7 @@ type Deps struct {
 
 	// Pricing — daily LiteLLM mirror + in-memory cache refresh.
 	ModelPricingRepo modelpricingrepo.Repo
-	PricingCache     *pricing.Cache
+	PricingCache     *PricingCache
 
 	// Usage / billing — per-LLM-call ClickHouse writer.
 	LLMUsageRepo llmusagerepo.Inserter
@@ -440,7 +441,7 @@ type MessageCleanup struct {
 // which lets the orchestrator boot in environments without NATS
 // (local dev, CI).
 type MemoryPublisher struct {
-	nats   *crawblnats.Client
+	nats   *NATSClient
 	logger *slog.Logger
 }
 
@@ -448,7 +449,7 @@ type MemoryPublisher struct {
 // asynchronous insertion into ClickHouse by UsageWriter. Construction
 // is nil-safe: a nil River client makes Publish a no-op.
 type UsagePublisher struct {
-	river  *pkgriver.Client
+	river  *RiverClient
 	logger *slog.Logger
 }
 
@@ -503,3 +504,58 @@ func stampEventMetadata(id, eventTime string) (string, string) {
 	}
 	return id, eventTime
 }
+
+// NATSConfig holds NATS connection parameters.
+type NATSConfig struct {
+	// URL is the NATS server URL (e.g., "nats://localhost:4222").
+	URL string
+	// StreamName is the JetStream stream name for usage events.
+	StreamName string
+	// SubjectPrefix is the subject prefix for usage events.
+	SubjectPrefix string
+}
+
+// NATSClient wraps a NATS connection with JetStream for usage event publishing.
+type NATSClient struct {
+	conn   *nats.Conn
+	js     jetstream.JetStream
+	config NATSConfig
+	logger *slog.Logger
+}
+
+// PricingCache holds model pricing data in memory for fast cost computation.
+// Thread-safe for concurrent reads. Call Refresh to reload from Postgres.
+type PricingCache struct {
+	mu      sync.RWMutex
+	entries map[string]PricingEntry // key: "provider:model:region"
+	byModel map[string]PricingEntry // key: model name, first match — O(1) fallback
+	db      *dbr.Connection
+	repo    modelpricingrepo.Repo
+	logger  *slog.Logger
+}
+
+// PricingEntry holds the per-token pricing for a single model.
+type PricingEntry struct {
+	Provider           string
+	Model              string
+	Region             string
+	InputCostPerToken  float64
+	OutputCostPerToken float64
+	CachedCostPerToken float64
+}
+
+const (
+	// defaultSoftStopTimeout is the budget for in-flight jobs to drain
+	// naturally before we escalate to cancellation.
+	defaultSoftStopTimeout = 20 * time.Second
+	// defaultHardStopTimeout is the budget for StopAndCancel to force
+	// cancellation of stuck jobs before the process exits.
+	defaultHardStopTimeout = 10 * time.Second
+)
+
+// RiverClient is a type alias for the upstream River client parameterized
+// with the standard library transaction type.
+type RiverClient = river.Client[*sql.Tx]
+
+// RiverConfig is a type alias for the upstream River config.
+type RiverConfig = river.Config

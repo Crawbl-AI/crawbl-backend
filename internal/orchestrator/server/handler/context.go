@@ -9,15 +9,15 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
 // WriteError writes a structured error response with the correct HTTP status.
 func WriteError(w http.ResponseWriter, mErr *merrors.Error) {
-	httpserver.WriteErrorResponse(w, HTTPStatusForError(mErr), mErr)
+	httputil.WriteErrorResponse(w, HTTPStatusForError(mErr), mErr)
 }
 
 // WriteSuccess writes a success response wrapped in {"data": ...} envelope.
@@ -28,12 +28,12 @@ func WriteSuccess(w http.ResponseWriter, status int, data any) {
 		WriteProtoSuccess(w, status, msg)
 		return
 	}
-	httpserver.WriteSuccessResponse(w, status, data)
+	httputil.WriteSuccessResponse(w, status, data)
 }
 
 // WriteJSON writes a JSON response without envelope wrapper.
 func WriteJSON(w http.ResponseWriter, status int, payload any) {
-	httpserver.WriteJSONResponse(w, status, payload)
+	httputil.WriteJSONResponse(w, status, payload)
 }
 
 // PrincipalFromRequest extracts the authenticated principal from request context.

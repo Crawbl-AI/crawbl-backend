@@ -3,7 +3,7 @@ package app
 import (
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 // const declarations
@@ -34,7 +34,7 @@ const reportFileMode = 0o644
 // var declarations
 
 var (
-	registryBase = configenv.StringOr("CRAWBL_REGISTRY", "registry.digitalocean.com/crawbl")
+	registryBase = config.StringOr("CRAWBL_REGISTRY", "registry.digitalocean.com/crawbl")
 
 	buildPlatformImageRepo     = registryBase + "/crawbl-platform"
 	buildAgentRuntimeImageRepo = registryBase + "/crawbl-agent-runtime"

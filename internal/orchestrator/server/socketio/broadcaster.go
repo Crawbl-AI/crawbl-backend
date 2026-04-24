@@ -6,7 +6,7 @@ import (
 
 	"github.com/zishang520/socket.io/v2/socket"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
 )
 
 // NewBroadcaster creates a Broadcaster backed by the given Socket.IO server.

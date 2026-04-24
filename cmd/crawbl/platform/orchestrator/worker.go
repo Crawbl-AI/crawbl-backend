@@ -8,17 +8,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/clickhouse"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/healthserver"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
-	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
 
 func newWorkerCommand() *cobra.Command {
@@ -62,13 +59,13 @@ func runWorker(ctx context.Context) error {
 	}
 
 	// River schema migration — runs before starting workers.
-	if err := pkgriver.Migrate(ctx, db.DB); err != nil {
+	if err := queue.MigrateRiver(ctx, db.DB); err != nil {
 		logger.Error("river migration failed", "error", err)
 		return fmt.Errorf("river migration: %w", err)
 	}
 	logger.Info("river migrations applied")
 
-	clickhouseDB, err := clickhouse.Open(ctx, logger)
+	clickhouseDB, err := queue.OpenClickhouse(ctx, logger)
 	if err != nil {
 		return fmt.Errorf("clickhouse open: %w", err)
 	}
@@ -79,7 +76,7 @@ func runWorker(ctx context.Context) error {
 	}()
 	llmUsageRepo := llmusagerepo.New(clickhouseDB)
 
-	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
+	pricingCache := queue.NewPricingCache(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
 	// Build River worker configuration with all background jobs.
@@ -101,7 +98,7 @@ func runWorker(ctx context.Context) error {
 		return fmt.Errorf("river config: %w", err)
 	}
 
-	riverClient, err := pkgriver.New(db.DB, riverCfg)
+	riverClient, err := queue.NewRiverClient(db.DB, riverCfg)
 	if err != nil {
 		logger.Error("river client construction failed", "error", err)
 		return fmt.Errorf("river client: %w", err)
@@ -110,11 +107,11 @@ func runWorker(ctx context.Context) error {
 		logger.Error("river client start failed", "error", err)
 		return fmt.Errorf("river start: %w", err)
 	}
-	defer pkgriver.Shutdown(riverClient, logger)
+	defer queue.ShutdownRiver(riverClient, logger)
 	logger.Info("river client started", "queues", "memory_process,memory_maintain,memory_enrich,memory_centroid,usage_write,pricing_refresh,message_cleanup")
 
-	healthSrv := healthserver.New(&healthserver.Config{
-		Port: envOrDefault("CRAWBL_WORKER_HEALTH_PORT", healthserver.DefaultPort),
+	healthSrv := httputil.NewHealthServer(&httputil.HealthConfig{
+		Port: envOrDefault("CRAWBL_WORKER_HEALTH_PORT", httputil.DefaultHealthPort),
 	}, logger)
 
 	return healthSrv.Run(ctx, shutdownTimeout)

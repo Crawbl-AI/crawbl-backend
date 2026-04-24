@@ -33,3 +33,8 @@ type Config struct {
 
 // Platform represents platform infrastructure.
 type Platform struct{}
+
+// stackConfigFile represents the structure of Pulumi.<env>.yaml.
+type stackConfigFile struct {
+	Config map[string]any `yaml:"config"`
+}

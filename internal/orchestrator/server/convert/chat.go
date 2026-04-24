@@ -9,7 +9,6 @@ import (
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
 // ConversationToProto converts a domain Conversation to the proto response.
@@ -62,10 +61,10 @@ func MessageContentToProto(content orchestrator.MessageContent) *mobilev1.Messag
 		TaskPreview: content.TaskPreview,
 	}
 	if s := string(content.State); s != "" {
-		resp.State = ptr.Of(s)
+		resp.State = &s
 	}
-	if content.Status != "" {
-		resp.Status = ptr.Of(content.Status)
+	if s := content.Status; s != "" {
+		resp.Status = &s
 	}
 	if content.SelectedActionID != nil {
 		resp.SelectedActionId = content.SelectedActionID
@@ -187,7 +186,7 @@ func ContentAgentToProto(ca *orchestrator.ContentAgent) *mobilev1.ContentAgent {
 		Avatar: ca.Avatar,
 	}
 	if s := string(ca.Status); s != "" {
-		out.Status = ptr.Of(s)
+		out.Status = &s
 	}
 	return out
 }

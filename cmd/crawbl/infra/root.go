@@ -16,13 +16,12 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 // loadStackSection reads a section from Pulumi.<env>.yaml into target.
 func loadStackSection(env, key string, target any) error {
-	if err := yamlvalues.LoadStackConfig(env, key, target); err != nil {
+	if err := platform.LoadStackConfig(env, key, target); err != nil {
 		return fmt.Errorf("load %s from Pulumi.%s.yaml: %w", key, env, err)
 	}
 	return nil
@@ -95,7 +94,7 @@ func buildConfig(env, region string) (infra.Config, error) {
 	return infra.Config{
 		Environment:      env,
 		Region:           region,
-		ESCEnvironment:   configenv.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
+		ESCEnvironment:   config.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env),
 		ExistingVPCID:    os.Getenv("DIGITALOCEAN_VPC_ID"),
 		ClusterConfig:    clusterConfig,
 		PlatformConfig:   platformConfig,

@@ -19,8 +19,7 @@ import (
 	"time"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 // Run starts the UserSwarm Metacontroller webhook.
@@ -50,7 +49,7 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 
 		<-ctx.Done()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaults.ShutdownGracePeriod)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), config.ShutdownGracePeriod)
 		defer cancel()
 
 		slog.Info("stopping userswarm webhook")
@@ -75,7 +74,7 @@ func Run(ctx context.Context, cfg *ListenConfig) error {
 // project into it.
 func runtimeConfigFromEnv() *runtimeConfig {
 	return &runtimeConfig{
-		AgentRuntimeImage:        configenv.StringOr("CRAWBL_AGENT_RUNTIME_IMAGE", defaultAgentRuntimeImage),
+		AgentRuntimeImage:        config.StringOr("CRAWBL_AGENT_RUNTIME_IMAGE", defaultAgentRuntimeImage),
 		OrchestratorGRPCEndpoint: os.Getenv("CRAWBL_ORCHESTRATOR_ENDPOINT"),
 		MCPEndpoint:              os.Getenv("CRAWBL_MCP_ENDPOINT"),
 		RedisAddr:                os.Getenv("CRAWBL_REDIS_ADDR"),

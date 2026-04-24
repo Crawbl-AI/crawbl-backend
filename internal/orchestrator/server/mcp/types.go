@@ -10,14 +10,14 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // Const declarations
@@ -68,7 +68,7 @@ const (
 
 var (
 	// auditWriteTimeout is the maximum time allowed for writing an audit log entry.
-	auditWriteTimeout = defaults.ShortTimeout
+	auditWriteTimeout = config.ShortTimeout
 
 	// errNoWorkspaceIdentity is returned when the MCP bearer token did not carry workspace context.
 	errNoWorkspaceIdentity = errorf("unauthorized: no workspace identity")

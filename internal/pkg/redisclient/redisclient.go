@@ -11,20 +11,20 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 )
 
 // ConfigFromEnv builds a Config from environment variables using the given prefix.
 // It reads:
 //   - {prefix}REDIS_ADDR     (default: "localhost:6379")
-//   - {prefix}REDIS_PASSWORD  via configenv.SecretString (supports _FILE fallback)
+//   - {prefix}REDIS_PASSWORD  via config.SecretString (supports _FILE fallback)
 //   - {prefix}REDIS_DB        (default: 0)
 func ConfigFromEnv(prefix string) Config {
 	return Config{
-		Addr:     configenv.StringOr(prefix+"REDIS_ADDR", DefaultAddr),
-		Password: configenv.SecretString(prefix+"REDIS_PASSWORD", ""),
-		DB:       configenv.IntOr(prefix+"REDIS_DB", DefaultDB),
-		TLS:      configenv.BoolOr(prefix+"REDIS_TLS", false),
+		Addr:     config.StringOr(prefix+"REDIS_ADDR", DefaultAddr),
+		Password: config.SecretString(prefix+"REDIS_PASSWORD", ""),
+		DB:       config.IntOr(prefix+"REDIS_DB", DefaultDB),
+		TLS:      config.BoolOr(prefix+"REDIS_TLS", false),
 	}
 }
 

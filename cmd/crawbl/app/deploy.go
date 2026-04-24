@@ -11,11 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/argocd"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/buildtools"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/release"
 )
 
 func newDeployCommand() *cobra.Command {
@@ -84,20 +82,20 @@ func checkNotProdContext() error {
 
 // checkAllTools verifies all required tools (argocd + release) are present.
 func checkAllTools() error {
-	if err := release.CheckTools(); err != nil {
+	if err := buildtools.CheckReleaseTools(); err != nil {
 		return err
 	}
-	return argocd.CheckTools()
+	return buildtools.CheckArgoCDTools()
 }
 
 // tagAndRelease tags the backend repo and creates a GitHub release.
-// Uses gitutil.RootDir to locate the repo root automatically.
+// Uses buildtools.RootDir to locate the repo root automatically.
 func tagAndRelease(repoSlug, tag, prevTag string) error {
-	rootDir, err := gitutil.RootDir()
+	rootDir, err := buildtools.RootDir()
 	if err != nil {
 		return err
 	}
-	return release.TagAndRelease(release.Config{
+	return buildtools.TagAndRelease(buildtools.ReleaseConfig{
 		RepoPath: rootDir,
 		RepoSlug: repoSlug,
 		Tag:      tag,
@@ -154,7 +152,7 @@ func runDeployPlatform(ctx context.Context, tag, argocdRepo string, gc, scan boo
 	}); err != nil {
 		return err
 	}
-	if err := updateArgocdAndCommit(ctx, tag, argocdRepo, func(u *argocd.Update) error {
+	if err := updateArgocdAndCommit(ctx, tag, argocdRepo, func(u *buildtools.Update) error {
 		if err := u.UpdateOrchestrator(ctx); err != nil {
 			return err
 		}
@@ -178,12 +176,12 @@ func runDeployPlatform(ctx context.Context, tag, argocdRepo string, gc, scan boo
 
 // updateArgocdAndCommit pulls the argocd repo, applies component-specific updates via
 // updateFn, then commits and pushes under the given component label.
-func updateArgocdAndCommit(ctx context.Context, tag, argocdRepo string, updateFn func(*argocd.Update) error, component string) error {
+func updateArgocdAndCommit(ctx context.Context, tag, argocdRepo string, updateFn func(*buildtools.Update) error, component string) error {
 	repoPath, err := resolveArgocdRepo(argocdRepo)
 	if err != nil {
 		return err
 	}
-	u := &argocd.Update{RepoPath: repoPath, Tag: tag}
+	u := &buildtools.Update{RepoPath: repoPath, Tag: tag}
 	if err := u.PullLatest(ctx); err != nil {
 		return err
 	}
@@ -234,7 +232,7 @@ func runDeployAuthFilter(ctx context.Context, tag, platform, argocdRepo string, 
 	gitTag := resolved.Tag
 	dockerTag := strings.TrimPrefix(gitTag, "auth-filter/")
 
-	rootDir, err := gitutil.RootDir()
+	rootDir, err := buildtools.RootDir()
 	if err != nil {
 		return err
 	}
@@ -248,7 +246,7 @@ func runDeployAuthFilter(ctx context.Context, tag, platform, argocdRepo string, 
 	}); err != nil {
 		return err
 	}
-	if err := updateArgocdAndCommit(ctx, dockerTag, argocdRepo, func(u *argocd.Update) error {
+	if err := updateArgocdAndCommit(ctx, dockerTag, argocdRepo, func(u *buildtools.Update) error {
 		return u.UpdateAuthFilter(ctx)
 	}, "auth-filter"); err != nil {
 		return err
@@ -319,7 +317,7 @@ func runDeployAgentRuntime(ctx context.Context, tag, argocdRepo string, gc bool)
 	}); err != nil {
 		return err
 	}
-	if err := updateArgocdAndCommit(ctx, imageTag, argocdRepo, func(u *argocd.Update) error {
+	if err := updateArgocdAndCommit(ctx, imageTag, argocdRepo, func(u *buildtools.Update) error {
 		return u.UpdateAgentRuntime(ctx)
 	}, "agent-runtime"); err != nil {
 		return err
@@ -384,7 +382,7 @@ func newStaticDeployCommand(opts staticDeployOpts) *cobra.Command {
 				return err
 			}
 
-			repoDir, err := gitutil.ResolveSiblingRepo(path, opts.RepoDir)
+			repoDir, err := buildtools.ResolveSiblingRepo(path, opts.RepoDir)
 			if err != nil {
 				return err
 			}
@@ -403,7 +401,7 @@ func newStaticDeployCommand(opts staticDeployOpts) *cobra.Command {
 				return err
 			}
 
-			return release.TagAndRelease(release.Config{
+			return buildtools.TagAndRelease(buildtools.ReleaseConfig{
 				RepoPath: repoDir,
 				RepoSlug: opts.RepoSlug,
 				Tag:      tag,
@@ -424,7 +422,7 @@ func addStaticDeployFlags(cmd *cobra.Command, tag *string, path *string, pathDef
 
 // checkStaticDeployTools verifies required tools for static site deploys.
 func checkStaticDeployTools() error {
-	if err := release.CheckTools(); err != nil {
+	if err := buildtools.CheckReleaseTools(); err != nil {
 		return err
 	}
 	for _, tool := range []string{"npm", "wrangler"} {

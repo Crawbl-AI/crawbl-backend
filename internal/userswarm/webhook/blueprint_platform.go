@@ -6,7 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
 
 // This file holds the non-pod parts of the desired runtime graph:
@@ -17,7 +16,7 @@ import (
 
 func buildServiceAccount(sw *crawblv1alpha1.UserSwarm, ns string) *corev1.ServiceAccount {
 	sa := &corev1.ServiceAccount{
-		TypeMeta:   kube.TypeMeta("v1", "ServiceAccount"),
+		TypeMeta:   TypeMeta("v1", "ServiceAccount"),
 		ObjectMeta: objectMeta(runtimeServiceAccountName(sw), ns, sw),
 	}
 	if pullSecret := sw.Spec.Runtime.ImagePullSecretName; pullSecret != "" {
@@ -32,7 +31,7 @@ func buildServiceAccount(sw *crawblv1alpha1.UserSwarm, ns string) *corev1.Servic
 func buildRuntimeNetwork(sw *crawblv1alpha1.UserSwarm, ns string) *corev1.Service {
 	port := runtimePortFor(sw)
 	return &corev1.Service{
-		TypeMeta:   kube.TypeMeta("v1", "Service"),
+		TypeMeta:   TypeMeta("v1", "Service"),
 		ObjectMeta: objectMeta(runtimeServiceName(sw), ns, sw),
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
