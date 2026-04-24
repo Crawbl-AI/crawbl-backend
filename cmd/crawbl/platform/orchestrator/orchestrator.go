@@ -347,7 +347,7 @@ type riverOpts struct {
 	embedder     embed.Embedder
 	messageRepo  coreMessageRepo
 	pricingCache *pricing.Cache
-	llmUsageRepo llmusagerepo.Repo
+	llmUsageRepo llmusagerepo.Inserter
 }
 
 // buildAndStartRiver creates the River config, constructs the client, runs

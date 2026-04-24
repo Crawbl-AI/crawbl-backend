@@ -38,9 +38,9 @@ type agentSettingsGetter interface {
 	GetByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestratorrepo.AgentSettingsRow, *merrors.Error)
 }
 
-// agentPromptsStore is the prompt subset agentservice reads when
+// agentPromptsLister is the prompt subset agentservice reads when
 // assembling agent details responses.
-type agentPromptsStore interface {
+type agentPromptsLister interface {
 	ListByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) ([]orchestratorrepo.AgentPromptRow, *merrors.Error)
 }
 

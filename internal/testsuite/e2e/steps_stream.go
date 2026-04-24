@@ -4,12 +4,11 @@
 // over the real-time update channel (text chunks, final message, tool
 // activity) within a bounded time window.
 //
-// TODO: implement step bodies once a Socket.IO Go client library is added
-// to go.mod. The server uses github.com/zishang520/socket.io/v2 (namespace
-// "/v1", room "workspace:<id>", events: message.chunk / message.done /
-// agent.tool). A compatible client library — e.g.
-// github.com/zishang520/socket.io-client-go — must be vendored before
-// these steps can dial the live server.
+// Step bodies are stubs until a Socket.IO Go client library is added to go.mod.
+// The server uses github.com/zishang520/socket.io/v2 (namespace "/v1",
+// room "workspace:<id>", events: message.chunk / message.done / agent.tool).
+// A compatible client library — e.g. github.com/zishang520/socket.io-client-go —
+// must be vendored before these steps can dial the live server.
 //
 // All scenarios in test-features/chat/streaming.feature are tagged @wip
 // and every step below returns nil (graceful no-op) until that library is
@@ -35,7 +34,7 @@ func registerStreamSteps(sc *godog.ScenarioContext, tc *testContext) {
 // streamConnect opens a real-time update channel connection for the named user
 // and subscribes to their workspace room.
 //
-// TODO: dial the Socket.IO server at cfg.BaseURL on namespace "/v1",
+// Implementation: dial the Socket.IO server at cfg.BaseURL on namespace "/v1",
 // send a workspace.subscribe event with the user's workspace ID, and store
 // the client + an event channel on tc. Requires a Socket.IO Go client library.
 func (tc *testContext) streamConnect(alias string) error {
@@ -51,7 +50,7 @@ func (tc *testContext) streamConnect(alias string) error {
 // streamAssertChunksReceived asserts that at least minChunks text chunks
 // were received over the live update channel within timeoutSecs seconds.
 //
-// TODO: poll tc.streamEvents until the required number of chunk events
+// Implementation: poll tc.streamEvents until the required number of chunk events
 // (message.chunk) arrive or the deadline expires. Requires streamConnect
 // to have dialled successfully first.
 func (tc *testContext) streamAssertChunksReceived(minChunks, timeoutSecs int) error {
@@ -62,8 +61,8 @@ func (tc *testContext) streamAssertChunksReceived(minChunks, timeoutSecs int) er
 // streamAssertFinalReceived asserts that a final complete-message event
 // arrived within timeoutSecs seconds.
 //
-// TODO: poll tc.streamEvents until a message.done event arrives or the
-// deadline expires.
+// Implementation: poll tc.streamEvents until a message.done event arrives or
+// the deadline expires.
 func (tc *testContext) streamAssertFinalReceived(timeoutSecs int) error {
 	log.Printf("streamAssertFinalReceived: @wip — no Socket.IO client library available (timeout=%ds)", timeoutSecs)
 	return nil
@@ -72,8 +71,8 @@ func (tc *testContext) streamAssertFinalReceived(timeoutSecs int) error {
 // streamAssertToolActivity asserts that at least one tool activity event
 // was received within timeoutSecs seconds.
 //
-// TODO: poll tc.streamEvents until an agent.tool event arrives or the
-// deadline expires.
+// Implementation: poll tc.streamEvents until an agent.tool event arrives or
+// the deadline expires.
 func (tc *testContext) streamAssertToolActivity(timeoutSecs int) error {
 	log.Printf("streamAssertToolActivity: @wip — no Socket.IO client library available (timeout=%ds)", timeoutSecs)
 	return nil

@@ -11,8 +11,8 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
-// Repo persists MCP audit log entries.
-type Repo interface {
+// LogWriter persists MCP audit log entries.
+type LogWriter interface {
 	WriteLog(ctx context.Context, sess *dbr.Session, entry *AuditLogRow) error
 }
 
@@ -33,7 +33,7 @@ type AuditLogRow struct {
 type postgres struct{}
 
 // New returns a Postgres-backed audit log repository.
-func New() Repo { return &postgres{} }
+func New() LogWriter { return &postgres{} }
 
 func (p *postgres) WriteLog(ctx context.Context, sess *dbr.Session, entry *AuditLogRow) error {
 	// Defensive JSON sanitisation: the mcp_audit_logs.input column is

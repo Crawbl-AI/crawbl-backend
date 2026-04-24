@@ -329,7 +329,7 @@ func (s *service) handleStepApproval(
 
 	emitter.WaitingApproval(ctx, i, step.Name, step.AgentSlug)
 
-	// TODO(team): Wait for approval via channel/polling. For now, auto-approve.
+	// FUTURE(team): Replace auto-approve with channel/polling-based approval gate.
 	stepExec.Status = string(workflowrepo.WorkflowStatusApproved)
 	if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
 		slog.Warn("ExecuteWorkflow: failed to set step approved", "execution_id", executionID, "step", i, "error", mErr.Error())

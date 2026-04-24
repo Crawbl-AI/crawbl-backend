@@ -59,7 +59,7 @@ func resolveDeployTagForRepo(explicit string, requireClean bool, repoPath string
 // (platform, auth-filter), it enforces a clean and pushed working tree.
 // tagPrefix scopes the tag namespace (e.g. "agent-runtime/" → "agent-runtime/v0.1.0").
 // An empty tagPrefix uses the global v* sequence.
-func resolveDeployTag(explicit string, tagPrefix string) (tagPair, error) {
+func resolveDeployTag(explicit, tagPrefix string) (tagPair, error) {
 	if err := gitutil.EnsureCleanAndPushed(); err != nil {
 		return tagPair{}, err
 	}

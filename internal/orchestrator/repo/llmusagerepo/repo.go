@@ -41,8 +41,8 @@ type LLMUsageEvent struct {
 	SessionID           string
 }
 
-// Repo writes LLM usage rows to ClickHouse.
-type Repo interface {
+// Inserter writes LLM usage rows to ClickHouse.
+type Inserter interface {
 	Insert(ctx context.Context, event *LLMUsageEvent) error
 }
 
@@ -51,10 +51,10 @@ type repo struct {
 	db *sql.DB
 }
 
-// New constructs a Repo that writes into the given ClickHouse
+// New constructs an Inserter that writes into the given ClickHouse
 // connection. Pass nil to get a no-op implementation — useful in
 // environments without an analytics database.
-func New(db *sql.DB) Repo {
+func New(db *sql.DB) Inserter {
 	if db == nil {
 		return noopRepo{}
 	}
