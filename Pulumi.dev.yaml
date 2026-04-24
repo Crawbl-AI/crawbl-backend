@@ -109,6 +109,8 @@ config:
       # TODO(bezhan): replace 0.0.0.0/0 with actual admin IPs before going to prod.
       sshAllowedCIDRs:
         - "0.0.0.0/0"
+      sshKeyNames:
+        - "bejanhtc@gmail.com"
     k3s:
       version: "v1.31.4+k3s1"
       disable:

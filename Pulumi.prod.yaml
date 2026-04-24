@@ -147,7 +147,7 @@ config:
         - prod
 
     pgbouncer:
-      # Pool name in DigitalOcean (matches the manually-created pool).
+      # Pool name in DigitalOcean.
       name: crawbl-pool
       # Database the pool connects to (must match postgres.dbName).
       dbName: crawbl

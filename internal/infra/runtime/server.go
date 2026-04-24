@@ -10,9 +10,9 @@ import (
 // createServer provisions a Hetzner Cloud server with the given cloud-init
 // user data and attaches the provided firewall.
 func createServer(ctx *pulumi.Context, name string, cfg RuntimeConfig, firewall *hcloud.Firewall, cloudInit string) (*hcloud.Server, error) {
-	sshKeys := make(pulumi.StringArray, 0, len(cfg.Hetzner.SSHKeyFingerprints))
-	for _, fp := range cfg.Hetzner.SSHKeyFingerprints {
-		sshKeys = append(sshKeys, pulumi.String(fp))
+	sshKeys := make(pulumi.StringArray, 0, len(cfg.Hetzner.SSHKeyNames))
+	for _, name := range cfg.Hetzner.SSHKeyNames {
+		sshKeys = append(sshKeys, pulumi.String(name))
 	}
 
 	server, err := hcloud.NewServer(ctx, name+"-server", &hcloud.ServerArgs{

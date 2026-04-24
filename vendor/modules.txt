@@ -933,6 +933,10 @@ github.com/pulumi/esc/syntax/encoding
 ## explicit; go 1.22
 github.com/pulumi/pulumi-cloudflare/sdk/v5/go/cloudflare
 github.com/pulumi/pulumi-cloudflare/sdk/v5/go/cloudflare/internal
+# github.com/pulumi/pulumi-command/sdk v1.2.1
+## explicit; go 1.24.7
+github.com/pulumi/pulumi-command/sdk/go/command/internal
+github.com/pulumi/pulumi-command/sdk/go/command/remote
 # github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.64.0
 ## explicit; go 1.25.8
 github.com/pulumi/pulumi-digitalocean/sdk/v4/go/digitalocean
