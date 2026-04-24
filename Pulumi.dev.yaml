@@ -97,3 +97,25 @@ config:
       - logs-dev
       - argocd-dev
       - postgres-dev
+
+  # -- k3s runtime configuration (Hetzner Cloud dev path) --
+  # Used by the runtime Pulumi stack to provision a Hetzner VM running k3s.
+  # After bootstrap, ArgoCD on the k3s node manages agent runtime workloads.
+  crawbl:runtime:
+    hetzner:
+      serverType: cx42
+      image: ubuntu-24.04
+      location: fsn1
+      # TODO(bezhan): replace 0.0.0.0/0 with actual admin IPs before going to prod.
+      sshAllowedCIDRs:
+        - "0.0.0.0/0"
+    k3s:
+      version: "v1.31.4+k3s1"
+      disable:
+        - traefik
+        - servicelb
+      storageClass: local-path
+      writeKubeconfigMode: "0640"
+    registry:
+      server: registry.digitalocean.com
+      namespace: crawbl

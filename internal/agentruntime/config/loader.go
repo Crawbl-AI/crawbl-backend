@@ -61,6 +61,11 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	fs.StringVar(&cfg.Spaces.Region, "spaces-region", os.Getenv("CRAWBL_SPACES_REGION"), "DO Spaces region (e.g. fra1)")
 	fs.StringVar(&cfg.Spaces.Bucket, "spaces-bucket", os.Getenv("CRAWBL_SPACES_BUCKET"), "DO Spaces bucket name")
 
+	// TLS (optional — for prod hybrid mTLS).
+	fs.StringVar(&cfg.TLS.CertFile, "tls-cert", os.Getenv("CRAWBL_TLS_CERT"), "Path to TLS server certificate (PEM)")
+	fs.StringVar(&cfg.TLS.KeyFile, "tls-key", os.Getenv("CRAWBL_TLS_KEY"), "Path to TLS server private key (PEM)")
+	fs.StringVar(&cfg.TLS.CAFile, "tls-ca", os.Getenv("CRAWBL_TLS_CA"), "Path to CA certificate for client verification (PEM)")
+
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}

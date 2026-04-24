@@ -2,11 +2,15 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
@@ -34,8 +38,14 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 		logger = slog.Default()
 	}
 
+	tlsCfg, err := loadTLSConfig(cfg.TLS)
+	if err != nil {
+		return nil, fmt.Errorf("server: load tls: %w", err)
+	}
+
 	unary, stream := crawblgrpc.NewHMACServerAuth(cfg.MCPSigningKey, nil)
-	grpcSrv := grpc.NewServer(
+
+	serverOpts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(unary),
 		grpc.ChainStreamInterceptor(stream),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
@@ -50,7 +60,13 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 			PermitWithoutStream: true,
 		}),
 		grpc.MaxConcurrentStreams(serverMaxConcurrentStreams),
-	)
+	}
+	if tlsCfg != nil {
+		serverOpts = append(serverOpts, grpc.Creds(credentials.NewTLS(tlsCfg)))
+		logger.Info("gRPC server TLS enabled", "cert", cfg.TLS.CertFile, "ca", cfg.TLS.CAFile)
+	}
+
+	grpcSrv := grpc.NewServer(serverOpts...)
 
 	healthSrv := NewHealthServer()
 	healthpb.RegisterHealthServer(grpcSrv, healthSrv.Inner())
@@ -118,4 +134,44 @@ func (s *Server) Shutdown() {
 			s.logger.Warn("runner close returned error", "error", err)
 		}
 	}
+}
+
+// loadTLSConfig builds a *tls.Config from the runtime TLS settings.
+// Returns nil when TLS is not configured (backward compatible insecure mode).
+func loadTLSConfig(cfg config.TLSConfig) (*tls.Config, error) {
+	if !cfg.Enabled() {
+		return nil, nil
+	}
+
+	// Load server certificate with GetCertificate for auto-rotation.
+	// cert-manager updates the mounted Secret files; Go's tls package
+	// re-reads them on each new TLS handshake via this callback.
+	getCert := func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load tls keypair: %w", err)
+		}
+		return &cert, nil
+	}
+
+	tlsCfg := &tls.Config{
+		GetCertificate: getCert,
+		MinVersion:     tls.VersionTLS13,
+	}
+
+	// If CA file is provided, enable mutual TLS (client cert verification).
+	if cfg.CAFile != "" {
+		caCert, err := os.ReadFile(cfg.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read ca cert: %w", err)
+		}
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("parse ca cert: no valid certificates found")
+		}
+		tlsCfg.ClientCAs = caPool
+		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	return tlsCfg, nil
 }

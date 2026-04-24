@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
 // driveSync is the top-level decision point for every callback.
@@ -33,6 +34,10 @@ func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runt
 
 	phase, readyStatus, readyReason := readinessSnapshot(req, swarm)
 
+	// Extract direct endpoint from observed pod (available when Metacontroller
+	// observes Pod children). Used for cross-cluster dialing in prod hybrid.
+	directEndpoint := observedDirectEndpoint(req, swarm)
+
 	// resyncPeriodSeconds is the Metacontroller resync interval for UserSwarm
 	// reconciliation. 30s balances responsiveness with API server load.
 	const resyncPeriodSeconds = 30
@@ -43,6 +48,7 @@ func reconcileGraph(req *syncRequest, swarm *crawblv1alpha1.UserSwarm, cfg *runt
 			"runtimeNamespace":   runtimeNamespace,
 			"serviceName":        runtimeServiceName(swarm),
 			"readyReplicas":      observedReadyReplicas(req),
+			"directEndpoint":     directEndpoint,
 			"conditions":         []any{StatusCondition("Ready", readyStatus, readyReason, "")},
 		},
 		Children:           children,
@@ -114,4 +120,35 @@ func observedReadyReplicas(req *syncRequest) int32 {
 	}
 
 	return 0
+}
+
+// observedDirectEndpoint reads the pod IP from the observed Pod children.
+// Returns "IP:port" when exactly one pod is running, empty string otherwise.
+// Requires the CompositeController CR to declare pods as a child resource.
+func observedDirectEndpoint(req *syncRequest, swarm *crawblv1alpha1.UserSwarm) string {
+	group, ok := req.Children["Pod.v1"]
+	if !ok {
+		return ""
+	}
+
+	port := swarm.Spec.Runtime.Port
+	if port == 0 {
+		port = crawblv1alpha1.DefaultGatewayPort
+	}
+
+	for _, raw := range group {
+		var pod struct {
+			Status struct {
+				PodIP string `json:"podIP"`
+				Phase string `json:"phase"`
+			} `json:"status"`
+		}
+		if err := json.Unmarshal(raw, &pod); err != nil {
+			continue
+		}
+		if pod.Status.Phase == "Running" && pod.Status.PodIP != "" {
+			return crawblgrpc.DirectTarget(pod.Status.PodIP, port)
+		}
+	}
+	return ""
 }

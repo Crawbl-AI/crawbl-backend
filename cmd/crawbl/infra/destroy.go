@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/runtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
@@ -63,6 +64,36 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 		}
 	}
 
+	if env == "dev" {
+		return destroyRuntime(ctx, env, region)
+	}
+	return destroyDOKS(ctx, env, region)
+}
+
+// destroyRuntime destroys the Hetzner k3s runtime stack for the dev environment.
+// No DO-specific post-destroy cleanup is needed.
+func destroyRuntime(ctx context.Context, env, region string) error {
+	cfg, err := buildRuntimeConfig(env, region)
+	if err != nil {
+		return fmt.Errorf("build runtime config: %w", err)
+	}
+
+	stack, err := runtime.NewStack(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("create runtime stack: %w", err)
+	}
+
+	if err := stack.Destroy(ctx); err != nil {
+		return fmt.Errorf("destroy failed: %w", err)
+	}
+
+	out.Ln()
+	out.Success("Destroy complete")
+	return nil
+}
+
+// destroyDOKS destroys the DOKS platform stack for non-dev environments.
+func destroyDOKS(ctx context.Context, env, region string) error {
 	config, err := buildConfig(env, region)
 	if err != nil {
 		return fmt.Errorf("build config: %w", err)

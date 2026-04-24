@@ -14,6 +14,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/cluster"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/databases"
 	"github.com/Crawbl-AI/crawbl-backend/internal/infra/platform"
+	"github.com/Crawbl-AI/crawbl-backend/internal/infra/runtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
@@ -28,6 +29,8 @@ func loadStackSection(env, key string, target any) error {
 }
 
 // buildConfig creates the full infra.Config from Pulumi stack config and environment variables.
+// For env=dev, it delegates to buildRuntimeConfig. For all other environments, it uses the
+// existing DOKS platform program.
 func buildConfig(env, region string) (infra.Config, error) {
 	// Load config sections from Pulumi.<env>.yaml
 	var clusterCfg cluster.StackClusterConfig
@@ -101,6 +104,43 @@ func buildConfig(env, region string) (infra.Config, error) {
 		DatabasesConfig:  dbsCfg,
 		CloudflareConfig: cfConfig,
 	}, nil
+}
+
+// buildRuntimeConfig creates a runtime.RuntimeConfig from Pulumi stack config
+// for the Hetzner k3s dev environment.
+func buildRuntimeConfig(env, region string) (runtime.RuntimeConfig, error) {
+	var runtimeCfg runtime.StackRuntimeConfig
+	if err := loadStackSection(env, "crawbl:runtime", &runtimeCfg); err != nil {
+		return runtime.RuntimeConfig{}, err
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return runtime.RuntimeConfig{}, fmt.Errorf("get working directory: %w", err)
+	}
+	helmValuesDir := filepath.Join(cwd, "config", "helm")
+	platformCfg := platform.DefaultPlatformConfig(helmValuesDir)
+
+	// ArgoCD deploy key — read from env var or file path
+	if key := os.Getenv("ARGOCD_SSH_PRIVATE_KEY"); key != "" {
+		platformCfg.ArgoCDRepoSSHPrivateKey = key
+	} else if keyPath := os.Getenv("ARGOCD_SSH_KEY_PATH"); keyPath != "" {
+		if data, err := os.ReadFile(keyPath); err == nil { // #nosec G304,G703 -- CLI tool, paths from developer config
+			platformCfg.ArgoCDRepoSSHPrivateKey = string(data)
+		}
+	}
+	if platformCfg.ArgoCDRepoSSHPrivateKey == "" {
+		out.Warning("ARGOCD_SSH_PRIVATE_KEY and ARGOCD_SSH_KEY_PATH are both unset — repo secret will not be managed by Pulumi")
+	}
+
+	cfg := runtime.ConfigFromStack(env, region, runtimeCfg, platformCfg)
+
+	// Cloudflare tunnel secret is a runtime credential — never stored in YAML.
+	cfg.Cloudflare.TunnelSecret = os.Getenv("CLOUDFLARE_TUNNEL_SECRET")
+
+	cfg.ESCEnvironment = config.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env)
+
+	return cfg, nil
 }
 
 // confirmPrompt prints prompt and returns true only when the user types "y" or "Y".

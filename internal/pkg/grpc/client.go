@@ -2,11 +2,14 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -19,6 +22,16 @@ func ClusterTarget(service, namespace string, port int32) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", service, namespace, port)
 }
 
+// DirectTarget formats an IP:port pair suitable for gRPC dialing. It wraps
+// IPv6 addresses in brackets per RFC 3986 so grpc.NewClient parses them
+// correctly (e.g. "[::1]:42618" vs "10.0.0.1:42618").
+func DirectTarget(ip string, port int32) string {
+	if strings.ContainsRune(ip, ':') {
+		return fmt.Sprintf("[%s]:%d", ip, port)
+	}
+	return fmt.Sprintf("%s:%d", ip, port)
+}
+
 // NewInsecureHMACPool creates a connection pool with insecure transport,
 // HMAC per-RPC credentials, and default keepalive. This is the standard
 // pool configuration for cluster-internal gRPC traffic.
@@ -29,6 +42,25 @@ func NewInsecureHMACPool(signingKey string) *Pool {
 		return grpc.NewClient(
 			target,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithPerRPCCredentials(creds),
+			grpc.WithKeepaliveParams(DefaultClientKeepalive),
+		)
+	}
+
+	return NewPool(dial)
+}
+
+// NewTLSHMACPool creates a connection pool with mTLS transport, HMAC
+// per-RPC credentials, and default keepalive. This is the pool
+// configuration for cross-cluster gRPC traffic in prod hybrid mode
+// where the runtime cluster is on a separate network.
+func NewTLSHMACPool(signingKey string, tlsCfg *tls.Config) *Pool {
+	creds := NewHMACCredentials(signingKey).WithRequireTransportSecurity()
+
+	dial := func(_ context.Context, target string) (*grpc.ClientConn, error) {
+		return grpc.NewClient(
+			target,
+			grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
 			grpc.WithPerRPCCredentials(creds),
 			grpc.WithKeepaliveParams(DefaultClientKeepalive),
 		)

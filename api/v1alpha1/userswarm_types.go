@@ -69,7 +69,11 @@ type UserSwarmStatus struct {
 	RuntimeNamespace   string             `json:"runtimeNamespace,omitempty"`
 	ServiceName        string             `json:"serviceName,omitempty"`
 	ReadyReplicas      int32              `json:"readyReplicas,omitempty"`
-	Conditions         []metav1.Condition `json:"conditions,omitempty"`
+	// DirectEndpoint is the routable address (IP:port) of the runtime pod,
+	// populated by the webhook when Pods are observed as child resources.
+	// Used for cross-cluster direct dialing in prod hybrid mode.
+	DirectEndpoint string             `json:"directEndpoint,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // UserSwarm is the schema for the userswarms API.

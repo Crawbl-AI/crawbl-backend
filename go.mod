@@ -27,6 +27,7 @@ require (
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pulumi/pulumi-cloudflare/sdk/v5 v5.49.1
 	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.64.0
+	github.com/pulumi/pulumi-hcloud/sdk v1.32.2
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.29.0
 	github.com/pulumi/pulumi/sdk/v3 v3.231.0
 	github.com/redis/go-redis/v9 v9.18.0
