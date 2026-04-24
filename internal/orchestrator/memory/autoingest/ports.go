@@ -18,8 +18,8 @@ type drawerStore interface {
 	CheckDuplicate(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32, threshold float64, limit int) ([]memory.DrawerSearchResult, error)
 }
 
-// centroidStore is the centroid subset used by the Phase-2 nearest-type
+// nearestTyper is the centroid subset used by the Phase-2 nearest-type
 // classifier. Optional at runtime — the worker no-ops when nil.
-type centroidStore interface {
+type nearestTyper interface {
 	NearestType(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32) (memType string, similarity float64, ok bool, err error)
 }

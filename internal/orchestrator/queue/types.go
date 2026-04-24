@@ -67,7 +67,7 @@ type Deps struct {
 	Embedder      embed.Embedder
 
 	// Messaging — stale pending message cleanup.
-	MessageRepo messageStore
+	MessageRepo stalePendingFailer
 
 	// Pricing — daily LiteLLM mirror + in-memory cache refresh.
 	ModelPricingRepo modelpricingrepo.Repo

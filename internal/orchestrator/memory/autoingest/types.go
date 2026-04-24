@@ -54,7 +54,7 @@ type Work struct {
 type Deps struct {
 	DB              *dbr.Connection
 	DrawerRepo      drawerStore
-	CentroidRepo    centroidStore
+	CentroidRepo    nearestTyper
 	Classifier      extract.Classifier
 	Embedder        embed.Embedder
 	MemoryPublisher *queue.MemoryPublisher

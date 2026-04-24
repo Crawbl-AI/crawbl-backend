@@ -11,7 +11,7 @@ const l0EmptyIdentity = "## L0 — IDENTITY\nNo identity configured for this wor
 
 // renderL0 returns the identity text for a workspace, falling back to a
 // placeholder when the workspace has no identity row or the lookup fails.
-func renderL0(ctx context.Context, sess database.SessionRunner, identityRepo identityStore, workspaceID string) string {
+func renderL0(ctx context.Context, sess database.SessionRunner, identityRepo identityGetter, workspaceID string) string {
 	if identityRepo == nil {
 		return l0EmptyIdentity
 	}

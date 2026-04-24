@@ -21,8 +21,8 @@ type drawerStore interface {
 	TouchAccessBatch(ctx context.Context, sess database.SessionRunner, workspaceID string, drawerIDs []string) error
 }
 
-// identityStore is the identity-row subset the L0 renderer reads to
+// identityGetter is the identity-row subset the L0 renderer reads to
 // surface each workspace's pinned identity text.
-type identityStore interface {
+type identityGetter interface {
 	Get(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.Identity, error)
 }

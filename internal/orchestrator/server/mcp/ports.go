@@ -44,8 +44,8 @@ type palaceGraphStore interface {
 	GraphStats(ctx context.Context, sess database.SessionRunner, workspaceID string) (*memory.PalaceGraphStats, error)
 }
 
-// identityStore is the identity subset MCP tools use to pin a
+// identitySetter is the identity subset MCP tools use to pin a
 // workspace's identity text.
-type identityStore interface {
+type identitySetter interface {
 	Set(ctx context.Context, sess database.SessionRunner, workspaceID, content string) error
 }

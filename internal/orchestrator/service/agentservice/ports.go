@@ -13,9 +13,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// workspaceStore is the workspace subset agentservice uses: verifying the
+// workspaceGetter is the workspace subset agentservice uses: verifying the
 // caller owns the workspace before returning agent-scoped data.
-type workspaceStore interface {
+type workspaceGetter interface {
 	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
 }
 
@@ -26,15 +26,15 @@ type agentStore interface {
 	CountMessagesByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (int, *merrors.Error)
 }
 
-// toolsStore is the tools subset agentservice uses: resolving per-agent
+// namedToolsGetter is the tools subset agentservice uses: resolving per-agent
 // allow-listed tools for GetAgentTools.
-type toolsStore interface {
+type namedToolsGetter interface {
 	GetByNames(ctx context.Context, sess orchestratorrepo.SessionRunner, names []string) ([]orchestrator.AgentTool, *merrors.Error)
 }
 
-// agentSettingsStore is the settings subset agentservice reads for the
+// agentSettingsGetter is the settings subset agentservice reads for the
 // agent details and tools endpoints.
-type agentSettingsStore interface {
+type agentSettingsGetter interface {
 	GetByAgentID(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestratorrepo.AgentSettingsRow, *merrors.Error)
 }
 

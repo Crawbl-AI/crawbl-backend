@@ -66,6 +66,8 @@ func (s *Server) Run(ctx context.Context, shutdownTimeout time.Duration) error {
 		}
 		return err
 	case <-ctx.Done():
+		// ctx is already cancelled here, so create a fresh background context
+		// for the shutdown timeout. This ensures shutdown has its own deadline.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		s.logger.Info("shutting down health server")
