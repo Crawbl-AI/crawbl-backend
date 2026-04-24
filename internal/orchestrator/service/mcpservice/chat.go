@@ -24,16 +24,16 @@ func (s *service) ListConversations(ctx contextT, sess sessionT, userID, workspa
 	return conversations, nil
 }
 
-func (s *service) SearchMessages(ctx contextT, sess sessionT, userID, workspaceID, conversationID, query string, limit int) ([]MessageBrief, error) {
-	if err := s.verifyWorkspace(ctx, sess, userID, workspaceID); err != nil {
+func (s *service) SearchMessages(ctx contextT, sess sessionT, opts SearchMessagesOpts) ([]MessageBrief, error) {
+	if err := s.verifyWorkspace(ctx, sess, opts.UserID, opts.WorkspaceID); err != nil {
 		return nil, err
 	}
 
-	if _, mErr := s.repos.Conversation.GetByID(ctx, sess, workspaceID, conversationID); mErr != nil {
+	if _, mErr := s.repos.Conversation.GetByID(ctx, sess, opts.WorkspaceID, opts.ConversationID); mErr != nil {
 		return nil, fmt.Errorf("conversation not found in this workspace")
 	}
 
-	rows, err := s.repos.MCP.SearchMessages(ctx, sess, conversationID, query, limit)
+	rows, err := s.repos.MCP.SearchMessages(ctx, sess, opts.ConversationID, opts.Query, opts.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
 	}

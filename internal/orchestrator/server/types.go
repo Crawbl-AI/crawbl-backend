@@ -11,7 +11,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
@@ -39,7 +39,7 @@ const (
 var (
 	// DefaultReadHeaderTimeout is the maximum duration for reading request headers.
 	// This prevents slowloris attacks by timing out slow clients.
-	DefaultReadHeaderTimeout = defaults.ShortTimeout
+	DefaultReadHeaderTimeout = config.ShortTimeout
 )
 
 // Config holds the configuration settings for the HTTP server.

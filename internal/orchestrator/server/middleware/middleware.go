@@ -11,7 +11,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // MaxBodyBytes wraps r.Body with http.MaxBytesReader so handlers decoding
@@ -30,7 +30,7 @@ func MaxBodyBytes(next http.Handler) http.Handler {
 // Chi already ships github.com/go-chi/chi/v5/middleware.Recoverer, but it
 // writes a plain-text body and logs with log.Print. We keep a custom
 // implementation so the response uses the project's JSON error envelope
-// (via httpserver.WriteErrorMessage) and the failure is emitted as a
+// (via httputil.WriteErrorMessage) and the failure is emitted as a
 // structured slog record with request_id, method, path, panic value, and
 // full stack trace — which downstream log pipelines (Fluent Bit →
 // VictoriaLogs) index for incident triage.
@@ -47,7 +47,7 @@ func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 						"panic", fmt.Sprintf("%v", rvr),
 						"stack", string(debug.Stack()),
 					)
-					httpserver.WriteErrorMessage(w, http.StatusInternalServerError, "internal server error")
+					httputil.WriteErrorMessage(w, http.StatusInternalServerError, "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
@@ -131,7 +131,7 @@ func injectE2EPrincipal(next http.Handler, w http.ResponseWriter, r *http.Reques
 
 	e2eUID := strings.TrimSpace(r.Header.Get(XE2EUIDHeader))
 	if e2eUID == "" {
-		httpserver.WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
+		httputil.WriteErrorMessage(w, http.StatusBadRequest, "X-E2E-UID header required with e2e token")
 		return true
 	}
 
@@ -164,7 +164,7 @@ func injectE2EPrincipal(next http.Handler, w http.ResponseWriter, r *http.Reques
 func injectFirebasePrincipal(next http.Handler, w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	uid := strings.TrimSpace(r.Header.Get(XFirebaseUIDHeader))
 	if uid == "" {
-		httpserver.WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteErrorMessage(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 

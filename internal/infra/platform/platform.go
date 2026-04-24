@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/yamlvalues"
 )
 
 // DefaultPlatformConfig returns default platform configuration.
@@ -14,7 +12,7 @@ func DefaultPlatformConfig(helmValuesDir string) Config {
 	return Config{
 		InstallArgoCD:            true,
 		ArgoCDChartVersion:       "7.8.13",
-		ArgoCDValues:             yamlvalues.MustLoad(helmValuesDir, "argocd.yaml"),
+		ArgoCDValues:             MustLoad(helmValuesDir, "argocd.yaml"),
 		ArgoCDAppsRepoURL:        "git@github.com:Crawbl-AI/crawbl-argocd-apps.git",
 		ArgoCDAppsTargetRevision: "main",
 	}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/kube"
 )
 
 // This file centralizes everything that gives the runtime graph its stable
@@ -21,15 +20,15 @@ func workspaceIDFromSwarmName(name string) string {
 }
 
 func runtimeServiceAccountName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), kube.MaxWorkloadNameLen)
+	return TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), MaxWorkloadNameLen)
 }
 
 func runtimeServiceName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), kube.MaxWorkloadNameLen)
+	return TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), MaxWorkloadNameLen)
 }
 
 func runtimeDeploymentName(sw *crawblv1alpha1.UserSwarm) string {
-	return kube.TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), kube.MaxWorkloadNameLen)
+	return TruncateName(fmt.Sprintf(agentRuntimeFmt, sw.Name), MaxWorkloadNameLen)
 }
 
 func runtimeNamespaceFor(sw *crawblv1alpha1.UserSwarm) string {

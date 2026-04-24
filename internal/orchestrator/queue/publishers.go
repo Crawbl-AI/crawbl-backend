@@ -3,14 +3,11 @@ package queue
 import (
 	"context"
 	"log/slog"
-
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
-	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
 
 // NewMemoryPublisher wires the NATS client and logger. Either may be
 // nil: callers get a working (no-op) publisher back either way.
-func NewMemoryPublisher(natsClient *crawblnats.Client, logger *slog.Logger) *MemoryPublisher {
+func NewMemoryPublisher(natsClient *NATSClient, logger *slog.Logger) *MemoryPublisher {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -38,7 +35,7 @@ func (p *MemoryPublisher) Publish(ctx context.Context, workspaceID string, event
 
 // NewUsagePublisher wires the River client and logger. Either may be
 // nil: callers get a working (no-op) publisher back either way.
-func NewUsagePublisher(riverClient *pkgriver.Client, logger *slog.Logger) *UsagePublisher {
+func NewUsagePublisher(riverClient *RiverClient, logger *slog.Logger) *UsagePublisher {
 	if logger == nil {
 		logger = slog.Default()
 	}

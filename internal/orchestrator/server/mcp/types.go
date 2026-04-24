@@ -13,10 +13,11 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
@@ -68,7 +69,7 @@ const (
 
 var (
 	// auditWriteTimeout is the maximum time allowed for writing an audit log entry.
-	auditWriteTimeout = defaults.ShortTimeout
+	auditWriteTimeout = config.ShortTimeout
 
 	// errNoWorkspaceIdentity is returned when the MCP bearer token did not carry workspace context.
 	errNoWorkspaceIdentity = errorf("unauthorized: no workspace identity")
@@ -142,7 +143,7 @@ type drawerStore interface {
 	Count(ctx context.Context, sess database.SessionRunner, workspaceID string) (int, error)
 	ListWings(ctx context.Context, sess database.SessionRunner, workspaceID string) ([]memory.WingCount, error)
 	ListRooms(ctx context.Context, sess database.SessionRunner, workspaceID, wing string) ([]memory.RoomCount, error)
-	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)
+	Search(ctx context.Context, sess database.SessionRunner, opts drawerrepo.SearchOpts) ([]memory.DrawerSearchResult, error)
 	CheckDuplicate(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32, threshold float64, limit int) ([]memory.DrawerSearchResult, error)
 	Add(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
 	AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
@@ -451,3 +452,11 @@ func errorf(msg string) error {
 type staticError struct{ msg string }
 
 func (e *staticError) Error() string { return e.msg }
+
+// reinforceSimilarOpts groups the parameters for reinforceSimilar.
+type reinforceSimilarOpts struct {
+	Deps        *Deps
+	WorkspaceID string
+	DrawerID    string
+	Embedding   []float32
+}

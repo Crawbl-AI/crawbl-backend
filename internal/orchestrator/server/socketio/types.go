@@ -284,3 +284,14 @@ type resolveAuthorisedWorkspacesOpts struct {
 	workspaceRepo workspaceOwnerChecker
 	authService   authResolver
 }
+
+// connectionHandlerCfg groups the parameters for registerConnectionHandler so
+// the signature stays under the project's 4-5 param limit.
+type connectionHandlerCfg struct {
+	nsp           socket.Namespace
+	logger        *slog.Logger
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
+	shutdownCtx   context.Context
+}

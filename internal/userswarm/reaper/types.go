@@ -103,6 +103,16 @@ type Result struct {
 	Errors int
 }
 
+// reapOrphanedSwarmsOpts groups the inputs for reapOrphanedSwarms.
+// ctx is always passed separately as the first argument.
+type reapOrphanedSwarmsOpts struct {
+	k8sClient client.Client
+	sess      *dbr.Session
+	repo      *reaperrepo.Repo
+	logger    *slog.Logger
+	dryRun    bool
+}
+
 // processStaleSwarmOpts groups the inputs for processStaleSwarm.
 type processStaleSwarmOpts struct {
 	k8sClient        client.Client

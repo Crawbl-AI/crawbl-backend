@@ -211,8 +211,13 @@ func (ss *streamSession) handleUsage(ctx context.Context, chunk userswarmclient.
 	// Compute cost from pricing cache.
 	var costUSD float64
 	if ss.svc.pricingCache != nil {
-		costUSD = ss.svc.pricingCache.Compute("", chunk.Model, "global",
-			chunk.PromptTokens, chunk.CompletionTokens, chunk.CachedTokens)
+		costUSD = ss.svc.pricingCache.Compute(queue.ComputeOpts{
+			Model:            chunk.Model,
+			Region:           "global",
+			PromptTokens:     chunk.PromptTokens,
+			CompletionTokens: chunk.CompletionTokens,
+			CachedTokens:     chunk.CachedTokens,
+		})
 	}
 
 	// Increment user usage counter (monthly).

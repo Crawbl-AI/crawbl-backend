@@ -217,7 +217,11 @@ func clusterDrawers(ctx context.Context, sess database.SessionRunner, deps Proce
 	if len(embedding) == 0 {
 		return
 	}
-	similar, err := deps.DrawerRepo.Search(ctx, sess, d.WorkspaceID, embedding, "", "", 10)
+	similar, err := deps.DrawerRepo.Search(ctx, sess, drawerrepo.SearchOpts{
+		WorkspaceID:    d.WorkspaceID,
+		QueryEmbedding: embedding,
+		Limit:          10,
+	})
 	if err != nil {
 		return
 	}
@@ -276,7 +280,11 @@ func detectDrawerConflicts(ctx context.Context, sess database.SessionRunner, dep
 	if len(embedding) == 0 || deps.LLMClassifier == nil {
 		return
 	}
-	neighbors, err := deps.DrawerRepo.Search(ctx, sess, d.WorkspaceID, embedding, "", "", 5)
+	neighbors, err := deps.DrawerRepo.Search(ctx, sess, drawerrepo.SearchOpts{
+		WorkspaceID:    d.WorkspaceID,
+		QueryEmbedding: embedding,
+		Limit:          5,
+	})
 	if err != nil {
 		slog.Warn("memory-process: neighbor search for conflict detection failed",
 			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)

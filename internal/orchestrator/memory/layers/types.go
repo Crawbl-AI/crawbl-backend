@@ -7,6 +7,7 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -62,7 +63,7 @@ const l3MaxSnippetLen = 300
 // calls into — hybrid search, wing/room lookups, importance-sorted L1,
 // arbitrary-filter L2, semantic L3, and batch access-touching.
 type drawerStore interface {
-	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)
+	Search(ctx context.Context, sess database.SessionRunner, opts drawerrepo.SearchOpts) ([]memory.DrawerSearchResult, error)
 	SearchHybrid(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, queryTerms []string, limit int) ([]memory.HybridSearchResult, error)
 	GetTopByImportance(ctx context.Context, sess database.SessionRunner, workspaceID, wing string, limit int) ([]memory.Drawer, error)
 	GetByWingRoom(ctx context.Context, sess database.SessionRunner, workspaceID, wing, room string, limit int) ([]memory.Drawer, error)
@@ -138,6 +139,26 @@ type renderL3Opts struct {
 	Embedder    embed.Embedder
 	WorkspaceID string
 	Query       string
+	Wing        string
+	Room        string
+	Limit       int
+}
+
+// formatMessagesOpts groups the parameters for formatMessages. ctx and sess
+// remain positional per the project session/opts/repo pattern.
+type formatMessagesOpts struct {
+	Msgs       []*orchestrator.Message
+	ListErr    *merrors.Error
+	Header     string
+	MaxTextLen int
+	Namer      AgentNamer
+}
+
+// renderL2Opts groups the parameters for renderL2. ctx and sess remain
+// positional per the project session/opts/repo pattern.
+type renderL2Opts struct {
+	DrawerRepo  drawerStore
+	WorkspaceID string
 	Wing        string
 	Room        string
 	Limit       int

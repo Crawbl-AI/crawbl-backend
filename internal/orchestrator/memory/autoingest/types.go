@@ -124,6 +124,18 @@ const importanceScale = 5.0
 // whitespace. Compiled once at package init; this pattern is always valid.
 var sentenceBoundary = regexp.MustCompile(`([.!?])\s+`)
 
+// buildDrawerOpts groups the parameters for buildDrawer. Work and
+// embedding are handled separately by the caller.
+type buildDrawerOpts struct {
+	Work       Work
+	Chunk      string
+	MemType    string
+	Room       string
+	Importance float64
+	Tier       string
+	State      string
+}
+
 // drawerStore is the drawer subset the auto-ingest worker uses:
 // idempotent add for the hot path plus a duplicate-check probe before
 // inserting.

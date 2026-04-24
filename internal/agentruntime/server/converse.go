@@ -186,7 +186,13 @@ func (h *converseHandler) runOneTurn(
 func (h *converseHandler) drainRunnerEvents(ctx context.Context, opts drainOpts) ([]*runtimev1.Turn, error) {
 	var turns []*runtimev1.Turn
 
-	for event, err := range h.runner.RunTurn(ctx, opts.principal.Subject, opts.sessionID, opts.systemPrompt, opts.targetAgent, opts.message) {
+	for event, err := range h.runner.RunTurn(ctx, runner.RunTurnOpts{
+		UserID:       opts.principal.Subject,
+		SessionID:    opts.sessionID,
+		SystemPrompt: opts.systemPrompt,
+		TargetAgent:  opts.targetAgent,
+		Message:      opts.message,
+	}) {
 		if err != nil {
 			return nil, err
 		}

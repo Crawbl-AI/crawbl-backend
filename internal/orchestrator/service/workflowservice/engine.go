@@ -13,7 +13,6 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -21,12 +20,17 @@ import (
 // newWorkflowEmitter constructs a workflowEmitter bound to one execution.
 func newWorkflowEmitter(b realtime.Broadcaster, workspaceID string, def *workflowrepo.WorkflowDefinitionRow, exec *workflowrepo.WorkflowExecutionRow) *workflowEmitter {
 	return &workflowEmitter{
-		broadcaster:    b,
-		workspaceID:    workspaceID,
-		workflowID:     def.ID,
-		workflowName:   def.Name,
-		executionID:    exec.ID,
-		conversationID: ptr.Deref(exec.ConversationID),
+		broadcaster:  b,
+		workspaceID:  workspaceID,
+		workflowID:   def.ID,
+		workflowName: def.Name,
+		executionID:  exec.ID,
+		conversationID: func() string {
+			if exec.ConversationID == nil {
+				return ""
+			}
+			return *exec.ConversationID
+		}(),
 	}
 }
 

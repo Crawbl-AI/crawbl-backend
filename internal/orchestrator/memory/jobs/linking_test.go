@@ -7,6 +7,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
@@ -16,9 +17,9 @@ type fakeKGRepo struct {
 	triples  []*memory.Triple
 }
 
-func (f *fakeKGRepo) AddEntity(_ context.Context, _ database.SessionRunner, _, name, _, _ string) (string, error) {
-	f.entities = append(f.entities, name)
-	return "e_" + name, nil
+func (f *fakeKGRepo) AddEntity(_ context.Context, _ database.SessionRunner, opts kgrepo.AddEntityOpts) (string, error) {
+	f.entities = append(f.entities, opts.Name)
+	return "e_" + opts.Name, nil
 }
 
 func (f *fakeKGRepo) AddTriple(_ context.Context, _ database.SessionRunner, _ string, t *memory.Triple) (string, error) {
@@ -69,7 +70,7 @@ func (f *fakeDrawerRepo) UpdateEmbedding(_ context.Context, _ database.SessionRu
 func (f *fakeDrawerRepo) UpdateState(_ context.Context, _ database.SessionRunner, _, _, _ string) error {
 	panic("fakeDrawerRepo: UpdateState not implemented")
 }
-func (f *fakeDrawerRepo) Search(_ context.Context, _ database.SessionRunner, _ string, _ []float32, _, _ string, _ int) ([]memory.DrawerSearchResult, error) {
+func (f *fakeDrawerRepo) Search(_ context.Context, _ database.SessionRunner, _ drawerrepo.SearchOpts) ([]memory.DrawerSearchResult, error) {
 	panic("fakeDrawerRepo: Search not implemented")
 }
 func (f *fakeDrawerRepo) SetSupersededBy(_ context.Context, _ database.SessionRunner, _, _, _ string) error {
@@ -81,10 +82,10 @@ func (f *fakeDrawerRepo) SetClusterID(_ context.Context, _ database.SessionRunne
 func (f *fakeDrawerRepo) IncrementRetryCount(_ context.Context, _ database.SessionRunner, _, _ string) error {
 	panic("fakeDrawerRepo: IncrementRetryCount not implemented")
 }
-func (f *fakeDrawerRepo) DecayImportance(_ context.Context, _ database.SessionRunner, _ string, _, _ int, _, _ float64) (int, error) {
+func (f *fakeDrawerRepo) DecayImportance(_ context.Context, _ database.SessionRunner, _ drawerrepo.DecayImportanceOpts) (int, error) {
 	panic("fakeDrawerRepo: DecayImportance not implemented")
 }
-func (f *fakeDrawerRepo) PruneLowImportance(_ context.Context, _ database.SessionRunner, _ string, _ float64, _, _ int) (int, error) {
+func (f *fakeDrawerRepo) PruneLowImportance(_ context.Context, _ database.SessionRunner, _ drawerrepo.PruneLowImportanceOpts) (int, error) {
 	panic("fakeDrawerRepo: PruneLowImportance not implemented")
 }
 func (f *fakeDrawerRepo) ListEnrichCandidates(_ context.Context, _ database.SessionRunner, _ int) ([]memory.Drawer, error) {

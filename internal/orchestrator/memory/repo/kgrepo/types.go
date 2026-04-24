@@ -39,3 +39,21 @@ type tripleRow struct {
 	SubjectName string `db:"subject_name"`
 	ObjectName  string `db:"object_name"`
 }
+
+// AddEntityOpts groups the parameters for AddEntity. ctx and sess remain
+// positional per the project session/opts/repo pattern.
+type AddEntityOpts struct {
+	WorkspaceID string
+	Name        string
+	EntityType  string
+	Properties  string
+}
+
+// findActiveTripleIDOpts groups the parameters for findActiveTripleID. ctx and
+// sess remain positional per the project session/opts/repo pattern.
+type findActiveTripleIDOpts struct {
+	WorkspaceID string
+	SubID       string
+	Predicate   string
+	ObjID       string
+}

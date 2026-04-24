@@ -182,21 +182,21 @@ func parseToolCallArgs(toolName, argsJSON string) toolCallArgs {
 // every message needs regardless of role: a new UUID, the conversation
 // pointer, a timestamped created_at/updated_at, and an empty
 // Attachments slice. Callers fill in Role, Content, and Status.
-func newMessage(convID string, role orchestrator.MessageRole, content orchestrator.MessageContent, status orchestrator.MessageStatus, agentID *string, attachments []orchestrator.Attachment) *orchestrator.Message {
+func newMessage(opts newMessageOpts) *orchestrator.Message {
 	now := time.Now().UTC()
-	if attachments == nil {
-		attachments = []orchestrator.Attachment{}
+	if opts.Attachments == nil {
+		opts.Attachments = []orchestrator.Attachment{}
 	}
 	return &orchestrator.Message{
 		ID:             uuid.NewString(),
-		ConversationID: convID,
-		AgentID:        agentID,
-		Role:           role,
-		Content:        content,
-		Status:         status,
+		ConversationID: opts.ConvID,
+		AgentID:        opts.AgentID,
+		Role:           opts.Role,
+		Content:        opts.Content,
+		Status:         opts.Status,
 		CreatedAt:      now,
 		UpdatedAt:      now,
-		Attachments:    attachments,
+		Attachments:    opts.Attachments,
 	}
 }
 
@@ -206,14 +206,13 @@ func (s *Service) newPlaceholder(convID string, agent *orchestrator.Agent) *orch
 	if agent != nil {
 		agentID = &agent.ID
 	}
-	return newMessage(
-		convID,
-		orchestrator.MessageRoleAgent,
-		orchestrator.MessageContent{Type: orchestrator.MessageContentTypeText},
-		orchestrator.MessageStatusPending,
-		agentID,
-		nil,
-	)
+	return newMessage(newMessageOpts{
+		ConvID:  convID,
+		Role:    orchestrator.MessageRoleAgent,
+		Content: orchestrator.MessageContent{Type: orchestrator.MessageContentTypeText},
+		Status:  orchestrator.MessageStatusPending,
+		AgentID: agentID,
+	})
 }
 
 // savePlaceholder persists a placeholder message in a transaction.

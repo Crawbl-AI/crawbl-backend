@@ -12,7 +12,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // WorkspaceAgentsList retrieves all agents available in a workspace.
@@ -187,7 +187,7 @@ func ConversationDelete(c *Context) http.HandlerFunc {
 // Not yet implemented — real full-text search comes later.
 func SearchMessages(c *Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpserver.WriteErrorMessage(w, http.StatusNotImplemented, "message search is not yet available")
+		httputil.WriteErrorMessage(w, http.StatusNotImplemented, "message search is not yet available")
 	}
 }
 
@@ -220,7 +220,7 @@ func MessagesSend(c *Context) http.HandlerFunc {
 
 		var reqBody mobilev1.SendMessageRequest
 		if err := DecodeProtoJSON(r, &reqBody); err != nil {
-			httpserver.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
+			httputil.WriteErrorMessage(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
@@ -258,7 +258,7 @@ func MessagesSend(c *Context) http.HandlerFunc {
 				"path", r.URL.Path,
 				"user_id", user.ID,
 			)
-			httpserver.WriteErrorMessage(w, http.StatusInternalServerError, "internal error")
+			httputil.WriteErrorMessage(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		WriteProtoSuccess(w, http.StatusCreated, convert.MessageToProto(userMsg))

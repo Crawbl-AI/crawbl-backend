@@ -44,7 +44,13 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 			limit = maxSearchLimit
 		}
 
-		results, err := deps.MCPService.SearchMessages(ctx, sess, userID, workspaceID, input.ConversationID, input.Query, limit)
+		results, err := deps.MCPService.SearchMessages(ctx, sess, mcpservice.SearchMessagesOpts{
+			UserID:         userID,
+			WorkspaceID:    workspaceID,
+			ConversationID: input.ConversationID,
+			Query:          input.Query,
+			Limit:          limit,
+		})
 		if err != nil {
 			return nil, nil, err
 		}

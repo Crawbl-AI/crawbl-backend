@@ -66,7 +66,15 @@ func (s *service) ingestChunk(ctx context.Context, sess database.SessionRunner, 
 	}
 
 	tier, state := s.pickTier(ctx, sess, work.WorkspaceID, memType, confidence, embedding)
-	d := buildDrawer(work, chunk, memType, room, importance, tier, state)
+	d := buildDrawer(buildDrawerOpts{
+		Work:       work,
+		Chunk:      chunk,
+		MemType:    memType,
+		Room:       room,
+		Importance: importance,
+		Tier:       tier,
+		State:      state,
+	})
 	if err := s.deps.DrawerRepo.AddIdempotent(ctx, sess, d, embedding); err != nil {
 		s.logger.WarnContext(ctx, "memory.autoingest: drawer insert failed",
 			slog.String("workspace_id", work.WorkspaceID),

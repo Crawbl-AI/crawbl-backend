@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // WriteProtoSuccess writes a protobuf message wrapped in the standard
@@ -38,7 +38,7 @@ func WriteProtoArraySuccess(w http.ResponseWriter, status int, msgs []proto.Mess
 		}
 		items = append(items, data)
 	}
-	w.Header().Set("Content-Type", httpserver.ContentTypeJSON)
+	w.Header().Set("Content-Type", httputil.ContentTypeJSON)
 	w.WriteHeader(status)
 	envelope := map[string]any{"data": items}
 	if err := json.NewEncoder(w).Encode(envelope); err != nil {
@@ -60,7 +60,7 @@ func DecodeProtoJSON(r *http.Request, msg proto.Message) error {
 // writeRawEnvelope writes pre-marshaled JSON data inside a {"data": ...}
 // envelope to the response writer.
 func writeRawEnvelope(w http.ResponseWriter, status int, rawJSON []byte) {
-	w.Header().Set("Content-Type", httpserver.ContentTypeJSON)
+	w.Header().Set("Content-Type", httputil.ContentTypeJSON)
 	w.WriteHeader(status)
 	// Write {"data":<raw>}\n manually to avoid double-encoding.
 	_, _ = w.Write([]byte(`{"data":`))

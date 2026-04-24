@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httprun"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 const (
@@ -64,5 +64,5 @@ func New(cfg *Config, mcpHandler http.Handler, logger *slog.Logger) *Server {
 // Run starts the server and blocks until ctx is cancelled, then
 // performs a graceful shutdown within the given timeout.
 func (s *Server) Run(ctx context.Context, shutdownTimeout time.Duration) error {
-	return httprun.ListenAndServeGraceful(ctx, s.httpServer, shutdownTimeout, "MCP", s.logger)
+	return httputil.ListenAndServeGraceful(ctx, s.httpServer, shutdownTimeout, "MCP", s.logger)
 }

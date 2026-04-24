@@ -98,13 +98,13 @@ func insertIdempotent(ctx context.Context, sess orchestratorrepo.SessionRunner, 
 
 // updateByID runs an UPDATE ... WHERE id = ? against table with the given
 // set list. Shared between UpdateExecution / UpdateStepExecution.
-func updateByID(ctx context.Context, sess orchestratorrepo.SessionRunner, table, id, opLabel string, sets []workflowSet) *merrors.Error {
-	stmt := sess.Update(table)
-	for _, s := range sets {
+func updateByID(ctx context.Context, opts updateByIDOpts) *merrors.Error {
+	stmt := opts.Sess.Update(opts.Table)
+	for _, s := range opts.Sets {
 		stmt = stmt.Set(s.Col, s.Val)
 	}
-	if _, err := stmt.Where(whereID, id).ExecContext(ctx); err != nil {
-		return merrors.WrapStdServerError(err, opLabel)
+	if _, err := stmt.Where(whereID, opts.ID).ExecContext(ctx); err != nil {
+		return merrors.WrapStdServerError(err, opts.OpLabel)
 	}
 	return nil
 }
@@ -153,13 +153,19 @@ func (r *workflowRepo) UpdateExecution(ctx context.Context, sess orchestratorrep
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-	return updateByID(ctx, sess, "workflow_executions", row.ID, "update workflow execution", []workflowSet{
-		{"status", row.Status},
-		{"current_step", row.CurrentStep},
-		{"context", row.Context},
-		{"error_message", row.ErrorMessage},
-		{"started_at", row.StartedAt},
-		{"completed_at", row.CompletedAt},
+	return updateByID(ctx, updateByIDOpts{
+		Sess:    sess,
+		Table:   "workflow_executions",
+		ID:      row.ID,
+		OpLabel: "update workflow execution",
+		Sets: []workflowSet{
+			{"status", row.Status},
+			{"current_step", row.CurrentStep},
+			{"context", row.Context},
+			{"error_message", row.ErrorMessage},
+			{"started_at", row.StartedAt},
+			{"completed_at", row.CompletedAt},
+		},
 	})
 }
 
@@ -206,13 +212,19 @@ func (r *workflowRepo) UpdateStepExecution(ctx context.Context, sess orchestrato
 	if row == nil {
 		return merrors.ErrInvalidInput
 	}
-	return updateByID(ctx, sess, "workflow_step_executions", row.ID, "update workflow step execution", []workflowSet{
-		{"status", row.Status},
-		{"output_text", row.OutputText},
-		{"artifact_id", row.ArtifactID},
-		{"duration_ms", row.DurationMs},
-		{"started_at", row.StartedAt},
-		{"completed_at", row.CompletedAt},
+	return updateByID(ctx, updateByIDOpts{
+		Sess:    sess,
+		Table:   "workflow_step_executions",
+		ID:      row.ID,
+		OpLabel: "update workflow step execution",
+		Sets: []workflowSet{
+			{"status", row.Status},
+			{"output_text", row.OutputText},
+			{"artifact_id", row.ArtifactID},
+			{"duration_ms", row.DurationMs},
+			{"started_at", row.StartedAt},
+			{"completed_at", row.CompletedAt},
+		},
 	})
 }
 

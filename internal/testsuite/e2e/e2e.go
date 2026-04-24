@@ -18,16 +18,18 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
-	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
+	"golang.org/x/sync/errgroup"
 )
 
 // buildTags assembles the godog tag expression, always excluding @wip and
@@ -134,7 +136,7 @@ func Run(cfg *Config) *Results {
 		return nil
 	}
 
-	runErr := backendruntime.RunUntilSignal(func() error {
+	runErr := runUntilSignal(func() error {
 		suite := godog.TestSuite{
 			Name: "crawbl-e2e",
 			ScenarioInitializer: func(sc *godog.ScenarioContext) {
@@ -226,6 +228,33 @@ func newTestContext(cfg *Config, users *suiteUsers, deps *suiteDeps) *testContex
 	tc.users["zach"] = users.zach
 
 	return tc
+}
+
+// runUntilSignal runs the supplied run function until it returns, until it
+// returns an error, or until the process receives SIGINT/SIGTERM/SIGQUIT/SIGHUP.
+// On signal, stop is called with a timeout context; if stop is nil the process
+// exits immediately. Any signal is propagated through ctx.
+func runUntilSignal(run func() error, stop func(context.Context) error, timeout time.Duration) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx, stopNotify := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGHUP)
+	defer stopNotify()
+
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error { return run() })
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	if ctx.Err() != nil && stop != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), timeout)
+		defer stopCancel()
+		return stop(stopCtx)
+	}
+
+	return nil
 }
 
 func initScenario(sc *godog.ScenarioContext, cfg *Config, users *suiteUsers, deps *suiteDeps) {

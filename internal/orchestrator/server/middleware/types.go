@@ -5,7 +5,7 @@
 //
 // This package lives under internal/orchestrator/server/ because its types
 // (MiddlewareConfig, RequestMetadata) and helpers (ContextWithPrincipal)
-// reference the orchestrator domain. internal/pkg/httpserver must remain
+// reference the orchestrator domain. internal/orchestrator/httpserver must remain
 // orchestrator-agnostic — putting this code here keeps the dependency
 // direction one-way (server → service → repo) and satisfies the clean
 // architecture rules in internal/pkg/AGENTS.md.

@@ -14,9 +14,9 @@ import (
 	"github.com/spf13/cobra"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/toolsrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/clickhouse"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	clickhousemigrations "github.com/Crawbl-AI/crawbl-backend/migrations/clickhouse"
 	orchestratormigrations "github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator"
@@ -96,7 +96,7 @@ func runPostgresMigrations(logger *slog.Logger) error {
 // runClickhouseMigrations applies embedded ClickHouse DDL. No-ops when
 // CRAWBL_CLICKHOUSE_DSN is unset (analytics disabled).
 func runClickhouseMigrations(ctx context.Context, logger *slog.Logger) error {
-	clickhouseDB, err := clickhouse.Open(ctx, logger)
+	clickhouseDB, err := queue.OpenClickhouse(ctx, logger)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
@@ -106,7 +106,7 @@ func runClickhouseMigrations(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer func() { _ = clickhouseDB.Close() }()
 
-	if err := clickhouse.Migrate(ctx, clickhouseDB, clickhousemigrations.FS, logger); err != nil {
+	if err := queue.MigrateClickhouse(ctx, clickhouseDB, clickhousemigrations.FS, logger); err != nil {
 		return err
 	}
 	return nil

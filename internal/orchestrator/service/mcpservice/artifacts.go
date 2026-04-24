@@ -97,22 +97,22 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	return &CreateArtifactResult{ArtifactId: artifactID, Version: 1}, nil
 }
 
-func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID, artifactID string, version int) (*ReadArtifactResult, error) {
-	if err := s.verifyWorkspace(ctx, sess, userID, workspaceID); err != nil {
+func (s *service) ReadArtifact(ctx contextT, sess sessionT, opts ReadArtifactOpts) (*ReadArtifactResult, error) {
+	if err := s.verifyWorkspace(ctx, sess, opts.UserID, opts.WorkspaceID); err != nil {
 		return nil, err
 	}
 
-	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, artifactID)
+	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, opts.WorkspaceID, opts.ArtifactID)
 	if mErr != nil {
 		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
-	ver, err := s.resolveArtifactVersion(ctx, sess, artifactID, version)
+	ver, err := s.resolveArtifactVersion(ctx, sess, opts.ArtifactID, opts.Version)
 	if err != nil {
 		return nil, err
 	}
 
-	reviewRows, mErr := s.repos.Artifact.ListReviews(ctx, sess, artifactID, ver.Version)
+	reviewRows, mErr := s.repos.Artifact.ListReviews(ctx, sess, opts.ArtifactID, ver.Version)
 	if mErr != nil {
 		reviewRows = nil
 	}

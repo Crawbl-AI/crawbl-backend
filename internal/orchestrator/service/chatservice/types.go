@@ -20,7 +20,6 @@ import (
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -54,7 +53,7 @@ type Deps struct {
 	RuntimeClient  userswarmclient.Client
 	Broadcaster    realtime.Broadcaster
 	MemoryStack    layers.Stack
-	PricingCache   *pricing.Cache
+	PricingCache   *queue.PricingCache
 	UsagePublisher *queue.UsagePublisher
 	IngestPool     autoingest.Service
 }
@@ -96,7 +95,7 @@ type Service struct {
 	broadcaster       realtime.Broadcaster
 	defaultAgents     []orchestrator.DefaultAgentBlueprint
 	memoryStack       layers.Stack
-	pricingCache      *pricing.Cache
+	pricingCache      *queue.PricingCache
 	usagePublisher    *queue.UsagePublisher
 	// ingestPool is the in-process auto-ingest Service. Nil disables
 	// auto-ingest cleanly.
@@ -141,6 +140,17 @@ type pendingToolCall struct {
 // It never performs a DB lookup — the map is populated once per request from
 // the workspace roster, so AgentName is always O(1).
 type mapNamer map[string]*orchestrator.Agent
+
+// newMessageOpts groups the parameters for newMessage so the function signature
+// stays under the project's 4-5 param limit.
+type newMessageOpts struct {
+	ConvID      string
+	Role        orchestrator.MessageRole
+	Content     orchestrator.MessageContent
+	Status      orchestrator.MessageStatus
+	AgentID     *string
+	Attachments []orchestrator.Attachment
+}
 
 // AgentName satisfies layers.AgentNamer using the in-memory lookup map.
 func (m mapNamer) AgentName(_ context.Context, _ database.SessionRunner, agentID string) (string, bool) {

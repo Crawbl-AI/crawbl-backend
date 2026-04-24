@@ -68,6 +68,16 @@ const (
 
 const whereID = "id = ?"
 
+// updateByIDOpts groups the parameters for the internal updateByID helper so
+// the function signature stays under the project's 4-5 param limit.
+type updateByIDOpts struct {
+	Sess    orchestratorrepo.SessionRunner
+	Table   string
+	ID      string
+	OpLabel string
+	Sets    []workflowSet
+}
+
 // workflowRepo is the PostgreSQL implementation of the Repo interface.
 type workflowRepo struct{}
 

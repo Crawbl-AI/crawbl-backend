@@ -1,15 +1,14 @@
 package app
 
 import (
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/buildtools"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/versioning"
 )
 
 // calculateSemverForRepo calculates semver for a specific repo path.
 func calculateSemverForRepo(repoPath string) (tagPair, error) {
-	result, err := versioning.CalculateForRepo(repoPath)
+	result, err := buildtools.CalculateForRepo(repoPath)
 	if err != nil {
 		return tagPair{}, err
 	}
@@ -21,7 +20,7 @@ func calculateSemverForRepo(repoPath string) (tagPair, error) {
 // calculateSemverForPrefix calculates semver for a namespaced tag prefix
 // (e.g. "agent-runtime/" → "agent-runtime/v0.1.0").
 func calculateSemverForPrefix(prefix string) (tagPair, error) {
-	result, err := versioning.CalculateForPrefix(prefix)
+	result, err := buildtools.CalculateForPrefix(prefix)
 	if err != nil {
 		return tagPair{}, err
 	}
@@ -35,7 +34,7 @@ func calculateSemverForPrefix(prefix string) (tagPair, error) {
 // which live in sibling repos).
 func resolveDeployTagForRepo(explicit string, requireClean bool, repoPath string) (tagPair, error) {
 	if requireClean {
-		if err := gitutil.EnsureCleanAndPushed(); err != nil {
+		if err := buildtools.EnsureCleanAndPushed(); err != nil {
 			return tagPair{}, err
 		}
 	}
@@ -51,7 +50,7 @@ func resolveDeployTagForRepo(explicit string, requireClean bool, repoPath string
 // tagPrefix scopes the tag namespace (e.g. "agent-runtime/" → "agent-runtime/v0.1.0").
 // An empty tagPrefix uses the global v* sequence.
 func resolveDeployTag(explicit, tagPrefix string) (tagPair, error) {
-	if err := gitutil.EnsureCleanAndPushed(); err != nil {
+	if err := buildtools.EnsureCleanAndPushed(); err != nil {
 		return tagPair{}, err
 	}
 	if explicit != "" {

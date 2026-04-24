@@ -44,8 +44,8 @@ func tripleID(subID, pred, objID string) string {
 	return fmt.Sprintf("t_%s_%s_%s_%x", subID, pred, objID, hash[:4])
 }
 
-func (g *Postgres) AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType, properties string) (string, error) {
-	id := entityID(name)
+func (g *Postgres) AddEntity(ctx context.Context, sess database.SessionRunner, opts AddEntityOpts) (string, error) {
+	id := entityID(opts.Name)
 	now := time.Now().UTC()
 
 	// ON CONFLICT DO UPDATE (upsert) is not supported by the dbr builder; raw SQL required.
@@ -56,10 +56,10 @@ func (g *Postgres) AddEntity(ctx context.Context, sess database.SessionRunner, w
 		   SET name = EXCLUDED.name,
 		       type = EXCLUDED.type,
 		       properties = EXCLUDED.properties`,
-		id, workspaceID, name, entityType, properties, now,
+		id, opts.WorkspaceID, opts.Name, opts.EntityType, opts.Properties, now,
 	).ExecContext(ctx)
 	if err != nil {
-		return "", fmt.Errorf("kg: add entity %q: %w", name, err)
+		return "", fmt.Errorf("kg: add entity %q: %w", opts.Name, err)
 	}
 	return id, nil
 }
@@ -72,7 +72,12 @@ func (g *Postgres) AddTriple(ctx context.Context, sess database.SessionRunner, w
 	subID := entityID(t.Subject)
 	objID := entityID(t.Object)
 
-	if existing, err := g.findActiveTripleID(ctx, sess, workspaceID, subID, t.Predicate, objID); err == nil && existing != "" {
+	if existing, err := g.findActiveTripleID(ctx, sess, findActiveTripleIDOpts{
+		WorkspaceID: workspaceID,
+		SubID:       subID,
+		Predicate:   t.Predicate,
+		ObjID:       objID,
+	}); err == nil && existing != "" {
 		return existing, nil
 	}
 
@@ -125,12 +130,12 @@ func (g *Postgres) checkWorkspaceLimits(ctx context.Context, sess database.Sessi
 // findActiveTripleID returns the id of an existing active triple with the
 // same subject/predicate/object tuple, or an empty string if no match.
 // Callers use this to dedup concurrent inserts.
-func (g *Postgres) findActiveTripleID(ctx context.Context, sess database.SessionRunner, workspaceID, subID, predicate, objID string) (string, error) {
+func (g *Postgres) findActiveTripleID(ctx context.Context, sess database.SessionRunner, opts findActiveTripleIDOpts) (string, error) {
 	var existingID string
 	err := sess.Select("id").
 		From("memory_triples").
 		Where("workspace_id = ? AND subject = ? AND predicate = ? AND object = ? AND valid_to IS NULL",
-			workspaceID, subID, predicate, objID).
+			opts.WorkspaceID, opts.SubID, opts.Predicate, opts.ObjID).
 		LoadOneContext(ctx, &existingID)
 	return existingID, err
 }
@@ -139,10 +144,20 @@ func (g *Postgres) findActiveTripleID(ctx context.Context, sess database.Session
 // triple. Both are safe to re-run — AddEntity uses ON CONFLICT — but
 // either error aborts the caller so we never insert a dangling triple.
 func (g *Postgres) ensureTripleEntities(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) error {
-	if _, err := g.AddEntity(ctx, sess, workspaceID, t.Subject, "entity", "{}"); err != nil {
+	if _, err := g.AddEntity(ctx, sess, AddEntityOpts{
+		WorkspaceID: workspaceID,
+		Name:        t.Subject,
+		EntityType:  "entity",
+		Properties:  "{}",
+	}); err != nil {
 		return fmt.Errorf("kg: auto-create subject entity: %w", err)
 	}
-	if _, err := g.AddEntity(ctx, sess, workspaceID, t.Object, "entity", "{}"); err != nil {
+	if _, err := g.AddEntity(ctx, sess, AddEntityOpts{
+		WorkspaceID: workspaceID,
+		Name:        t.Object,
+		EntityType:  "entity",
+		Properties:  "{}",
+	}); err != nil {
 		return fmt.Errorf("kg: auto-create object entity: %w", err)
 	}
 	return nil

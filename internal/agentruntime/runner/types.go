@@ -100,6 +100,24 @@ type WorkspaceBlueprint struct {
 	Agents []AgentBlueprint `json:"agents"`
 }
 
+// RunTurnOpts groups the per-turn parameters for Runner.RunTurn.
+// ctx is always passed separately as the first argument.
+type RunTurnOpts struct {
+	// UserID is the Firebase subject / Crawbl user ID that owns the session.
+	UserID string
+	// SessionID is the client-supplied conversation identifier. ADK
+	// auto-creates the session row when it does not exist yet.
+	SessionID string
+	// SystemPrompt, when non-empty, is prepended to the user message so
+	// per-turn persona overrides are possible without rebuilding the agent.
+	SystemPrompt string
+	// TargetAgent is the optional agent slug to route this turn to.
+	// Empty means the Manager root handles the turn.
+	TargetAgent string
+	// Message is the user's turn text. Required.
+	Message string
+}
+
 // AgentBlueprint describes a single agent's configuration. Field
 // names mirror the orchestrator's agents / agent_settings /
 // agent_prompts columns so the HTTP handler can marshal rows directly

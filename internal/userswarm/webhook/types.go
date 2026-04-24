@@ -83,6 +83,17 @@ type syncResponse struct {
 	Finalized          bool           `json:"finalized,omitempty"`
 }
 
+// MaxNameLen is the general Kubernetes object name limit (63 characters).
+const MaxNameLen = 63
+
+// MaxWorkloadNameLen is the limit for StatefulSet and Deployment names.
+// These resources auto-generate pod names with suffixes, so the base name
+// needs headroom to stay under the 63-char label value limit.
+const MaxWorkloadNameLen = 52
+
+// hashLen is how many characters of the SHA-256 hash to keep when truncating.
+const hashLen = 10
+
 // Security constants shared by the generated runtime pod shape.
 const (
 	runtimeUID int64 = 65532
