@@ -52,6 +52,29 @@ func TestIsNoise(t *testing.T) {
 	}
 }
 
+// assertChunksInBounds verifies every chunk satisfies minChunk and maxSize.
+func assertChunksInBounds(t *testing.T, chunks []string, minChunk, maxSize int) {
+	t.Helper()
+	for _, c := range chunks {
+		if len(c) < minChunk {
+			t.Errorf("chunk %q is below minChunk %d", c, minChunk)
+		}
+		if len(c) > maxSize {
+			t.Errorf("chunk len %d exceeds maxSize %d", len(c), maxSize)
+		}
+	}
+}
+
+// assertChunkMinLen verifies every chunk is at least minChunk bytes.
+func assertChunkMinLen(t *testing.T, chunks []string, minChunk int) {
+	t.Helper()
+	for i, c := range chunks {
+		if len(c) < minChunk {
+			t.Errorf("chunk[%d] len %d is below minChunk %d", i, len(c), minChunk)
+		}
+	}
+}
+
 func TestChunkText(t *testing.T) {
 	t.Parallel()
 
@@ -112,26 +135,28 @@ func TestChunkText(t *testing.T) {
 			got := chunkText(tc.text, tc.maxSize, tc.overlap, tc.minChunk)
 
 			if tc.name == "chunks below minChunk are discarded" {
-				for _, c := range got {
-					if len(c) < tc.minChunk {
-						t.Errorf("chunk %q is below minChunk %d", c, tc.minChunk)
-					}
-					if len(c) > tc.maxSize {
-						t.Errorf("chunk len %d exceeds maxSize %d", len(c), tc.maxSize)
-					}
-				}
+				assertChunksInBounds(t, got, tc.minChunk, tc.maxSize)
 				return
 			}
 
 			if len(got) < tc.wantCount {
 				t.Fatalf("chunkText() returned %d chunks, want at least %d; chunks: %q", len(got), tc.wantCount, got)
 			}
-			for i, c := range got {
-				if len(c) < tc.minChunk {
-					t.Errorf("chunk[%d] len %d is below minChunk %d", i, len(c), tc.minChunk)
-				}
-			}
+			assertChunkMinLen(t, got, tc.minChunk)
 		})
+	}
+}
+
+// assertHexSuffix checks that every character in suffix is a lowercase hex digit.
+func assertHexSuffix(t *testing.T, id, suffix string) {
+	t.Helper()
+	if suffix == "" {
+		t.Fatal("hex part is empty")
+	}
+	for _, ch := range suffix {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			t.Fatalf("id %q contains non-hex character %q in suffix", id, ch)
+		}
 	}
 }
 
@@ -168,13 +193,6 @@ func TestAutoIngestDrawerID(t *testing.T) {
 		}
 
 		hexPart := strings.TrimPrefix(id, prefix)
-		if hexPart == "" {
-			t.Fatal("hex part is empty")
-		}
-		for _, ch := range hexPart {
-			if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
-				t.Fatalf("id %q contains non-hex character %q in suffix", id, ch)
-			}
-		}
+		assertHexSuffix(t, id, hexPart)
 	})
 }

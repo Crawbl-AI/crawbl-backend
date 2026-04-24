@@ -6,6 +6,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
@@ -59,7 +60,7 @@ func (f *fakeDrawerRepo) ActiveWorkspaces(_ context.Context, _ database.SessionR
 func (f *fakeDrawerRepo) ListByState(_ context.Context, _ database.SessionRunner, _, _ string, _ int) ([]memory.Drawer, error) {
 	panic("fakeDrawerRepo: ListByState not implemented")
 }
-func (f *fakeDrawerRepo) UpdateClassification(_ context.Context, _ database.SessionRunner, _, _, _, _, _ string, _ float64) error {
+func (f *fakeDrawerRepo) UpdateClassification(_ context.Context, _ database.SessionRunner, _ drawerrepo.UpdateClassificationOpts) error {
 	panic("fakeDrawerRepo: UpdateClassification not implemented")
 }
 func (f *fakeDrawerRepo) UpdateEmbedding(_ context.Context, _ database.SessionRunner, _, _ string, _ []float32) error {
