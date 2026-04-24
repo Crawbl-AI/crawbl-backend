@@ -27,7 +27,7 @@ require (
 	github.com/pulumi/pulumi-cloudflare/sdk/v5 v5.49.1
 	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.63.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.28.0
-	github.com/pulumi/pulumi/sdk/v3 v3.230.0
+	github.com/pulumi/pulumi/sdk/v3 v3.231.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/riverqueue/river v0.34.0
 	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.34.0
