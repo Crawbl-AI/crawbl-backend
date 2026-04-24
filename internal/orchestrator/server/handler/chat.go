@@ -9,10 +9,10 @@ import (
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/convert"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // WorkspaceAgentsList retrieves all agents available in a workspace.

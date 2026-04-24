@@ -48,13 +48,13 @@ kubectl, verify DOCR integration, and wait for ArgoCD to sync.`,
   crawbl infra update --env prod --auto-approve    # Apply prod changes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUpdate(cmd.Context(), updateOpts{
-					env:            env,
-					region:         region,
-					autoApprove:    autoApprove,
-					saveKubeconfig: saveKubeconfig,
-					clusterName:    clusterName,
-					syncTimeout:    syncTimeout,
-				})
+				env:            env,
+				region:         region,
+				autoApprove:    autoApprove,
+				saveKubeconfig: saveKubeconfig,
+				clusterName:    clusterName,
+				syncTimeout:    syncTimeout,
+			})
 		},
 	}
 
@@ -66,17 +66,6 @@ kubectl, verify DOCR integration, and wait for ArgoCD to sync.`,
 	cmd.Flags().DurationVar(&syncTimeout, "sync-timeout", 10*time.Minute, "Timeout for ArgoCD sync wait (used with --save-kubeconfig)")
 
 	return cmd
-}
-
-// updateOpts groups the parameters for runUpdate.
-// ctx is always passed separately as the first argument.
-type updateOpts struct {
-	env            string
-	region         string
-	autoApprove    bool
-	saveKubeconfig bool
-	clusterName    string
-	syncTimeout    time.Duration
 }
 
 func runUpdate(ctx context.Context, opts updateOpts) error {

@@ -39,12 +39,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/riverqueue/river"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 

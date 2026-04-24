@@ -6,10 +6,10 @@ import (
 	"context"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
@@ -139,6 +139,26 @@ type renderL3Opts struct {
 	Embedder    embed.Embedder
 	WorkspaceID string
 	Query       string
+	Wing        string
+	Room        string
+	Limit       int
+}
+
+// formatMessagesOpts groups the parameters for formatMessages. ctx and sess
+// remain positional per the project session/opts/repo pattern.
+type formatMessagesOpts struct {
+	Msgs       []*orchestrator.Message
+	ListErr    *merrors.Error
+	Header     string
+	MaxTextLen int
+	Namer      AgentNamer
+}
+
+// renderL2Opts groups the parameters for renderL2. ctx and sess remain
+// positional per the project session/opts/repo pattern.
+type renderL2Opts struct {
+	DrawerRepo  drawerStore
+	WorkspaceID string
 	Wing        string
 	Room        string
 	Limit       int

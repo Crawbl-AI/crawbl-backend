@@ -12,6 +12,17 @@ const appSyncPollInterval = 15 * time.Second
 
 // type declarations
 
+// updateOpts groups the parameters for runUpdate.
+// ctx is always passed separately as the first argument.
+type updateOpts struct {
+	env            string
+	region         string
+	autoApprove    bool
+	saveKubeconfig bool
+	clusterName    string
+	syncTimeout    time.Duration
+}
+
 // planOutput is the JSON structure for --json output. CI parses this
 // instead of scraping human-readable text.
 type planOutput struct {

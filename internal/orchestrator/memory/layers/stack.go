@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // NewStack creates a new memory stack. The hybrid retrieval path uses the

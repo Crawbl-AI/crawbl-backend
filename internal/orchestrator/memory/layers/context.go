@@ -8,7 +8,6 @@ import (
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	memory "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
 // BuildContextForConversation returns the formatted context block that both
@@ -90,16 +89,6 @@ func capToRunes(s string, maxRunes int) string {
 		return s
 	}
 	return string(runes[:maxRunes])
-}
-
-// formatMessagesOpts groups the parameters for formatMessages. ctx and sess
-// remain positional per the project session/opts/repo pattern.
-type formatMessagesOpts struct {
-	Msgs       []*orchestrator.Message
-	ListErr    *merrors.Error
-	Header     string
-	MaxTextLen int
-	Namer      AgentNamer
 }
 
 // formatMessages renders the recent message list as a formatted string block.

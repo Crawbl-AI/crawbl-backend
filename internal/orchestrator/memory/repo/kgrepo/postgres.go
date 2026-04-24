@@ -44,15 +44,6 @@ func tripleID(subID, pred, objID string) string {
 	return fmt.Sprintf("t_%s_%s_%s_%x", subID, pred, objID, hash[:4])
 }
 
-// AddEntityOpts groups the parameters for AddEntity. ctx and sess remain
-// positional per the project session/opts/repo pattern.
-type AddEntityOpts struct {
-	WorkspaceID string
-	Name        string
-	EntityType  string
-	Properties  string
-}
-
 func (g *Postgres) AddEntity(ctx context.Context, sess database.SessionRunner, opts AddEntityOpts) (string, error) {
 	id := entityID(opts.Name)
 	now := time.Now().UTC()
@@ -134,15 +125,6 @@ func (g *Postgres) checkWorkspaceLimits(ctx context.Context, sess database.Sessi
 		return fmt.Errorf("kg: triple limit reached (%d)", memory.MaxTriplesPerWorkspace)
 	}
 	return nil
-}
-
-// findActiveTripleIDOpts groups the parameters for findActiveTripleID. ctx and
-// sess remain positional per the project session/opts/repo pattern.
-type findActiveTripleIDOpts struct {
-	WorkspaceID string
-	SubID       string
-	Predicate   string
-	ObjID       string
 }
 
 // findActiveTripleID returns the id of an existing active triple with the

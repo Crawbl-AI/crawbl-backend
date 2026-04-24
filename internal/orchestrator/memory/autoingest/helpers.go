@@ -10,18 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
-// buildDrawerOpts groups the parameters for buildDrawer. Work and
-// embedding are handled separately by the caller.
-type buildDrawerOpts struct {
-	Work       Work
-	Chunk      string
-	MemType    string
-	Room       string
-	Importance float64
-	Tier       string
-	State      string
-}
-
 // buildDrawer assembles the memory.Drawer row we are about to insert.
 // Tier and state are injected by the caller based on heuristic
 // confidence; see service.pickTier.

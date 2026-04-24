@@ -108,12 +108,12 @@ func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput,
 		}
 
 		results, err := deps.DrawerRepo.Search(ctx, sess, drawerrepo.SearchOpts{
-				WorkspaceID:    workspaceID,
-				QueryEmbedding: embedding,
-				Wing:           input.Wing,
-				Room:           input.Room,
-				Limit:          limit,
-			})
+			WorkspaceID:    workspaceID,
+			QueryEmbedding: embedding,
+			Wing:           input.Wing,
+			Room:           input.Room,
+			Limit:          limit,
+		})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -334,14 +334,6 @@ func classifyAndScore(deps *Deps, content string) (memoryType string, importance
 		}
 	}
 	return memoryType, importance
-}
-
-// reinforceSimilarOpts groups the parameters for reinforceSimilar.
-type reinforceSimilarOpts struct {
-	Deps        *Deps
-	WorkspaceID string
-	DrawerID    string
-	Embedding   []float32
 }
 
 // reinforceSimilar boosts the importance of existing drawers that are

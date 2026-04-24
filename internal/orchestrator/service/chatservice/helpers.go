@@ -12,9 +12,9 @@ import (
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // resolveToolAgentID resolves the agent DB ID for a tool call event.

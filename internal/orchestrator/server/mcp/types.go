@@ -10,7 +10,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
@@ -19,6 +18,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // Const declarations
@@ -452,3 +452,11 @@ func errorf(msg string) error {
 type staticError struct{ msg string }
 
 func (e *staticError) Error() string { return e.msg }
+
+// reinforceSimilarOpts groups the parameters for reinforceSimilar.
+type reinforceSimilarOpts struct {
+	Deps        *Deps
+	WorkspaceID string
+	DrawerID    string
+	Embedding   []float32
+}

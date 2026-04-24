@@ -7,13 +7,13 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // Consts.

@@ -11,8 +11,8 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // Server configuration constants defining default values for the orchestrator HTTP server.

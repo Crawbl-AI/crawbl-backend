@@ -18,11 +18,11 @@ import (
 	"github.com/alitto/pond/v2"
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
 // Service is the memory auto-ingest entry point used by chatservice.
@@ -123,6 +123,18 @@ const importanceScale = 5.0
 // sentenceBoundary splits text on sentence-ending punctuation followed by
 // whitespace. Compiled once at package init; this pattern is always valid.
 var sentenceBoundary = regexp.MustCompile(`([.!?])\s+`)
+
+// buildDrawerOpts groups the parameters for buildDrawer. Work and
+// embedding are handled separately by the caller.
+type buildDrawerOpts struct {
+	Work       Work
+	Chunk      string
+	MemType    string
+	Room       string
+	Importance float64
+	Tier       string
+	State      string
+}
 
 // drawerStore is the drawer subset the auto-ingest worker uses:
 // idempotent add for the hot path plus a duplicate-check probe before
