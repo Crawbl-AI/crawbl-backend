@@ -2,11 +2,8 @@ package socketio
 
 import (
 	"context"
-	"errors"
-	"log/slog"
 	"strings"
 
-	"github.com/gocraft/dbr/v2"
 	"github.com/zishang520/socket.io/v2/socket"
 
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
@@ -15,25 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
-
-// errInternalAnswersProcessing is the wire-safe fallback shown to clients when
-// a non-business error reaches the socket boundary. The detailed cause is
-// logged server-side and never leaked to the client.
-const errInternalAnswersProcessing = "failed to process answers"
-
-// errInvalidAnswersPayload is returned by parseMessageAnswersPayload when the
-// raw Socket.IO argument cannot be cast to map[string]any.
-var errInvalidAnswersPayload = errors.New("invalid answers payload")
-
-// answersHandler handles the message.answers Socket.IO event.
-// Service fields use the consumer-side interfaces declared in types.go
-// so this package never imports the producer AuthService/ChatService contracts.
-type answersHandler struct {
-	db          *dbr.Connection
-	chatService chatSender
-	authService authResolver
-	logger      *slog.Logger
-}
 
 // newAnswersHandler constructs an answersHandler from the shared Config.
 func newAnswersHandler(cfg *Config) *answersHandler {

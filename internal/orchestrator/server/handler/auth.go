@@ -14,8 +14,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
-const errInvalidRequestBody = "invalid request body"
-
 // HealthCheck returns the server health status and version.
 // This endpoint is unauthenticated and used by load balancers and monitoring
 // systems to verify the server is responsive.

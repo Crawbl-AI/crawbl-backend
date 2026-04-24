@@ -3,31 +3,9 @@ package chatservice
 import (
 	"errors"
 
-	"github.com/gocraft/dbr/v2"
-
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
-
-// Deps holds the infrastructure dependencies for a ChatService.
-// DB is required. Broadcaster defaults to a no-op when nil.
-// MemoryStack, PricingCache, UsagePublisher, and IngestPool are optional
-// and degrade gracefully when nil.
-type Deps struct {
-	DB             *dbr.Connection
-	Repos          Repos
-	RuntimeClient  userswarmclient.Client
-	Broadcaster    realtime.Broadcaster
-	MemoryStack    layers.Stack
-	PricingCache   *pricing.Cache
-	UsagePublisher *queue.UsagePublisher
-	IngestPool     autoingest.Service
-}
 
 // New creates a new ChatService with the provided dependencies.
 // DB is required for request sessions. MemoryStack may be nil; when nil,

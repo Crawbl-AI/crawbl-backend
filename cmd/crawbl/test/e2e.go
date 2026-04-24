@@ -29,13 +29,6 @@ func envInt(key string, fallback int) int {
 	return v
 }
 
-// portForward represents a running kubectl port-forward subprocess.
-type portForward struct {
-	cmd       *exec.Cmd
-	localPort int
-	label     string
-}
-
 // startPortForwards launches kubectl port-forward subprocesses for the
 // orchestrator, postgres, and redis services in the backend namespace.
 // Returns a cleanup function that kills all subprocesses.
@@ -92,12 +85,6 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 
 	return forwards[0].localPort, forwards[1].localPort, forwards[2].localPort, cleanup, nil
 }
-
-// dialTimeout is the per-attempt TCP dial timeout used by waitForPort.
-const dialTimeout = 500 * time.Millisecond
-
-// portPollInterval is how often waitForPort retries between dial attempts.
-const portPollInterval = 300 * time.Millisecond
 
 // waitForPort polls a TCP port until it accepts connections or ctx expires.
 func waitForPort(ctx context.Context, port int) error {

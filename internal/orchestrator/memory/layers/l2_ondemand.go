@@ -9,8 +9,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-const l2MaxSnippetLen = 300
-
 // renderL2 retrieves on-demand drawers filtered by wing/room.
 func renderL2(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, workspaceID, wing, room string, limit int) (string, error) {
 	if limit <= 0 {

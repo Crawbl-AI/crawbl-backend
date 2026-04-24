@@ -18,14 +18,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/release"
 )
 
-const (
-	RepoSlugBackend = "Crawbl-AI/crawbl-backend"
-	RepoSlugDocs    = "Crawbl-AI/crawbl-docs"
-	RepoSlugWebsite = "Crawbl-AI/crawbl-website"
-
-	gcDescription = "Run registry garbage collection after deploy (keep latest 5 per repo)"
-)
-
 func newDeployCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy [component]",
@@ -65,10 +57,6 @@ func addDockerDeployFlags(cmd *cobra.Command, tag *string, platform *string, arg
 	cmd.Flags().StringVar(platform, "platform", "linux/amd64", "Build platform")
 	cmd.Flags().StringVar(argocdRepo, "argocd-repo", "", "Path to crawbl-argocd-apps (default: sibling dir)")
 }
-
-// prodKubeContext is the kubectl context name for the production cluster.
-// Direct CLI deploys to this context are not allowed — use deploy-prod.yml in CI.
-const prodKubeContext = "do-fra1-crawbl-prod"
 
 // checkNotProdContext returns an error when the current kubectl context targets
 // the production cluster. Production deploys must go through GitHub CI only.
@@ -343,19 +331,6 @@ func runDeployAgentRuntime(ctx context.Context, tag, argocdRepo string, gc bool)
 		return runGC(ctx, defaultGCKeep, false)
 	}
 	return nil
-}
-
-// staticDeployOpts describes a Cloudflare Pages deploy for a static site repo.
-type staticDeployOpts struct {
-	Use         string
-	Short       string
-	Long        string
-	Example     string
-	RepoDir     string
-	RepoSlug    string
-	OutputDir   string
-	PagesName   string
-	PathDefault string
 }
 
 func newDeployDocsCommand() *cobra.Command {

@@ -33,6 +33,7 @@ linters:
     - unparam
     - wastedassign
     - whitespace
+    - typesfile
   exclusions:
     rules:
       - path: _test\.go
@@ -42,6 +43,14 @@ linters:
           - gocognit
           - cyclop
           - mnd
+      # Kubernetes CRD types follow kubebuilder conventions (*_types.go, groupversion_info.go).
+      - path: api/
+        linters:
+          - typesfile
+      # The linter's own code is exempt.
+      - path: tools/lint/
+        linters:
+          - typesfile
     paths:
       - .cache
       - .artifacts
@@ -99,6 +108,10 @@ linters:
     staticcheck:
       checks:
         - all
+    custom:
+      typesfile:
+        type: module
+        description: "Enforces type/const/var declarations in types.go"
 
 formatters:
   enable:

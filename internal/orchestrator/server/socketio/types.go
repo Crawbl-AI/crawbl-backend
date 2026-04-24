@@ -4,6 +4,7 @@ package socketio
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // socketSession holds per-socket cancellation state for in-flight dispatch goroutines.
@@ -150,6 +152,9 @@ type Broadcaster struct {
 	logger *slog.Logger
 }
 
+// Compile-time interface satisfaction check.
+var _ realtime.Broadcaster = (*Broadcaster)(nil)
+
 // Socket event names for chat messaging over WebSocket.
 const (
 	eventMessageSend    = "message.send"
@@ -225,4 +230,57 @@ type messageAnswersErrPayload struct {
 	LocalID   string `json:"local_id"`
 	MessageID string `json:"message_id"`
 	Error     string `json:"error"`
+}
+
+// errInternalAnswersProcessing is the wire-safe fallback shown to clients when
+// a non-business error reaches the socket boundary. The detailed cause is
+// logged server-side and never leaked to the client.
+const errInternalAnswersProcessing = "failed to process answers"
+
+// errInvalidAnswersPayload is returned by parseMessageAnswersPayload when the
+// raw Socket.IO argument cannot be cast to map[string]any.
+var errInvalidAnswersPayload = errors.New("invalid answers payload")
+
+// answersHandler handles the message.answers Socket.IO event.
+// Service fields use the consumer-side interfaces declared in types.go
+// so this package never imports the producer AuthService/ChatService contracts.
+type answersHandler struct {
+	db          *dbr.Connection
+	chatService chatSender
+	authService authResolver
+	logger      *slog.Logger
+}
+
+// messageHandler holds the dependencies for handling message.send events.
+// Service fields use the consumer-side interfaces declared in types.go
+// so this package never imports the producer AuthService/ChatService/
+// WorkspaceService contracts.
+type messageHandler struct {
+	db               *dbr.Connection
+	chatService      chatSender
+	authService      authResolver
+	workspaceService workspaceAuthorizer
+	logger           *slog.Logger
+}
+
+// workspaceSubscribeHandlerOpts groups the inputs for registerWorkspaceSubscribeHandler.
+type workspaceSubscribeHandlerOpts struct {
+	socket        *socket.Socket
+	sd            *socketData
+	logger        *slog.Logger
+	subject       string
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
+}
+
+// resolveAuthorisedWorkspacesOpts groups the inputs for resolveAuthorisedWorkspaces.
+type resolveAuthorisedWorkspacesOpts struct {
+	logger        *slog.Logger
+	socket        *socket.Socket
+	userSubject   string
+	ids           []string
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
 }

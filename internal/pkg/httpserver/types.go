@@ -25,6 +25,8 @@ const (
 	ContentTypeJSON = "application/json"
 	// BearerPrefix is the Bearer token prefix.
 	BearerPrefix = "Bearer "
+
+	headerContentType = "Content-Type"
 )
 
 // successResponseEnvelope wraps successful responses in a data envelope.

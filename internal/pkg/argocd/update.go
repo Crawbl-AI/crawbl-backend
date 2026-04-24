@@ -1,4 +1,3 @@
-// Package argocd provides helpers for updating image tags in crawbl-argocd-apps.
 package argocd
 
 import (
@@ -11,20 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
-
-const (
-	// RegistryBase is the DigitalOcean container registry base URL.
-	RegistryBase = "registry.digitalocean.com/crawbl"
-
-	// fileMode is the permission bits used when writing updated YAML files.
-	fileMode = 0o644
-)
-
-// Update holds state for updating image tags in crawbl-argocd-apps.
-type Update struct {
-	RepoPath string
-	Tag      string
-}
 
 // RunYQ executes yq -i with the given expression against a file path (relative to RepoPath).
 func (u *Update) RunYQ(ctx context.Context, expr, relPath string) error {

@@ -11,41 +11,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// messageReader is the narrow message-repo contract BuildContextForConversation
-// requires. Defined at the consumer per project convention.
-type messageReader interface {
-	ListRecent(ctx context.Context, sess database.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
-}
-
-// AgentNamer resolves a display name for an agent ID. Implementations may
-// use a pre-built in-memory map (chatservice) or a live repo lookup
-// (mcpservice). Return ("", false) when the agent is unknown.
-type AgentNamer interface {
-	AgentName(ctx context.Context, sess database.SessionRunner, agentID string) (name string, ok bool)
-}
-
-// BuildContextOpts controls optional behaviour of BuildContextForConversation.
-type BuildContextOpts struct {
-	// MaxTextLen caps the per-message text length before truncation (default 500).
-	MaxTextLen int
-	// Header is prepended to the recent-messages block. When empty the default
-	// "## Conversation Context\nRecent messages (oldest first):\n\n" is used.
-	Header string
-}
-
-// BuildContextParams groups the required (non-optional) parameters for
-// BuildContextForConversation. ctx and sess remain positional per the project
-// session/opts/repo pattern.
-type BuildContextParams struct {
-	Stack          Stack
-	Messages       messageReader
-	Namer          AgentNamer
-	WorkspaceID    string
-	ConversationID string
-	Limit          int
-	Opts           BuildContextOpts
-}
-
 // BuildContextForConversation returns the formatted context block that both
 // ChatService and MCPService prepend to LLM prompts. It performs the
 // memory-layer wake-up (L0+L1), appends recent messages, and caps the result

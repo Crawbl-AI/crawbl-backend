@@ -8,8 +8,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-const headerContentType = "Content-Type"
-
 // WriteSuccessResponse writes a JSON success response with the given status code and data.
 // The response is wrapped in a success envelope: {"data": <data>}.
 // This function sets the Content-Type header to application/json and logs encoding errors.

@@ -1,6 +1,7 @@
-version: v1.62.2
+version: v2.9.0
 name: crawbl-lint
 destination: ./bin
 plugins:
   - module: github.com/Crawbl-AI/crawbl-backend
+    import: github.com/Crawbl-AI/crawbl-backend/tools/lint/typesfile
     path: .

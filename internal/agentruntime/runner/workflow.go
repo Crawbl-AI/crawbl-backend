@@ -31,31 +31,11 @@ package runner
 import (
 	"fmt"
 
-	adkagent "google.golang.org/adk/agent"
 	adkmodel "google.golang.org/adk/model"
 	adktool "google.golang.org/adk/tool"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/agents"
 )
-
-// Graph holds the constructed root agent plus references to the
-// sub-agents in case the caller needs to log individual agent
-// telemetry. The root is what the gRPC Converse handler runs on
-// every user turn.
-type Graph struct {
-	// Root is the entry point for every user turn. Always the Manager
-	// agent; the Manager routes to Wally/Eve via ADK's transfer_to_agent
-	// flow based on the user's intent.
-	Root adkagent.Agent
-
-	// Manager, Wally, Eve are the individual agents in the graph.
-	// Exposed so telemetry and blueprint refresh code can target them
-	// by name. Callers should not invoke them directly — always go
-	// through Root.
-	Manager adkagent.Agent
-	Wally   adkagent.Agent
-	Eve     adkagent.Agent
-}
 
 // BuildGraph constructs the three-agent graph from a model.LLM, an
 // optional MCP toolset, and a WorkspaceBlueprint. The blueprint

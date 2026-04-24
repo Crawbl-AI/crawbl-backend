@@ -12,44 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-const errAgentIDOrSlugRequired = "agent_id or agent_slug is required"
-
-type createArtifactInput struct {
-	Title          string `json:"title" jsonschema:"the title of the artifact"`
-	Content        string `json:"content" jsonschema:"the initial content of the artifact"`
-	ContentType    string `json:"content_type,omitempty" jsonschema:"MIME type of the content (default: text/markdown)"`
-	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation to associate the artifact with"`
-	AgentID        string `json:"agent_id,omitempty" jsonschema:"UUID of the agent creating the artifact (fast path)"`
-	AgentSlug      string `json:"agent_slug,omitempty" jsonschema:"slug of the agent creating the artifact"`
-	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type readArtifactInput struct {
-	ArtifactID  string `json:"artifact_id" jsonschema:"the ID of the artifact to read"`
-	Version     int    `json:"version,omitempty" jsonschema:"specific version to read (default: latest)"`
-	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type updateArtifactInput struct {
-	ArtifactID      string `json:"artifact_id" jsonschema:"the ID of the artifact to update"`
-	Content         string `json:"content" jsonschema:"the new content for the artifact"`
-	ChangeSummary   string `json:"change_summary,omitempty" jsonschema:"a brief summary of what changed"`
-	ExpectedVersion int    `json:"expected_version,omitempty" jsonschema:"for optimistic locking — update fails if current version differs"`
-	AgentID         string `json:"agent_id,omitempty" jsonschema:"UUID of the agent making the update (fast path)"`
-	AgentSlug       string `json:"agent_slug,omitempty" jsonschema:"slug of the agent making the update"`
-	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type reviewArtifactInput struct {
-	ArtifactID  string `json:"artifact_id" jsonschema:"the ID of the artifact to review"`
-	Outcome     string `json:"outcome" jsonschema:"review outcome: approved, changes_requested, or commented"`
-	Comments    string `json:"comments" jsonschema:"review comments explaining the outcome"`
-	Version     int    `json:"version,omitempty" jsonschema:"specific version to review (default: current)"`
-	AgentID     string `json:"agent_id,omitempty" jsonschema:"UUID of the reviewing agent (fast path)"`
-	AgentSlug   string `json:"agent_slug,omitempty" jsonschema:"slug of the reviewing agent"`
-	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
 // newCreateArtifactHandler returns the MCP tool handler for the create_artifact tool.
 func newCreateArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[createArtifactInput, *mcpv1.CreateArtifactToolOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input createArtifactInput) (*sdkmcp.CallToolResult, *mcpv1.CreateArtifactToolOutput, error) {

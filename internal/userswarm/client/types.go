@@ -16,11 +16,15 @@ package client
 
 import (
 	"context"
+	"sync"
 	"time"
+
+	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
 // AgentTurn represents a single agent's contribution in a multi-agent
@@ -259,4 +263,43 @@ type Client interface {
 // configurable prefix.
 type fakeClient struct {
 	replyPrefix string
+}
+
+// readyConditionType is the condition the UserSwarm webhook sets on a
+// CR once the runtime pod passes its gRPC health check.
+const readyConditionType = "Ready"
+
+// userSwarmClient is the production implementation of Client. It owns:
+//   - a controller-runtime Kubernetes client for CR management
+//   - the resolved UserSwarmConfig for this deployment environment
+//   - a *crawblgrpc.Pool that caches workspace gRPC connections with
+//     single-flight dial, keepalive, and HMAC per-RPC credentials
+//
+// The zero value is not usable; always construct via NewUserSwarmClient.
+type userSwarmClient struct {
+	client      k8sclient.Client
+	config      UserSwarmConfig
+	grpcPool    *crawblgrpc.Pool
+	cache       *runtimeCache
+	cacheCancel context.CancelFunc
+}
+
+// runtimeCacheTTL is how long a cached RuntimeStatus is considered fresh.
+// 15 seconds balances API call reduction (~95%) with status freshness.
+const runtimeCacheTTL = 15 * time.Second
+
+// sweepInterval is how often the background goroutine prunes expired entries.
+const sweepInterval = 60 * time.Second
+
+// runtimeCache is a simple TTL-based cache mapping workspace IDs to their
+// last-known RuntimeStatus. It is safe for concurrent use. A background
+// sweep goroutine prunes expired entries to prevent unbounded growth.
+type runtimeCache struct {
+	mu      sync.RWMutex
+	entries map[string]runtimeCacheEntry
+}
+
+type runtimeCacheEntry struct {
+	status    *orchestrator.RuntimeStatus
+	expiresAt time.Time
 }

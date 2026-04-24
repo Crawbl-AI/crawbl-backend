@@ -14,9 +14,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 )
 
-// Ensure redis implements Client at compile time.
-var _ Client = (*redis)(nil)
-
 // ConfigFromEnv builds a Config from environment variables using the given prefix.
 // It reads:
 //   - {prefix}REDIS_ADDR     (default: "localhost:6379")

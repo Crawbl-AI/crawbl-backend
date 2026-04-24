@@ -11,16 +11,6 @@ import (
 	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 )
 
-type userProfileInput struct {
-	IncludePreferences bool   `json:"include_preferences,omitempty" jsonschema:"include user preferences in response"`
-	Description        string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type workspaceInfoInput struct {
-	IncludeAgents bool   `json:"include_agents,omitempty" jsonschema:"include agent list in response"`
-	Description   string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
 func newUserProfileHandler(deps *Deps) sdkmcp.ToolHandlerFor[userProfileInput, *mcpv1.UserProfileOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, _ string, input userProfileInput) (*sdkmcp.CallToolResult, *mcpv1.UserProfileOutput, error) {
 		RecordAPICall(ctx, "DB:SELECT users WHERE id="+userID)

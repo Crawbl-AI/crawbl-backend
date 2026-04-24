@@ -33,6 +33,9 @@ type SessionRunner interface {
 	DeleteFrom(table string) *dbr.DeleteStmt
 }
 
+// sessionKey is the unexported context key for the per-request database session.
+type sessionKey struct{}
+
 // Default database connection configuration values.
 // These are used when environment variables are not set.
 const (

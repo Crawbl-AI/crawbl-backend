@@ -31,18 +31,6 @@ func wrapNotImplemented(name string) error {
 	return &notImplementedError{name: name}
 }
 
-type notImplementedError struct {
-	name string
-}
-
-func (e *notImplementedError) Error() string {
-	return "tool " + e.name + ": " + ErrNotImplemented.Error()
-}
-
-func (e *notImplementedError) Unwrap() error {
-	return ErrNotImplemented
-}
-
 // StubbedToolNames enumerates the catalog tools that currently fall through
 // to CallNotImplementedTool. It is used by US-AR-008's agent wiring to bind
 // every stubbed tool in one loop without hard-coding the list in workflow.go.

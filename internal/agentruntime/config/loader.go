@@ -12,11 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
-// envPrefix is the common prefix used for every environment variable
-// this binary reads. Matches the orchestrator's CRAWBL_* convention so
-// a single .env file can drive both processes locally or in the cluster.
-const envPrefix = "CRAWBL_"
-
 // Load parses configuration from CLI flags first, then fills unset fields
 // from environment variables, then fills remaining gaps from DefaultConfig.
 //

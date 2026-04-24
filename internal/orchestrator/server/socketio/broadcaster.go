@@ -17,9 +17,6 @@ func NewBroadcaster(io *socket.Server, logger *slog.Logger) *Broadcaster {
 	}
 }
 
-// Compile-time interface satisfaction check.
-var _ realtime.Broadcaster = (*Broadcaster)(nil)
-
 // EmitToWorkspace sends a named event with payload to all clients in a workspace room.
 func (b *Broadcaster) EmitToWorkspace(_ context.Context, workspaceID string, event string, data any) {
 	room := socket.Room(workspaceRoomPrefix + workspaceID)

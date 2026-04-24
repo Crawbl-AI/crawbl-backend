@@ -11,22 +11,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
 
-const maxGraphResults = 50
-
-// frontier tracks a BFS cursor through the palace room graph.
-type frontier struct {
-	room  string
-	depth int
-}
-
-// Postgres is the palace-graph repository backed by PostgreSQL. It
-// implements repo.PalaceGraphRepo; the per-workspace room-node aggregation
-// is cached in Redis so repeated Traverse / FindTunnels / GraphStats calls
-// reuse the same projection instead of re-scanning memory_drawers.
-type Postgres struct {
-	cache *graphCache
-}
-
 // NewPostgres returns a palace-graph repository backed by Postgres. Pass a
 // non-nil redisclient.Client to enable the shared TTL cache; nil disables
 // caching entirely and every call hits Postgres directly.
@@ -34,14 +18,6 @@ func NewPostgres(redis redisclient.Client, logger *slog.Logger) *Postgres {
 	return &Postgres{
 		cache: newGraphCache(redis, logger),
 	}
-}
-
-// drawerMeta is a scan target for the aggregation query.
-type drawerMeta struct {
-	Room string `db:"room"`
-	Wing string `db:"wing"`
-	Hall string `db:"hall"`
-	Cnt  int    `db:"cnt"`
 }
 
 func (g *Postgres) buildNodes(ctx context.Context, sess database.SessionRunner, workspaceID string) (map[string]*RoomNode, error) {

@@ -24,28 +24,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/telemetry"
 )
 
-// Log preview length constants for structured log fields.
-const (
-	// previewLenArgs is the max runes for tool-call args previews.
-	previewLenArgs = 120
-	// previewLenMessage is the max runes for user message previews.
-	previewLenMessage = 120
-	// previewLenReply is the max runes for agent reply previews.
-	previewLenReply = 160
-)
-
-// converseHandler implements runtimev1.AgentRuntimeServer.Converse as
-// a bidi stream that forwards each ConverseRequest to the ADK runner
-// and translates each session.Event yielded back into a ConverseEvent
-// oneof. This is the hot path of the runtime — every user turn flows
-// through here.
-type converseHandler struct {
-	runtimev1.UnimplementedAgentRuntimeServer
-	logger  *slog.Logger
-	runner  *runner.Runner
-	metrics *telemetry.TurnMetrics
-}
-
 // newConverseHandler wires the handler against an already-constructed
 // runner.Runner. main.go calls this after building the runner; the
 // gRPC server wraps the result in a chain that includes the HMAC
@@ -140,21 +118,6 @@ func (h *converseHandler) handleConverseRequest(stream runtimev1.AgentRuntime_Co
 	return h.runOneTurn(stream, principal, sessionID, req.GetSystemPrompt(), req.GetAgentId(), message)
 }
 
-// turnState accumulates per-turn observations (model version, final
-// text, tool calls, partial chunks, authoring agents) so the single
-// "turn complete" log line at the end carries the full story.
-type turnState struct {
-	targetAgent  string
-	modelName    string
-	finalAgent   string
-	finalText    string
-	finalSeen    bool
-	partialCount int
-	toolCalls    []string
-	authors      map[string]int
-	callSequence int32
-}
-
 func newTurnState(targetAgent string) *turnState {
 	return &turnState{
 		targetAgent: targetAgent,
@@ -215,17 +178,6 @@ func (h *converseHandler) runOneTurn(
 		turns:       turns,
 		start:       start,
 	})
-}
-
-// drainOpts groups the inputs for drainRunnerEvents.
-type drainOpts struct {
-	stream       runtimev1.AgentRuntime_ConverseServer
-	principal    crawblgrpc.Identity
-	sessionID    string
-	systemPrompt string
-	targetAgent  string
-	message      string
-	state        *turnState
 }
 
 // drainRunnerEvents iterates all ADK events for one turn, translating each
@@ -300,18 +252,6 @@ func (h *converseHandler) processContentEvent(
 		}
 	}
 	return nil
-}
-
-// turnDoneOpts groups the inputs for sendTurnDone.
-type turnDoneOpts struct {
-	stream      runtimev1.AgentRuntime_ConverseServer
-	principal   crawblgrpc.Identity
-	sessionID   string
-	targetAgent string
-	message     string
-	state       *turnState
-	turns       []*runtimev1.Turn
-	start       time.Time
 }
 
 // sendTurnDone synthesises the terminal DoneEvent, logs turn completion,

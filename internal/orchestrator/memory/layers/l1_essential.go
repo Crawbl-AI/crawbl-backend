@@ -11,14 +11,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-const (
-	l1MaxDrawers  = 15
-	l1MaxChars    = memory.TokenBudgetL1
-	maxSnippetLen = 200
-)
-
-const l1TruncationNote = "\n  ... (more in L3 search)"
-
 // renderL1 generates the essential story from top drawers.
 func renderL1(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, workspaceID, wing string) string {
 	drawers, err := drawerRepo.GetTopByImportance(ctx, sess, workspaceID, wing, l1MaxDrawers)

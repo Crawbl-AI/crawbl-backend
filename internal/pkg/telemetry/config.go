@@ -7,21 +7,6 @@ import (
 	"time"
 )
 
-// Env var names Crawbl binaries read to populate a Config. The
-// CRAWBL_OTEL_* namespace keeps them separate from the upstream
-// OTEL_EXPORTER_OTLP_* conventions so our two signal pipelines
-// (metrics to VictoriaMetrics, logs to VictoriaLogs via Fluent Bit)
-// can be configured independently.
-const (
-	EnvEnabled        = "CRAWBL_OTEL_ENABLED"
-	EnvEndpoint       = "CRAWBL_OTEL_METRICS_ENDPOINT"
-	EnvServiceName    = "CRAWBL_OTEL_SERVICE_NAME"
-	EnvServiceVersion = "CRAWBL_OTEL_SERVICE_VERSION"
-	EnvEnvironment    = "CRAWBL_OTEL_ENVIRONMENT"
-	EnvNamespace      = "CRAWBL_OTEL_NAMESPACE"
-	EnvExportInterval = "CRAWBL_OTEL_EXPORT_INTERVAL"
-)
-
 // ConfigFromEnv returns a Config populated from the CRAWBL_OTEL_*
 // environment variables. defaultServiceName is the binary identifier
 // the caller wants used when CRAWBL_OTEL_SERVICE_NAME is empty.

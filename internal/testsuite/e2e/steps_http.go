@@ -126,7 +126,7 @@ func (tc *testContext) interpolatePath(path string) string {
 
 // doRequest is a helper that sends a request and returns the body as string.
 // Used by setup steps that don't care about assertions.
-func (tc *testContext) doRequest(method, path, alias string, body any) (string, error) {
+func (tc *testContext) doRequest(method, path, alias string, body any) (string, error) { //nolint:unparam // body kept for POST/PUT steps
 	path = tc.interpolatePath(path)
 	url := tc.cfg.BaseURL + path
 

@@ -10,43 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
 )
 
-// FileReadOptions is the argument shape for the file_read tool.
-type FileReadOptions struct {
-	// Key is the object key the user (or orchestrator) stored the
-	// file under. Examples: "uploads/trip-itinerary.md",
-	// "notes/2026-04-05.txt". Slashes are allowed.
-	Key string `json:"key"`
-}
-
-// FileReadResult is the tool output. Content is returned as text
-// when the blob's MIME type is textual; otherwise the handler wraps
-// it as base64 so the LLM can at least see the file exists and
-// decide how to react. Keeping the result struct flat helps the
-// LLM cite the source in its reply.
-type FileReadResult struct {
-	Key         string `json:"key"`
-	Content     string `json:"content"`
-	ContentType string `json:"content_type"`
-	Encoding    string `json:"encoding"` // "text" or "base64"
-	SizeBytes   int    `json:"size_bytes"`
-}
-
-// FileWriteOptions is the argument shape for the file_write tool.
-type FileWriteOptions struct {
-	Key         string `json:"key"`
-	Content     string `json:"content"`
-	ContentType string `json:"content_type,omitempty"`
-}
-
-// FileWriteResult echoes the full object key so the LLM has a stable
-// pointer it can refer back to in subsequent turns.
-type FileWriteResult struct {
-	Key         string `json:"key"`
-	ObjectKey   string `json:"object_key"`
-	ContentType string `json:"content_type,omitempty"`
-	SizeBytes   int    `json:"size_bytes"`
-}
-
 // FileRead fetches an object from Spaces, scoped to the runtime
 // pod's workspace. The workspace ID is captured at tool construction
 // time (see agents.NewFileReadTool) so agents cannot read another

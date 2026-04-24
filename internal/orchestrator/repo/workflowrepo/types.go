@@ -66,8 +66,23 @@ const (
 	WorkflowTriggeredByAgent WorkflowTriggeredBy = "agent"
 )
 
+const whereID = "id = ?"
+
 // workflowRepo is the PostgreSQL implementation of the Repo interface.
 type workflowRepo struct{}
+
+// workflowInsertPair is one column/value pair in an ordered insert. Using
+// a slice instead of a map preserves dbr.Pair ordering across helpers.
+type workflowInsertPair struct {
+	Col string
+	Val any
+}
+
+// workflowSet is one column/value pair in an ordered UPDATE ... SET list.
+type workflowSet struct {
+	Col string
+	Val any
+}
 
 // WorkflowDefinitionRow represents a database row for the workflow_definitions table.
 type WorkflowDefinitionRow struct {

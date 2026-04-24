@@ -7,36 +7,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
-
-const (
-	// DefaultDialTimeout caps the time a single gRPC dial attempt will
-	// block before returning an error.
-	DefaultDialTimeout = 5 * time.Second
-
-	// DefaultCallTimeout bounds the duration of a non-streaming gRPC
-	// call (e.g. Memory RPCs). Streaming calls use the request's own
-	// context deadline.
-	DefaultCallTimeout = 90 * time.Second
-
-	// keepaliveIntervalSeconds is the idle ping interval in seconds.
-	keepaliveIntervalSeconds = 30
-)
-
-// DefaultClientKeepalive is the keepalive parameters every crawbl-backend
-// gRPC client should install via grpc.WithKeepaliveParams when dialing
-// long-lived peer connections (like the per-workspace runtime pods).
-var DefaultClientKeepalive = keepalive.ClientParameters{
-	Time:                keepaliveIntervalSeconds * time.Second,
-	Timeout:             10 * time.Second,
-	PermitWithoutStream: true,
-}
 
 // ClusterTarget builds a Kubernetes in-cluster DNS target for gRPC dialing.
 // Format: "<service>.<namespace>.svc.cluster.local:<port>"
@@ -62,17 +37,6 @@ func NewInsecureHMACPool(signingKey string) *Pool {
 	return NewPool(dial)
 }
 
-// Identity is the two-part (subject, object) pair carried on every
-// authenticated gRPC RPC between crawbl-backend components. Subject is
-// typically the user ID, Object is the workspace ID.
-type Identity struct {
-	Subject string
-	Object  string
-}
-
-// identityKey is the private context key for Identity values.
-type identityKey struct{}
-
 // WithIdentity stamps an Identity onto the context so that HMACCredentials
 // can sign the bearer header automatically.
 func WithIdentity(ctx context.Context, id Identity) context.Context {
@@ -84,13 +48,6 @@ func WithIdentity(ctx context.Context, id Identity) context.Context {
 func IdentityFromContext(ctx context.Context) (Identity, bool) {
 	v, ok := ctx.Value(identityKey{}).(Identity)
 	return v, ok
-}
-
-// HMACCredentials is a grpc/credentials.PerRPCCredentials that signs every
-// outbound RPC with an HMAC bearer token via internal/pkg/hmac.
-type HMACCredentials struct {
-	signingKey string
-	requireTLS bool
 }
 
 // NewHMACCredentials builds credentials with the given shared key.
@@ -128,8 +85,6 @@ func (c *HMACCredentials) RequireTransportSecurity() bool {
 	}
 	return c.requireTLS
 }
-
-var _ credentials.PerRPCCredentials = (*HMACCredentials)(nil)
 
 // FormatProtoTimestamp renders a google.protobuf.Timestamp to an RFC3339
 // UTC string. Returns "" for nil or zero timestamps.

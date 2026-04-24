@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// pollInterval is the fixed polling interval used by pollUntil.
-const pollInterval = 1 * time.Second
-
 // pollUntil calls fn every pollInterval until it returns nil or ctx expires.
 // Returns the last error from fn if the context deadline is reached.
 func pollUntil(ctx context.Context, fn func() error) error {

@@ -11,8 +11,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
-const crawblLintBin = "./bin/crawbl-lint"
-
 func newFmtCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "fmt",

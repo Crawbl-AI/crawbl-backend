@@ -14,10 +14,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
-// defaultGCKeep is the number of latest tags to retain per repository when
-// GC runs automatically after a deploy.
-const defaultGCKeep = 5
-
 func newGCCommand() *cobra.Command {
 	var (
 		keep   int
@@ -43,18 +39,6 @@ Requires doctl to be installed and authenticated.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Log what would be deleted without making changes")
 
 	return cmd
-}
-
-// gcRepo represents a repository returned by doctl registry repository list-v2.
-type gcRepo struct {
-	Name string `json:"name"`
-}
-
-// gcTag represents a single tag returned by doctl registry repository list-tags.
-type gcTag struct {
-	Tag            string    `json:"tag"`
-	ManifestDigest string    `json:"manifest_digest"`
-	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func runGC(ctx context.Context, keep int, dryRun bool) error {

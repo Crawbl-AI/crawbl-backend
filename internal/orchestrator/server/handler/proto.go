@@ -6,25 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
-
-// protoMarshaler is the shared protojson marshal options for all proto
-// responses. UseProtoNames emits snake_case field names matching the
-// proto definitions and current JSON wire format.
-var protoMarshaler = protojson.MarshalOptions{
-	UseProtoNames:   true,
-	EmitUnpopulated: true,
-}
-
-// protoUnmarshaler is the shared protojson unmarshal options for all
-// proto request bodies. DiscardUnknown allows forward-compatible clients.
-var protoUnmarshaler = protojson.UnmarshalOptions{
-	DiscardUnknown: true,
-}
 
 // WriteProtoSuccess writes a protobuf message wrapped in the standard
 // {"data": ...} envelope. It uses protojson for proto-canonical field
@@ -60,11 +45,6 @@ func WriteProtoArraySuccess(w http.ResponseWriter, status int, msgs []proto.Mess
 		slog.Error("failed to write proto array envelope", slog.String("error", err.Error()))
 	}
 }
-
-// maxProtoBodySize is the upper bound for request bodies decoded by
-// DecodeProtoJSON. Requests larger than 1 MiB are silently truncated,
-// which causes an unmarshal error — preventing OOM from oversized payloads.
-const maxProtoBodySize = 1 << 20 // 1 MiB
 
 // DecodeProtoJSON reads JSON from the request body and unmarshals it
 // into a proto message using protojson (DiscardUnknown enabled).

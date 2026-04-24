@@ -12,9 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 )
 
-// MaxMessageTextLength is the maximum allowed byte length for a chat message text.
-const MaxMessageTextLength = 32 * 1024
-
 // ConversationToProto converts a domain Conversation to the proto response.
 func ConversationToProto(conversation *orchestrator.Conversation) *mobilev1.ConversationResponse {
 	resp := &mobilev1.ConversationResponse{

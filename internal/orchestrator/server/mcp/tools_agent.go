@@ -10,15 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-type createAgentHistoryInput struct {
-	AgentID        string `json:"agent_id,omitempty"`
-	AgentSlug      string `json:"agent_slug,omitempty"`
-	ConversationID string `json:"conversation_id,omitempty"`
-	Title          string `json:"title"`
-	Subtitle       string `json:"subtitle,omitempty"`
-	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
 func newCreateAgentHistoryHandler(deps *Deps) sdkmcp.ToolHandlerFor[createAgentHistoryInput, *mcpv1.CreateAgentHistoryOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createAgentHistoryInput) (*sdkmcp.CallToolResult, *mcpv1.CreateAgentHistoryOutput, error) {
 		if input.Title == "" {

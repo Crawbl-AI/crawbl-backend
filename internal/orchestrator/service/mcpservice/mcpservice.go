@@ -5,31 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gocraft/dbr/v2"
-
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 )
-
-// Convenience type aliases to keep method signatures short.
-type (
-	contextT = context.Context
-	sessionT = *dbr.Session
-)
-
-// Sentinel errors returned by the service.
-var errWorkspaceNotFound = errors.New("workspace not found")
-
-// service implements the Service interface.
-type service struct {
-	repos       Repos
-	infra       Infra
-	memoryStack layers.Stack
-	// spawnWorkflow launches a workflow execution in a background goroutine
-	// tied to the server-lifetime context. It captures shutdownCtx via closure
-	// so the service struct does not store a context.Context field.
-	spawnWorkflow func(executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
-}
 
 // New creates a new MCP service, returning an error if any required dependency
 // is nil. memoryStack may be nil; when nil, context building falls back to

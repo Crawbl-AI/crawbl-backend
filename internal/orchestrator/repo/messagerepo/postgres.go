@@ -2,7 +2,6 @@ package messagerepo
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,24 +11,6 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-)
-
-const (
-	whereID             = "id = ?"
-	whereConversationID = "conversation_id = ?"
-)
-
-// messageStatusOrderingCASE builds the SQL CASE expression for monotonic status ordering.
-// Higher ordinals prevent downgrades to lower-status states.
-var messageStatusOrderingCASE = fmt.Sprintf(
-	"CASE status WHEN '%s' THEN 0 WHEN '%s' THEN 1 WHEN '%s' THEN 2 WHEN '%s' THEN 3 WHEN '%s' THEN 99 WHEN '%s' THEN 99 WHEN '%s' THEN 99 ELSE -1 END",
-	orchestrator.MessageStatusPending,
-	orchestrator.MessageStatusSent,
-	orchestrator.MessageStatusDelivered,
-	orchestrator.MessageStatusRead,
-	orchestrator.MessageStatusFailed,
-	orchestrator.MessageStatusIncomplete,
-	orchestrator.MessageStatusSilent,
 )
 
 // New creates a new MessageRepo instance backed by PostgreSQL.
@@ -386,17 +367,6 @@ ON CONFLICT (id) DO UPDATE SET
 	}
 
 	return nil
-}
-
-// RecordDelegationOpts groups the fields for RecordDelegation. ctx and sess
-// remain positional per the project session/opts/repo pattern.
-type RecordDelegationOpts struct {
-	WorkspaceID      string
-	ConversationID   string
-	TriggerMsgID     string
-	DelegatorAgentID string
-	DelegateAgentID  string
-	TaskSummary      string
 }
 
 // RecordDelegation inserts an agent_delegations row to track when one agent

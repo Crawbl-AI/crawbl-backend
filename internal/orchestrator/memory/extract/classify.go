@@ -8,24 +8,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/config"
 )
 
-const (
-	minSegmentLenForBonus = 200
-	confidenceDivisor     = 5.0
-	defaultChunkSize      = 25
-)
-
-type classifier struct {
-	markers          map[string][]*regexp.Regexp
-	positive         map[string]bool
-	negative         map[string]bool
-	resolvers        []*regexp.Regexp
-	codeLines        []*regexp.Regexp
-	blockquote       *regexp.Regexp
-	humanSpeaker     *regexp.Regexp
-	assistantSpeaker *regexp.Regexp
-	wordTokenizer    *regexp.Regexp
-}
-
 // NewClassifier returns a heuristic memory classifier.
 // Patterns are loaded from the embedded classify_patterns.json config.
 // If config loading fails, it panics — this is a programmer error (missing embedded file).

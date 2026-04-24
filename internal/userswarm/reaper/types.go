@@ -47,7 +47,16 @@
 // cutoff logic before a first production deployment.
 package reaper
 
-import "time"
+import (
+	"log/slog"
+	"time"
+
+	"github.com/gocraft/dbr/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	crawblv1alpha1 "github.com/Crawbl-AI/crawbl-backend/api/v1alpha1"
+	"github.com/Crawbl-AI/crawbl-backend/internal/userswarm/reaper/reaperrepo"
+)
 
 // Config holds the parameters that control a single reaper run.
 //
@@ -92,4 +101,15 @@ type Result struct {
 	// individual operations fail, so a non-zero Errors value does not mean
 	// the entire run failed — just that some resources may need manual cleanup.
 	Errors int
+}
+
+// processStaleSwarmOpts groups the inputs for processStaleSwarm.
+type processStaleSwarmOpts struct {
+	k8sClient        client.Client
+	sess             *dbr.Session
+	repo             *reaperrepo.Repo
+	logger           *slog.Logger
+	swarm            *crawblv1alpha1.UserSwarm
+	softDeletedUsers map[string]struct{}
+	dryRun           bool
 }

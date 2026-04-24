@@ -17,61 +17,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
-// pendingToolCall tracks a ToolCallEvent so we can resolve the tool name,
-// agent, and parsed args when the matching ToolResultEvent arrives.
-// agentResult holds the outcome of a parallel agent call in swarm mode.
-type agentResult struct {
-	replies []*orchestrator.Message
-	err     *merrors.Error
-}
-
-type pendingToolCall struct {
-	tool      string       // e.g. agentruntimetools.ToolTransferToAgent
-	agentSlug string       // agent slug from the ToolCallEvent (e.g. "manager")
-	args      toolCallArgs // parsed args — reused on ToolResult for delegation resolution
-	messageID string       // persisted tool_status message ID for updating on completion
-}
-
-// agentSilentResponse is the sentinel text agents return when they have nothing to say.
-const agentSilentResponse = "[SILENT]"
-
-// taskPreviewMaxRunes caps the delegation task_preview field.
-const taskPreviewMaxRunes = 120
-
-// mapNamer is a layers.AgentNamer backed by a pre-built agent-by-ID map.
-// It never performs a DB lookup — the map is populated once per request from
-// the workspace roster, so AgentName is always O(1).
-type mapNamer map[string]*orchestrator.Agent
-
-// AgentName satisfies layers.AgentNamer using the in-memory lookup map.
-func (m mapNamer) AgentName(_ context.Context, _ database.SessionRunner, agentID string) (string, bool) {
-	if a, ok := m[agentID]; ok && a != nil {
-		return a.Name, true
-	}
-	return "", false
-}
-
-// subAgentStream tracks a placeholder message and accumulated text for a single
-// agent_id seen during a multi-agent streaming response (Phase 5).
-type subAgentStream struct {
-	agent       *orchestrator.Agent
-	placeholder *orchestrator.Message
-	accumulated strings.Builder
-	chunkCount  int
-	firstChunk  bool
-	done        bool // received a StreamEventDone for this agent_id
-}
-
-// toolCallArgs is the result of parsing a tool call's raw JSON args once.
-// Returned by parseToolCallArgs and consumed by the streaming loop to
-// populate the agent.tool event (query + args) and delegation tracking.
-type toolCallArgs struct {
-	// Parsed is the full JSON args as a typed map for the mobile l10n layer.
-	Parsed map[string]any
-	// Query is the human-readable primary arg extracted via ToolQueryField.
-	Query string
-}
-
 // resolveToolAgentID resolves the agent DB ID for a tool call event.
 func resolveToolAgentID(primary *orchestrator.Agent, lookups agentLookups, chunkAgentSlug string) string {
 	if chunkAgentSlug != "" {

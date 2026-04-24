@@ -11,12 +11,6 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-type agentLookups struct {
-	byID    map[string]*orchestrator.Agent
-	bySlug  map[string]*orchestrator.Agent
-	manager *orchestrator.Agent
-}
-
 // ListAgents retrieves all agents for a workspace with current runtime status.
 func (s *Service) ListAgents(ctx context.Context, opts *orchestratorservice.ListAgentsOpts) ([]*orchestrator.Agent, *merrors.Error) {
 	if opts == nil {

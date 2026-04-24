@@ -5,47 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/gocraft/dbr/v2"
-
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 )
-
-const (
-	// enrichBatchSize caps how many drawers are enriched per sweep so a
-	// backlog spike cannot monopolise the worker.
-	enrichBatchSize = 100
-)
-
-var (
-	// enrichPerDrawerTimeout bounds the single-drawer LLM extract call so
-	// one slow upstream response cannot stall the whole batch.
-	enrichPerDrawerTimeout = defaults.MediumTimeout
-)
-
-// EnrichDeps holds dependencies for the memory enrichment sweep. It
-// deliberately mirrors ProcessDeps so jobs/process.go helpers can be
-// reused where practical. Repo fields are consumer-side interfaces from
-// ports.go.
-type EnrichDeps struct {
-	DB            *dbr.Connection
-	DrawerRepo    DrawerStore
-	KGRepo        KGStore
-	LLMClassifier extract.LLMClassifier
-	Logger        *slog.Logger
-}
-
-// EnrichResult reports one sweep's outcome for metrics + log lines.
-// A "remaining backlog" counter is deliberately absent — computing it
-// accurately requires a separate COUNT(*) query that is not worth the
-// extra round-trip per sweep. Operators can read backlog size directly
-// from the idx_drawers_enrich partial index if needed.
-type EnrichResult struct {
-	Processed int
-	Skipped   int
-}
 
 // RunEnrich drains up to enrichBatchSize processed-but-unenriched
 // drawers, extracts entities + triples with the LLM, and updates the

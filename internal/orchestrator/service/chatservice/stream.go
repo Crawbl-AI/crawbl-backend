@@ -3,62 +3,16 @@ package chatservice
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
-
-	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
-	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
-
-// streamSession owns all mutable state for one callAgentStreaming invocation.
-// Created at the start of the streaming call, methods on this struct replace
-// the 7-8 parameter functions that previously threaded context through the pipeline.
-type streamSession struct {
-	svc          *Service
-	sess         *dbr.Session
-	wsID         string
-	userID       string
-	convID       string
-	conversation *orchestrator.Conversation
-	primary      *orchestrator.Agent
-	lookups      agentLookups
-	placeholder  *orchestrator.Message
-	streams      map[string]*subAgentStream
-	pending      map[string]pendingToolCall
-	log          *slog.Logger
-
-	// User message tracking (moved from SendMessageOpts mutation).
-	userMessageID string
-	localID       string
-	deliveredOnce *sync.Once
-	readOnce      *sync.Once
-	onPersisted   func(*orchestrator.Message)
-
-	// Stream metrics.
-	startTime   time.Time
-	totalChunks int
-	globalDone  bool
-	firstChunk  bool
-}
-
-// newStreamSessionOpts groups the inputs for newStreamSession.
-type newStreamSessionOpts struct {
-	svc         *Service
-	sendOpts    *orchestratorservice.SendMessageOpts
-	pm          *persistedMsg
-	conv        *orchestrator.Conversation
-	agent       *orchestrator.Agent
-	lookups     agentLookups
-	placeholder *orchestrator.Message
-}
 
 func newStreamSession(ctx context.Context, o newStreamSessionOpts) *streamSession {
 	return &streamSession{
@@ -84,17 +38,6 @@ func newStreamSession(ctx context.Context, o newStreamSessionOpts) *streamSessio
 		startTime:  time.Now(),
 		firstChunk: true,
 	}
-}
-
-// callAgentStreamingOpts groups the inputs for callAgentStreaming.
-type callAgentStreamingOpts struct {
-	sendOpts     *orchestratorservice.SendMessageOpts
-	pm           *persistedMsg
-	conversation *orchestrator.Conversation
-	runtimeState *orchestrator.RuntimeStatus
-	agent        *orchestrator.Agent
-	lookups      agentLookups
-	extraContext string
 }
 
 // callAgentStreaming handles a single agent's streaming gRPC call.

@@ -8,6 +8,51 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
+// artifactRepo is the PostgreSQL implementation of the Repo interface.
+type artifactRepo struct{}
+
+var artifactColumns = []any{
+	"id",
+	"workspace_id",
+	"conversation_id",
+	"title",
+	"content_type",
+	"current_version",
+	"status",
+	"created_by_agent_id",
+	"created_at",
+	"updated_at",
+}
+
+var versionColumns = []any{
+	"id",
+	"artifact_id",
+	"version",
+	"content",
+	"change_summary",
+	"agent_id",
+	"agent_slug",
+	"created_at",
+}
+
+var reviewColumns = []any{
+	"id",
+	"artifact_id",
+	"version",
+	"reviewer_agent_id",
+	"reviewer_agent_slug",
+	"outcome",
+	"comments",
+	"created_at",
+}
+
+// artifactInsertPair is one column/value pair in an ordered insert. Using
+// a slice instead of a map preserves dbr.Pair ordering across helpers.
+type artifactInsertPair struct {
+	Col string
+	Val any
+}
+
 // ArtifactStatus represents the lifecycle state of an artifact.
 type ArtifactStatus string
 

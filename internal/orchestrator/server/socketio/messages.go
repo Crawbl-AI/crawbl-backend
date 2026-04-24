@@ -2,28 +2,14 @@ package socketio
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
-	"github.com/gocraft/dbr/v2"
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
-
-// messageHandler holds the dependencies for handling message.send events.
-// Service fields use the consumer-side interfaces declared in types.go
-// so this package never imports the producer AuthService/ChatService/
-// WorkspaceService contracts.
-type messageHandler struct {
-	db               *dbr.Connection
-	chatService      chatSender
-	authService      authResolver
-	workspaceService workspaceAuthorizer
-	logger           *slog.Logger
-}
 
 // handleMessageSend processes a message.send event from the Socket.IO client.
 // It validates the authenticated principal, creates a DB session, converts the

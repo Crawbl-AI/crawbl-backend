@@ -6,22 +6,7 @@ import (
 	"strings"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
-
-const l3MaxSnippetLen = 300
-
-// renderL3Opts groups the parameters for renderL3. ctx and sess remain
-// positional per the project session/opts/repo pattern.
-type renderL3Opts struct {
-	DrawerRepo  drawerStore
-	Embedder    embed.Embedder
-	WorkspaceID string
-	Query       string
-	Wing        string
-	Room        string
-	Limit       int
-}
 
 // renderL3 performs semantic search and formats results.
 func renderL3(ctx context.Context, sess database.SessionRunner, opts renderL3Opts) (string, error) {

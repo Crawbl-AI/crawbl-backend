@@ -34,7 +34,7 @@ func NewFCMClient(projectID, serviceAccountPath string) (*FCMClient, error) {
 	app, err := firebase.NewApp(
 		ctx,
 		&firebase.Config{ProjectID: projectID},
-		option.WithCredentialsJSON(credJSON),
+		option.WithCredentialsJSON(credJSON), //nolint:staticcheck // no replacement available yet
 	)
 	if err != nil {
 		return nil, fmt.Errorf("firebase: initialising admin app: %w", err)

@@ -133,12 +133,6 @@ func (s *Service) EnsureDefaultWorkspace(ctx context.Context, opts *orchestrator
 //
 // Returns a slice of workspace pointers on success, or a merrors.Error
 // if the input is invalid or the repository operation fails.
-// workspaceRuntimeParallelism caps the number of concurrent EnsureRuntime
-// calls when listing workspaces. Each call hits the K8s API, so bounded
-// parallelism converts O(n * rtt) latency to O(n/cap * rtt) without
-// unbounded goroutine growth.
-const workspaceRuntimeParallelism = 5
-
 func (s *Service) ListByUserID(ctx context.Context, opts *orchestratorservice.ListWorkspacesOpts) ([]*orchestrator.Workspace, *merrors.Error) {
 	if opts == nil {
 		return nil, merrors.ErrInvalidInput

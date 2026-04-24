@@ -1,29 +1,14 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/configenv"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/gitutil"
 )
-
-var (
-	registryBase = configenv.StringOr("CRAWBL_REGISTRY", "registry.digitalocean.com/crawbl")
-
-	buildPlatformImageRepo     = registryBase + "/crawbl-platform"
-	buildAgentRuntimeImageRepo = registryBase + "/crawbl-agent-runtime"
-	buildAuthFilterImageRepo   = registryBase + "/envoy-auth-filter"
-	buildAuthFilterDockerfile  = "dockerfiles/envoy-auth-filter.dockerfile"
-	buildAuthFilterContext     = "cmd/envoy-auth-filter"
-
-	buildDocsRepoDir    = "crawbl-docs"
-	buildWebsiteRepoDir = "crawbl-website"
-)
-
-const errTagRequired = "--tag is required"
 
 func newBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -62,7 +47,7 @@ func newBuildPlatformCommand() *cobra.Command {
   crawbl app build platform --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf(errTagRequired)
+				return errors.New(errTagRequired)
 			}
 			return runKoBuild(cmd.Context(), koBuildOpts{
 				importPath:   "./cmd/crawbl",
@@ -92,7 +77,7 @@ func newBuildAgentRuntimeCommand() *cobra.Command {
   crawbl app build agent-runtime --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf(errTagRequired)
+				return errors.New(errTagRequired)
 			}
 			return runKoBuild(cmd.Context(), koBuildOpts{
 				importPath: "./cmd/crawbl-agent-runtime",
@@ -122,7 +107,7 @@ func newBuildAuthFilterCommand() *cobra.Command {
   crawbl app build auth-filter --tag latest --push`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if tag == "" {
-				return fmt.Errorf(errTagRequired)
+				return errors.New(errTagRequired)
 			}
 			rootDir, err := gitutil.RootDir()
 			if err != nil {

@@ -157,9 +157,6 @@ func waitForController(ctx context.Context, timeout time.Duration) error {
 	)
 }
 
-// appSyncPollInterval is how often to check ArgoCD application sync status.
-const appSyncPollInterval = 15 * time.Second
-
 // waitForAppsSync polls ArgoCD applications until all are Synced/Healthy or timeout.
 func waitForAppsSync(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

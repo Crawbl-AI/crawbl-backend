@@ -13,37 +13,10 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/defaults"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/ptr"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
-
-// MaxWorkflowDuration caps the total wall-clock time for a single workflow
-// execution. 30 minutes is well above the longest expected agent chain
-// (real workflows complete in seconds to a few minutes), while still ensuring
-// a stuck or runaway workflow is cancelled before leaking resources past the
-// pod's SIGTERM grace window. Tune this if workflows grow beyond ~100 steps.
-const MaxWorkflowDuration = 30 * time.Minute
-
-var (
-	// WorkflowCleanupTimeout is the time budget for post-failure DB writes when
-	// the workflow context has already been cancelled.
-	WorkflowCleanupTimeout = defaults.ShortTimeout
-)
-
-// workflowEmitter wraps the realtime broadcaster for a single workflow
-// execution. It captures workspaceID + definition + executionID once so
-// per-call sites only need to pass the event name and optional extra
-// payload fields.
-type workflowEmitter struct {
-	broadcaster    realtime.Broadcaster
-	workspaceID    string
-	workflowID     string
-	workflowName   string
-	executionID    string
-	conversationID string
-}
 
 // newWorkflowEmitter constructs a workflowEmitter bound to one execution.
 func newWorkflowEmitter(b realtime.Broadcaster, workspaceID string, def *workflowrepo.WorkflowDefinitionRow, exec *workflowrepo.WorkflowExecutionRow) *workflowEmitter {
@@ -193,18 +166,6 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 	emitter.Completed(ctx)
 }
 
-// executeWorkflowStepOpts groups the inputs for executeWorkflowStep.
-type executeWorkflowStepOpts struct {
-	sess        *dbr.Session
-	executionID string
-	i           int
-	step        workflowrepo.WorkflowStep
-	workflowCtx map[string]string
-	execution   *workflowrepo.WorkflowExecutionRow
-	emitter     *workflowEmitter
-	runtime     *orchestrator.RuntimeStatus
-}
-
 // executeWorkflowStep runs a single workflow step and updates state in-place.
 // Returns true when the caller should stop the loop (fatal failure handled internally).
 func (s *service) executeWorkflowStep(ctx context.Context, o executeWorkflowStepOpts) bool {
@@ -334,20 +295,6 @@ func (s *service) handleStepApproval(
 	if mErr := s.workflowRepo.UpdateStepExecution(ctx, sess, stepExec); mErr != nil {
 		slog.Warn("ExecuteWorkflow: failed to set step approved", "execution_id", executionID, "step", i, "error", mErr.Error())
 	}
-}
-
-// handleStepFailureOpts groups the inputs for handleStepFailure.
-type handleStepFailureOpts struct {
-	sess        *dbr.Session
-	executionID string
-	i           int
-	step        workflowrepo.WorkflowStep
-	stepExec    *workflowrepo.WorkflowStepExecutionRow
-	execution   *workflowrepo.WorkflowExecutionRow
-	emitter     *workflowEmitter
-	callErr     error
-	durationMs  int
-	completedAt time.Time
 }
 
 // handleStepFailure updates state after a step runtime call fails.

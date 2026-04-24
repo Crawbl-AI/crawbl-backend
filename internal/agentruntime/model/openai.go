@@ -11,7 +11,6 @@
 package model
 
 import (
-	"errors"
 	"strings"
 
 	genaiopenai "github.com/achetronic/adk-utils-go/genai/openai"
@@ -19,12 +18,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
 )
-
-// ErrOpenAIAPIKeyMissing is returned when config.Validate has been skipped
-// and the constructor is called with an empty APIKey. It's safe to return
-// the zero Config from tests, but production construction always goes
-// through config.Load + Validate which rejects a missing key earlier.
-var ErrOpenAIAPIKeyMissing = errors.New("openai: APIKey is required (set OPENAI_API_KEY env var or config.OpenAI.APIKey)")
 
 // NewOpenAI constructs a model.LLM backed by the official OpenAI Go SDK via
 // the adk-utils-go adapter. BaseURL is optional — when empty, the adapter

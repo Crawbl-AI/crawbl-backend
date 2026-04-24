@@ -14,21 +14,6 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-// maxAgentDepth is the maximum depth for agent-to-agent chains.
-const maxAgentDepth = 3
-
-// delegationPreviewMaxRunes caps the preview text on delegation socket events.
-const delegationPreviewMaxRunes = 100
-
-// agentMessageMaxStoredBytes caps the response_text column on agent_messages.
-const agentMessageMaxStoredBytes = 32768
-
-// agentMessageTruncatedMarker is appended when a response exceeds the column budget.
-const agentMessageTruncatedMarker = "\n[truncated]"
-
-// contextMessageLimit is the number of recent messages to include as context.
-const contextMessageLimit = 20
-
 func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAgentMessageParams) (*SendAgentMessageResult, error) {
 	if s.infra.RuntimeClient == nil {
 		return &SendAgentMessageResult{Error: "agent messaging not configured on this server"}, nil
@@ -78,16 +63,6 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	})
 }
 
-// prepareOpts groups the inputs for prepareAgentMessage.
-type prepareOpts struct {
-	params      *SendAgentMessageParams
-	slug        string
-	fromAgent   *orchestrator.Agent
-	targetAgent *orchestrator.Agent
-	callingSlug string
-	message     string
-}
-
 // prepareAgentMessage checks the depth limit and inserts the agent_messages row.
 // Returns the new message ID, or an error when the depth limit is exceeded.
 func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareOpts) (string, error) {
@@ -126,17 +101,6 @@ func (s *service) prepareAgentMessage(ctx contextT, sess sessionT, opts prepareO
 		)
 	}
 	return msgID, nil
-}
-
-// callRuntimeOpts groups the inputs for callAgentRuntime.
-type callRuntimeOpts struct {
-	params      *SendAgentMessageParams
-	slug        string
-	fromAgent   *orchestrator.Agent
-	targetAgent *orchestrator.Agent
-	callingSlug string
-	message     string
-	msgID       string
 }
 
 // callAgentRuntime ensures the runtime is ready, sends the message, and handles
@@ -248,19 +212,6 @@ func resolveAgents(agents []*orchestrator.Agent, slug, sessionID string) (target
 		return nil, nil, callingSlug, "an agent cannot send a message to itself"
 	}
 	return target, from, callingSlug, ""
-}
-
-// failAgentMessageOpts groups the inputs for failAgentMessage.
-type failAgentMessageOpts struct {
-	ctx            contextT
-	sess           sessionT
-	msgID          string
-	errText        string
-	durationMs     int64
-	workspaceID    string
-	from           *orchestrator.Agent
-	to             *orchestrator.Agent
-	conversationID string
 }
 
 // failAgentMessage marks an agent_messages row as failed and emits a delegation-done event.

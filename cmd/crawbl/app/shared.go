@@ -13,15 +13,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
-// koBuildOpts holds parameters for a ko build.
-type koBuildOpts struct {
-	importPath   string // Go import path, e.g. "./cmd/crawbl"
-	imageRepo    string // full image name, e.g. "registry.digitalocean.com/crawbl/crawbl-platform"
-	tag          string
-	push         bool
-	buildVersion string // injected as KO_BUILD_VERSION for ldflags template
-}
-
 // runKoBuild executes ko build with the given options.
 func runKoBuild(ctx context.Context, opts koBuildOpts) error {
 	koPath, err := exec.LookPath("ko")
@@ -60,16 +51,6 @@ func runKoBuild(ctx context.Context, opts koBuildOpts) error {
 		out.Success("Built %s locally", imageRef)
 	}
 	return nil
-}
-
-// dockerBuildOpts holds parameters for a docker buildx build (auth-filter only).
-type dockerBuildOpts struct {
-	imageRepo  string
-	dockerfile string
-	contextDir string
-	tag        string
-	platform   string
-	push       bool
 }
 
 // runDockerBuild executes docker buildx build for the auth-filter WASM image.

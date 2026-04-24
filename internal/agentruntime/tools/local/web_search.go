@@ -9,36 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
-)
-
-// WebSearchOptions is the argument shape for the web_search_tool. The
-// LLM passes these as a JSON object; the runner marshals it into this
-// struct before calling WebSearch.
-type WebSearchOptions struct {
-	// Query is the free-text search query. Required.
-	Query string `json:"query"`
-	// MaxResults caps how many results are returned. Defaults to
-	// DefaultWebSearchMaxResults when zero; ceiling is
-	// MaxWebSearchMaxResults regardless of caller request.
-	MaxResults int `json:"max_results,omitempty"`
-}
-
-// WebSearchResult is the typed result row the tool emits. The LLM
-// sees one of these per hit plus enough content to cite the source.
-type WebSearchResult struct {
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Snippet string `json:"snippet"`
-	Engine  string `json:"engine"`
-}
-
-// Conservative defaults keep the tool output small enough that the
-// LLM context budget stays usable after a multi-tool agent turn.
-const (
-	DefaultWebSearchMaxResults = 5
-	MaxWebSearchMaxResults     = 15
-	defaultWebSearchTimeout    = 10 * time.Second
 )
 
 // WebSearch executes a meta-search query against a SearXNG instance
@@ -147,19 +117,4 @@ func filterSearchResults(raw []searxngResult, maxResults int) []WebSearchResult 
 		})
 	}
 	return out
-}
-
-// searxngResponse is the minimal subset of the SearXNG JSON API we
-// consume. The real payload has many more fields (suggestions,
-// infoboxes, unresponsive_engines, answers); we ignore everything
-// except the result list.
-type searxngResponse struct {
-	Results []searxngResult `json:"results"`
-}
-
-type searxngResult struct {
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Content string `json:"content"`
-	Engine  string `json:"engine"`
 }

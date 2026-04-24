@@ -112,26 +112,6 @@ func buildAgentBlueprint(r *http.Request, c *Context, userID, workspaceID string
 	return b
 }
 
-// internalWorkspaceBlueprint is the wire shape returned by
-// GET /v1/internal/agents. Field names MUST match
-// internal/agentruntime/runner/blueprint.go WorkspaceBlueprint so the
-// runtime decodes the response directly. Keeping the type private to
-// this file (no export) because the only valid consumer is the
-// runtime's blueprint client.
-type internalWorkspaceBlueprint struct {
-	WorkspaceID string                   `json:"workspace_id"`
-	Agents      []internalAgentBlueprint `json:"agents"`
-}
-
-type internalAgentBlueprint struct {
-	Slug         string   `json:"slug"`
-	Role         string   `json:"role"`
-	SystemPrompt string   `json:"system_prompt"`
-	Description  string   `json:"description"`
-	AllowedTools []string `json:"allowed_tools"`
-	Model        string   `json:"model"`
-}
-
 // decodeBearerIdentity extracts an HMAC bearer token from the request
 // and returns the (userID, workspaceID) it encodes. Matches the scheme
 // used by internal/orchestrator/mcp/server.go:66 so runtime pods can

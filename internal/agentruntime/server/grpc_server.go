@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"time"
 
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -13,58 +12,9 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/config"
-	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/runner"
 	runtimev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/agentruntime/v1"
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
-
-// gRPC server tuning constants. Named to satisfy the mnd linter.
-const (
-	serverMaxConnectionIdle     = 5 * time.Minute
-	serverMaxConnectionAge      = 30 * time.Minute
-	serverMaxConnectionAgeGrace = 10 * time.Second
-	serverKeepaliveTime         = 30 * time.Second
-	serverKeepaliveTimeout      = 10 * time.Second
-	serverMinKeepaliveTime      = 15 * time.Second
-	serverMaxConcurrentStreams  = 32
-)
-
-// Server is the top-level gRPC server wrapper for crawbl-agent-runtime.
-// It owns the net.Listener, the *grpc.Server, the HealthServer, and
-// holds a reference to the injected runner so Shutdown can tear it
-// down in the correct order. main.go constructs one Server via New(),
-// calls Start() in a goroutine, and Shutdown() on SIGTERM.
-//
-// Every piece of generic gRPC infrastructure (HMAC auth interceptor,
-// graceful shutdown, PerRPC credentials symmetry with the client)
-// lives in internal/pkg/grpc. This package only contains
-// agentruntime-specific wiring: the Server struct, the Converse
-// service handler, and the HealthServer lifecycle.
-type Server struct {
-	cfg      config.Config
-	logger   *slog.Logger
-	listener net.Listener
-	grpcSrv  *grpc.Server
-	health   *HealthServer
-	runner   *runner.Runner
-
-	// lifecycleCancel cancels the context passed to net.Listen in Start,
-	// bounding the listener bring-up to the Server's own lifetime.
-	// Cancelled on Shutdown so an in-progress net.Listen call (e.g. on a
-	// slow DNS resolution) unblocks cleanly instead of hanging forever.
-	lifecycleCancel context.CancelFunc
-}
-
-// Deps bundles the dependencies main.go constructs before calling New.
-// Passing them through a single struct keeps the server package free
-// of direct Redis / model imports and makes the dependency graph
-// obvious at the wiring site.
-type Deps struct {
-	// Runner drives Converse turns. Required.
-	Runner *runner.Runner
-	// Logger for the server. If nil, slog.Default() is used.
-	Logger *slog.Logger
-}
 
 // New wires a Server ready to Start(). It installs the shared
 // internal/pkg/grpc HMAC auth interceptor, registers the health +

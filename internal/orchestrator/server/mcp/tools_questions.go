@@ -10,30 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-type askQuestionsInput struct {
-	AgentID        string             `json:"agent_id,omitempty"        jsonschema:"UUID of the asking agent (fast path)"`
-	AgentSlug      string             `json:"agent_slug,omitempty"      jsonschema:"slug of the asking agent"`
-	ConversationID string             `json:"conversation_id,omitempty" jsonschema:"optional; defaults to the current conversation if the runtime provided it — agents should not set this"`
-	Turns          []askQuestionsTurn `json:"turns"                     jsonschema:"ordered list of turn groups"`
-	Description    string             `json:"description,omitempty"     jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type askQuestionsTurn struct {
-	Label     string                 `json:"label,omitempty"`
-	Questions []askQuestionsQuestion `json:"questions"`
-}
-
-type askQuestionsQuestion struct {
-	Prompt      string               `json:"prompt"`
-	Mode        string               `json:"mode"                   jsonschema:"single or multi"`
-	Options     []askQuestionsOption `json:"options"                jsonschema:"2-26 options"`
-	AllowCustom bool                 `json:"allow_custom,omitempty" jsonschema:"whether the user may also provide free-text input (default false)"`
-}
-
-type askQuestionsOption struct {
-	Label string `json:"label"`
-}
-
 // newAskQuestionsHandler returns the MCP tool handler for the ask_questions tool.
 func newAskQuestionsHandler(deps *Deps) sdkmcp.ToolHandlerFor[askQuestionsInput, *mcpv1.AskQuestionsToolOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, input askQuestionsInput) (*sdkmcp.CallToolResult, *mcpv1.AskQuestionsToolOutput, error) {

@@ -12,46 +12,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-type artifactRepo struct{}
-
 // New creates a new artifact Repo instance backed by PostgreSQL.
 func New() *artifactRepo {
 	return &artifactRepo{}
-}
-
-var artifactColumns = []any{
-	"id",
-	"workspace_id",
-	"conversation_id",
-	"title",
-	"content_type",
-	"current_version",
-	"status",
-	"created_by_agent_id",
-	"created_at",
-	"updated_at",
-}
-
-var versionColumns = []any{
-	"id",
-	"artifact_id",
-	"version",
-	"content",
-	"change_summary",
-	"agent_id",
-	"agent_slug",
-	"created_at",
-}
-
-var reviewColumns = []any{
-	"id",
-	"artifact_id",
-	"version",
-	"reviewer_agent_id",
-	"reviewer_agent_slug",
-	"outcome",
-	"comments",
-	"created_at",
 }
 
 // Create inserts a new artifact row into the artifacts table.
@@ -150,11 +113,6 @@ func (r *artifactRepo) IncrementVersion(ctx context.Context, sess orchestratorre
 // dbr.Pair in insertion order; callers pass a *pairs slice* to preserve
 // column ordering, since maps are unordered in Go. Returns nil on both
 // fresh insert and duplicate PK.
-type artifactInsertPair struct {
-	Col string
-	Val any
-}
-
 func insertArtifactChildIdempotent(ctx context.Context, sess orchestratorrepo.SessionRunner, table, opLabel string, pairs []artifactInsertPair) *merrors.Error {
 	stmt := sess.InsertInto(table)
 	for _, p := range pairs {

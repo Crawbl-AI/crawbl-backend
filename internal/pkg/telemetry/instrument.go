@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -17,16 +16,6 @@ import (
 // provider is a no-op in that case and the instruments silently drop.
 func Meter(scope string) metric.Meter {
 	return otel.Meter("crawbl/" + scope)
-}
-
-// TurnMetrics is a small bundle of counters and histograms for the
-// agent-runtime's per-turn hot path. Build it once at startup and
-// call Record on every completed turn. Concurrent-safe.
-type TurnMetrics struct {
-	turns    metric.Int64Counter
-	duration metric.Float64Histogram
-	once     sync.Once
-	err      error
 }
 
 // NewTurnMetrics lazily builds the instruments the first time it is

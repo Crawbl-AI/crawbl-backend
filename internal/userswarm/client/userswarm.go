@@ -30,25 +30,6 @@ import (
 	crawblgrpc "github.com/Crawbl-AI/crawbl-backend/internal/pkg/grpc"
 )
 
-// readyConditionType is the condition the UserSwarm webhook sets on a
-// CR once the runtime pod passes its gRPC health check.
-const readyConditionType = "Ready"
-
-// userSwarmClient is the production implementation of Client. It owns:
-//   - a controller-runtime Kubernetes client for CR management
-//   - the resolved UserSwarmConfig for this deployment environment
-//   - a *crawblgrpc.Pool that caches workspace gRPC connections with
-//     single-flight dial, keepalive, and HMAC per-RPC credentials
-//
-// The zero value is not usable; always construct via NewUserSwarmClient.
-type userSwarmClient struct {
-	client      k8sclient.Client
-	config      UserSwarmConfig
-	grpcPool    *crawblgrpc.Pool
-	cache       *runtimeCache
-	cacheCancel context.CancelFunc
-}
-
 // NewUserSwarmClient constructs the production Kubernetes-backed Client.
 //
 // Setup steps:

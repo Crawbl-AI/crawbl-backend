@@ -26,39 +26,6 @@ import (
 	readability "codeberg.org/readeck/go-readability/v2"
 )
 
-// ErrNotImplemented is returned by local tool stubs that exist only to
-// satisfy the catalog-registration path in US-AR-005. Phase 1 uses this
-// sentinel so that agents calling a stub tool during the e2e gate
-// (US-AR-014) get a deterministic, typed error instead of a panic.
-var ErrNotImplemented = errors.New("tool not implemented in Phase 1")
-
-// WebFetchOptions is the argument shape for the web_fetch tool. The
-// LLM passes these as a JSON object; the runner marshals it into this
-// struct before calling WebFetch.
-type WebFetchOptions struct {
-	// URL is the absolute HTTP(S) URL to fetch. Required.
-	URL string `json:"url"`
-	// MaxBytes caps the response body the tool will read. Defaults to
-	// DefaultWebFetchMaxBytes when zero.
-	MaxBytes int64 `json:"max_bytes,omitempty"`
-	// TimeoutSeconds bounds the full HTTP round-trip. Defaults to
-	// DefaultWebFetchTimeoutSeconds when zero.
-	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
-}
-
-// Conservative defaults protect the runtime process from unbounded
-// responses or slow servers. Agents can override per call via the
-// options struct, but the ceilings apply.
-const (
-	DefaultWebFetchMaxBytes       int64 = 200 * 1024 // 200 KB
-	DefaultWebFetchTimeoutSeconds int   = 10
-	MaxWebFetchTimeoutSeconds     int   = 60
-
-	// MaxToolOutputChars caps the final string returned to the LLM.
-	// 30K chars ≈ 7.5K tokens — keeps tool results within context budget.
-	MaxToolOutputChars = 30000
-)
-
 // WebFetch executes the web_fetch tool: HTTP GET the URL, read up to
 // MaxBytes of response body, return as a string. The context cancels the
 // request if the agent's run is interrupted. Errors from the fetch are
