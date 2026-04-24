@@ -128,6 +128,11 @@ type Config struct {
 	// the server runs without TLS (single-cluster dev mode). When set,
 	// the server serves gRPC over mTLS for prod hybrid cross-cluster traffic.
 	TLS TLSConfig
+
+	// EnableReflection enables gRPC server reflection for debugging tools
+	// (grpcurl, evans). Disabled by default in production to reduce
+	// information disclosure surface. Defaults to true for dev.
+	EnableReflection bool
 }
 
 // SpacesConfig carries the DigitalOcean Spaces client settings the

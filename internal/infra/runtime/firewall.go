@@ -10,9 +10,14 @@ import (
 // createFirewall provisions a Hetzner Cloud firewall with rules for SSH, K8s API,
 // HTTP/HTTPS inbound, and essential outbound traffic.
 func createFirewall(ctx *pulumi.Context, name string, cfg RuntimeConfig) (*hcloud.Firewall, error) {
+	k8sAPICIDRs := cfg.Hetzner.K8sAPIAllowedCIDRs
+	if len(k8sAPICIDRs) == 0 {
+		k8sAPICIDRs = cfg.Hetzner.SSHAllowedCIDRs
+	}
+
 	inbound := hcloud.FirewallRuleArray{
 		buildInboundRule("allow-ssh", "22", "tcp", cfg.Hetzner.SSHAllowedCIDRs),
-		buildInboundRule("allow-k8s-api", "6443", "tcp", cfg.Hetzner.SSHAllowedCIDRs),
+		buildInboundRule("allow-k8s-api", "6443", "tcp", k8sAPICIDRs),
 		buildInboundRule("allow-http", "80", "tcp", []string{"0.0.0.0/0", "::/0"}),
 		buildInboundRule("allow-https", "443", "tcp", []string{"0.0.0.0/0", "::/0"}),
 	}

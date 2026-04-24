@@ -49,8 +49,11 @@ type HetznerConfig struct {
 	Image string
 	// Location is the Hetzner datacenter (e.g. "fsn1").
 	Location string
-	// SSHAllowedCIDRs restricts SSH and K8s API access to these CIDR ranges.
+	// SSHAllowedCIDRs restricts SSH access to these CIDR ranges.
 	SSHAllowedCIDRs []string
+	// K8sAPIAllowedCIDRs restricts Kubernetes API (6443) access. When empty,
+	// falls back to SSHAllowedCIDRs for backward compatibility.
+	K8sAPIAllowedCIDRs []string
 	// SSHKeyNames are the names of Hetzner SSH keys to attach to the server.
 	SSHKeyNames []string
 }
@@ -104,7 +107,8 @@ type StackHetznerConfig struct {
 	Image              string   `yaml:"image"`
 	Location           string   `yaml:"location"`
 	SSHAllowedCIDRs    []string `yaml:"sshAllowedCIDRs"`
-	SSHKeyNames []string `yaml:"sshKeyNames"`
+	K8sAPIAllowedCIDRs []string `yaml:"k8sAPIAllowedCIDRs"`
+	SSHKeyNames        []string `yaml:"sshKeyNames"`
 }
 
 // StackK3sConfig is the YAML form of k3s installation settings.
@@ -122,7 +126,8 @@ func ConfigFromStack(env, region string, sc StackRuntimeConfig, platformCfg plat
 		Image:              sc.Hetzner.Image,
 		Location:           sc.Hetzner.Location,
 		SSHAllowedCIDRs:    sc.Hetzner.SSHAllowedCIDRs,
-		SSHKeyNames: sc.Hetzner.SSHKeyNames,
+		K8sAPIAllowedCIDRs: sc.Hetzner.K8sAPIAllowedCIDRs,
+		SSHKeyNames:        sc.Hetzner.SSHKeyNames,
 	}
 	if hetzner.ServerType == "" {
 		hetzner.ServerType = DefaultServerType

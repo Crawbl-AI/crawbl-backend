@@ -66,6 +66,9 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	fs.StringVar(&cfg.TLS.KeyFile, "tls-key", os.Getenv("CRAWBL_TLS_KEY"), "Path to TLS server private key (PEM)")
 	fs.StringVar(&cfg.TLS.CAFile, "tls-ca", os.Getenv("CRAWBL_TLS_CA"), "Path to CA certificate for client verification (PEM)")
 
+	// gRPC reflection (disabled in prod via CRAWBL_ENABLE_REFLECTION=false).
+	fs.BoolVar(&cfg.EnableReflection, "enable-reflection", os.Getenv("CRAWBL_ENABLE_REFLECTION") != "false", "Enable gRPC server reflection")
+
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}

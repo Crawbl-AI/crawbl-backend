@@ -52,11 +52,11 @@ func createArgoCDRepoSecret(ctx *pulumi.Context, name string, cfg Config, deps [
 			}),
 		},
 		Type: pulumi.String("Opaque"),
-		StringData: pulumi.StringMap{
+		StringData: pulumi.ToSecret(pulumi.StringMap{
 			"type":          pulumi.String("git"),
 			"url":           pulumi.String(cfg.ArgoCDAppsRepoURL),
 			"sshPrivateKey": pulumi.String(cfg.ArgoCDRepoSSHPrivateKey),
-		},
+		}).(pulumi.StringMapInput),
 	}, append(opts,
 		pulumi.Provider(cfg.Provider),
 		pulumi.DependsOn(deps),
