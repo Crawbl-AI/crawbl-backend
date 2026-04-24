@@ -12,7 +12,7 @@ import (
 
 const (
 	// DefaultServerType is the default Hetzner server type for the k3s node.
-	DefaultServerType = "cx42"
+	DefaultServerType = "cx43"
 	// DefaultImage is the default OS image for the Hetzner server.
 	DefaultImage = "ubuntu-24.04"
 	// DefaultLocation is the default Hetzner datacenter location.
@@ -43,7 +43,7 @@ type RuntimeConfig struct {
 
 // HetznerConfig holds Hetzner Cloud server settings.
 type HetznerConfig struct {
-	// ServerType is the Hetzner server plan (e.g. "cx42").
+	// ServerType is the Hetzner server plan (e.g. "cx43").
 	ServerType string
 	// Image is the OS image (e.g. "ubuntu-24.04").
 	Image string
