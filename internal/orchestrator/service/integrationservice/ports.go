@@ -10,8 +10,8 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// integrationConnStore is the integration_connections subset this
+// activeProviderLister is the integration_connections subset this
 // service uses: looking up active providers for a given user.
-type integrationConnStore interface {
+type activeProviderLister interface {
 	ListActiveProviders(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, activeStatus string) ([]string, *merrors.Error)
 }

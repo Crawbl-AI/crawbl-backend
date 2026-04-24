@@ -68,10 +68,10 @@ type WorkflowExecutor interface {
 // import producer-owned interfaces for its own internal plumbing.
 type Repos struct {
 	MCP          mcprepo.Repo
-	Workspace    workspaceStore
+	Workspace    workspaceGetter
 	Conversation conversationStore
 	Agent        agentStore
-	AgentHistory agentHistoryStore
+	AgentHistory agentHistoryCreator
 	Message      messageStore
 	Artifact     artifactrepo.Repo
 	Workflow     workflowrepo.Repo
@@ -84,12 +84,14 @@ type Infra struct {
 	RuntimeClient userswarmclient.Client
 	Broadcaster   realtime.Broadcaster
 	WorkflowExec  WorkflowExecutor
-	// ShutdownCtx is the server-lifetime context. Goroutines spawned by the
-	// service (e.g. workflow executors) derive their contexts from this so
-	// they die on SIGTERM rather than surviving the HTTP request or leaking.
+	// ShutdownCtx is the server-lifetime context stored here intentionally.
+	// Goroutines spawned by the service (e.g. workflow executors) derive
+	// their contexts from this so they die on SIGTERM rather than surviving
+	// the HTTP request or leaking. A per-request context cannot be used
+	// because these goroutines outlive the HTTP handler.
 	// If nil, workflow goroutines fall back to context.Background() (useful
 	// for tests).
-	ShutdownCtx context.Context
+	ShutdownCtx context.Context //nolint:containedctx
 }
 
 type logger interface {

@@ -15,7 +15,7 @@ import (
 
 // New creates a new integrationservice.Service, returning an error if any
 // required dependency is nil.
-func New(logger *slog.Logger, connRepo integrationConnStore) (*Service, error) {
+func New(logger *slog.Logger, connRepo activeProviderLister) (*Service, error) {
 	if logger == nil {
 		return nil, errors.New("integrationservice: logger is required")
 	}
@@ -28,7 +28,7 @@ func New(logger *slog.Logger, connRepo integrationConnStore) (*Service, error) {
 
 // MustNew wraps New and panics on dependency-validation errors. Intended for
 // use from main/init paths where misconfiguration is unrecoverable.
-func MustNew(logger *slog.Logger, connRepo integrationConnStore) *Service {
+func MustNew(logger *slog.Logger, connRepo activeProviderLister) *Service {
 	svc, err := New(logger, connRepo)
 	if err != nil {
 		panic(err)

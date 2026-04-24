@@ -33,11 +33,11 @@ type sendMessageFunc func(ctx context.Context, opts *orchestratorservice.SendMes
 // can satisfy the struct with any backend that provides the exact method
 // subset chatservice needs — no coupling to a producer-owned interface.
 type Repos struct {
-	Workspace     workspaceStore
+	Workspace     workspaceGetter
 	Agent         agentStore
 	Conversation  conversationStore
 	Message       messageStore
-	Tools         toolsStore
+	Tools         toolsSeeder
 	AgentSettings agentSettingsStore
 	AgentPrompts  agentPromptsStore
 	AgentHistory  agentHistoryStore
@@ -49,11 +49,11 @@ type Repos struct {
 // per the project's "interfaces at consumer" convention.
 type Service struct {
 	db                *dbr.Connection
-	workspaceRepo     workspaceStore
+	workspaceRepo     workspaceGetter
 	agentRepo         agentStore
 	conversationRepo  conversationStore
 	messageRepo       messageStore
-	toolsRepo         toolsStore
+	toolsRepo         toolsSeeder
 	agentSettingsRepo agentSettingsStore
 	agentPromptsRepo  agentPromptsStore
 	agentHistoryRepo  agentHistoryStore

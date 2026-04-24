@@ -14,9 +14,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// workspaceStore is the workspace subset chatservice uses: ownership
+// workspaceGetter is the workspace subset chatservice uses: ownership
 // lookups and workspace seed.
-type workspaceStore interface {
+type workspaceGetter interface {
 	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
 }
 
@@ -58,9 +58,9 @@ type messageStore interface {
 	UpdateToolState(ctx context.Context, sess orchestratorrepo.SessionRunner, messageID, state string) *merrors.Error
 }
 
-// toolsStore is the tool-catalog subset chatservice uses to seed
+// toolsSeeder is the tool-catalog subset chatservice uses to seed
 // per-workspace tool defaults during first-run bootstrap.
-type toolsStore interface {
+type toolsSeeder interface {
 	Seed(ctx context.Context, sess orchestratorrepo.SessionRunner, tools []orchestratorrepo.ToolRow) *merrors.Error
 }
 

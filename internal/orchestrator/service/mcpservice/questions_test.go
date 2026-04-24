@@ -14,7 +14,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
-// fakeWorkspaceStore satisfies workspaceStore for tests.
+// fakeWorkspaceStore satisfies workspaceGetter for tests.
 type fakeWorkspaceStore struct {
 	ws  *orchestrator.Workspace
 	err *merrors.Error
@@ -55,7 +55,7 @@ func (f *fakeAgentStore) ListByWorkspaceID(_ context.Context, _ orchestratorrepo
 	return f.agents, f.err
 }
 
-// fakeAgentHistoryStore satisfies agentHistoryStore for tests.
+// fakeAgentHistoryStore satisfies agentHistoryCreator for tests.
 type fakeAgentHistoryStore struct{}
 
 func (f *fakeAgentHistoryStore) Create(_ context.Context, _ orchestratorrepo.SessionRunner, _ *orchestratorrepo.AgentHistoryRow) *merrors.Error {
@@ -105,7 +105,7 @@ func (noopLogger) ErrorContext(_ context.Context, _ string, _ ...any) {}
 
 // buildTestService assembles a minimal service wired with the provided fakes.
 func buildTestService(
-	ws workspaceStore,
+	ws workspaceGetter,
 	conv conversationStore,
 	agents agentStore,
 	msgs *fakeMessageStore,

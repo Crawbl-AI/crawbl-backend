@@ -138,6 +138,8 @@ func (s *Server) Run(ctx context.Context, shutdownTimeout time.Duration) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
+		// ctx is already cancelled here; use a fresh background context so the
+		// shutdown deadline is independent of the (already-done) request context.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 

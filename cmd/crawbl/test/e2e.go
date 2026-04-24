@@ -53,7 +53,7 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 
 	kubectlPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		return 0, 0, 0, func() {}, fmt.Errorf("kubectl not found in PATH: %w", err)
+		return 0, 0, 0, func() { /* no-op: nothing to clean up when kubectl was not found */ }, fmt.Errorf("kubectl not found in PATH: %w", err)
 	}
 
 	var running []*portForward

@@ -23,7 +23,12 @@ type messageHandler struct {
 	authService      authResolver
 	workspaceService workspaceAuthorizer
 	logger           *slog.Logger
-	shutdownCtx      context.Context
+	// shutdownCtx is the server-lifetime context stored here intentionally.
+	// Dispatch goroutines derive per-request contexts from it so they are
+	// cancelled on SIGTERM regardless of the originating Socket.IO event.
+	// A per-call context cannot be used because the goroutine outlives the
+	// event handler that spawned it.
+	shutdownCtx context.Context //nolint:containedctx
 }
 
 // handleMessageSend processes a message.send event from the Socket.IO client.

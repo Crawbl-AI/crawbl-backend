@@ -109,8 +109,7 @@ func (s *Service) sendDirectMessage(
 	}
 
 	// Stream response from the agent.
-	return s.callAgentStreaming(callAgentStreamingOpts{
-		ctx:          ctx,
+	return s.callAgentStreaming(ctx, callAgentStreamingOpts{
 		sendOpts:     opts,
 		pm:           pm,
 		conversation: conversation,
@@ -157,8 +156,7 @@ func (s *Service) sendSwarmMessage(
 	sess := database.SessionFromContext(ctx)
 	conversationContext := s.buildConversationContext(ctx, sess, opts.WorkspaceID, conversation.ID, lookups, 20)
 
-	return s.callAgentStreaming(callAgentStreamingOpts{
-		ctx:          ctx,
+	return s.callAgentStreaming(ctx, callAgentStreamingOpts{
 		sendOpts:     opts,
 		pm:           pm,
 		conversation: conversation,
@@ -192,8 +190,7 @@ func (s *Service) executeParallel(
 			// The session travels on a derived context so opts stays read-only.
 			agentSess := s.db.NewSession(nil)
 			agentCtx := database.ContextWithSession(ctx, agentSess)
-			replies, err := s.callAgentStreaming(callAgentStreamingOpts{
-				ctx:          agentCtx,
+			replies, err := s.callAgentStreaming(agentCtx, callAgentStreamingOpts{
 				sendOpts:     opts,
 				pm:           pm,
 				conversation: conversation,

@@ -5,7 +5,7 @@
 package seed
 
 import (
-	_ "embed"
+	_ "embed" // required for //go:embed directives to embed JSON data files at compile time
 	"encoding/json"
 )
 

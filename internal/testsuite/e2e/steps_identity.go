@@ -112,9 +112,8 @@ func (tc *testContext) identityAssertNotContains(alias, phrase string) error {
 			return nil
 		}
 		var content sql.NullString
-		row := s.QueryRowContext(context.Background(),
-			`SELECT content FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID)
-		if scanErr := row.Scan(&content); scanErr != nil {
+		if scanErr := s.QueryRowContext(context.Background(),
+			`SELECT content FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID).Scan(&content); scanErr != nil {
 			// Row doesn't exist — phrase cannot be present.
 			return nil
 		}

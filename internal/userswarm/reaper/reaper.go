@@ -111,8 +111,8 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 			continue
 		}
 
-		found, reaped, userReaped, err := processStaleSwarm(processStaleSwarmOpts{
-			ctx: ctx, k8sClient: k8sClient, sess: sess, repo: repo,
+		found, reaped, userReaped, err := processStaleSwarm(ctx, processStaleSwarmOpts{
+			k8sClient: k8sClient, sess: sess, repo: repo,
 			logger: logger, swarm: swarm, softDeletedUsers: softDeletedUsers,
 			dryRun: cfg.DryRun,
 		})
@@ -139,7 +139,6 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 
 // processStaleSwarmOpts groups the inputs for processStaleSwarm.
 type processStaleSwarmOpts struct {
-	ctx              context.Context
 	k8sClient        client.Client
 	sess             *dbr.Session
 	repo             *reaperrepo.Repo
@@ -155,8 +154,7 @@ type processStaleSwarmOpts struct {
 //
 // Returns (usersFound, swarmsReaped, usersReaped, err). A non-nil err means
 // the operation should count as one error in Result.Errors.
-func processStaleSwarm(o processStaleSwarmOpts) (usersFound, swarmsReaped, usersReaped int, err error) {
-	ctx := o.ctx
+func processStaleSwarm(ctx context.Context, o processStaleSwarmOpts) (usersFound, swarmsReaped, usersReaped int, err error) {
 	k8sClient := o.k8sClient
 	sess := o.sess
 	repo := o.repo
