@@ -172,8 +172,8 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 		if ctx.Err() != nil {
 			break
 		}
-		done := s.executeWorkflowStep(executeWorkflowStepOpts{
-			ctx: ctx, sess: sess, executionID: executionID, i: i,
+		done := s.executeWorkflowStep(ctx, executeWorkflowStepOpts{
+			sess: sess, executionID: executionID, i: i,
 			step: step, workflowCtx: workflowCtx, execution: execution,
 			emitter: emitter, runtime: runtime,
 		})
@@ -195,7 +195,6 @@ func (s *service) ExecuteWorkflow(ctx context.Context, executionID, workspaceID 
 
 // executeWorkflowStepOpts groups the inputs for executeWorkflowStep.
 type executeWorkflowStepOpts struct {
-	ctx         context.Context
 	sess        *dbr.Session
 	executionID string
 	i           int
@@ -208,8 +207,7 @@ type executeWorkflowStepOpts struct {
 
 // executeWorkflowStep runs a single workflow step and updates state in-place.
 // Returns true when the caller should stop the loop (fatal failure handled internally).
-func (s *service) executeWorkflowStep(o executeWorkflowStepOpts) bool {
-	ctx := o.ctx
+func (s *service) executeWorkflowStep(ctx context.Context, o executeWorkflowStepOpts) bool {
 	sess := o.sess
 	executionID := o.executionID
 	i := o.i
@@ -268,8 +266,8 @@ func (s *service) executeWorkflowStep(o executeWorkflowStepOpts) bool {
 	completedAt := time.Now().UTC()
 
 	if callErr != nil {
-		return s.handleStepFailure(handleStepFailureOpts{
-			ctx: ctx, sess: sess, executionID: executionID, i: i,
+		return s.handleStepFailure(ctx, handleStepFailureOpts{
+			sess: sess, executionID: executionID, i: i,
 			step: step, stepExec: stepExec, execution: execution,
 			emitter: emitter, callErr: callErr, durationMs: durationMs,
 			completedAt: completedAt,
@@ -340,7 +338,6 @@ func (s *service) handleStepApproval(
 
 // handleStepFailureOpts groups the inputs for handleStepFailure.
 type handleStepFailureOpts struct {
-	ctx         context.Context
 	sess        *dbr.Session
 	executionID string
 	i           int
@@ -355,8 +352,7 @@ type handleStepFailureOpts struct {
 
 // handleStepFailure updates state after a step runtime call fails.
 // Returns true when the workflow loop should stop (OnFailureStop policy).
-func (s *service) handleStepFailure(o handleStepFailureOpts) bool {
-	ctx := o.ctx
+func (s *service) handleStepFailure(ctx context.Context, o handleStepFailureOpts) bool {
 	sess := o.sess
 	executionID := o.executionID
 	i := o.i

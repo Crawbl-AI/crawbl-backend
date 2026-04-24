@@ -33,21 +33,15 @@ type answersHandler struct {
 	chatService chatSender
 	authService authResolver
 	logger      *slog.Logger
-	shutdownCtx context.Context
 }
 
 // newAnswersHandler constructs an answersHandler from the shared Config.
 func newAnswersHandler(cfg *Config) *answersHandler {
-	shutdownCtx := cfg.ShutdownCtx
-	if shutdownCtx == nil {
-		shutdownCtx = context.Background()
-	}
 	return &answersHandler{
 		db:          cfg.DB,
 		chatService: cfg.ChatService,
 		authService: cfg.AuthService,
 		logger:      cfg.Logger,
-		shutdownCtx: shutdownCtx,
 	}
 }
 
@@ -59,7 +53,7 @@ func newAnswersHandler(cfg *Config) *answersHandler {
 // On error: emits message.answers.error to the sender socket.
 // The follow-up message.updated / message.new / streaming events arrive
 // asynchronously via broadcasts from RespondToQuestions.
-func (h *answersHandler) handleMessageAnswers(s *socket.Socket, args ...any) {
+func (h *answersHandler) handleMessageAnswers(shutdownCtx context.Context, s *socket.Socket, args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -99,12 +93,12 @@ func (h *answersHandler) handleMessageAnswers(s *socket.Socket, args ...any) {
 	)
 
 	// Dispatch in a goroutine so the Socket.IO event loop is not blocked.
-	go h.dispatch(s, principal, req, localID)
+	go h.dispatch(shutdownCtx, s, principal, req, localID)
 }
 
 // dispatch runs the message answers flow asynchronously.
-func (h *answersHandler) dispatch(s *socket.Socket, principal *orchestrator.Principal, req *mobilev1.MessageAnswersRequest, localID string) {
-	ctx, cancel := context.WithCancel(h.shutdownCtx)
+func (h *answersHandler) dispatch(shutdownCtx context.Context, s *socket.Socket, principal *orchestrator.Principal, req *mobilev1.MessageAnswersRequest, localID string) {
+	ctx, cancel := context.WithCancel(shutdownCtx)
 	defer cancel()
 
 	// Store the cancel func in the per-socket session so the single disconnect

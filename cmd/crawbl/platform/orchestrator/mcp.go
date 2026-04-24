@@ -80,8 +80,7 @@ func runMCP(ctx context.Context) error {
 
 	// The MCP handler needs a broadcaster for push notifications; the MCP
 	// process does not run Socket.IO, so we use the NopBroadcaster.
-	mcpHandler := buildMCPHandler(mcpHandlerDeps{
-		Ctx:              ctx,
+	mcpHandler := buildMCPHandler(ctx, mcpHandlerDeps{
 		Logger:           logger,
 		DB:               db,
 		WorkspaceRepo:    workspaceRepo,

@@ -22,7 +22,6 @@ import (
 // Created at the start of the streaming call, methods on this struct replace
 // the 7-8 parameter functions that previously threaded context through the pipeline.
 type streamSession struct {
-	ctx          context.Context
 	svc          *Service
 	sess         *dbr.Session
 	wsID         string
@@ -52,7 +51,6 @@ type streamSession struct {
 
 // newStreamSessionOpts groups the inputs for newStreamSession.
 type newStreamSessionOpts struct {
-	ctx         context.Context
 	svc         *Service
 	sendOpts    *orchestratorservice.SendMessageOpts
 	pm          *persistedMsg
@@ -62,11 +60,10 @@ type newStreamSessionOpts struct {
 	placeholder *orchestrator.Message
 }
 
-func newStreamSession(o newStreamSessionOpts) *streamSession {
+func newStreamSession(ctx context.Context, o newStreamSessionOpts) *streamSession {
 	return &streamSession{
-		ctx:          o.ctx,
 		svc:          o.svc,
-		sess:         database.SessionFromContext(o.ctx),
+		sess:         database.SessionFromContext(ctx),
 		wsID:         o.sendOpts.WorkspaceID,
 		userID:       o.sendOpts.UserID,
 		convID:       o.conv.ID,
@@ -141,8 +138,7 @@ func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.
 	}
 
 	// 3. Create session and process stream.
-	ss := newStreamSession(newStreamSessionOpts{
-		ctx:         o.ctx,
+	ss := newStreamSession(o.ctx, newStreamSessionOpts{
 		svc:         s,
 		sendOpts:    o.sendOpts,
 		pm:          o.pm,
@@ -151,11 +147,11 @@ func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.
 		lookups:     o.lookups,
 		placeholder: placeholder,
 	})
-	ss.emitDelivered()
-	ss.processStream(streamCh)
+	ss.emitDelivered(o.ctx)
+	ss.processStream(o.ctx, streamCh)
 
 	// 4. Finalize.
-	replies := ss.finalize()
+	replies := ss.finalize(o.ctx)
 
 	// Auto-ingest conversation into MemPalace memory (non-blocking).
 	if len(replies) > 0 {
@@ -171,20 +167,20 @@ func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.
 
 // processStream reads chunks from the gRPC stream channel and dispatches each
 // event to the appropriate handler method on the session.
-func (ss *streamSession) processStream(ch <-chan userswarmclient.StreamChunk) {
+func (ss *streamSession) processStream(ctx context.Context, ch <-chan userswarmclient.StreamChunk) {
 	for chunk := range ch {
 		switch chunk.Type {
 		case userswarmclient.StreamEventChunk, userswarmclient.StreamEventThinking:
-			ss.handleText(chunk)
+			ss.handleText(ctx, chunk)
 		case userswarmclient.StreamEventToolCall:
-			ss.resolveStream(chunk.AgentID)
-			ss.handleToolCall(chunk)
+			ss.resolveStream(ctx, chunk.AgentID)
+			ss.handleToolCall(ctx, chunk)
 		case userswarmclient.StreamEventToolResult:
-			ss.handleToolResult(chunk)
+			ss.handleToolResult(ctx, chunk)
 		case userswarmclient.StreamEventDone:
-			ss.handleDone(chunk)
+			ss.handleDone(ctx, chunk)
 		case userswarmclient.StreamEventUsage:
-			ss.handleUsage(chunk)
+			ss.handleUsage(ctx, chunk)
 		}
 	}
 	ss.log.Info("stream complete", "streams", len(ss.streams), "chunks", ss.totalChunks,
@@ -193,41 +189,41 @@ func (ss *streamSession) processStream(ch <-chan userswarmclient.StreamChunk) {
 
 // handleText processes a text or thinking chunk: resolves the target stream,
 // emits status transitions, accumulates text, and broadcasts the chunk.
-func (ss *streamSession) handleText(chunk userswarmclient.StreamChunk) {
-	st := ss.resolveStream(chunk.AgentID)
+func (ss *streamSession) handleText(ctx context.Context, chunk userswarmclient.StreamChunk) {
+	st := ss.resolveStream(ctx, chunk.AgentID)
 	if ss.firstChunk {
-		ss.emitRead()
+		ss.emitRead(ctx)
 		ss.firstChunk = false
 	}
 	if st.firstChunk {
-		ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusWriting), ss.convID)
+		ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusWriting), ss.convID)
 		st.firstChunk = false
 	}
 	st.accumulated.WriteString(chunk.Delta)
 	st.chunkCount++
 	ss.totalChunks++
-	ss.svc.broadcaster.EmitMessageChunk(ss.ctx, ss.wsID, &realtime.MessageChunkPayload{
+	ss.svc.broadcaster.EmitMessageChunk(ctx, ss.wsID, &realtime.MessageChunkPayload{
 		MessageId: st.placeholder.ID, ConversationId: ss.convID,
 		AgentId: st.agent.ID, Chunk: chunk.Delta,
 	})
 }
 
 // handleDone marks streams as done when StreamEventDone is received.
-func (ss *streamSession) handleDone(chunk userswarmclient.StreamChunk) {
+func (ss *streamSession) handleDone(ctx context.Context, chunk userswarmclient.StreamChunk) {
 	if chunk.AgentID == "" {
 		ss.globalDone = true
 		for _, st := range ss.streams {
 			st.done = true
 		}
 	} else {
-		ss.resolveStream(chunk.AgentID).done = true
+		ss.resolveStream(ctx, chunk.AgentID).done = true
 		ss.globalDone = allStreamsDone(ss.streams)
 	}
 }
 
 // handleUsage processes a usage event from the runtime. Increments both
 // user-level (monthly period) and agent-level (lifetime) token counters.
-func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
+func (ss *streamSession) handleUsage(ctx context.Context, chunk userswarmclient.StreamChunk) {
 	ss.log.Info("llm usage",
 		"agent", chunk.AgentID,
 		"model", chunk.Model,
@@ -245,7 +241,7 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 	}
 
 	// Emit real-time usage update to mobile via Socket.IO.
-	ss.svc.broadcaster.EmitUsageUpdate(ss.ctx, ss.wsID, &realtime.UsageUpdatePayload{
+	ss.svc.broadcaster.EmitUsageUpdate(ctx, ss.wsID, &realtime.UsageUpdatePayload{
 		AgentId:          chunk.AgentID,
 		ConversationId:   ss.convID,
 		MessageId:        usageMessageID,
@@ -278,7 +274,7 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 	}
 
 	// Increment user usage counter (monthly).
-	if mErr := ss.svc.usageRepo.IncrementUsage(ss.ctx, ss.sess, &usagerepo.IncrementUsageOpts{
+	if mErr := ss.svc.usageRepo.IncrementUsage(ctx, ss.sess, &usagerepo.IncrementUsageOpts{
 		UserID:           ss.userID,
 		Period:           period,
 		PromptTokens:     int64(chunk.PromptTokens),
@@ -291,7 +287,7 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 
 	// Increment agent usage counter (lifetime).
 	if agentDBID != "" {
-		if mErr := ss.svc.usageRepo.IncrementAgentUsage(ss.ctx, ss.sess, &usagerepo.IncrementAgentUsageOpts{
+		if mErr := ss.svc.usageRepo.IncrementAgentUsage(ctx, ss.sess, &usagerepo.IncrementAgentUsageOpts{
 			AgentID:          agentDBID,
 			WorkspaceID:      workspaceID,
 			PromptTokens:     int64(chunk.PromptTokens),
@@ -304,7 +300,7 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 	}
 
 	// Publish to NATS for ClickHouse analytics pipeline.
-	ss.svc.usagePublisher.Publish(ss.ctx, ss.wsID, &queue.UsageEvent{
+	ss.svc.usagePublisher.Publish(ctx, ss.wsID, &queue.UsageEvent{
 		UserID:           ss.userID,
 		WorkspaceID:      ss.wsID,
 		ConversationID:   ss.convID,
@@ -341,28 +337,28 @@ func (ss *streamSession) resolveStreamReadOnly(slug string) *subAgentStream {
 }
 
 // emitDelivered marks the user message as delivered (once across parallel agents).
-func (ss *streamSession) emitDelivered() {
+func (ss *streamSession) emitDelivered(ctx context.Context) {
 	if ss.userMessageID == "" || ss.deliveredOnce == nil {
 		return
 	}
 	ss.deliveredOnce.Do(func() {
-		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, &realtime.MessageStatusPayload{
+		ss.svc.broadcaster.EmitMessageStatus(ctx, ss.wsID, &realtime.MessageStatusPayload{
 			MessageId: ss.userMessageID, ConversationId: ss.convID,
 			LocalId: ss.localID, Status: string(orchestrator.MessageStatusDelivered),
 		})
-		if mErr := ss.svc.messageRepo.UpdateStatus(ss.ctx, ss.sess, ss.userMessageID, orchestrator.MessageStatusDelivered); mErr != nil {
+		if mErr := ss.svc.messageRepo.UpdateStatus(ctx, ss.sess, ss.userMessageID, orchestrator.MessageStatusDelivered); mErr != nil {
 			slog.Warn("failed to update delivered status", "msg", ss.userMessageID, "error", mErr.Error())
 		}
 	})
 }
 
 // emitRead marks the user message as read (once on first chunk).
-func (ss *streamSession) emitRead() {
+func (ss *streamSession) emitRead(ctx context.Context) {
 	if ss.userMessageID == "" || ss.readOnce == nil {
 		return
 	}
 	ss.readOnce.Do(func() {
-		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, &realtime.MessageStatusPayload{
+		ss.svc.broadcaster.EmitMessageStatus(ctx, ss.wsID, &realtime.MessageStatusPayload{
 			MessageId: ss.userMessageID, ConversationId: ss.convID,
 			LocalId: ss.localID, Status: string(orchestrator.MessageStatusRead),
 		})
@@ -372,7 +368,7 @@ func (ss *streamSession) emitRead() {
 // resolveStream maps an agent slug from a stream chunk to the corresponding
 // subAgentStream entry, creating a new sub-agent stream when a previously
 // unseen agent slug appears.
-func (ss *streamSession) resolveStream(slug string) *subAgentStream {
+func (ss *streamSession) resolveStream(ctx context.Context, slug string) *subAgentStream {
 	if ss.primary == nil {
 		return nil
 	}
@@ -386,5 +382,5 @@ func (ss *streamSession) resolveStream(slug string) *subAgentStream {
 	if st, ok := ss.streams[sub.ID]; ok {
 		return st
 	}
-	return ss.createSubAgentStream(sub)
+	return ss.createSubAgentStream(ctx, sub)
 }

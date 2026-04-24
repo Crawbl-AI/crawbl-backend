@@ -165,12 +165,11 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 			"subject", subject,
 		)
 
-		registerWorkspaceSubscribeHandler(workspaceSubscribeHandlerOpts{
+		registerWorkspaceSubscribeHandler(shutdownCtx, workspaceSubscribeHandlerOpts{
 			socket:        s,
 			sd:            sd,
 			logger:        logger,
 			subject:       subject,
-			shutdownCtx:   shutdownCtx,
 			db:            db,
 			workspaceRepo: workspaceRepo,
 			authService:   authService,
@@ -186,7 +185,6 @@ type workspaceSubscribeHandlerOpts struct {
 	sd            *socketData
 	logger        *slog.Logger
 	subject       string
-	shutdownCtx   context.Context
 	db            *dbr.Connection
 	workspaceRepo workspaceOwnerChecker
 	authService   authResolver
@@ -194,7 +192,7 @@ type workspaceSubscribeHandlerOpts struct {
 
 // registerWorkspaceSubscribeHandler wires the workspace.subscribe event on a socket.
 // It verifies ownership then joins the authorised workspace rooms.
-func registerWorkspaceSubscribeHandler(o workspaceSubscribeHandlerOpts) {
+func registerWorkspaceSubscribeHandler(shutdownCtx context.Context, o workspaceSubscribeHandlerOpts) {
 	_ = o.socket.On(eventWorkspaceSubscribe, func(args ...any) {
 		ids := parseWorkspaceIDs(args)
 		if len(ids) == 0 {
@@ -209,8 +207,7 @@ func registerWorkspaceSubscribeHandler(o workspaceSubscribeHandlerOpts) {
 			return
 		}
 
-		authorised, ok := resolveAuthorisedWorkspaces(resolveAuthorisedWorkspacesOpts{
-			ctx:           o.shutdownCtx,
+		authorised, ok := resolveAuthorisedWorkspaces(shutdownCtx, resolveAuthorisedWorkspacesOpts{
 			logger:        o.logger,
 			socket:        o.socket,
 			userSubject:   o.sd.Principal.Subject,
@@ -275,7 +272,6 @@ func registerDisconnectHandler(s *socket.Socket, sd *socketData, logger *slog.Lo
 
 // resolveAuthorisedWorkspacesOpts groups the inputs for resolveAuthorisedWorkspaces.
 type resolveAuthorisedWorkspacesOpts struct {
-	ctx           context.Context
 	logger        *slog.Logger
 	socket        *socket.Socket
 	userSubject   string
@@ -289,13 +285,13 @@ type resolveAuthorisedWorkspacesOpts struct {
 // owned by the authenticated user. When db/workspaceRepo are nil (dev/test) it
 // returns all ids unfiltered. Returns (ids, true) on success or (nil, false) when
 // the caller should abort the subscribe entirely (e.g. subject resolution failed).
-func resolveAuthorisedWorkspaces(o resolveAuthorisedWorkspacesOpts) ([]string, bool) {
+func resolveAuthorisedWorkspaces(ctx context.Context, o resolveAuthorisedWorkspacesOpts) ([]string, bool) {
 	if o.db == nil || o.workspaceRepo == nil {
 		return o.ids, true
 	}
 
 	sess := o.db.NewSession(nil)
-	dbCtx := database.ContextWithSession(o.ctx, sess)
+	dbCtx := database.ContextWithSession(ctx, sess)
 
 	// Resolve Firebase subject → internal user.ID.
 	userID := o.userSubject
@@ -373,7 +369,7 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 			h.handleMessageSend(s, msgArgs...)
 		})
 		_ = s.On(eventMessageAnswers, func(ansArgs ...any) {
-			answers.handleMessageAnswers(s, ansArgs...)
+			answers.handleMessageAnswers(shutdownCtx, s, ansArgs...)
 		})
 	})
 
