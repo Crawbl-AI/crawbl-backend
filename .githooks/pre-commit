@@ -33,5 +33,12 @@ fi
 # Extract unique packages from staged files.
 packages=$(echo "${staged_go_files}" | xargs -I{} dirname {} | sort -u | sed 's|^|./|')
 
-golangci-lint run ${packages}
+# Use the custom golangci-lint binary (with typesfile plugin) if available,
+# otherwise fall back to the standard golangci-lint.
+lint_bin="golangci-lint"
+if [ -x "./bin/crawbl-lint" ]; then
+  lint_bin="./bin/crawbl-lint"
+fi
+
+${lint_bin} run ${packages}
 echo "Lint passed."
