@@ -21,7 +21,22 @@ var (
 	// namespace, excluding prefixed namespaces (e.g. `auth-filter/v0.1.0`
 	// or `agent-runtime/v2.3.4`) that belong to per-component sequences.
 	globalSemverTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$`)
+
+	// resolvedGitPath is the absolute path to the git executable, resolved
+	// once at package init to avoid PATH injection (go:S4036).
+	resolvedGitPath = resolveGitPath()
 )
+
+// resolveGitPath looks up the git executable in PATH and returns its absolute
+// path. Falls back to the bare "git" name if LookPath fails so that callers
+// that already handle command errors continue to work unchanged.
+func resolveGitPath() string {
+	p, err := exec.LookPath("git")
+	if err != nil {
+		return "git"
+	}
+	return p
+}
 
 // isGlobalSemverTag reports whether tag is a plain `vX.Y.Z` tag in the
 // global release sequence — no slash-namespaced prefix, parseable as
@@ -45,7 +60,7 @@ func gitCmd(repoPath string, args ...string) *exec.Cmd {
 	if repoPath != "" {
 		args = append([]string{"-C", repoPath}, args...)
 	}
-	return exec.CommandContext(context.Background(), "git", args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
+	return exec.CommandContext(context.Background(), resolvedGitPath, args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
 }
 
 // bumpVersion increments the major, minor, or patch component of a canonical
@@ -169,7 +184,11 @@ func CalculateForPrefix(prefix string) (Result, error) {
 // latestReleaseTag queries GitHub for the latest release tag using gh CLI.
 // Returns empty string if no release exists or gh is not available.
 func latestReleaseTag(repoPath string) string {
-	cmd := exec.CommandContext(context.Background(), "gh", "release", "view", "--json", "tagName", "-q", ".tagName")
+	ghPath, err := exec.LookPath("gh")
+	if err != nil {
+		return ""
+	}
+	cmd := exec.CommandContext(context.Background(), ghPath, "release", "view", "--json", "tagName", "-q", ".tagName")
 	if repoPath != "" {
 		cmd.Dir = repoPath
 	}

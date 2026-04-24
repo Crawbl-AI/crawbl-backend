@@ -75,10 +75,15 @@ func syncAllApps(ctx context.Context, force bool) error {
 
 // syncApp performs a hard refresh (and optional stuck-operation reset) for one ArgoCD app.
 func syncApp(ctx context.Context, appName string, force bool) error {
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		return fmt.Errorf("kubectl not found in PATH: %w", err)
+	}
+
 	if force {
 		out.Step(style.Running, "Resetting stuck operation on %s", appName)
 		patch := `[{"op":"remove","path":"/operation"}]`
-		cmd := exec.CommandContext(ctx, "kubectl", "patch", "app", appName, // #nosec G204 -- CLI tool, input from developer
+		cmd := exec.CommandContext(ctx, kubectlPath, "patch", "app", appName, // #nosec G204 -- CLI tool, input from developer
 			"-n", "argocd", "--type", "json", "-p", patch)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -88,7 +93,7 @@ func syncApp(ctx context.Context, appName string, force bool) error {
 
 	out.Step(style.Deploy, "Triggering hard refresh on %s", appName)
 	annotation := `{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}`
-	cmd := exec.CommandContext(ctx, "kubectl", "patch", "app", appName, // #nosec G204 -- CLI tool, input from developer
+	cmd := exec.CommandContext(ctx, kubectlPath, "patch", "app", appName, // #nosec G204 -- CLI tool, input from developer
 		"-n", "argocd", "--type", "merge", "-p", annotation)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -102,9 +107,13 @@ func syncApp(ctx context.Context, appName string, force bool) error {
 
 // listArgoCDApps returns the names of all ArgoCD Application resources in the argocd namespace.
 func listArgoCDApps(ctx context.Context) ([]string, error) {
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		return nil, fmt.Errorf("kubectl not found in PATH: %w", err)
+	}
 	out.Step(style.Running, "Listing ArgoCD apps in argocd namespace")
 	var buf bytes.Buffer
-	cmd := exec.CommandContext(ctx, "kubectl", "get", "app",
+	cmd := exec.CommandContext(ctx, kubectlPath, "get", "app",
 		"-n", "argocd", "-o", "jsonpath={.items[*].metadata.name}")
 	cmd.Stdout = &buf
 	cmd.Stderr = os.Stderr

@@ -73,8 +73,14 @@ const prodKubeContext = "do-fra1-crawbl-prod"
 // checkNotProdContext returns an error when the current kubectl context targets
 // the production cluster. Production deploys must go through GitHub CI only.
 func checkNotProdContext() error {
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		// If kubectl is unavailable, allow the deploy to proceed — the context
+		// check is a safety net, not a hard dependency.
+		return nil
+	}
 	var buf bytes.Buffer
-	cmd := exec.CommandContext(context.Background(), "kubectl", "config", "current-context")
+	cmd := exec.CommandContext(context.Background(), kubectlPath, "config", "current-context")
 	cmd.Stdout = &buf
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
@@ -456,8 +462,12 @@ func checkStaticDeployTools() error {
 
 // runNpmBuild runs npm run build in the given directory.
 func runNpmBuild(dir string) error {
+	npmPath, err := exec.LookPath("npm")
+	if err != nil {
+		return fmt.Errorf("npm not found in PATH: %w", err)
+	}
 	out.Step(style.Docker, "Building static site in %s", dir)
-	cmd := exec.CommandContext(context.Background(), "npm", "run", "build")
+	cmd := exec.CommandContext(context.Background(), npmPath, "run", "build")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -470,8 +480,12 @@ func runNpmBuild(dir string) error {
 
 // runWranglerDeploy deploys a static site to Cloudflare Pages using wrangler.
 func runWranglerDeploy(dir, outputDir, projectName string) error {
+	wranglerPath, err := exec.LookPath("wrangler")
+	if err != nil {
+		return fmt.Errorf("wrangler not found in PATH: %w", err)
+	}
 	out.Step(style.Deploy, "Deploying %s to Cloudflare Pages", projectName)
-	cmd := exec.CommandContext(context.Background(), "wrangler", "pages", "deploy", outputDir, "--project-name", projectName) // #nosec G204 -- CLI tool, input from developer
+	cmd := exec.CommandContext(context.Background(), wranglerPath, "pages", "deploy", outputDir, "--project-name", projectName) // #nosec G204 -- CLI tool, input from developer
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

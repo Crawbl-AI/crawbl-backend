@@ -101,6 +101,15 @@ func EnsureSchema(config Config) error {
 		return fmt.Errorf("ping db for schema bootstrap: %w", err)
 	}
 
+	// pgx.Identifier.Sanitize() double-quotes the identifier and escapes any
+	// embedded double-quote characters (replacing `"` with `""`), which is the
+	// standard PostgreSQL mechanism for safe identifier interpolation.  Schema
+	// names cannot be passed as query parameters — only values can — so string
+	// interpolation is the only viable approach here.  The value comes from an
+	// operator-controlled environment variable (DATABASE_SCHEMA), not from user
+	// input, so the injection surface is limited to trusted configuration.
+	// The NUL-byte guard above prevents the one panic path in Sanitize().
+	// #nosec G201 -- identifier is sanitized via pgx.Identifier.Sanitize()
 	_, err = db.ExecContext(context.Background(),
 		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{schema}.Sanitize())
 	return err

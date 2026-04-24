@@ -26,9 +26,14 @@ func newBuildCommand() *cobra.Command {
 				return fmt.Errorf("creating output dir: %w", err)
 			}
 
+			goPath, err := exec.LookPath("go")
+			if err != nil {
+				return fmt.Errorf("go not found in PATH: %w", err)
+			}
+
 			out.Step(style.Running, "Cross-compiling crawbl for linux/amd64...")
 
-			c := exec.CommandContext(ctx, "go",
+			c := exec.CommandContext(ctx, goPath,
 				"build",
 				"-mod=vendor",
 				"-trimpath",

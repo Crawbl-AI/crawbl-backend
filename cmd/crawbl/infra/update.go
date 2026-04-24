@@ -189,7 +189,11 @@ func waitForAppsSync(timeout time.Duration) error {
 
 // checkAppSyncStatus returns (synced count, total count, error).
 func checkAppSyncStatus() (int, int, error) {
-	cmd := exec.CommandContext(context.Background(), "kubectl", "get", "applications", "-n", "argocd",
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		return 0, 0, fmt.Errorf("kubectl not found in PATH: %w", err)
+	}
+	cmd := exec.CommandContext(context.Background(), kubectlPath, "get", "applications", "-n", "argocd",
 		"-o", "jsonpath={range .items[*]}{.status.sync.status},{.status.health.status}{\"\\n\"}{end}")
 	output, err := cmd.Output()
 	if err != nil {
@@ -224,9 +228,14 @@ func checkAppSyncStatus() (int, int, error) {
 
 // printAppStatus prints the current status of all ArgoCD applications.
 func printAppStatus() {
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		out.Warning("kubectl not found in PATH: %v", err)
+		return
+	}
 	out.Ln()
 	out.Step(style.Config, "Application status:")
-	cmd := exec.CommandContext(context.Background(), "kubectl", "get", "applications", "-n", "argocd",
+	cmd := exec.CommandContext(context.Background(), kubectlPath, "get", "applications", "-n", "argocd",
 		"-o", "custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

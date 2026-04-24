@@ -45,10 +45,13 @@ func runScan(ctx context.Context) error {
 
 	sonarURL := configenv.StringOr("SONARQUBE_URL", "https://sonar-dev.crawbl.com")
 
+	toolPaths := make(map[string]string)
 	for _, tool := range []string{"sonar-scanner", "gosec", "staticcheck"} {
-		if _, err := exec.LookPath(tool); err != nil {
+		p, err := exec.LookPath(tool)
+		if err != nil {
 			return fmt.Errorf("%s is required but not found in PATH (run: mise install)", tool)
 		}
+		toolPaths[tool] = p
 	}
 
 	rootDir, err := gitutil.RootDir()
@@ -59,7 +62,7 @@ func runScan(ctx context.Context) error {
 	// Step 1: Run gosec — produces a SonarQube-compatible JSON report.
 	out.Step(style.Lint, "Running gosec security scan")
 	gosecReport := "gosec-report.json"
-	gosecCmd := exec.CommandContext(ctx, "gosec",
+	gosecCmd := exec.CommandContext(ctx, toolPaths["gosec"],
 		"-fmt=sonarqube",
 		"-out="+gosecReport,
 		"-exclude-dir=vendor",
@@ -95,7 +98,7 @@ func runScan(ctx context.Context) error {
 	out.Step(style.Lint, "Running SonarQube analysis")
 	out.Infof("Server: %s", sonarURL)
 
-	sonarCmd := exec.CommandContext(ctx, "sonar-scanner", // #nosec G204 -- CLI tool, input from developer
+	sonarCmd := exec.CommandContext(ctx, toolPaths["sonar-scanner"], // #nosec G204 -- CLI tool, input from developer
 		"-Dsonar.host.url="+sonarURL,
 		"-Dsonar.token="+token,
 	)
