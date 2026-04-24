@@ -7,7 +7,7 @@ Control plane for [Crawbl AI](https://crawbl.com) — auth, chat routing, agent 
 [![CI](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/Crawbl-AI/crawbl-backend/actions/workflows/deploy-dev.yml)
 [![Quality Gate](https://sonar-dev.crawbl.com/api/project_badges/measure?project=crawbl-backend&metric=alert_status)](https://sonar-dev.crawbl.com/dashboard?id=crawbl-backend)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![K8s](https://img.shields.io/badge/K8s-DOKS-326CE5?logo=kubernetes&logoColor=white)]()
+[![K8s](https://img.shields.io/badge/K8s-k3s%2FDOKS-326CE5?logo=kubernetes&logoColor=white)]()
 
 </div>
 
@@ -100,7 +100,7 @@ crawbl --help                          # all commands
 | **Webhook**       | Builds pod specs for per-user agent provisioning    |
 | **Auth Filter**   | Envoy WASM filter for request authentication        |
 | **Reaper**        | Cleans up stale test users + orphaned pods          |
-| **Infra**         | Pulumi IaC for DOKS cluster + ArgoCD bootstrap      |
+| **Infra**         | Pulumi IaC for Hetzner k3s (dev) / DOKS (prod) + ArgoCD bootstrap |
 
 ## Structure
 

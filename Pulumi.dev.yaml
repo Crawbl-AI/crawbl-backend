@@ -1,11 +1,14 @@
 # Pulumi stack configuration for the "dev" environment.
 #
-# This file defines all infrastructure parameters for the dev DigitalOcean
-# Kubernetes cluster. Pulumi reads these values when running:
+# Dev infrastructure runs on a Hetzner Cloud VM (k3s), NOT DOKS.
+# Pulumi provisions the Hetzner VM + k3s bootstrap, then ArgoCD takes over
+# via the crawbl-argocd-apps repository (root-k3s-dev/ app-of-apps).
+#
+# Run infra changes with:
 #   set -a && source .env && set +a && crawbl infra update
 #
 # The Pulumi program (internal/infra/) uses these to provision:
-#   - A DOKS (DigitalOcean Kubernetes Service) cluster
+#   - A Hetzner Cloud VM running k3s (see crawbl:runtime below)
 #   - ArgoCD installation (via the Helm values in config/helm/argocd.yaml)
 #   - The aws-credentials Secret for External Secrets Operator
 #
@@ -17,57 +20,32 @@ config:
   crawbl:environment: dev
 
   # -- DigitalOcean region. fra1 = Frankfurt, Germany.
+  # Used for the container registry and other DO resources shared with prod.
   crawbl:region: fra1
 
-  # -- Kubernetes cluster configuration --
-  crawbl:cluster:
-    # Whether Pulumi should create and manage a VPC. Set to false when
-    # using the default VPC or a pre-existing one.
-    manageVPC: false
-    # VPC IP range (only used if manageVPC is true).
-    vpcIPRange: "10.10.0.0/16"
-
-    # Enable automatic minor version upgrades for the K8s cluster.
-    autoUpgrade: true
-    # Allow surge upgrades (provisions new nodes before draining old ones).
-    surgeUpgrade: true
-    # Single control plane (not HA). HA costs more and is not needed for dev.
-    highAvailability: false
-    # Safety flag: prevent accidental deletion of load balancers, volumes, etc.
-    # when the cluster is destroyed.
-    destroyAllAssociatedResources: false
-
-    # Maintenance window: Sunday at 04:00 UTC (low-traffic period).
-    maintenanceDay: sunday
-    maintenanceStartTime: "04:00"
-
-    # -- Node pool configuration --
-    # Pool name used in DigitalOcean dashboard.
-    nodePoolName: platform-8gb
-    # Droplet size: 4 vCPUs, 8GB RAM. Smallest size that can run the full
-    # platform stack (ArgoCD + ESO + PostgreSQL + Redis + operators + orchestrator).
-    nodeSize: s-4vcpu-8gb
-    # Single node for dev (no redundancy needed).
-    nodeCount: 1
-    # No extra labels on nodes (would be used for node affinity rules).
-    nodeLabels: {}
-    # Tags applied to the cluster and nodes in DigitalOcean.
-    tags:
-      - crawbl
-      - dev
-
-    # -- Container Registry --
-    # Whether Pulumi should create the DO container registry. Set to false
-    # because the "crawbl" registry already exists and is shared across envs.
-    manageRegistry: false
-    # Registry name (used for image pull integration with DOKS).
-    registryName: crawbl
-    # DO registry plan tier.
-    registrySubscriptionTier: starter
-
-    # Whether to create a DigitalOcean Project to group resources.
-    # Set to false because the project already exists.
-    createProject: false
+  # -- DOKS cluster configuration (PROD-ONLY) --
+  # Dev no longer uses DOKS. The section below is kept for reference and is only
+  # read by the prod Pulumi stack. It has no effect when targeting the dev stack.
+  # crawbl:cluster:
+  #   manageVPC: false
+  #   vpcIPRange: "10.10.0.0/16"
+  #   autoUpgrade: true
+  #   surgeUpgrade: true
+  #   highAvailability: false
+  #   destroyAllAssociatedResources: false
+  #   maintenanceDay: sunday
+  #   maintenanceStartTime: "04:00"
+  #   nodePoolName: platform-8gb
+  #   nodeSize: s-4vcpu-8gb
+  #   nodeCount: 1
+  #   nodeLabels: {}
+  #   tags:
+  #     - crawbl
+  #     - dev
+  #   manageRegistry: false
+  #   registryName: crawbl
+  #   registrySubscriptionTier: starter
+  #   createProject: false
 
   # -- Cloudflare tunnel and DNS configuration (dev only) --
   # Prod traffic goes through the DigitalOcean Load Balancer; no tunnel needed.

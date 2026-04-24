@@ -105,7 +105,8 @@ Go middleware/orchestrator for Crawbl. Contains both the orchestrator HTTP API a
 
 ## Local Development
 
-- Dev/test happens on the live dev cluster. Use `crawbl setup` to verify your environment, then `crawbl app deploy platform` to build and deploy.
+- Dev/test happens on the live dev cluster. The dev cluster is a Hetzner Cloud VM running k3s (not DOKS) — connect via the k3s kubeconfig provisioned by `crawbl infra update`.
+- Use `crawbl setup` to verify your environment, then `crawbl app deploy platform` to build and deploy.
 - Migrations at `migrations/orchestrator/` are embedded and run automatically on orchestrator startup via `golang-migrate` — no manual step.
 - Install toolchain with `mise install` (pins Go, `protoc`, `yq`, k8s, and cloud tooling in `.mise.toml`).
 - Regenerate gRPC bindings from `proto/agentruntime/v1/*.proto` with `crawbl generate`.
@@ -158,10 +159,10 @@ To delete a dev user: remove the user row from the port-forwarded Postgres, then
 
 ## Observability
 
-The full monitoring stack (VictoriaMetrics, VictoriaLogs, Fluent Bit) is **prod-only** and is not deployed in the dev environment.
+The monitoring stack (VictoriaMetrics, VictoriaLogs, Fluent Bit) is deployed in **both dev and prod** via ArgoCD.
 
-- **Dev**: use `kubectl logs -n <namespace> <pod>` for logs and `kubectl top pods -n <namespace>` or the DigitalOcean dashboard for resource usage.
-- **Prod**: VictoriaMetrics, VictoriaLogs, and Fluent Bit are available for metrics and centralised log search.
+- **Dev (Hetzner k3s)**: VictoriaMetrics, VictoriaLogs, and Fluent Bit are deployed by the `root-k3s-dev/` app-of-apps. Use `kubectl logs` for quick tail access, or query VictoriaLogs directly. For ad-hoc resource checks, `kubectl top pods -n <namespace>` works without the full stack.
+- **Prod**: VictoriaMetrics, VictoriaLogs, and Fluent Bit are managed by `root-prod/` and exposed via HTTPRoutes at `metrics.crawbl.com` and `logs.crawbl.com`.
 
 ## Go Best Practices
 
