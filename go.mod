@@ -21,7 +21,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/modelcontextprotocol/go-sdk v1.5.0
-	github.com/nats-io/nats.go v1.50.0
+	github.com/nats-io/nats.go v1.51.0
 	github.com/openai/openai-go/v3 v3.31.0
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pulumi/pulumi-cloudflare/sdk/v5 v5.49.1
