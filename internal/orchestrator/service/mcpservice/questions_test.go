@@ -125,7 +125,7 @@ func buildTestService(
 		Logger:      noopLogger{},
 		Broadcaster: broadcaster,
 	}
-	svc, err := New(repos, infra, nil)
+	svc, err := New(repos, infra, nil, nil)
 	if err != nil {
 		panic("buildTestService: " + err.Error())
 	}

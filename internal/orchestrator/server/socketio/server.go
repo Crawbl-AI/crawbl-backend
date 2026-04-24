@@ -31,7 +31,7 @@ import (
 // middleware, workspace room management, and Redis adapter for cross-pod event fan-out.
 //
 // The returned server is ready to be mounted as an http.Handler via Handler.
-func NewServer(cfg *Config) *socket.Server {
+func NewServer(cfg *Config, shutdownCtx context.Context) *socket.Server {
 	if cfg == nil {
 		panic("socketio config is required")
 	}
@@ -62,7 +62,6 @@ func NewServer(cfg *Config) *socket.Server {
 	// Set up the /v1 namespace with auth middleware and connection handling.
 	nsp := io.Of(socketNamespace, nil)
 	registerAuthMiddleware(nsp, cfg.Logger)
-	shutdownCtx := cfg.ShutdownCtx
 	if shutdownCtx == nil {
 		shutdownCtx = context.Background()
 	}
@@ -337,13 +336,12 @@ func resolveAuthorisedWorkspaces(ctx context.Context, o resolveAuthorisedWorkspa
 // Registers a second "connection" listener on the /v1 namespace. Socket.IO
 // supports multiple listeners, so this works alongside the existing connection
 // handler that manages workspace subscriptions.
-func RegisterMessageHandler(io *socket.Server, cfg *Config) {
+func RegisterMessageHandler(io *socket.Server, cfg *Config, shutdownCtx context.Context) {
 	if cfg.DB == nil || cfg.ChatService == nil || cfg.AuthService == nil || cfg.WorkspaceService == nil {
 		cfg.Logger.Info("socketio: message.send handler disabled (missing DB, ChatService, AuthService, or WorkspaceService)")
 		return
 	}
 
-	shutdownCtx := cfg.ShutdownCtx
 	if shutdownCtx == nil {
 		shutdownCtx = context.Background()
 	}
@@ -354,7 +352,6 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 		authService:      cfg.AuthService,
 		workspaceService: cfg.WorkspaceService,
 		logger:           cfg.Logger,
-		shutdownCtx:      shutdownCtx,
 	}
 
 	answers := newAnswersHandler(cfg)
@@ -366,7 +363,7 @@ func RegisterMessageHandler(io *socket.Server, cfg *Config) {
 			return
 		}
 		_ = s.On(eventMessageSend, func(msgArgs ...any) {
-			h.handleMessageSend(s, msgArgs...)
+			h.handleMessageSend(shutdownCtx, s, msgArgs...)
 		})
 		_ = s.On(eventMessageAnswers, func(ansArgs ...any) {
 			answers.handleMessageAnswers(shutdownCtx, s, ansArgs...)

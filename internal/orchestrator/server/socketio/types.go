@@ -127,14 +127,6 @@ type Config struct {
 	// WorkspaceService verifies workspace ownership before message dispatch.
 	// Required for message.send handling. Nil disables chat over WebSocket.
 	WorkspaceService workspaceAuthorizer
-
-	// ShutdownCtx is the server lifetime context stored here intentionally.
-	// Dispatch goroutines derive their contexts from this so that in-flight
-	// DB writes are cancelled when the server receives SIGTERM and the DB
-	// pool closes. A per-request context cannot be used because goroutines
-	// outlive the Socket.IO event handler that spawned them.
-	// If nil, context.Background() is used as a fallback.
-	ShutdownCtx context.Context //nolint:containedctx
 }
 
 // Socket event names for workspace subscription management.

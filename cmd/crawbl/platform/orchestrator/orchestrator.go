@@ -183,7 +183,7 @@ func runServer(ctx context.Context) error {
 	workspaceService := workspaceservice.MustNew(repos.Workspace, runtimeClient, logger)
 	authService := authservice.MustNew(repos.User, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, repos.Workspace, authService)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(ctx, logger, redisClient, db, repos.Workspace, authService)
 	defer cleanupRT()
 
 	toolsRepo := toolsrepo.New()
@@ -236,8 +236,7 @@ func runServer(ctx context.Context) error {
 			ChatService:      chatService,
 			AuthService:      authService,
 			WorkspaceService: workspaceService,
-			ShutdownCtx:      ctx,
-		})
+		}, ctx)
 	}
 
 	mcpHandler := buildMCPHandler(ctx, mcpHandlerDeps{
@@ -709,9 +708,9 @@ func buildMCPHandler(ctx context.Context, deps mcpHandlerDeps) http.Handler {
 			RuntimeClient: runtimeClient,
 			Broadcaster:   broadcaster,
 			WorkflowExec:  workflowSvc,
-			ShutdownCtx:   ctx,
 		},
 		memoryStack,
+		ctx,
 	)
 
 	noiseCfg, err := memconfig.LoadNoiseConfig()
@@ -785,7 +784,7 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // db, workspaceRepo, and authService are forwarded to the Socket.IO server so
 // it can verify workspace ownership before joining rooms on workspace.subscribe
 // events. authService resolves the Firebase subject to an internal user.ID.
-func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService *authservice.Service) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+func buildRealtime(shutdownCtx context.Context, logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService *authservice.Service) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
 	if rc == nil {
 		logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, noopCleanup
@@ -797,7 +796,7 @@ func buildRealtime(logger *slog.Logger, rc redisclient.Client, db *dbr.Connectio
 		DB:            db,
 		WorkspaceRepo: workspaceRepo,
 		AuthService:   authService,
-	})
+	}, shutdownCtx)
 
 	broadcaster := socketio.NewBroadcaster(io, logger)
 	handler := socketio.Handler(io)

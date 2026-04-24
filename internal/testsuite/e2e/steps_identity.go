@@ -89,9 +89,8 @@ func (tc *testContext) identityAssertContains(alias, phrase string) error {
 			return nil
 		}
 		var content sql.NullString
-		row := s.QueryRowContext(context.Background(),
-			`SELECT content FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID)
-		if err := row.Scan(&content); err != nil {
+		if err := s.QueryRowContext(context.Background(),
+			`SELECT content FROM memory_identities WHERE workspace_id = $1`, r.WorkspaceID).Scan(&content); err != nil {
 			return fmt.Errorf("reading personal summary for %q: %w", alias, err)
 		}
 		if !content.Valid || !strings.Contains(content.String, phrase) {
