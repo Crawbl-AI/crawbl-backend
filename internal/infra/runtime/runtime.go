@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -131,10 +133,86 @@ func (s *Stack) Up(ctx context.Context) (*UpResult, error) {
 }
 
 // Destroy destroys all infrastructure in the runtime stack.
+// It first strips K8s resources from Pulumi state (Helm releases and
+// namespaces become unreachable when the server is deleted), then
+// destroys the remaining cloud resources.
 func (s *Stack) Destroy(ctx context.Context) error {
 	_ = os.Setenv("PULUMI_K8S_DELETE_UNREACHABLE", "true")
+	if err := s.RemoveUnreachableK8sState(ctx); err != nil {
+		return fmt.Errorf("clean pulumi state: %w", err)
+	}
 	_, err := s.stack.Destroy(ctx)
 	return err
+}
+
+// RemoveUnreachableK8sState exports the Pulumi state, strips all
+// kubernetes:* and command:remote:* resources, and clears pending
+// operations. This allows Destroy to proceed when the K8s cluster or
+// SSH connection is unreachable.
+func (s *Stack) RemoveUnreachableK8sState(ctx context.Context) error {
+	state, err := s.stack.Export(ctx)
+	if err != nil {
+		return fmt.Errorf("export state: %w", err)
+	}
+
+	var deployment map[string]json.RawMessage
+	if err := json.Unmarshal(state.Deployment, &deployment); err != nil {
+		return fmt.Errorf("unmarshal state: %w", err)
+	}
+
+	if raw, ok := deployment["resources"]; ok {
+		var resources []map[string]any
+		if err := json.Unmarshal(raw, &resources); err != nil {
+			return fmt.Errorf("unmarshal resources: %w", err)
+		}
+		// Collect URNs of resources we're removing so we can also remove
+		// any providers that depend on them (e.g. k8s provider depends on
+		// the remote command that extracts kubeconfig).
+		removedURNs := make(map[string]bool)
+		filtered := make([]map[string]any, 0, len(resources))
+		for _, r := range resources {
+			t, _ := r["type"].(string)
+			if strings.HasPrefix(t, "kubernetes:") || strings.HasPrefix(t, "command:remote:") {
+				if urn, ok := r["urn"].(string); ok {
+					removedURNs[urn] = true
+				}
+				continue
+			}
+			filtered = append(filtered, r)
+		}
+		// Second pass: remove providers whose dependencies reference removed resources.
+		final := make([]map[string]any, 0, len(filtered))
+		for _, r := range filtered {
+			if deps, ok := r["dependencies"].([]any); ok {
+				orphaned := false
+				for _, d := range deps {
+					if ds, ok := d.(string); ok && removedURNs[ds] {
+						orphaned = true
+						break
+					}
+				}
+				if orphaned {
+					continue
+				}
+			}
+			final = append(final, r)
+		}
+		b, err := json.Marshal(final)
+		if err != nil {
+			return fmt.Errorf("marshal filtered resources: %w", err)
+		}
+		deployment["resources"] = b
+	}
+
+	deployment["pending_operations"] = json.RawMessage("[]")
+
+	cleaned, err := json.Marshal(deployment)
+	if err != nil {
+		return fmt.Errorf("marshal cleaned state: %w", err)
+	}
+	state.Deployment = cleaned
+
+	return s.stack.Import(ctx, state)
 }
 
 // Outputs returns the runtime stack outputs.

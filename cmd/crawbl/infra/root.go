@@ -3,9 +3,14 @@
 package infra
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -135,12 +140,60 @@ func buildRuntimeConfig(env, region string) (runtime.RuntimeConfig, error) {
 
 	cfg := runtime.ConfigFromStack(env, region, runtimeCfg, platformCfg)
 
+	// Resolve "auto" in SSHAllowedCIDRs to the current public IP.
+	// This allows developers with dynamic IPs to simply set "auto" in
+	// Pulumi.dev.yaml instead of hardcoding an IP that changes daily.
+	cfg.Hetzner.SSHAllowedCIDRs = resolveAutoCIDRs(cfg.Hetzner.SSHAllowedCIDRs)
+	cfg.Hetzner.K8sAPIAllowedCIDRs = resolveAutoCIDRs(cfg.Hetzner.K8sAPIAllowedCIDRs)
+
 	// Cloudflare tunnel secret is a runtime credential — never stored in YAML.
 	cfg.Cloudflare.TunnelSecret = os.Getenv("CLOUDFLARE_TUNNEL_SECRET")
 
 	cfg.ESCEnvironment = config.StringOr("CRAWBL_ESC_ENV", "crawbl/"+env)
 
 	return cfg, nil
+}
+
+// resolveAutoCIDRs replaces the literal string "auto" in a CIDR list with
+// the current machine's public IP as a /32. This lets developers with
+// dynamic IPs use sshAllowedCIDRs: ["auto"] in Pulumi.dev.yaml.
+func resolveAutoCIDRs(cidrs []string) []string {
+	resolved := make([]string, 0, len(cidrs))
+	for _, c := range cidrs {
+		if c == "auto" {
+			ip := detectPublicIP()
+			if ip != "" {
+				out.Infof("Resolved 'auto' CIDR to %s/32", ip)
+				resolved = append(resolved, ip+"/32")
+			} else {
+				out.Warning("Could not detect public IP for 'auto' CIDR — skipping")
+			}
+		} else {
+			resolved = append(resolved, c)
+		}
+	}
+	return resolved
+}
+
+// detectPublicIP returns the current machine's public IP via ifconfig.me.
+func detectPublicIP() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://ifconfig.me", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", "curl/8.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // confirmPrompt prints prompt and returns true only when the user types "y" or "Y".

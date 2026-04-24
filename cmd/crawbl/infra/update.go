@@ -104,11 +104,9 @@ func runUpdate(ctx context.Context, opts updateOpts) error {
 	return postUpdateDOKS(ctx, opts)
 }
 
-// postUpdateDev saves kubeconfig from Pulumi stack outputs and waits for ArgoCD.
-// DOCR registry integration is not needed for the Hetzner k3s dev environment.
+// postUpdateDev fetches kubeconfig directly from the k3s server via SSH
+// and waits for ArgoCD. DOCR registry integration is not needed for Hetzner k3s.
 func postUpdateDev(ctx context.Context, opts updateOpts) error {
-	out.Step(style.Infra, "Reading kubeconfig from Pulumi stack outputs...")
-
 	cfg, err := buildRuntimeConfig(opts.env, opts.region)
 	if err != nil {
 		return fmt.Errorf("build runtime config: %w", err)
@@ -124,13 +122,19 @@ func postUpdateDev(ctx context.Context, opts updateOpts) error {
 		return fmt.Errorf("get stack outputs: %w", err)
 	}
 
-	kubeconfigRaw, ok := outputs["kubeconfig"]
+	serverIPRaw, ok := outputs["serverIP"]
 	if !ok {
-		return fmt.Errorf("kubeconfig output not found in stack outputs")
+		return fmt.Errorf("serverIP output not found in stack outputs")
 	}
-	kubeconfig, ok := kubeconfigRaw.(string)
+	serverIP, ok := serverIPRaw.(string)
 	if !ok {
-		return fmt.Errorf("kubeconfig output is not a string")
+		return fmt.Errorf("serverIP output is not a string")
+	}
+
+	out.Step(style.Infra, "Fetching kubeconfig from k3s server %s via SSH...", serverIP)
+	kubeconfig, err := fetchKubeconfigSSH(serverIP)
+	if err != nil {
+		return fmt.Errorf("fetch kubeconfig via SSH: %w", err)
 	}
 
 	kubeconfigPath := os.ExpandEnv("$HOME/.kube/config-crawbl-dev")
@@ -139,6 +143,9 @@ func postUpdateDev(ctx context.Context, opts updateOpts) error {
 	}
 	out.Step(style.Check, "Kubeconfig saved to %s", kubeconfigPath)
 	out.Infof("Set KUBECONFIG=%s to use this cluster", kubeconfigPath)
+
+	// Point kubectl at the new k3s kubeconfig for the wait steps below.
+	_ = os.Setenv("KUBECONFIG", kubeconfigPath)
 
 	out.Step(style.Infra, "Waiting for ArgoCD application-controller...")
 	if err := waitForController(ctx, opts.syncTimeout); err != nil {
@@ -246,6 +253,24 @@ func validateEnvVars() error {
 		return fmt.Errorf("missing PULUMI_ACCESS_TOKEN environment variable")
 	}
 	return nil
+}
+
+// fetchKubeconfigSSH connects to the k3s server via SSH and retrieves the
+// real kubeconfig from /etc/rancher/k3s/k3s.yaml, replacing 127.0.0.1
+// with the server's public IP. This is more reliable than reading the
+// kubeconfig from Pulumi outputs which may have encoding issues.
+func fetchKubeconfigSSH(serverIP string) (string, error) {
+	sshCmd := exec.Command("ssh",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "ConnectTimeout=10",
+		fmt.Sprintf("root@%s", serverIP),
+		fmt.Sprintf("sed 's/127.0.0.1/%s/g' /etc/rancher/k3s/k3s.yaml", serverIP),
+	)
+	output, err := sshCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("ssh to %s: %w", serverIP, err)
+	}
+	return string(output), nil
 }
 
 // waitForController waits for the ArgoCD application-controller StatefulSet to be ready.
