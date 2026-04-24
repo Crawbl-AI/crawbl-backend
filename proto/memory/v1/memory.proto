@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package crawbl.memory.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/memory/v1;memoryv1";
+
+// MemoryType classifies extracted memories.
+enum MemoryType {
+  MEMORY_TYPE_UNSPECIFIED = 0;
+  MEMORY_TYPE_DECISION = 1;
+  MEMORY_TYPE_PREFERENCE = 2;
+  MEMORY_TYPE_MILESTONE = 3;
+  MEMORY_TYPE_PROBLEM = 4;
+  MEMORY_TYPE_EMOTIONAL = 5;
+  MEMORY_TYPE_FACT = 6;
+  MEMORY_TYPE_TASK = 7;
+}
+
+// DrawerState represents the processing state of a memory drawer.
+enum DrawerState {
+  DRAWER_STATE_UNSPECIFIED = 0;
+  DRAWER_STATE_RAW = 1;
+  DRAWER_STATE_CLASSIFYING = 2;
+  DRAWER_STATE_PROCESSED = 3;
+  DRAWER_STATE_MERGED = 4;
+  DRAWER_STATE_FAILED = 5;
+}

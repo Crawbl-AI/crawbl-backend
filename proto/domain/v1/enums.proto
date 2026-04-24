@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package crawbl.domain.v1;
+
+option go_package = "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/domain/v1;domainv1";
+
+// AgentStatus represents the operational status of an agent within a workspace.
+enum AgentStatus {
+  AGENT_STATUS_UNSPECIFIED = 0;
+  AGENT_STATUS_ONLINE = 1;
+  AGENT_STATUS_READING = 2;
+  AGENT_STATUS_THINKING = 3;
+  AGENT_STATUS_PENDING = 4;
+  AGENT_STATUS_ERROR = 5;
+  AGENT_STATUS_OFFLINE = 6;
+  AGENT_STATUS_WRITING = 7;
+}
+
+// ConversationType represents the type of conversation in a workspace.
+enum ConversationType {
+  CONVERSATION_TYPE_UNSPECIFIED = 0;
+  CONVERSATION_TYPE_SWARM = 1;
+  CONVERSATION_TYPE_AGENT = 2;
+}
+
+// MessageRole represents the sender role in a conversation message.
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_AGENT = 2;
+  MESSAGE_ROLE_SYSTEM = 3;
+}
+
+// MessageStatus represents the delivery status of a message.
+enum MessageStatus {
+  MESSAGE_STATUS_UNSPECIFIED = 0;
+  MESSAGE_STATUS_PENDING = 1;
+  MESSAGE_STATUS_DELIVERED = 2;
+  MESSAGE_STATUS_FAILED = 3;
+  MESSAGE_STATUS_SENT = 4;
+  MESSAGE_STATUS_READ = 5;
+  MESSAGE_STATUS_INCOMPLETE = 6;
+  MESSAGE_STATUS_SILENT = 7;
+  MESSAGE_STATUS_DELEGATED = 8;
+}
+
+// MessageContentType represents the type of content in a message.
+enum MessageContentType {
+  MESSAGE_CONTENT_TYPE_UNSPECIFIED = 0;
+  MESSAGE_CONTENT_TYPE_TEXT = 1;
+  MESSAGE_CONTENT_TYPE_ACTION_CARD = 2;
+  MESSAGE_CONTENT_TYPE_TOOL_STATUS = 3;
+  MESSAGE_CONTENT_TYPE_SYSTEM = 4;
+  MESSAGE_CONTENT_TYPE_LOADING = 5;
+  MESSAGE_CONTENT_TYPE_DELEGATION = 6;
+  MESSAGE_CONTENT_TYPE_ARTIFACT = 7;
+  MESSAGE_CONTENT_TYPE_WORKFLOW = 8;
+  MESSAGE_CONTENT_TYPE_QUESTIONS = 9;
+}
+
+// ActionStyle represents the visual style of an action button.
+enum ActionStyle {
+  ACTION_STYLE_UNSPECIFIED = 0;
+  ACTION_STYLE_PRIMARY = 1;
+  ACTION_STYLE_SECONDARY = 2;
+  ACTION_STYLE_DESTRUCTIVE = 3;
+}
+
+// ToolState represents the execution state of a tool.
+enum ToolState {
+  TOOL_STATE_UNSPECIFIED = 0;
+  TOOL_STATE_RUNNING = 1;
+  TOOL_STATE_COMPLETED = 2;
+  TOOL_STATE_FAILED = 3;
+}
+
+// AttachmentType represents the type of file attachment.
+enum AttachmentType {
+  ATTACHMENT_TYPE_UNSPECIFIED = 0;
+  ATTACHMENT_TYPE_IMAGE = 1;
+  ATTACHMENT_TYPE_VIDEO = 2;
+  ATTACHMENT_TYPE_AUDIO = 3;
+  ATTACHMENT_TYPE_FILE = 4;
+}
+
+// RuntimeState represents the operational state of a user's swarm runtime.
+enum RuntimeState {
+  RUNTIME_STATE_UNSPECIFIED = 0;
+  RUNTIME_STATE_PROVISIONING = 1;
+  RUNTIME_STATE_READY = 2;
+  RUNTIME_STATE_OFFLINE = 3;
+  RUNTIME_STATE_FAILED = 4;
+}
+
+// ResponseLength represents the response verbosity preference.
+enum ResponseLength {
+  RESPONSE_LENGTH_UNSPECIFIED = 0;
+  RESPONSE_LENGTH_AUTO = 1;
+  RESPONSE_LENGTH_SHORT = 2;
+  RESPONSE_LENGTH_MEDIUM = 3;
+  RESPONSE_LENGTH_LONG = 4;
+}
+
+// QuestionMode is the selection mode for a question item.
+enum QuestionMode {
+  QUESTION_MODE_UNSPECIFIED = 0;
+  QUESTION_MODE_SINGLE = 1;
+  QUESTION_MODE_MULTI = 2;
+}
+
+// ItemType distinguishes tools from third-party integrations.
+enum ItemType {
+  ITEM_TYPE_UNSPECIFIED = 0;
+  ITEM_TYPE_TOOL = 1;
+  ITEM_TYPE_APP = 2;
+}

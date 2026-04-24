@@ -31,8 +31,8 @@ var (
 // ports.go.
 type EnrichDeps struct {
 	DB            *dbr.Connection
-	DrawerRepo    drawerStore
-	KGRepo        kgStore
+	DrawerRepo    DrawerStore
+	KGRepo        KGStore
 	LLMClassifier extract.LLMClassifier
 	Logger        *slog.Logger
 }

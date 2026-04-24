@@ -37,6 +37,11 @@ func newUnitCommand() *cobra.Command {
 }
 
 func runFormattedGoTests(ctx context.Context, formatterPath string, formatterArgs ...string) error {
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return fmt.Errorf("go not found in PATH: %w", err)
+	}
+
 	reader, writer := io.Pipe()
 
 	formatter := exec.CommandContext(ctx, formatterPath, formatterArgs...) // #nosec G204 -- CLI tool, input from developer
@@ -44,7 +49,7 @@ func runFormattedGoTests(ctx context.Context, formatterPath string, formatterArg
 	formatter.Stdout = os.Stdout
 	formatter.Stderr = os.Stderr
 
-	goTest := exec.CommandContext(ctx, "go", "test", "-mod=vendor", "-json", "./...")
+	goTest := exec.CommandContext(ctx, goPath, "test", "-mod=vendor", "-json", "./...")
 	goTest.Stdout = writer
 	goTest.Stderr = writer
 
@@ -86,8 +91,13 @@ func ensureGoTool(ctx context.Context, binaryName, installTarget string) (string
 		return path, nil
 	}
 
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return "", fmt.Errorf("go not found in PATH: %w", err)
+	}
+
 	out.Step(style.Deploy, "Installing %s...", binaryName)
-	install := exec.CommandContext(ctx, "go", "install", installTarget) // #nosec G204 -- CLI tool, input from developer
+	install := exec.CommandContext(ctx, goPath, "install", installTarget) // #nosec G204 -- CLI tool, input from developer
 	install.Stdout = os.Stdout
 	install.Stderr = os.Stderr
 	if err := install.Run(); err != nil {
@@ -129,7 +139,11 @@ func goToolCandidates(ctx context.Context, binaryName string) []string {
 }
 
 func goEnv(ctx context.Context, key string) string {
-	cmd := exec.CommandContext(ctx, "go", "env", key) // #nosec G204 -- CLI tool, input from developer
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+	cmd := exec.CommandContext(ctx, goPath, "env", key) // #nosec G204 -- CLI tool, input from developer
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

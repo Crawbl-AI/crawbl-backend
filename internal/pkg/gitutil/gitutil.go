@@ -12,9 +12,22 @@ import (
 
 const revParse = "rev-parse"
 
+// gitPath resolves the absolute path of the git executable.
+func gitPath() (string, error) {
+	p, err := exec.LookPath("git")
+	if err != nil {
+		return "", fmt.Errorf("git not found in PATH: %w", err)
+	}
+	return p, nil
+}
+
 // RootDir returns the git repository root directory.
 func RootDir() (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", revParse, "--show-toplevel")
+	git, err := gitPath()
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(context.Background(), git, revParse, "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get git root: %w", err)
@@ -45,10 +58,14 @@ func ResolveSiblingRepo(explicit, repoDir string) (string, error) {
 // HEAD has been pushed to the remote. This prevents deploying uncommitted or
 // unpushed code.
 func EnsureCleanAndPushed() error {
+	git, err := gitPath()
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 
 	// Check for uncommitted changes.
-	statusCmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	statusCmd := exec.CommandContext(ctx, git, "status", "--porcelain")
 	statusOutput, err := statusCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git status failed: %w", err)
@@ -58,7 +75,7 @@ func EnsureCleanAndPushed() error {
 	}
 
 	// Check that HEAD is pushed to the remote.
-	localCmd := exec.CommandContext(ctx, "git", revParse, "HEAD")
+	localCmd := exec.CommandContext(ctx, git, revParse, "HEAD")
 	localOutput, err := localCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git rev-parse HEAD failed: %w", err)
@@ -66,14 +83,14 @@ func EnsureCleanAndPushed() error {
 	localSHA := strings.TrimSpace(string(localOutput))
 
 	// Get current branch.
-	branchCmd := exec.CommandContext(ctx, "git", revParse, "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(ctx, git, revParse, "--abbrev-ref", "HEAD")
 	branchOutput, err := branchCmd.Output()
 	if err != nil {
 		return fmt.Errorf("git rev-parse --abbrev-ref HEAD failed: %w", err)
 	}
 	branch := strings.TrimSpace(string(branchOutput))
 
-	remoteCmd := exec.CommandContext(ctx, "git", revParse, "origin/"+branch) // #nosec G204 -- CLI tool, input from developer
+	remoteCmd := exec.CommandContext(ctx, git, revParse, "origin/"+branch) // #nosec G204 -- CLI tool, input from developer
 	remoteOutput, err := remoteCmd.Output()
 	if err != nil {
 		return fmt.Errorf("branch %q not found on remote — push before deploying: %w", branch, err)

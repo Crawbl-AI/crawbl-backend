@@ -24,6 +24,11 @@ type koBuildOpts struct {
 
 // runKoBuild executes ko build with the given options.
 func runKoBuild(ctx context.Context, opts koBuildOpts) error {
+	koPath, err := exec.LookPath("ko")
+	if err != nil {
+		return fmt.Errorf("ko not found in PATH: %w", err)
+	}
+
 	imageRef := fmt.Sprintf("%s:%s", opts.imageRepo, opts.tag)
 	out.Step(style.Deploy, "Building %s (ko)", imageRef)
 
@@ -35,7 +40,7 @@ func runKoBuild(ctx context.Context, opts koBuildOpts) error {
 		args = append(args, "--local")
 	}
 
-	cmd := exec.CommandContext(ctx, "ko", args...) // #nosec G204 -- CLI tool, input from developer
+	cmd := exec.CommandContext(ctx, koPath, args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Env = append(os.Environ(),
 		"KO_DOCKER_REPO="+opts.imageRepo,
 	)
@@ -69,6 +74,11 @@ type dockerBuildOpts struct {
 
 // runDockerBuild executes docker buildx build for the auth-filter WASM image.
 func runDockerBuild(ctx context.Context, opts dockerBuildOpts) error {
+	dockerPath, err := exec.LookPath("docker")
+	if err != nil {
+		return fmt.Errorf("docker not found in PATH: %w", err)
+	}
+
 	imageRef := fmt.Sprintf("%s:%s", opts.imageRepo, opts.tag)
 	out.Step(style.Docker, "Building %s", imageRef)
 
@@ -90,7 +100,7 @@ func runDockerBuild(ctx context.Context, opts dockerBuildOpts) error {
 
 	args = append(args, opts.contextDir)
 
-	cmd := exec.CommandContext(ctx, "docker", args...) // #nosec G204 -- CLI tool, input from developer
+	cmd := exec.CommandContext(ctx, dockerPath, args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

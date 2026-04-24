@@ -1,6 +1,10 @@
 package mcpservice
 
-import "fmt"
+import (
+	"fmt"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
 
 func (s *service) GetUserProfile(ctx contextT, sess sessionT, userID string, includePrefs bool) (*UserProfileResult, error) {
 	row, err := s.repos.MCP.GetUserByID(ctx, sess, userID)
@@ -9,13 +13,13 @@ func (s *service) GetUserProfile(ctx contextT, sess sessionT, userID string, inc
 	}
 
 	result := &UserProfileResult{
-		ID:          row.ID,
+		Id:          row.ID,
 		Email:       row.Email,
 		Nickname:    row.Nickname,
 		Name:        row.Name,
 		Surname:     row.Surname,
 		CountryCode: row.CountryCode,
-		CreatedAt:   row.CreatedAt,
+		CreatedAt:   timestamppb.New(row.CreatedAt),
 	}
 
 	if includePrefs {

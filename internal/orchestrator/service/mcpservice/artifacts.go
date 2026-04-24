@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/gocraft/dbr/v2"
 
@@ -22,7 +23,7 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		return nil, err
 	}
 
-	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentID, params.AgentSlug)
+	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentId, params.AgentSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +38,8 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	versionID := uuid.NewString()
 
 	var convID *string
-	if params.ConversationID != "" {
-		convID = &params.ConversationID
+	if params.ConversationId != "" {
+		convID = &params.ConversationId
 	}
 
 	artifactRow := &artifactrepo.ArtifactRow{
@@ -72,13 +73,13 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	}
 
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{
-			ArtifactID:     artifactID,
-			ConversationID: stringFromPtr(convID),
+		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, &realtime.ArtifactEventPayload{
+			ArtifactId:     artifactID,
+			ConversationId: stringFromPtr(convID),
 			Title:          params.Title,
 			Version:        1,
 			Action:         string(artifactrepo.ArtifactActionCreated),
-			AgentID:        agentID,
+			AgentId:        agentID,
 			AgentSlug:      params.AgentSlug,
 		})
 	}
@@ -95,7 +96,7 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		Status:      string(artifactrepo.ArtifactStatusDraft),
 	})
 
-	return &CreateArtifactResult{ArtifactID: artifactID, Version: 1}, nil
+	return &CreateArtifactResult{ArtifactId: artifactID, Version: 1}, nil
 }
 
 func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID, artifactID string, version int) (*ReadArtifactResult, error) {
@@ -118,22 +119,22 @@ func (s *service) ReadArtifact(ctx contextT, sess sessionT, userID, workspaceID,
 		reviewRows = nil
 	}
 
-	reviews := make([]ArtifactReviewBrief, 0, len(reviewRows))
+	reviews := make([]*ArtifactReviewBrief, 0, len(reviewRows))
 	for _, r := range reviewRows {
-		reviews = append(reviews, ArtifactReviewBrief{
+		reviews = append(reviews, &ArtifactReviewBrief{
 			ReviewerAgentSlug: r.ReviewerAgentSlug,
 			Outcome:           r.Outcome,
 			Comments:          r.Comments,
-			CreatedAt:         r.CreatedAt,
+			CreatedAt:         timestamppb.New(r.CreatedAt),
 		})
 	}
 
 	return &ReadArtifactResult{
-		ArtifactID:  artifact.ID,
+		ArtifactId:  artifact.ID,
 		Title:       artifact.Title,
 		ContentType: artifact.ContentType,
 		Content:     ver.Content,
-		Version:     ver.Version,
+		Version:     int32(ver.Version),
 		Status:      artifact.Status,
 		Reviews:     reviews,
 	}, nil
@@ -144,22 +145,22 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		return nil, err
 	}
 
-	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, params.ArtifactID)
+	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, params.ArtifactId)
 	if mErr != nil {
 		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
-	if params.ExpectedVersion > 0 && params.ExpectedVersion != artifact.CurrentVersion {
+	if params.ExpectedVersion > 0 && int(params.ExpectedVersion) != artifact.CurrentVersion {
 		return nil, fmt.Errorf("version conflict: expected %d but current is %d", params.ExpectedVersion, artifact.CurrentVersion)
 	}
 
-	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentID, params.AgentSlug)
+	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentId, params.AgentSlug)
 	if err != nil {
 		return nil, err
 	}
 
 	result, txErr := database.WithTransaction(sess, "update artifact version", func(tx *dbr.Tx) (*UpdateArtifactResult, *merrors.Error) {
-		newVersion, mErr := s.repos.Artifact.IncrementVersion(ctx, tx, params.ArtifactID)
+		newVersion, mErr := s.repos.Artifact.IncrementVersion(ctx, tx, params.ArtifactId)
 		if mErr != nil {
 			return nil, mErr
 		}
@@ -173,7 +174,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 
 		versionRow := &artifactrepo.ArtifactVersionRow{
 			ID:            uuid.NewString(),
-			ArtifactID:    params.ArtifactID,
+			ArtifactID:    params.ArtifactId,
 			Version:       newVersion,
 			Content:       params.Content,
 			ChangeSummary: changeSummary,
@@ -185,22 +186,22 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 			return nil, mErr
 		}
 
-		return &UpdateArtifactResult{Version: newVersion}, nil
+		return &UpdateArtifactResult{Version: int32(newVersion)}, nil
 	})
 	if txErr != nil {
 		return nil, fmt.Errorf("update artifact: %s", txErr.Error())
 	}
 
-	newVersion := result.Version
+	newVersion := int(result.Version)
 
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{
-			ArtifactID:     params.ArtifactID,
-			ConversationID: stringFromPtr(artifact.ConversationID),
+		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, &realtime.ArtifactEventPayload{
+			ArtifactId:     params.ArtifactId,
+			ConversationId: stringFromPtr(artifact.ConversationID),
 			Title:          artifact.Title,
-			Version:        newVersion,
+			Version:        int32(newVersion),
 			Action:         string(artifactrepo.ArtifactActionUpdated),
-			AgentID:        agentID,
+			AgentId:        agentID,
 			AgentSlug:      params.AgentSlug,
 		})
 	}
@@ -209,7 +210,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		WorkspaceID: workspaceID,
 		AgentID:     agentID,
 		ConvID:      artifact.ConversationID,
-		ArtifactID:  params.ArtifactID,
+		ArtifactID:  params.ArtifactId,
 		Title:       artifact.Title,
 		ContentType: artifact.ContentType,
 		Action:      artifactrepo.ArtifactActionUpdated,
@@ -217,7 +218,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		Status:      artifact.Status,
 	})
 
-	return &UpdateArtifactResult{Version: newVersion}, nil
+	return &UpdateArtifactResult{Version: int32(newVersion)}, nil
 }
 
 func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceID string, params *ReviewArtifactParams) (*ReviewArtifactResult, error) {
@@ -225,24 +226,24 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		return nil, err
 	}
 
-	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, params.ArtifactID)
+	artifact, mErr := s.repos.Artifact.GetByID(ctx, sess, workspaceID, params.ArtifactId)
 	if mErr != nil {
 		return nil, fmt.Errorf(errArtifactNotFound)
 	}
 
-	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentID, params.AgentSlug)
+	agentID, err := s.resolveAgentParam(ctx, sess, workspaceID, params.AgentId, params.AgentSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	reviewVersion := params.Version
+	reviewVersion := int(params.Version)
 	if reviewVersion <= 0 {
 		reviewVersion = artifact.CurrentVersion
 	}
 
 	reviewRow := &artifactrepo.ArtifactReviewRow{
 		ID:                uuid.NewString(),
-		ArtifactID:        params.ArtifactID,
+		ArtifactID:        params.ArtifactId,
 		Version:           reviewVersion,
 		ReviewerAgentID:   agentID,
 		ReviewerAgentSlug: params.AgentSlug,
@@ -255,19 +256,19 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	}
 
 	if params.Outcome == string(artifactrepo.ArtifactReviewApproved) {
-		if statusErr := s.repos.MCP.UpdateArtifactStatus(ctx, sess, params.ArtifactID, string(artifactrepo.ArtifactReviewApproved)); statusErr != nil {
+		if statusErr := s.repos.MCP.UpdateArtifactStatus(ctx, sess, params.ArtifactId, string(artifactrepo.ArtifactReviewApproved)); statusErr != nil {
 			return &ReviewArtifactResult{Reviewed: true}, fmt.Errorf("review created but failed to update status: %w", statusErr)
 		}
 	}
 
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{
-			ArtifactID:     params.ArtifactID,
-			ConversationID: stringFromPtr(artifact.ConversationID),
+		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, &realtime.ArtifactEventPayload{
+			ArtifactId:     params.ArtifactId,
+			ConversationId: stringFromPtr(artifact.ConversationID),
 			Title:          artifact.Title,
-			Version:        reviewVersion,
+			Version:        int32(reviewVersion),
 			Action:         string(artifactrepo.ArtifactActionReviewed),
-			AgentID:        agentID,
+			AgentId:        agentID,
 			AgentSlug:      params.AgentSlug,
 		})
 	}
@@ -276,7 +277,7 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 		WorkspaceID: workspaceID,
 		AgentID:     agentID,
 		ConvID:      artifact.ConversationID,
-		ArtifactID:  params.ArtifactID,
+		ArtifactID:  params.ArtifactId,
 		Title:       artifact.Title,
 		ContentType: artifact.ContentType,
 		Action:      artifactrepo.ArtifactActionReviewed,

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/mod/semver"
 )
@@ -21,7 +22,25 @@ var (
 	// namespace, excluding prefixed namespaces (e.g. `auth-filter/v0.1.0`
 	// or `agent-runtime/v2.3.4`) that belong to per-component sequences.
 	globalSemverTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$`)
+
+	gitPathOnce     sync.Once
+	resolvedGitPath string
 )
+
+// getGitPath returns the absolute path to the git executable, resolved lazily
+// on first call via sync.Once to avoid I/O at package init (go:S4036).
+// Falls back to the bare "git" name if LookPath fails.
+func getGitPath() string {
+	gitPathOnce.Do(func() {
+		p, err := exec.LookPath("git")
+		if err != nil {
+			resolvedGitPath = "git"
+			return
+		}
+		resolvedGitPath = p
+	})
+	return resolvedGitPath
+}
 
 // isGlobalSemverTag reports whether tag is a plain `vX.Y.Z` tag in the
 // global release sequence — no slash-namespaced prefix, parseable as
@@ -45,7 +64,7 @@ func gitCmd(repoPath string, args ...string) *exec.Cmd {
 	if repoPath != "" {
 		args = append([]string{"-C", repoPath}, args...)
 	}
-	return exec.CommandContext(context.Background(), "git", args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
+	return exec.CommandContext(context.Background(), getGitPath(), args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
 }
 
 // bumpVersion increments the major, minor, or patch component of a canonical
@@ -169,7 +188,11 @@ func CalculateForPrefix(prefix string) (Result, error) {
 // latestReleaseTag queries GitHub for the latest release tag using gh CLI.
 // Returns empty string if no release exists or gh is not available.
 func latestReleaseTag(repoPath string) string {
-	cmd := exec.CommandContext(context.Background(), "gh", "release", "view", "--json", "tagName", "-q", ".tagName")
+	ghPath, err := exec.LookPath("gh")
+	if err != nil {
+		return ""
+	}
+	cmd := exec.CommandContext(context.Background(), ghPath, "release", "view", "--json", "tagName", "-q", ".tagName")
 	if repoPath != "" {
 		cmd.Dir = repoPath
 	}

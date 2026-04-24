@@ -202,7 +202,11 @@ type toolCheck struct {
 
 // checkTool runs the check command via sh so shell operators (||, redirects) work.
 func checkTool(t toolCheck) bool {
-	cmd := exec.CommandContext(context.Background(), "sh", "-c", t.checkCmd) // #nosec G204 -- CLI tool, input from developer
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		return false
+	}
+	cmd := exec.CommandContext(context.Background(), shPath, "-c", t.checkCmd) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Run() == nil
@@ -219,7 +223,11 @@ func fileExists(path string) bool {
 }
 
 func runCmd(name string, args ...string) error {
-	cmd := exec.CommandContext(context.Background(), name, args...) // #nosec G204 -- CLI tool, input from developer
+	cmdPath, err := exec.LookPath(name)
+	if err != nil {
+		return fmt.Errorf("%s not found in PATH: %w", name, err)
+	}
+	cmd := exec.CommandContext(context.Background(), cmdPath, args...) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

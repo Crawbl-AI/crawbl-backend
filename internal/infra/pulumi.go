@@ -2,8 +2,10 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -128,6 +130,19 @@ func exportOutputs(ctx *pulumi.Context, clusterResult *cluster.Cluster) {
 	ctx.Export("clusterName", clusterResult.Outputs.ClusterName)
 	ctx.Export("clusterEndpoint", clusterResult.Outputs.ClusterEndpoint)
 	ctx.Export("kubeconfig", clusterResult.Outputs.Kubeconfig)
+
+	ctx.Export("readme", clusterResult.Outputs.ClusterName.ApplyT(func(name string) string {
+		return "# Crawbl Infrastructure\n\n" +
+			"DOKS cluster **" + name + "** bootstrapped with ArgoCD.\n\n" +
+			"All application workloads are managed by ArgoCD via the " +
+			"[crawbl-argocd-apps](https://github.com/Crawbl-AI/crawbl-argocd-apps) repo.\n\n" +
+			"## Components\n\n" +
+			"| Layer | Managed By |\n" +
+			"|-------|------------|\n" +
+			"| DOKS cluster, VPC, Cloudflare tunnel | Pulumi (this stack) |\n" +
+			"| ArgoCD Helm release + root Application | Pulumi (this stack) |\n" +
+			"| All other K8s workloads | ArgoCD |\n"
+	}).(pulumi.StringOutput))
 }
 
 // Preview runs a Pulumi preview.
@@ -170,8 +185,62 @@ func (s *Stack) Up(ctx context.Context) (*UpResult, error) {
 
 // Destroy destroys all infrastructure in the stack.
 func (s *Stack) Destroy(ctx context.Context) error {
+	// PULUMI_K8S_DELETE_UNREACHABLE covers native K8s resources (Namespaces,
+	// Secrets, CRDs) but NOT Helm releases — the Helm provider has its own
+	// unreachable check. RemoveUnreachableK8sState handles the Helm case by
+	// stripping those resources from state before destroy runs.
+	os.Setenv("PULUMI_K8S_DELETE_UNREACHABLE", "true")
 	_, err := s.stack.Destroy(ctx)
 	return err
+}
+
+// RemoveUnreachableK8sState exports the Pulumi state, strips all kubernetes:*
+// resources (including Helm releases that PULUMI_K8S_DELETE_UNREACHABLE cannot
+// handle) and clears pending operations from interrupted deployments, then
+// re-imports the cleaned state. Call this before Destroy when the K8s cluster
+// is known to be unreachable.
+func (s *Stack) RemoveUnreachableK8sState(ctx context.Context) error {
+	state, err := s.stack.Export(ctx)
+	if err != nil {
+		return fmt.Errorf("export state: %w", err)
+	}
+
+	var deployment map[string]json.RawMessage
+	if err := json.Unmarshal(state.Deployment, &deployment); err != nil {
+		return fmt.Errorf("unmarshal state: %w", err)
+	}
+
+	// Remove all K8s-managed resources (Helm releases, CRDs, namespaces, secrets, etc.).
+	if raw, ok := deployment["resources"]; ok {
+		var resources []map[string]any
+		if err := json.Unmarshal(raw, &resources); err != nil {
+			return fmt.Errorf("unmarshal resources: %w", err)
+		}
+		filtered := make([]map[string]any, 0, len(resources))
+		for _, r := range resources {
+			t, _ := r["type"].(string)
+			if strings.HasPrefix(t, "kubernetes:") {
+				continue
+			}
+			filtered = append(filtered, r)
+		}
+		b, err := json.Marshal(filtered)
+		if err != nil {
+			return fmt.Errorf("marshal filtered resources: %w", err)
+		}
+		deployment["resources"] = b
+	}
+
+	// Clear pending operations from interrupted deployments.
+	deployment["pending_operations"] = json.RawMessage("[]")
+
+	cleaned, err := json.Marshal(deployment)
+	if err != nil {
+		return fmt.Errorf("marshal cleaned state: %w", err)
+	}
+	state.Deployment = cleaned
+
+	return s.stack.Import(ctx, state)
 }
 
 // Outputs returns the stack outputs.

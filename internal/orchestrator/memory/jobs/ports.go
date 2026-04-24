@@ -14,10 +14,10 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-// drawerStore is the drawer subset the memory jobs use across process,
+// DrawerStore is the drawer subset the memory jobs use across process,
 // maintain, enrich, and centroid-recompute pipelines. It mirrors exactly
 // the call sites inside this package.
-type drawerStore interface {
+type DrawerStore interface {
 	ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error)
 	ListByState(ctx context.Context, sess database.SessionRunner, workspaceID, state string, limit int) ([]memory.Drawer, error)
 	ClaimForProcessing(ctx context.Context, sess database.SessionRunner, workspaceID string, ids []string) error
@@ -35,15 +35,15 @@ type drawerStore interface {
 	ListCentroidTrainingSamples(ctx context.Context, sess database.SessionRunner, windowDays, topN int) ([]memory.CentroidTrainingSample, error)
 }
 
-// kgStore is the knowledge-graph subset memory jobs use.
-type kgStore interface {
+// KGStore is the knowledge-graph subset memory jobs use.
+type KGStore interface {
 	AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType, properties string) (string, error)
 	AddTriple(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) (string, error)
 }
 
-// centroidStore is the centroid subset the weekly centroid-recompute job
+// CentroidStore is the centroid subset the weekly centroid-recompute job
 // depends on.
-type centroidStore interface {
+type CentroidStore interface {
 	GetAll(ctx context.Context, sess database.SessionRunner) ([]memory.MemoryTypeCentroid, error)
 	Upsert(ctx context.Context, sess database.SessionRunner, rows []memory.MemoryTypeCentroid) error
 }

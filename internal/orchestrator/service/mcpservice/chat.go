@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
@@ -46,10 +48,10 @@ func (s *service) SearchMessages(ctx contextT, sess sessionT, userID, workspaceI
 			text = text[:agentContextMaxTextLen] + "..."
 		}
 		briefs = append(briefs, MessageBrief{
-			ID:        r.ID,
+			Id:        r.ID,
 			Role:      r.Role,
 			Text:      text,
-			CreatedAt: r.CreatedAt,
+			CreatedAt: timestamppb.New(r.CreatedAt),
 		})
 	}
 	return briefs, nil

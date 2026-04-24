@@ -51,6 +51,11 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 		{"svc/backend-redis-master", 6379, 6379, "redis"},
 	}
 
+	kubectlPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		return 0, 0, 0, func() {}, fmt.Errorf("kubectl not found in PATH: %w", err)
+	}
+
 	var running []*portForward
 	cleanup = func() {
 		for _, pf := range running {
@@ -62,7 +67,7 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 	}
 
 	for _, f := range forwards {
-		cmd := exec.CommandContext(context.Background(), "kubectl", "port-forward", f.svc, // #nosec G204 -- CLI tool, input from developer
+		cmd := exec.CommandContext(context.Background(), kubectlPath, "port-forward", f.svc, // #nosec G204 -- CLI tool, input from developer
 			fmt.Sprintf("%d:%d", f.localPort, f.remotePort),
 			"-n", "backend")
 		cmd.Stdout = nil

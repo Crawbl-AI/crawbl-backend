@@ -26,8 +26,8 @@ const (
 // ports.go.
 type ProcessDeps struct {
 	DB            *dbr.Connection
-	DrawerRepo    drawerStore
-	KGRepo        kgStore
+	DrawerRepo    DrawerStore
+	KGRepo        KGStore
 	LLMClassifier extract.LLMClassifier
 	Embedder      embed.Embedder
 }
@@ -355,7 +355,7 @@ func resolveNeighborConflict(ctx context.Context, sess database.SessionRunner, d
 // once ColdWorkerMaxRetries is exhausted. The drawer is currently in state
 // 'classifying'; without an explicit state reset it would be stuck there
 // permanently since ListByState only queries state = 'raw'.
-func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, d *memory.Drawer) {
+func handleProcessFailure(ctx context.Context, sess database.SessionRunner, drawerRepo DrawerStore, d *memory.Drawer) {
 	if err := drawerRepo.IncrementRetryCount(ctx, sess, d.WorkspaceID, d.ID); err != nil {
 		slog.Warn("memory-process: increment retry count failed",
 			"drawer_id", d.ID, "workspace_id", d.WorkspaceID, "error", err)

@@ -28,8 +28,12 @@ type Update struct {
 
 // RunYQ executes yq -i with the given expression against a file path (relative to RepoPath).
 func (u *Update) RunYQ(ctx context.Context, expr, relPath string) error {
+	yqPath, err := exec.LookPath("yq")
+	if err != nil {
+		return fmt.Errorf("yq not found in PATH: %w", err)
+	}
 	absPath := filepath.Join(u.RepoPath, relPath)
-	cmd := exec.CommandContext(ctx, "yq", "-i", expr, absPath) // #nosec G204 -- CLI tool, input from developer
+	cmd := exec.CommandContext(ctx, yqPath, "-i", expr, absPath) // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -133,8 +137,12 @@ func (u *Update) UpdateAgentRuntime(ctx context.Context) error {
 
 // PullLatest pulls the latest changes from remote before making modifications.
 func (u *Update) PullLatest(ctx context.Context) error {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return fmt.Errorf("git not found in PATH: %w", err)
+	}
 	out.Step(style.Deploy, "Pulling latest changes from argocd repo")
-	cmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "pull", "--rebase") // #nosec G204 -- CLI tool, input from developer
+	cmd := exec.CommandContext(ctx, gitPath, "-C", u.RepoPath, "pull", "--rebase") // #nosec G204 -- CLI tool, input from developer
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -146,8 +154,13 @@ func (u *Update) PullLatest(ctx context.Context) error {
 // CommitAndPush stages all changes, commits with a deploy message, and pushes.
 // It is a no-op if there are no staged changes.
 func (u *Update) CommitAndPush(ctx context.Context, component string) error {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return fmt.Errorf("git not found in PATH: %w", err)
+	}
+
 	// Stage all changes.
-	addCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "add", "-A") // #nosec G204 -- CLI tool, input from developer
+	addCmd := exec.CommandContext(ctx, gitPath, "-C", u.RepoPath, "add", "-A") // #nosec G204 -- CLI tool, input from developer
 	addCmd.Stdout = os.Stdout
 	addCmd.Stderr = os.Stderr
 	if err := addCmd.Run(); err != nil {
@@ -155,7 +168,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	}
 
 	// Check whether there is anything to commit.
-	diffCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "diff", "--cached", "--quiet") // #nosec G204 -- CLI tool, input from developer
+	diffCmd := exec.CommandContext(ctx, gitPath, "-C", u.RepoPath, "diff", "--cached", "--quiet") // #nosec G204 -- CLI tool, input from developer
 	if err := diffCmd.Run(); err == nil {
 		out.Step(style.Deploy, "No changes to commit for %s", component)
 		return nil
@@ -164,7 +177,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	// Commit.
 	message := fmt.Sprintf("deploy: update %s to %s", component, u.Tag)
 	out.Step(style.Deploy, "Committing: %s", message)
-	commitCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "commit", "-m", message) // #nosec G204 -- CLI tool, input from developer
+	commitCmd := exec.CommandContext(ctx, gitPath, "-C", u.RepoPath, "commit", "-m", message) // #nosec G204 -- CLI tool, input from developer
 	commitCmd.Stdout = os.Stdout
 	commitCmd.Stderr = os.Stderr
 	if err := commitCmd.Run(); err != nil {
@@ -172,7 +185,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 	}
 
 	// Pull with rebase to incorporate any remote changes before pushing.
-	rebaseCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "pull", "--rebase") // #nosec G204 -- CLI tool, input from developer
+	rebaseCmd := exec.CommandContext(ctx, gitPath, "-C", u.RepoPath, "pull", "--rebase") // #nosec G204 -- CLI tool, input from developer
 	rebaseCmd.Stdout = os.Stdout
 	rebaseCmd.Stderr = os.Stderr
 	if err := rebaseCmd.Run(); err != nil {
@@ -181,7 +194,7 @@ func (u *Update) CommitAndPush(ctx context.Context, component string) error {
 
 	// Push.
 	out.Step(style.Deploy, "Pushing changes")
-	pushCmd := exec.CommandContext(ctx, "git", "-C", u.RepoPath, "push") // #nosec G204 -- CLI tool, input from developer
+	pushCmd := exec.CommandContext(ctx, gitPath, "-C", u.RepoPath, "push") // #nosec G204 -- CLI tool, input from developer
 	pushCmd.Stdout = os.Stdout
 	pushCmd.Stderr = os.Stderr
 	if err := pushCmd.Run(); err != nil {

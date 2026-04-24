@@ -23,5 +23,8 @@ sonar-scanner-cli = "latest"
 # gosec — Go security scanner (OWASP vulnerabilities, hardcoded secrets, weak crypto).
 # Outputs SonarQube-compatible reports imported as external issues.
 "go:github.com/securego/gosec/v2/cmd/gosec" = "latest"
+# staticcheck — Go static analysis (bugs, performance, simplifications).
+# Outputs JSON converted to SonarQube generic issue format by `crawbl app scan`.
+"go:honnef.co/go/tools/cmd/staticcheck" = "latest"
 # Snyk CLI for security scanning and MCP integration with Claude Code.
 "npm:snyk" = "latest"

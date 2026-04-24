@@ -195,7 +195,7 @@ func delegationAgent(a *orchestrator.Agent) *realtime.DelegationAgent {
 		return nil
 	}
 	return &realtime.DelegationAgent{
-		ID:     a.ID,
+		Id:     a.ID,
 		Name:   a.Name,
 		Role:   a.Role,
 		Slug:   a.Slug,

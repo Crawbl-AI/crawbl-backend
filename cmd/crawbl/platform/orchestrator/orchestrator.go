@@ -450,6 +450,38 @@ func buildRiverUI(ctx context.Context, logger *slog.Logger, riverClient *pkgrive
 	return ruiHandler, riverUIHost, nil
 }
 
+// initLogging sets up structured JSON logging and OpenTelemetry export.
+// It returns the configured logger and a cleanup function that the caller
+// must defer to flush telemetry on shutdown.
+func initLogging(ctx context.Context, serviceName string) (*slog.Logger, func()) {
+	logLevel := slog.LevelInfo
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn", "warning":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+	slog.SetDefault(logger)
+
+	telemetryShutdown, tErr := telemetry.Init(ctx, telemetry.ConfigFromEnv(serviceName, os.Getenv("CRAWBL_VERSION")), logger)
+	if tErr != nil {
+		logger.Warn("telemetry init failed, continuing without metrics export", "error", tErr)
+	}
+
+	cleanup := func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			logger.Warn("telemetry shutdown returned error", "error", err)
+		}
+	}
+
+	return logger, cleanup
+}
+
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

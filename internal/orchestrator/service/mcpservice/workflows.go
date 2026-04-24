@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
@@ -16,14 +17,14 @@ import (
 
 func (s *service) CreateWorkflow(ctx contextT, sess sessionT, workspaceID string, params *CreateWorkflowParams) (*CreateWorkflowResult, error) {
 	var steps []WorkflowStep
-	if err := json.Unmarshal([]byte(params.StepsJSON), &steps); err != nil {
+	if err := json.Unmarshal([]byte(params.StepsJson), &steps); err != nil {
 		return nil, fmt.Errorf("invalid steps JSON: %w", err)
 	}
 	if len(steps) == 0 {
 		return nil, fmt.Errorf("steps array must not be empty")
 	}
-	for i, step := range steps {
-		if step.Name == "" || step.AgentSlug == "" || step.PromptTemplate == "" {
+	for i := range steps {
+		if steps[i].Name == "" || steps[i].AgentSlug == "" || steps[i].PromptTemplate == "" {
 			return nil, fmt.Errorf("step %d: name, agent_slug, and prompt_template are required", i)
 		}
 	}
@@ -48,11 +49,11 @@ func (s *service) CreateWorkflow(ctx contextT, sess sessionT, workspaceID string
 		return nil, fmt.Errorf("create workflow: %s", mErr.Error())
 	}
 
-	return &CreateWorkflowResult{WorkflowID: defID, StepCount: len(steps)}, nil
+	return &CreateWorkflowResult{WorkflowId: defID, StepCount: int32(len(steps))}, nil
 }
 
 func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspaceID string, params *TriggerWorkflowParams) (*TriggerWorkflowResult, error) {
-	definition, mErr := s.repos.Workflow.GetDefinition(ctx, sess, workspaceID, params.WorkflowID)
+	definition, mErr := s.repos.Workflow.GetDefinition(ctx, sess, workspaceID, params.WorkflowId)
 	if mErr != nil {
 		return nil, fmt.Errorf("workflow not found: %s", mErr.Error())
 	}
@@ -73,13 +74,13 @@ func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspace
 	execID := uuid.NewString()
 
 	var convID *string
-	if params.ConversationID != "" {
-		convID = &params.ConversationID
+	if params.ConversationId != "" {
+		convID = &params.ConversationId
 	}
 
 	execRow := &workflowrepo.WorkflowExecutionRow{
 		ID:                   execID,
-		WorkflowDefinitionID: params.WorkflowID,
+		WorkflowDefinitionID: params.WorkflowId,
 		WorkspaceID:          workspaceID,
 		ConversationID:       convID,
 		Status:               string(workflowrepo.WorkflowStatusPending),
@@ -93,7 +94,7 @@ func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspace
 		return nil, fmt.Errorf("create execution: %s", mErr.Error())
 	}
 
-	s.persistWorkflowMessage(ctx, sess, workspaceID, convID, params.WorkflowID, execID, definition.Name)
+	s.persistWorkflowMessage(ctx, sess, workspaceID, convID, params.WorkflowId, execID, definition.Name)
 
 	if s.infra.RuntimeClient == nil {
 		return nil, fmt.Errorf("runtime client not configured")
@@ -117,7 +118,7 @@ func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspace
 	}
 
 	return &TriggerWorkflowResult{
-		ExecutionID:  execID,
+		ExecutionId:  execID,
 		WorkflowName: definition.Name,
 	}, nil
 }
@@ -145,7 +146,7 @@ func (s *service) CheckWorkflowStatus(ctx contextT, sess sessionT, workspaceID, 
 		)
 	}
 
-	var stepBriefs []StepStatusBrief
+	var stepBriefs []*StepStatusBrief
 	for i := range steps {
 		stepExec, sErr := s.repos.Workflow.GetStepExecution(ctx, sess, executionID, i)
 		if sErr != nil {
@@ -153,12 +154,17 @@ func (s *service) CheckWorkflowStatus(ctx contextT, sess sessionT, workspaceID, 
 				"execution_id", executionID, "step", i, "error", sErr)
 			continue
 		}
-		stepBriefs = append(stepBriefs, StepStatusBrief{
-			StepIndex:  stepExec.StepIndex,
+		var durationMs *int32
+		if stepExec.DurationMs != nil {
+			v := int32(*stepExec.DurationMs)
+			durationMs = &v
+		}
+		stepBriefs = append(stepBriefs, &StepStatusBrief{
+			StepIndex:  int32(stepExec.StepIndex),
 			StepName:   stepExec.StepName,
 			AgentSlug:  stepExec.AgentSlug,
 			Status:     stepExec.Status,
-			DurationMs: stepExec.DurationMs,
+			DurationMs: durationMs,
 		})
 	}
 
@@ -168,9 +174,9 @@ func (s *service) CheckWorkflowStatus(ctx contextT, sess sessionT, workspaceID, 
 	}
 
 	return &WorkflowStatusResult{
-		ExecutionID: execution.ID,
+		ExecutionId: execution.ID,
 		Status:      execution.Status,
-		CurrentStep: execution.CurrentStep,
+		CurrentStep: int32(execution.CurrentStep),
 		Error:       errMsg,
 		Steps:       stepBriefs,
 	}, nil
@@ -263,12 +269,12 @@ func (s *service) ListWorkflows(ctx contextT, sess sessionT, userID, workspaceID
 			)
 		}
 		briefs = append(briefs, WorkflowBriefResult{
-			ID:          row.ID,
+			Id:          row.ID,
 			Name:        row.Name,
 			Description: row.Description,
 			IsActive:    row.IsActive,
-			StepCount:   len(steps),
-			CreatedAt:   row.CreatedAt,
+			StepCount:   int32(len(steps)),
+			CreatedAt:   timestamppb.New(row.CreatedAt),
 		})
 	}
 

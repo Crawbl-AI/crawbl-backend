@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
@@ -49,10 +50,10 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 		ss.pending[chunk.CallID] = pendingToolCall{tool: chunk.Tool, agentSlug: chunk.AgentID, args: parsed, messageID: toolMsgID}
 	}
 
-	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
-		AgentID: toolAgentID, ConversationID: ss.convID,
+	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, &realtime.AgentToolPayload{
+		AgentId: toolAgentID, ConversationId: ss.convID,
 		Tool: chunk.Tool, Status: realtime.AgentToolStatusRunning,
-		CallID: chunk.CallID, Query: parsed.Query, Args: wireArgs,
+		CallId: chunk.CallID, Query: parsed.Query, Args: toStructPB(wireArgs),
 		CreatedAt: toolCreatedAt,
 	})
 }
@@ -76,10 +77,10 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	// an English sentence BE-side because it would dodge mobile l10n.
 	doneArgs := buildWireArgs(matched.tool, matched.args.Parsed)
 
-	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
-		AgentID: toolAgentID, ConversationID: ss.convID,
+	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, &realtime.AgentToolPayload{
+		AgentId: toolAgentID, ConversationId: ss.convID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
-		CallID: chunk.CallID, Query: matched.args.Query, Args: doneArgs,
+		CallId: chunk.CallID, Query: matched.args.Query, Args: toStructPB(doneArgs),
 	})
 
 	// Update persisted tool_status message to completed.
@@ -188,6 +189,16 @@ func isWebTool(tool string) bool {
 		return true
 	}
 	return false
+}
+
+// toStructPB converts a map[string]any to *structpb.Struct for the proto
+// AgentToolPayload.Args field. Returns nil when the input is nil.
+func toStructPB(m map[string]any) *structpb.Struct {
+	if m == nil {
+		return nil
+	}
+	s, _ := structpb.NewStruct(m)
+	return s
 }
 
 // newToolStatusMessage creates a tool_status message for persistence.

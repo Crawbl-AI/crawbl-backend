@@ -147,49 +147,24 @@ func agentWithSlug(slug, id string) *fakeAgentStore {
 	return &fakeAgentStore{agents: []*orchestrator.Agent{{ID: id, Slug: slug}}}
 }
 
-func TestAskQuestions_HappyPath(t *testing.T) {
-	t.Parallel()
-
-	spy := &spyBroadcaster{}
-	msgs := &fakeMessageStore{}
-	svc := buildTestService(happyWorkspace(), happyConversation(), agentWithSlug("bot", "agent-42"), msgs, spy)
-
-	params := &AskQuestionsParams{
-		AgentSlug:      "bot",
-		ConversationID: "conv-1",
-		Turns: []AskQuestionsTurn{
-			{
-				Questions: []AskQuestionsQuestion{
-					{Prompt: "Pick a colour", Mode: orchestrator.QuestionModeSingle, Options: []string{"Red", "Green", "Blue"}, AllowCustom: true},
-					{Prompt: "Pick fruits", Mode: orchestrator.QuestionModeMulti, Options: []string{"Apple", "Banana", "Cherry"}, AllowCustom: true},
-				},
-			},
-		},
-	}
-
-	result, err := svc.AskQuestions(context.Background(), nil, "user-1", "ws-1", params)
-	if err != nil {
-		t.Fatalf("AskQuestions returned unexpected error: %v", err)
-	}
-
-	if result.MessageID == "" {
-		t.Fatal("expected non-empty MessageID")
-	}
-
+// assertBroadcast checks that EmitMessageNew was called exactly once for the given workspace.
+func assertBroadcast(t *testing.T, spy *spyBroadcaster, wantWorkspaceID string) {
+	t.Helper()
 	if spy.newCalls != 1 {
 		t.Fatalf("EmitMessageNew called %d times, want 1", spy.newCalls)
 	}
-
-	if spy.lastWorkspID != "ws-1" {
-		t.Fatalf("EmitMessageNew workspace = %q, want %q", spy.lastWorkspID, "ws-1")
+	if spy.lastWorkspID != wantWorkspaceID {
+		t.Fatalf("EmitMessageNew workspace = %q, want %q", spy.lastWorkspID, wantWorkspaceID)
 	}
+}
 
+// assertSavedMessage checks that exactly one message was saved and validates its top-level fields.
+func assertSavedMessage(t *testing.T, msgs *fakeMessageStore) *orchestrator.Message {
+	t.Helper()
 	if len(msgs.saved) != 1 {
 		t.Fatalf("expected 1 saved message, got %d", len(msgs.saved))
 	}
-
 	msg := msgs.saved[0]
-
 	if msg.Content.Type != orchestrator.MessageContentTypeQuestions {
 		t.Fatalf("content type = %q, want %q", msg.Content.Type, orchestrator.MessageContentTypeQuestions)
 	}
@@ -202,7 +177,12 @@ func TestAskQuestions_HappyPath(t *testing.T) {
 	if msg.AgentID == nil || *msg.AgentID == "" {
 		t.Fatal("expected AgentID to be set")
 	}
+	return msg
+}
 
+// assertTurnShape checks the turn count and the first turn's index and question count.
+func assertTurnShape(t *testing.T, msg *orchestrator.Message) orchestrator.QuestionTurn {
+	t.Helper()
 	if len(msg.Content.Turns) != 1 {
 		t.Fatalf("turns count = %d, want 1", len(msg.Content.Turns))
 	}
@@ -213,6 +193,54 @@ func TestAskQuestions_HappyPath(t *testing.T) {
 	if len(turn.Questions) != 2 {
 		t.Fatalf("questions count = %d, want 2", len(turn.Questions))
 	}
+	return turn
+}
+
+// assertOptionIDs checks that each option's ID matches the expected list.
+func assertOptionIDs(t *testing.T, label string, q orchestrator.QuestionItem, wantIDs []string) {
+	t.Helper()
+	if len(q.Options) != len(wantIDs) {
+		t.Fatalf("%s option count = %d, want %d", label, len(q.Options), len(wantIDs))
+	}
+	for i, o := range q.Options {
+		if o.ID != wantIDs[i] {
+			t.Fatalf("%s option[%d].ID = %q, want %q", label, i, o.ID, wantIDs[i])
+		}
+	}
+}
+
+func TestAskQuestions_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	spy := &spyBroadcaster{}
+	msgs := &fakeMessageStore{}
+	svc := buildTestService(happyWorkspace(), happyConversation(), agentWithSlug("bot", "agent-42"), msgs, spy)
+
+	params := &AskQuestionsParams{
+		AgentSlug:      "bot",
+		ConversationId: "conv-1",
+		Turns: []*AskQuestionsTurn{
+			{
+				Questions: []*AskQuestionsQuestion{
+					{Prompt: "Pick a colour", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"Red", "Green", "Blue"}, AllowCustom: true},
+					{Prompt: "Pick fruits", Mode: string(orchestrator.QuestionModeMulti), Options: []string{"Apple", "Banana", "Cherry"}, AllowCustom: true},
+				},
+			},
+		},
+	}
+
+	result, err := svc.AskQuestions(context.Background(), nil, "user-1", "ws-1", params)
+	if err != nil {
+		t.Fatalf("AskQuestions returned unexpected error: %v", err)
+	}
+	if result.MessageId == "" {
+		t.Fatal("expected non-empty MessageId")
+	}
+
+	assertBroadcast(t, spy, "ws-1")
+
+	msg := assertSavedMessage(t, msgs)
+	turn := assertTurnShape(t, msg)
 
 	q1 := turn.Questions[0]
 	if q1.ID != "t1q1" {
@@ -224,15 +252,7 @@ func TestAskQuestions_HappyPath(t *testing.T) {
 	if !q1.AllowCustom {
 		t.Fatal("q1.AllowCustom should be true")
 	}
-	if len(q1.Options) != 3 {
-		t.Fatalf("q1 option count = %d, want 3", len(q1.Options))
-	}
-	wantOptionIDs := []string{"A", "B", "C"}
-	for i, o := range q1.Options {
-		if o.ID != wantOptionIDs[i] {
-			t.Fatalf("q1 option[%d].ID = %q, want %q", i, o.ID, wantOptionIDs[i])
-		}
-	}
+	assertOptionIDs(t, "q1", q1, []string{"A", "B", "C"})
 
 	q2 := turn.Questions[1]
 	if q2.ID != "t1q2" {
@@ -261,7 +281,7 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "zero turns",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
+				ConversationId: "conv-1",
 				Turns:          nil,
 			},
 		},
@@ -269,18 +289,18 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "turn with zero questions",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns:          []AskQuestionsTurn{{Questions: nil}},
+				ConversationId: "conv-1",
+				Turns:          []*AskQuestionsTurn{{Questions: nil}},
 			},
 		},
 		{
 			name: "question with fewer than two options",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"OnlyOne"}},
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
+						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"OnlyOne"}},
 					},
 				}},
 			},
@@ -289,10 +309,10 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "question with more than 26 options",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: func() []string {
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
+						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: func() []string {
 							opts := make([]string, 27)
 							for i := range opts {
 								opts[i] = "opt"
@@ -307,10 +327,10 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "mode neither single nor multi",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: orchestrator.QuestionMode("invalid"), Options: twoOptions},
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
+						{Prompt: "Q?", Mode: "invalid", Options: twoOptions},
 					},
 				}},
 			},
@@ -319,10 +339,10 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "empty prompt",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
-						{Prompt: "   ", Mode: orchestrator.QuestionModeSingle, Options: twoOptions},
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
+						{Prompt: "   ", Mode: string(orchestrator.QuestionModeSingle), Options: twoOptions},
 					},
 				}},
 			},
@@ -331,10 +351,10 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "empty option label",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"Valid", ""}},
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
+						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"Valid", ""}},
 					},
 				}},
 			},
@@ -343,13 +363,13 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "too many turns",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: func() []AskQuestionsTurn {
-					turns := make([]AskQuestionsTurn, maxTurnsPerMessage+1)
+				ConversationId: "conv-1",
+				Turns: func() []*AskQuestionsTurn {
+					turns := make([]*AskQuestionsTurn, maxTurnsPerMessage+1)
 					for i := range turns {
-						turns[i] = AskQuestionsTurn{
-							Questions: []AskQuestionsQuestion{
-								{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: twoOptions},
+						turns[i] = &AskQuestionsTurn{
+							Questions: []*AskQuestionsQuestion{
+								{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: twoOptions},
 							},
 						}
 					}
@@ -361,13 +381,13 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "too many questions in a turn",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: func() []AskQuestionsQuestion {
-						qs := make([]AskQuestionsQuestion, maxQuestionsPerTurn+1)
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: func() []*AskQuestionsQuestion {
+						qs := make([]*AskQuestionsQuestion, maxQuestionsPerTurn+1)
 						for i := range qs {
-							qs[i] = AskQuestionsQuestion{
-								Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: twoOptions,
+							qs[i] = &AskQuestionsQuestion{
+								Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: twoOptions,
 							}
 						}
 						return qs
@@ -379,12 +399,12 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "prompt too long",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
 						{
 							Prompt:  strings.Repeat("x", maxPromptLen+1),
-							Mode:    orchestrator.QuestionModeSingle,
+							Mode:    string(orchestrator.QuestionModeSingle),
 							Options: twoOptions,
 						},
 					},
@@ -395,12 +415,12 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "option label too long",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
-					Questions: []AskQuestionsQuestion{
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
+					Questions: []*AskQuestionsQuestion{
 						{
 							Prompt:  "Q?",
-							Mode:    orchestrator.QuestionModeSingle,
+							Mode:    string(orchestrator.QuestionModeSingle),
 							Options: []string{"ok", strings.Repeat("y", maxOptionLabelLen+1)},
 						},
 					},
@@ -411,11 +431,11 @@ func TestAskQuestions_ValidationErrors(t *testing.T) {
 			name: "turn label too long",
 			params: &AskQuestionsParams{
 				AgentSlug:      "bot",
-				ConversationID: "conv-1",
-				Turns: []AskQuestionsTurn{{
+				ConversationId: "conv-1",
+				Turns: []*AskQuestionsTurn{{
 					Label: strings.Repeat("z", maxTurnLabelLen+1),
-					Questions: []AskQuestionsQuestion{
-						{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: twoOptions},
+					Questions: []*AskQuestionsQuestion{
+						{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: twoOptions},
 					},
 				}},
 			},
@@ -442,10 +462,10 @@ func TestAskQuestions_UnknownAgentSlug(t *testing.T) {
 
 	params := &AskQuestionsParams{
 		AgentSlug:      "ghost",
-		ConversationID: "conv-1",
-		Turns: []AskQuestionsTurn{{
-			Questions: []AskQuestionsQuestion{
-				{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"A", "B"}},
+		ConversationId: "conv-1",
+		Turns: []*AskQuestionsTurn{{
+			Questions: []*AskQuestionsQuestion{
+				{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"A", "B"}},
 			},
 		}},
 	}
@@ -464,10 +484,10 @@ func TestAskQuestions_ConversationNotFound(t *testing.T) {
 
 	params := &AskQuestionsParams{
 		AgentSlug:      "bot",
-		ConversationID: "conv-missing",
-		Turns: []AskQuestionsTurn{{
-			Questions: []AskQuestionsQuestion{
-				{Prompt: "Q?", Mode: orchestrator.QuestionModeSingle, Options: []string{"A", "B"}},
+		ConversationId: "conv-missing",
+		Turns: []*AskQuestionsTurn{{
+			Questions: []*AskQuestionsQuestion{
+				{Prompt: "Q?", Mode: string(orchestrator.QuestionModeSingle), Options: []string{"A", "B"}},
 			},
 		}},
 	}

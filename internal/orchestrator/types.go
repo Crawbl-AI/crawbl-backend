@@ -13,7 +13,59 @@ import (
 	"strings"
 	"time"
 
+	domainv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/domain/v1"
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
+)
+
+// Proto enum type re-exports. The canonical enum definitions live in
+// proto/domain/v1/enums.proto; these aliases make the proto constants
+// accessible via the orchestrator package for callers that need to
+// reference or compare against the proto enum values.
+type (
+	ProtoAgentStatus      = domainv1.AgentStatus
+	ProtoConversationType = domainv1.ConversationType
+	ProtoMessageRole      = domainv1.MessageRole
+	ProtoMessageStatus    = domainv1.MessageStatus
+	ProtoContentType      = domainv1.MessageContentType
+	ProtoActionStyle      = domainv1.ActionStyle
+	ProtoToolState        = domainv1.ToolState
+	ProtoAttachmentType   = domainv1.AttachmentType
+	ProtoRuntimeState     = domainv1.RuntimeState
+	ProtoResponseLength   = domainv1.ResponseLength
+	ProtoQuestionMode     = domainv1.QuestionMode
+	ProtoItemType         = domainv1.ItemType
+)
+
+// Proto enum constants re-exported for direct use without importing domainv1.
+const (
+	ProtoAgentStatusOnline   = domainv1.AgentStatus_AGENT_STATUS_ONLINE
+	ProtoAgentStatusReading  = domainv1.AgentStatus_AGENT_STATUS_READING
+	ProtoAgentStatusThinking = domainv1.AgentStatus_AGENT_STATUS_THINKING
+	ProtoAgentStatusPending  = domainv1.AgentStatus_AGENT_STATUS_PENDING
+	ProtoAgentStatusError    = domainv1.AgentStatus_AGENT_STATUS_ERROR
+	ProtoAgentStatusOffline  = domainv1.AgentStatus_AGENT_STATUS_OFFLINE
+	ProtoAgentStatusWriting  = domainv1.AgentStatus_AGENT_STATUS_WRITING
+
+	ProtoMessageRoleUser   = domainv1.MessageRole_MESSAGE_ROLE_USER
+	ProtoMessageRoleAgent  = domainv1.MessageRole_MESSAGE_ROLE_AGENT
+	ProtoMessageRoleSystem = domainv1.MessageRole_MESSAGE_ROLE_SYSTEM
+
+	ProtoMessageStatusPending   = domainv1.MessageStatus_MESSAGE_STATUS_PENDING
+	ProtoMessageStatusDelivered = domainv1.MessageStatus_MESSAGE_STATUS_DELIVERED
+	ProtoMessageStatusFailed    = domainv1.MessageStatus_MESSAGE_STATUS_FAILED
+	ProtoMessageStatusSent      = domainv1.MessageStatus_MESSAGE_STATUS_SENT
+	ProtoMessageStatusDelegated = domainv1.MessageStatus_MESSAGE_STATUS_DELEGATED
+
+	ProtoContentTypeText       = domainv1.MessageContentType_MESSAGE_CONTENT_TYPE_TEXT
+	ProtoContentTypeDelegation = domainv1.MessageContentType_MESSAGE_CONTENT_TYPE_DELEGATION
+	ProtoContentTypeArtifact   = domainv1.MessageContentType_MESSAGE_CONTENT_TYPE_ARTIFACT
+	ProtoContentTypeWorkflow   = domainv1.MessageContentType_MESSAGE_CONTENT_TYPE_WORKFLOW
+	ProtoContentTypeQuestions  = domainv1.MessageContentType_MESSAGE_CONTENT_TYPE_QUESTIONS
+
+	ProtoRuntimeStateReady        = domainv1.RuntimeState_RUNTIME_STATE_READY
+	ProtoRuntimeStateProvisioning = domainv1.RuntimeState_RUNTIME_STATE_PROVISIONING
+	ProtoRuntimeStateOffline      = domainv1.RuntimeState_RUNTIME_STATE_OFFLINE
+	ProtoRuntimeStateFailed       = domainv1.RuntimeState_RUNTIME_STATE_FAILED
 )
 
 // Default configuration constants for the orchestrator.

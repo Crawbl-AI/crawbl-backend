@@ -58,11 +58,12 @@ type gcTag struct {
 }
 
 func runGC(ctx context.Context, keep int, dryRun bool) error {
-	if _, err := exec.LookPath("doctl"); err != nil {
+	doctlPath, err := exec.LookPath("doctl")
+	if err != nil {
 		return fmt.Errorf("doctl is required but not found in PATH")
 	}
 
-	repos, err := gcListRepos(ctx)
+	repos, err := gcListRepos(ctx, doctlPath)
 	if err != nil {
 		return fmt.Errorf("list repositories: %w", err)
 	}
@@ -72,7 +73,7 @@ func runGC(ctx context.Context, keep int, dryRun bool) error {
 	var totalDeleted int
 
 	for _, repo := range repos {
-		totalDeleted += gcProcessRepo(ctx, repo.Name, keep, dryRun)
+		totalDeleted += gcProcessRepo(ctx, doctlPath, repo.Name, keep, dryRun)
 	}
 
 	out.Ln()
@@ -87,8 +88,8 @@ func runGC(ctx context.Context, keep int, dryRun bool) error {
 
 // gcProcessRepo deletes old tags from a single repository, keeping the latest N.
 // Returns the number of tags deleted (or that would be deleted in dry-run mode).
-func gcProcessRepo(ctx context.Context, repoName string, keep int, dryRun bool) int {
-	tags, err := gcListTags(ctx, repoName)
+func gcProcessRepo(ctx context.Context, doctlPath, repoName string, keep int, dryRun bool) int {
+	tags, err := gcListTags(ctx, doctlPath, repoName)
 	if err != nil {
 		out.Warning("Failed to list tags for %s: %v", repoName, err)
 		return 0
@@ -115,7 +116,7 @@ func gcProcessRepo(ctx context.Context, repoName string, keep int, dryRun bool) 
 			deleted++
 			continue
 		}
-		if err := gcDeleteManifest(ctx, repoName, tag.ManifestDigest); err != nil {
+		if err := gcDeleteManifest(ctx, doctlPath, repoName, tag.ManifestDigest); err != nil {
 			out.Warning("Failed to delete %s:%s: %v", repoName, tag.Tag, err)
 			continue
 		}
@@ -126,8 +127,8 @@ func gcProcessRepo(ctx context.Context, repoName string, keep int, dryRun bool) 
 }
 
 // gcListRepos returns all repositories in the authenticated DOCR registry.
-func gcListRepos(ctx context.Context) ([]gcRepo, error) {
-	data, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "list-v2", "-o", "json").Output()
+func gcListRepos(ctx context.Context, doctlPath string) ([]gcRepo, error) {
+	data, err := exec.CommandContext(ctx, doctlPath, "registry", "repository", "list-v2", "-o", "json").Output()
 	if err != nil {
 		return nil, fmt.Errorf("doctl registry repository list-v2: %w", err)
 	}
@@ -140,8 +141,8 @@ func gcListRepos(ctx context.Context) ([]gcRepo, error) {
 }
 
 // gcListTags returns all tags for a given repository.
-func gcListTags(ctx context.Context, repo string) ([]gcTag, error) {
-	data, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "list-tags", repo, "-o", "json").Output() // #nosec G204 -- CLI tool, input from developer
+func gcListTags(ctx context.Context, doctlPath, repo string) ([]gcTag, error) {
+	data, err := exec.CommandContext(ctx, doctlPath, "registry", "repository", "list-tags", repo, "-o", "json").Output() // #nosec G204 -- CLI tool, input from developer
 	if err != nil {
 		return nil, fmt.Errorf("doctl registry repository list-tags %s: %w", repo, err)
 	}
@@ -154,8 +155,8 @@ func gcListTags(ctx context.Context, repo string) ([]gcTag, error) {
 }
 
 // gcDeleteManifest deletes a manifest (and its associated tags) by digest.
-func gcDeleteManifest(ctx context.Context, repo, digest string) error {
-	output, err := exec.CommandContext(ctx, "doctl", "registry", "repository", "delete-manifest", repo, digest, "--force").CombinedOutput() // #nosec G204 -- CLI tool, input from developer
+func gcDeleteManifest(ctx context.Context, doctlPath, repo, digest string) error {
+	output, err := exec.CommandContext(ctx, doctlPath, "registry", "repository", "delete-manifest", repo, digest, "--force").CombinedOutput() // #nosec G204 -- CLI tool, input from developer
 	if err != nil {
 		return fmt.Errorf("%s: %w", string(output), err)
 	}
