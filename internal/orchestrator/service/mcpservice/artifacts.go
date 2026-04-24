@@ -73,7 +73,7 @@ func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	}
 
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{
+		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, &realtime.ArtifactEventPayload{
 			ArtifactId:     artifactID,
 			ConversationId: stringFromPtr(convID),
 			Title:          params.Title,
@@ -195,7 +195,7 @@ func (s *service) UpdateArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	newVersion := int(result.Version)
 
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{
+		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, &realtime.ArtifactEventPayload{
 			ArtifactId:     params.ArtifactId,
 			ConversationId: stringFromPtr(artifact.ConversationID),
 			Title:          artifact.Title,
@@ -262,7 +262,7 @@ func (s *service) ReviewArtifact(ctx contextT, sess sessionT, userID, workspaceI
 	}
 
 	if s.infra.Broadcaster != nil {
-		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, realtime.ArtifactEventPayload{
+		s.infra.Broadcaster.EmitArtifactUpdated(ctx, workspaceID, &realtime.ArtifactEventPayload{
 			ArtifactId:     params.ArtifactId,
 			ConversationId: stringFromPtr(artifact.ConversationID),
 			Title:          artifact.Title,

@@ -275,7 +275,7 @@ func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, 
 	if s.infra.Broadcaster == nil || to == nil {
 		return
 	}
-	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
+	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, &realtime.AgentDelegationPayload{
 		From:           mcpDelegationAgent(from),
 		To:             mcpDelegationAgent(to),
 		ConversationId: conversationID,
@@ -291,7 +291,7 @@ func (s *service) emitDelegationDone(ctx contextT, workspaceID string, from, to 
 		return
 	}
 	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusOnline), conversationID)
-	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, realtime.AgentDelegationPayload{
+	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, &realtime.AgentDelegationPayload{
 		From:           mcpDelegationAgent(from),
 		To:             mcpDelegationAgent(to),
 		ConversationId: conversationID,

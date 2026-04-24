@@ -50,7 +50,7 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 		ss.pending[chunk.CallID] = pendingToolCall{tool: chunk.Tool, agentSlug: chunk.AgentID, args: parsed, messageID: toolMsgID}
 	}
 
-	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
+	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, &realtime.AgentToolPayload{
 		AgentId: toolAgentID, ConversationId: ss.convID,
 		Tool: chunk.Tool, Status: realtime.AgentToolStatusRunning,
 		CallId: chunk.CallID, Query: parsed.Query, Args: toStructPB(wireArgs),
@@ -77,7 +77,7 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	// an English sentence BE-side because it would dodge mobile l10n.
 	doneArgs := buildWireArgs(matched.tool, matched.args.Parsed)
 
-	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, realtime.AgentToolPayload{
+	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, &realtime.AgentToolPayload{
 		AgentId: toolAgentID, ConversationId: ss.convID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
 		CallId: chunk.CallID, Query: matched.args.Query, Args: toStructPB(doneArgs),

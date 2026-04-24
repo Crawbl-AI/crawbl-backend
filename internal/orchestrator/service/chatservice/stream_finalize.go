@@ -84,7 +84,7 @@ func (ss *streamSession) emitSubAgentDelegationDone() {
 		if st.agent.ID == ss.primary.ID {
 			continue
 		}
-		ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, realtime.AgentDelegationPayload{
+		ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, &realtime.AgentDelegationPayload{
 			From:           delegationAgent(ss.primary),
 			To:             delegationAgent(st.agent),
 			ConversationId: ss.convID,
@@ -105,7 +105,7 @@ func (ss *streamSession) finalizeStream(st *subAgentStream) *orchestrator.Messag
 		if mErr := ss.svc.messageRepo.DeleteByID(ss.ctx, ss.sess, st.placeholder.ID); mErr != nil {
 			slog.Warn("delete empty placeholder", "id", st.placeholder.ID, "error", mErr.Error())
 		}
-		ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, realtime.MessageDonePayload{
+		ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, &realtime.MessageDonePayload{
 			MessageId: st.placeholder.ID, ConversationId: ss.convID,
 			AgentId: st.agent.ID, Status: string(orchestrator.MessageStatusSilent),
 		})
@@ -124,7 +124,7 @@ func (ss *streamSession) finalizeStream(st *subAgentStream) *orchestrator.Messag
 	}
 
 	reply := ss.finalizeMessage(st.placeholder, text, status)
-	ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, realtime.MessageDonePayload{
+	ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, &realtime.MessageDonePayload{
 		MessageId: st.placeholder.ID, ConversationId: ss.convID,
 		AgentId: st.agent.ID, Status: string(status),
 	})

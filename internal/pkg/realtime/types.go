@@ -25,28 +25,28 @@ type Broadcaster interface {
 	EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string, conversationID ...string)
 
 	// EmitMessageChunk emits a message.chunk event for a streamed text token.
-	EmitMessageChunk(ctx context.Context, workspaceID string, payload MessageChunkPayload)
+	EmitMessageChunk(ctx context.Context, workspaceID string, payload *MessageChunkPayload)
 
 	// EmitMessageDone emits a message.done event when streaming is complete.
-	EmitMessageDone(ctx context.Context, workspaceID string, payload MessageDonePayload)
+	EmitMessageDone(ctx context.Context, workspaceID string, payload *MessageDonePayload)
 
 	// EmitAgentTool emits an agent.tool event for tool call activity during streaming.
-	EmitAgentTool(ctx context.Context, workspaceID string, payload AgentToolPayload)
+	EmitAgentTool(ctx context.Context, workspaceID string, payload *AgentToolPayload)
 
 	// EmitMessageStatus emits a message.status event for delivery status transitions.
-	EmitMessageStatus(ctx context.Context, workspaceID string, payload MessageStatusPayload)
+	EmitMessageStatus(ctx context.Context, workspaceID string, payload *MessageStatusPayload)
 
 	// EmitAgentDelegation emits an agent.delegation event for inter-agent communication.
-	EmitAgentDelegation(ctx context.Context, workspaceID string, payload AgentDelegationPayload)
+	EmitAgentDelegation(ctx context.Context, workspaceID string, payload *AgentDelegationPayload)
 
 	// EmitArtifactUpdated emits an artifact.updated event.
-	EmitArtifactUpdated(ctx context.Context, workspaceID string, payload ArtifactEventPayload)
+	EmitArtifactUpdated(ctx context.Context, workspaceID string, payload *ArtifactEventPayload)
 
 	// EmitWorkflowEvent emits a workflow progress event.
-	EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload WorkflowEventPayload)
+	EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload *WorkflowEventPayload)
 
 	// EmitUsageUpdate emits a usage.update event for per-LLM-call token tracking.
-	EmitUsageUpdate(ctx context.Context, workspaceID string, payload UsageUpdatePayload)
+	EmitUsageUpdate(ctx context.Context, workspaceID string, payload *UsageUpdatePayload)
 }
 
 // NopBroadcaster is a no-op implementation used when real-time is not configured.

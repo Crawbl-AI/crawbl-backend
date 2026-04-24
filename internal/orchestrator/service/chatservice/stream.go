@@ -206,7 +206,7 @@ func (ss *streamSession) handleText(chunk userswarmclient.StreamChunk) {
 	st.accumulated.WriteString(chunk.Delta)
 	st.chunkCount++
 	ss.totalChunks++
-	ss.svc.broadcaster.EmitMessageChunk(ss.ctx, ss.wsID, realtime.MessageChunkPayload{
+	ss.svc.broadcaster.EmitMessageChunk(ss.ctx, ss.wsID, &realtime.MessageChunkPayload{
 		MessageId: st.placeholder.ID, ConversationId: ss.convID,
 		AgentId: st.agent.ID, Chunk: chunk.Delta,
 	})
@@ -245,7 +245,7 @@ func (ss *streamSession) handleUsage(chunk userswarmclient.StreamChunk) {
 	}
 
 	// Emit real-time usage update to mobile via Socket.IO.
-	ss.svc.broadcaster.EmitUsageUpdate(ss.ctx, ss.wsID, realtime.UsageUpdatePayload{
+	ss.svc.broadcaster.EmitUsageUpdate(ss.ctx, ss.wsID, &realtime.UsageUpdatePayload{
 		AgentId:          chunk.AgentID,
 		ConversationId:   ss.convID,
 		MessageId:        usageMessageID,
@@ -346,7 +346,7 @@ func (ss *streamSession) emitDelivered() {
 		return
 	}
 	ss.deliveredOnce.Do(func() {
-		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, realtime.MessageStatusPayload{
+		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, &realtime.MessageStatusPayload{
 			MessageId: ss.userMessageID, ConversationId: ss.convID,
 			LocalId: ss.localID, Status: string(orchestrator.MessageStatusDelivered),
 		})
@@ -362,7 +362,7 @@ func (ss *streamSession) emitRead() {
 		return
 	}
 	ss.readOnce.Do(func() {
-		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, realtime.MessageStatusPayload{
+		ss.svc.broadcaster.EmitMessageStatus(ss.ctx, ss.wsID, &realtime.MessageStatusPayload{
 			MessageId: ss.userMessageID, ConversationId: ss.convID,
 			LocalId: ss.localID, Status: string(orchestrator.MessageStatusRead),
 		})

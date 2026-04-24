@@ -28,7 +28,7 @@ func (ss *streamSession) createSubAgentStream(sub *orchestrator.Agent) *subAgent
 		delegationCreatedAt = primarySt.placeholder.CreatedAt.UTC().Format(time.RFC3339Nano)
 		delegationMsgID = primarySt.placeholder.ID
 	}
-	ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, realtime.AgentDelegationPayload{
+	ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, &realtime.AgentDelegationPayload{
 		From:           delegationAgent(ss.primary),
 		To:             delegationAgent(sub),
 		ConversationId: ss.convID, Status: realtime.AgentDelegationStatusRunning,

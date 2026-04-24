@@ -49,7 +49,7 @@ func (b *Broadcaster) EmitMessageUpdated(ctx context.Context, workspaceID string
 // EmitAgentStatus emits an agent.status event. Optional conversationID ties
 // the status to a specific conversation (e.g. "reading", "thinking").
 func (b *Broadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, agentID string, status string, conversationID ...string) {
-	payload := realtime.AgentStatusPayload{
+	payload := &realtime.AgentStatusPayload{
 		AgentId: agentID,
 		Status:  status,
 	}
@@ -60,41 +60,41 @@ func (b *Broadcaster) EmitAgentStatus(ctx context.Context, workspaceID string, a
 }
 
 // EmitMessageChunk emits a message.chunk event for a streamed text token.
-func (b *Broadcaster) EmitMessageChunk(ctx context.Context, workspaceID string, payload realtime.MessageChunkPayload) {
+func (b *Broadcaster) EmitMessageChunk(ctx context.Context, workspaceID string, payload *realtime.MessageChunkPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageChunk, payload)
 }
 
 // EmitMessageDone emits a message.done event when streaming is complete.
-func (b *Broadcaster) EmitMessageDone(ctx context.Context, workspaceID string, payload realtime.MessageDonePayload) {
+func (b *Broadcaster) EmitMessageDone(ctx context.Context, workspaceID string, payload *realtime.MessageDonePayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageDone, payload)
 }
 
 // EmitAgentTool emits an agent.tool event for tool call activity during streaming.
-func (b *Broadcaster) EmitAgentTool(ctx context.Context, workspaceID string, payload realtime.AgentToolPayload) {
+func (b *Broadcaster) EmitAgentTool(ctx context.Context, workspaceID string, payload *realtime.AgentToolPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentTool, payload)
 }
 
 // EmitMessageStatus emits a message.status event for delivery status transitions.
-func (b *Broadcaster) EmitMessageStatus(ctx context.Context, workspaceID string, payload realtime.MessageStatusPayload) {
+func (b *Broadcaster) EmitMessageStatus(ctx context.Context, workspaceID string, payload *realtime.MessageStatusPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventMessageStatus, payload)
 }
 
 // EmitAgentDelegation emits an agent.delegation event for inter-agent communication.
-func (b *Broadcaster) EmitAgentDelegation(ctx context.Context, workspaceID string, payload realtime.AgentDelegationPayload) {
+func (b *Broadcaster) EmitAgentDelegation(ctx context.Context, workspaceID string, payload *realtime.AgentDelegationPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventAgentDelegation, payload)
 }
 
 // EmitArtifactUpdated emits an artifact.updated event.
-func (b *Broadcaster) EmitArtifactUpdated(ctx context.Context, workspaceID string, payload realtime.ArtifactEventPayload) {
+func (b *Broadcaster) EmitArtifactUpdated(ctx context.Context, workspaceID string, payload *realtime.ArtifactEventPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventArtifactUpdated, payload)
 }
 
 // EmitWorkflowEvent emits a workflow progress event.
-func (b *Broadcaster) EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload realtime.WorkflowEventPayload) {
+func (b *Broadcaster) EmitWorkflowEvent(ctx context.Context, workspaceID string, event string, payload *realtime.WorkflowEventPayload) {
 	b.EmitToWorkspace(ctx, workspaceID, event, payload)
 }
 
 // EmitUsageUpdate emits a usage.update event for per-LLM-call token tracking.
-func (b *Broadcaster) EmitUsageUpdate(ctx context.Context, workspaceID string, payload realtime.UsageUpdatePayload) {
+func (b *Broadcaster) EmitUsageUpdate(ctx context.Context, workspaceID string, payload *realtime.UsageUpdatePayload) {
 	b.EmitToWorkspace(ctx, workspaceID, realtime.EventUsageUpdate, payload)
 }

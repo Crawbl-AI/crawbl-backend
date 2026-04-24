@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/mod/semver"
 )
@@ -22,20 +23,23 @@ var (
 	// or `agent-runtime/v2.3.4`) that belong to per-component sequences.
 	globalSemverTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$`)
 
-	// resolvedGitPath is the absolute path to the git executable, resolved
-	// once at package init to avoid PATH injection (go:S4036).
-	resolvedGitPath = resolveGitPath()
+	gitPathOnce     sync.Once
+	resolvedGitPath string
 )
 
-// resolveGitPath looks up the git executable in PATH and returns its absolute
-// path. Falls back to the bare "git" name if LookPath fails so that callers
-// that already handle command errors continue to work unchanged.
-func resolveGitPath() string {
-	p, err := exec.LookPath("git")
-	if err != nil {
-		return "git"
-	}
-	return p
+// getGitPath returns the absolute path to the git executable, resolved lazily
+// on first call via sync.Once to avoid I/O at package init (go:S4036).
+// Falls back to the bare "git" name if LookPath fails.
+func getGitPath() string {
+	gitPathOnce.Do(func() {
+		p, err := exec.LookPath("git")
+		if err != nil {
+			resolvedGitPath = "git"
+			return
+		}
+		resolvedGitPath = p
+	})
+	return resolvedGitPath
 }
 
 // isGlobalSemverTag reports whether tag is a plain `vX.Y.Z` tag in the
@@ -60,7 +64,7 @@ func gitCmd(repoPath string, args ...string) *exec.Cmd {
 	if repoPath != "" {
 		args = append([]string{"-C", repoPath}, args...)
 	}
-	return exec.CommandContext(context.Background(), resolvedGitPath, args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
+	return exec.CommandContext(context.Background(), getGitPath(), args...) // #nosec G204 -- CLI tool, input from developer //nolint:gosec
 }
 
 // bumpVersion increments the major, minor, or patch component of a canonical
