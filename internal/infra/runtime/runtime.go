@@ -16,9 +16,18 @@ import (
 // BuildRuntimeProgram creates the Pulumi RunFunc that provisions the full
 // Hetzner k3s runtime: server, firewall, k3s install, ArgoCD bootstrap,
 // and Cloudflare tunnel/DNS.
+//
+// The SSH private key is loaded eagerly (before the Pulumi engine runs) so
+// the program fails fast with a clear error instead of mid-deployment.
 func BuildRuntimeProgram(cfg RuntimeConfig) pulumi.RunFunc {
 	return func(ctx *pulumi.Context) error {
 		name := "crawbl-" + cfg.Environment
+
+		// Load SSH key eagerly — needed for remote kubeconfig extraction.
+		sshKey, err := loadSSHPrivateKey()
+		if err != nil {
+			return fmt.Errorf("load ssh key: %w", err)
+		}
 
 		// Phase 1: Build cloud-init from config.
 		cloudInit := buildCloudInit(cfg)
@@ -35,8 +44,11 @@ func BuildRuntimeProgram(cfg RuntimeConfig) pulumi.RunFunc {
 			return err
 		}
 
-		// Phase 4: Build kubeconfig from server IP.
-		kubeconfig := extractKubeconfig(ctx, name, server)
+		// Phase 4: SSH into the server, wait for k3s, extract real kubeconfig.
+		kubeconfig, err := extractKubeconfig(ctx, name, server, sshKey)
+		if err != nil {
+			return err
+		}
 
 		// Phase 5: Create Kubernetes provider from kubeconfig.
 		k8sProvider, err := kubernetes.NewProvider(ctx, "k8s", &kubernetes.ProviderArgs{

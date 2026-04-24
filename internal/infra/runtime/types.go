@@ -51,8 +51,8 @@ type HetznerConfig struct {
 	Location string
 	// SSHAllowedCIDRs restricts SSH and K8s API access to these CIDR ranges.
 	SSHAllowedCIDRs []string
-	// SSHKeyFingerprints are the fingerprints of SSH keys to attach to the server.
-	SSHKeyFingerprints []string
+	// SSHKeyNames are the names of Hetzner SSH keys to attach to the server.
+	SSHKeyNames []string
 }
 
 // K3sConfig holds k3s installation settings.
@@ -104,7 +104,7 @@ type StackHetznerConfig struct {
 	Image              string   `yaml:"image"`
 	Location           string   `yaml:"location"`
 	SSHAllowedCIDRs    []string `yaml:"sshAllowedCIDRs"`
-	SSHKeyFingerprints []string `yaml:"sshKeyFingerprints"`
+	SSHKeyNames []string `yaml:"sshKeyNames"`
 }
 
 // StackK3sConfig is the YAML form of k3s installation settings.
@@ -122,7 +122,7 @@ func ConfigFromStack(env, region string, sc StackRuntimeConfig, platformCfg plat
 		Image:              sc.Hetzner.Image,
 		Location:           sc.Hetzner.Location,
 		SSHAllowedCIDRs:    sc.Hetzner.SSHAllowedCIDRs,
-		SSHKeyFingerprints: sc.Hetzner.SSHKeyFingerprints,
+		SSHKeyNames: sc.Hetzner.SSHKeyNames,
 	}
 	if hetzner.ServerType == "" {
 		hetzner.ServerType = DefaultServerType
@@ -136,8 +136,8 @@ func ConfigFromStack(env, region string, sc StackRuntimeConfig, platformCfg plat
 	if hetzner.SSHAllowedCIDRs == nil {
 		hetzner.SSHAllowedCIDRs = []string{}
 	}
-	if hetzner.SSHKeyFingerprints == nil {
-		hetzner.SSHKeyFingerprints = []string{}
+	if hetzner.SSHKeyNames == nil {
+		hetzner.SSHKeyNames = []string{}
 	}
 
 	k3s := K3sConfig{
