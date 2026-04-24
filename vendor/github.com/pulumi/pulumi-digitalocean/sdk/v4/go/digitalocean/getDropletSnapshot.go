@@ -31,7 +31,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			_, err := digitalocean.LookupDropletSnapshot(ctx, &digitalocean.LookupDropletSnapshotArgs{
+//			_, err := digitalocean.GetDropletSnapshot(ctx, &digitalocean.LookupDropletSnapshotArgs{
 //				NameRegex:  pulumi.StringRef("^web"),
 //				Region:     pulumi.StringRef("nyc3"),
 //				MostRecent: pulumi.BoolRef(true),
@@ -59,7 +59,7 @@ import (
 //
 //	func main() {
 //		pulumi.Run(func(ctx *pulumi.Context) error {
-//			web_snapshot, err := digitalocean.LookupDropletSnapshot(ctx, &digitalocean.LookupDropletSnapshotArgs{
+//			web_snapshot, err := digitalocean.GetDropletSnapshot(ctx, &digitalocean.LookupDropletSnapshotArgs{
 //				NameRegex:  pulumi.StringRef("^web"),
 //				Region:     pulumi.StringRef("nyc3"),
 //				MostRecent: pulumi.BoolRef(true),
@@ -68,7 +68,7 @@ import (
 //				return err
 //			}
 //			_, err = digitalocean.NewDroplet(ctx, "from-snapshot", &digitalocean.DropletArgs{
-//				Image:  pulumi.String(web_snapshot.Id),
+//				Image:  pulumi.String(pulumi.String(web_snapshot.Id)),
 //				Name:   pulumi.String("web-02"),
 //				Region: pulumi.String(digitalocean.RegionNYC3),
 //				Size:   pulumi.String(digitalocean.DropletSlugDropletS2VCPU4GB),
