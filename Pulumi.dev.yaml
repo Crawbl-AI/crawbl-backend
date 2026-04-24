@@ -103,7 +103,7 @@ config:
   # After bootstrap, ArgoCD on the k3s node manages agent runtime workloads.
   crawbl:runtime:
     hetzner:
-      serverType: cx42
+      serverType: cx43
       image: ubuntu-24.04
       location: fsn1
       # TODO(bezhan): replace 0.0.0.0/0 with actual admin IPs before going to prod.
