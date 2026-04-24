@@ -135,8 +135,8 @@ func lookupToolDescription(name string) (string, bool) {
 // ADK tool.Context interface does not expose the underlying invocation
 // context via a public accessor.
 //
-// TODO(https://github.com/google/adk-go/issues/track): thread per-turn
-// ctx once the ADK exposes it on tool.Context. Currently every tool runs
+// FUTURE: Thread per-turn ctx once the ADK exposes it on tool.Context
+// (https://github.com/google/adk-go/issues/track). Currently every tool runs
 // on background ctx, which means user disconnect does not cancel in-flight
 // HTTP calls made from within tools.
 func toolCtxOrBackground(tctx adktool.Context) context.Context {

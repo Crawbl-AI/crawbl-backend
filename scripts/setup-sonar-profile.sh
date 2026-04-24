@@ -20,14 +20,9 @@ LANGUAGE="go"
 echo "==> Checking for existing '${PROFILE_NAME}' profile..."
 existing=$(curl -s -u "${SONAR_TOKEN}:" \
   "${SONAR_URL}/api/qualityprofiles/search?language=${LANGUAGE}&organization=${ORG}" \
-  | python3 -c "
-import json,sys
-data=json.load(sys.stdin)
-for p in data.get('profiles',[]):
-    if p['name']=='${PROFILE_NAME}':
-        print(p['key'])
-        break
-" 2>/dev/null || true)
+  | jq -r --arg name "${PROFILE_NAME}" \
+      '.profiles[] | select(.name == $name) | .key' \
+  2>/dev/null || true)
 
 if [ -n "${existing}" ]; then
   echo "    Profile already exists (key: ${existing})"
@@ -36,18 +31,11 @@ else
   echo "==> Copying 'Sonar way' to '${PROFILE_NAME}'..."
   sonar_way_key=$(curl -s -u "${SONAR_TOKEN}:" \
     "${SONAR_URL}/api/qualityprofiles/search?language=${LANGUAGE}&organization=${ORG}" \
-    | python3 -c "
-import json,sys
-data=json.load(sys.stdin)
-for p in data.get('profiles',[]):
-    if p['name']=='Sonar way':
-        print(p['key'])
-        break
-")
+    | jq -r '.profiles[] | select(.name == "Sonar way") | .key')
   PROFILE_KEY=$(curl -s -u "${SONAR_TOKEN}:" \
     "${SONAR_URL}/api/qualityprofiles/copy" \
     -d "fromKey=${sonar_way_key}&toName=${PROFILE_NAME}" \
-    | python3 -c "import json,sys; print(json.load(sys.stdin)['key'])")
+    | jq -r '.key')
   echo "    Created profile (key: ${PROFILE_KEY})"
 fi
 
@@ -62,7 +50,7 @@ activate_rule() {
   fi
   local result
   result=$(curl -s -u "${SONAR_TOKEN}:" "${SONAR_URL}/api/qualityprofiles/activate_rule" -d "${data}" 2>&1)
-  if [ -n "${result}" ] && echo "${result}" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'errors' in d else 1)" 2>/dev/null; then
+  if [ -n "${result}" ] && echo "${result}" | jq -e 'has("errors")' > /dev/null 2>&1; then
     echo "    WARN: ${rule}: ${result}"
   else
     echo "    OK: ${rule} ${params}"
@@ -98,17 +86,8 @@ fi
 echo "==> Verifying profile..."
 curl -s -u "${SONAR_TOKEN}:" \
   "${SONAR_URL}/api/qualityprofiles/search?language=${LANGUAGE}&organization=${ORG}" \
-  | python3 -c "
-import json,sys
-data=json.load(sys.stdin)
-for p in data.get('profiles',[]):
-    if p['name']=='${PROFILE_NAME}':
-        print(f\"  Name: {p['name']}\")
-        print(f\"  Key: {p['key']}\")
-        print(f\"  Active rules: {p['activeRuleCount']}\")
-        print(f\"  Default: {p['isDefault']}\")
-        break
-"
+  | jq -r --arg name "${PROFILE_NAME}" \
+      '.profiles[] | select(.name == $name) | "  Name: \(.name)\n  Key: \(.key)\n  Active rules: \(.activeRuleCount)\n  Default: \(.isDefault)"'
 
 echo ""
 echo "Done. If the profile is not set as default, set it manually:"

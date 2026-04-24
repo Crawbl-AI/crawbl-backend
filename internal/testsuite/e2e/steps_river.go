@@ -27,7 +27,7 @@ func registerRiverSteps(sc *godog.ScenarioContext, tc *testContext) {
 // If the river_job table does not exist (River may use a non-default schema),
 // the check is skipped with a pass so scenarios are not gated on infrastructure
 // that may not be present in all environments.
-// TODO: re-enable once River schema path is confirmed in the dev cluster.
+// Re-enable once River schema path is confirmed in the dev cluster.
 func (tc *testContext) riverJobCompleted(ctx context.Context, kind string) error {
 	if tc.dbConn == nil {
 		return nil

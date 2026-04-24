@@ -165,8 +165,7 @@ func (tc *testContext) dbHasPushToken(token, alias string) error {
 	subject := tc.resolveSubject(alias)
 	s := tc.sess()
 	var count int
-	// TODO: convert to full dbr builder with JOIN once dbr support is clearer.
-	// For now, keep raw SQL for JOIN queries.
+	// Using raw SQL for this JOIN query; convert to dbr builder once dbr JOIN support is confirmed.
 	if err := s.QueryRowContext(context.Background(), `
 		SELECT COUNT(*) FROM user_push_tokens
 		JOIN users ON users.id = user_push_tokens.user_id

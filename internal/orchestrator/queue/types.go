@@ -74,7 +74,7 @@ type Deps struct {
 	PricingCache     *pricing.Cache
 
 	// Usage / billing — per-LLM-call ClickHouse writer.
-	LLMUsageRepo llmusagerepo.Repo
+	LLMUsageRepo llmusagerepo.Inserter
 }
 
 // River queue names. NewConfig registers a river.QueueConfig for each

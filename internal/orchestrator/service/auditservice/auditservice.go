@@ -11,10 +11,10 @@ import (
 )
 
 // repo is a local alias for the audit persistence interface.
-type repo = auditrepo.Repo
+type repo = auditrepo.LogWriter
 
-// Service provides MCP audit logging operations.
-type Service interface {
+// LogWriter provides MCP audit logging operations.
+type LogWriter interface {
 	WriteLog(ctx context.Context, sess *dbr.Session, entry *auditrepo.AuditLogRow) error
 }
 
@@ -23,7 +23,7 @@ type service struct {
 }
 
 // New creates a new audit service, returning an error if the repo is nil.
-func New(r repo) (Service, error) {
+func New(r repo) (LogWriter, error) {
 	if r == nil {
 		return nil, errors.New("auditservice: repo is required")
 	}
@@ -32,7 +32,7 @@ func New(r repo) (Service, error) {
 
 // MustNew wraps New and panics on dependency-validation errors. Intended for
 // use from main/init paths where misconfiguration is unrecoverable.
-func MustNew(r repo) Service {
+func MustNew(r repo) LogWriter {
 	svc, err := New(r)
 	if err != nil {
 		panic(err)

@@ -22,7 +22,7 @@ type Repos struct {
 	Agent         agentStore
 	Tools         namedToolsGetter
 	AgentSettings agentSettingsGetter
-	AgentPrompts  agentPromptsStore
+	AgentPrompts  agentPromptsLister
 	AgentHistory  agentHistoryStore
 	Usage         usagerepo.Repo
 	Drawer        drawerStore
@@ -37,7 +37,7 @@ type Service struct {
 	agentRepo         agentStore
 	toolsRepo         namedToolsGetter
 	agentSettingsRepo agentSettingsGetter
-	agentPromptsRepo  agentPromptsStore
+	agentPromptsRepo  agentPromptsLister
 	agentHistoryRepo  agentHistoryStore
 	runtimeClient     userswarmclient.Client
 	usageRepo         usagerepo.Repo

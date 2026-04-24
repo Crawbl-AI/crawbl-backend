@@ -39,7 +39,7 @@ func (tc *testContext) saveFirstMatchingItem(arrayPath, matchField, matchValue, 
 // saveFromConversations fetches conversations for the workspace and saves a matching field.
 // Used when the current response body is not the conversations list.
 //
-// TODO(a-babayev): the user alias is hardcoded to "primary"; if a future step needs to fetch
+// NOTE(a-babayev): the user alias is hardcoded to "primary"; if a future step needs to fetch
 // conversations as frank or grace, extract the alias into the Gherkin step pattern and add
 // an aliasName parameter here.
 func (tc *testContext) saveFromConversations(arrayPath, matchField, matchValue, saveField, key string) error {

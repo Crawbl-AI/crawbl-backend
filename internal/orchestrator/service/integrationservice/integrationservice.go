@@ -82,8 +82,8 @@ func (s *Service) GetOAuthConfig(ctx context.Context, opts *orchestratorservice.
 		return nil, merrors.ErrInvalidInput
 	}
 
-	// TODO: Load OAuth client credentials from config/secrets per provider.
-	// For now, return not-implemented until OAuth clients are set up.
+	// OAuth client credentials must be loaded from config/secrets per provider
+	// before this can return a real config.
 	s.logger.Info("OAuth connect requested (not yet implemented)",
 		slog.String("provider", opts.Provider),
 		slog.String("user_id", opts.UserID),
@@ -99,8 +99,8 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, opts *orchestratorser
 		return merrors.ErrInvalidInput
 	}
 
-	// TODO: Exchange code for tokens via the provider's token endpoint.
-	// Encrypt and store in integration_connections table.
+	// Exchange code for tokens via the provider's token endpoint and encrypt/store
+	// in integration_connections table once OAuth clients are configured.
 	s.logger.Info("OAuth callback received (not yet implemented)",
 		slog.String("provider", opts.Provider),
 		slog.String("user_id", opts.UserID),

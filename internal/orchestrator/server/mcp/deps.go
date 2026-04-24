@@ -52,8 +52,8 @@ const (
 	ctxKeyConversationID contextKey = "mcp_conversation_id"
 )
 
-// auditService is the local interface for MCP audit logging.
-type auditService interface {
+// auditLogWriter is the local interface for MCP audit logging.
+type auditLogWriter interface {
 	WriteLog(ctx context.Context, sess *dbr.Session, entry *auditrepo.AuditLogRow) error
 }
 
@@ -66,7 +66,7 @@ type Deps struct {
 	Logger       *slog.Logger
 	SigningKey   string
 	MCPService   mcpservice.Service
-	AuditService auditService
+	AuditService auditLogWriter
 
 	// Memory palace dependencies.
 	DrawerRepo   drawerStore

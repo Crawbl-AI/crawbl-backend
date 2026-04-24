@@ -188,6 +188,6 @@ func (tc *testContext) conditionalJSONNotEmpty(status int, path string) error {
 }
 
 // gjsonGet is a convenience function for step helpers.
-func gjsonGet(body string, path string) string {
+func gjsonGet(body, path string) string {
 	return gjson.Get(body, path).String()
 }
