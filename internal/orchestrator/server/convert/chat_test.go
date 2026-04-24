@@ -3,8 +3,59 @@ package convert
 import (
 	"testing"
 
+	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
+
+// assertTurn verifies the index and label of a proto QuestionTurnPayload.
+func assertTurn(t *testing.T, prefix string, got *mobilev1.QuestionTurnPayload, wantIndex int32, wantLabel string) {
+	t.Helper()
+	if got.GetIndex() != wantIndex {
+		t.Errorf("%s.Index = %d, want %d", prefix, got.GetIndex(), wantIndex)
+	}
+	if got.GetLabel() != wantLabel {
+		t.Errorf("%s.Label = %q, want %q", prefix, got.GetLabel(), wantLabel)
+	}
+}
+
+// assertQuestion verifies the fields of a proto QuestionItemPayload.
+func assertQuestion(t *testing.T, prefix string, q *mobilev1.QuestionItemPayload, wantID, wantPrompt, wantMode string, wantAllowCustom bool) {
+	t.Helper()
+	if q.GetId() != wantID {
+		t.Errorf("%s.Id = %q, want %q", prefix, q.GetId(), wantID)
+	}
+	if wantPrompt != "" && q.GetPrompt() != wantPrompt {
+		t.Errorf("%s.Prompt = %q, want %q", prefix, q.GetPrompt(), wantPrompt)
+	}
+	if q.GetMode() != wantMode {
+		t.Errorf("%s.Mode = %q, want %q", prefix, q.GetMode(), wantMode)
+	}
+	if q.GetAllowCustom() != wantAllowCustom {
+		t.Errorf("%s.AllowCustom = %v, want %v", prefix, q.GetAllowCustom(), wantAllowCustom)
+	}
+}
+
+// assertAnswer verifies the fields of a proto QuestionAnswerPayload.
+func assertAnswer(t *testing.T, prefix string, got *mobilev1.QuestionAnswerPayload, wantID string, wantOptionIDs []string, wantCustomText string) {
+	t.Helper()
+	if got.GetQuestionId() != wantID {
+		t.Errorf("%s.QuestionId = %q, want %q", prefix, got.GetQuestionId(), wantID)
+	}
+	if len(wantOptionIDs) > 0 {
+		if len(got.GetOptionIds()) != len(wantOptionIDs) {
+			t.Errorf("%s.OptionIds = %v, want %v", prefix, got.GetOptionIds(), wantOptionIDs)
+		} else {
+			for i, id := range wantOptionIDs {
+				if got.GetOptionIds()[i] != id {
+					t.Errorf("%s.OptionIds[%d] = %q, want %q", prefix, i, got.GetOptionIds()[i], id)
+				}
+			}
+		}
+	}
+	if wantCustomText != "" && got.GetCustomText() != wantCustomText {
+		t.Errorf("%s.CustomText = %q, want %q", prefix, got.GetCustomText(), wantCustomText)
+	}
+}
 
 // TestMessageContentToProto_Questions_RoundTrip verifies that a domain
 // MessageContent of type questions is fully preserved after conversion to proto.
@@ -78,87 +129,46 @@ func TestMessageContentToProto_Questions_RoundTrip(t *testing.T) {
 	if resp.Type != "questions" {
 		t.Errorf("Type = %q, want %q", resp.Type, "questions")
 	}
-
 	if len(resp.Turns) != 2 {
 		t.Fatalf("len(Turns) = %d, want 2", len(resp.Turns))
 	}
 
-	// Turn 0
-	turn0 := resp.Turns[0]
-	if turn0.Index != 1 {
-		t.Errorf("Turns[0].Index = %d, want 1", turn0.Index)
-	}
-	if turn0.Label != "Turn one" {
-		t.Errorf("Turns[0].Label = %q, want %q", turn0.Label, "Turn one")
-	}
-	if len(turn0.Questions) != 2 {
-		t.Fatalf("Turns[0] len(Questions) = %d, want 2", len(turn0.Questions))
-	}
-	q0 := turn0.Questions[0]
-	if q0.Id != "t1q1" {
-		t.Errorf("Turns[0].Questions[0].Id = %q, want %q", q0.Id, "t1q1")
-	}
-	if q0.Prompt != "Pick a city" {
-		t.Errorf("Turns[0].Questions[0].Prompt = %q, want %q", q0.Prompt, "Pick a city")
-	}
-	if q0.Mode != string(orchestrator.QuestionModeSingle) {
-		t.Errorf("Turns[0].Questions[0].Mode = %q, want %q", q0.Mode, orchestrator.QuestionModeSingle)
-	}
-	if !q0.AllowCustom {
-		t.Errorf("Turns[0].Questions[0].AllowCustom = false, want true")
-	}
-	if len(q0.Options) != 2 {
-		t.Fatalf("Turns[0].Questions[0] len(Options) = %d, want 2", len(q0.Options))
-	}
-	if q0.Options[0].Id != "A" || q0.Options[0].Label != "Paris" {
-		t.Errorf("Options[0] = {%q, %q}, want {A, Paris}", q0.Options[0].Id, q0.Options[0].Label)
-	}
-	if q0.Options[1].Id != "B" || q0.Options[1].Label != "London" {
-		t.Errorf("Options[1] = {%q, %q}, want {B, London}", q0.Options[1].Id, q0.Options[1].Label)
-	}
+	t.Run("turn0", func(t *testing.T) {
+		turn0 := resp.Turns[0]
+		assertTurn(t, "Turns[0]", turn0, 1, "Turn one")
 
-	q1 := turn0.Questions[1]
-	if q1.Id != "t1q2" {
-		t.Errorf("Turns[0].Questions[1].Id = %q, want %q", q1.Id, "t1q2")
-	}
-	if q1.Mode != string(orchestrator.QuestionModeMulti) {
-		t.Errorf("Turns[0].Questions[1].Mode = %q, want %q", q1.Mode, orchestrator.QuestionModeMulti)
-	}
-	if q1.AllowCustom {
-		t.Errorf("Turns[0].Questions[1].AllowCustom = true, want false")
-	}
+		if len(turn0.Questions) != 2 {
+			t.Fatalf("Turns[0] len(Questions) = %d, want 2", len(turn0.Questions))
+		}
 
-	// Turn 1
-	turn1 := resp.Turns[1]
-	if turn1.Index != 2 {
-		t.Errorf("Turns[1].Index = %d, want 2", turn1.Index)
-	}
-	if turn1.Label != "Turn two" {
-		t.Errorf("Turns[1].Label = %q, want %q", turn1.Label, "Turn two")
-	}
+		q0 := turn0.Questions[0]
+		assertQuestion(t, "Turns[0].Questions[0]", q0, "t1q1", "Pick a city", string(orchestrator.QuestionModeSingle), true)
 
-	// Answers
-	if len(resp.Answers) != 3 {
-		t.Fatalf("len(Answers) = %d, want 3", len(resp.Answers))
-	}
-	if resp.Answers[0].QuestionId != "t1q1" {
-		t.Errorf("Answers[0].QuestionId = %q, want %q", resp.Answers[0].QuestionId, "t1q1")
-	}
-	if len(resp.Answers[0].OptionIds) != 1 || resp.Answers[0].OptionIds[0] != "A" {
-		t.Errorf("Answers[0].OptionIds = %v, want [A]", resp.Answers[0].OptionIds)
-	}
-	if resp.Answers[1].QuestionId != "t1q2" {
-		t.Errorf("Answers[1].QuestionId = %q, want %q", resp.Answers[1].QuestionId, "t1q2")
-	}
-	if len(resp.Answers[1].OptionIds) != 2 {
-		t.Errorf("Answers[1].OptionIds = %v, want [X Y]", resp.Answers[1].OptionIds)
-	}
-	if resp.Answers[2].QuestionId != "t2q1" {
-		t.Errorf("Answers[2].QuestionId = %q, want %q", resp.Answers[2].QuestionId, "t2q1")
-	}
-	if resp.Answers[2].CustomText != "Kotlin" {
-		t.Errorf("Answers[2].CustomText = %q, want %q", resp.Answers[2].CustomText, "Kotlin")
-	}
+		if len(q0.GetOptions()) != 2 {
+			t.Fatalf("Turns[0].Questions[0] len(Options) = %d, want 2", len(q0.GetOptions()))
+		}
+		if q0.GetOptions()[0].Id != "A" || q0.GetOptions()[0].Label != "Paris" {
+			t.Errorf("Options[0] = {%q, %q}, want {A, Paris}", q0.GetOptions()[0].Id, q0.GetOptions()[0].Label)
+		}
+		if q0.GetOptions()[1].Id != "B" || q0.GetOptions()[1].Label != "London" {
+			t.Errorf("Options[1] = {%q, %q}, want {B, London}", q0.GetOptions()[1].Id, q0.GetOptions()[1].Label)
+		}
+
+		assertQuestion(t, "Turns[0].Questions[1]", turn0.Questions[1], "t1q2", "", string(orchestrator.QuestionModeMulti), false)
+	})
+
+	t.Run("turn1", func(t *testing.T) {
+		assertTurn(t, "Turns[1]", resp.Turns[1], 2, "Turn two")
+	})
+
+	t.Run("answers", func(t *testing.T) {
+		if len(resp.Answers) != 3 {
+			t.Fatalf("len(Answers) = %d, want 3", len(resp.Answers))
+		}
+		assertAnswer(t, "Answers[0]", resp.Answers[0], "t1q1", []string{"A"}, "")
+		assertAnswer(t, "Answers[1]", resp.Answers[1], "t1q2", []string{"X", "Y"}, "")
+		assertAnswer(t, "Answers[2]", resp.Answers[2], "t2q1", nil, "Kotlin")
+	})
 }
 
 // TestMessageContentToProto_Questions_EmptyTurnsOmitted verifies that nil

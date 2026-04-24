@@ -203,45 +203,65 @@ func TestParseMessageAnswersPayload(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if got.WorkspaceId != tc.wantReq.WorkspaceId {
-				t.Errorf("WorkspaceId = %q, want %q", got.WorkspaceId, tc.wantReq.WorkspaceId)
-			}
-			if got.MessageId != tc.wantReq.MessageId {
-				t.Errorf("MessageId = %q, want %q", got.MessageId, tc.wantReq.MessageId)
-			}
-			if got.LocalId != tc.wantReq.LocalId {
-				t.Errorf("LocalId = %q, want %q", got.LocalId, tc.wantReq.LocalId)
-			}
-
-			if tc.wantReq.Answers == nil && got.Answers != nil {
-				t.Errorf("Answers = %v, want nil", got.Answers)
-				return
-			}
-			if tc.wantReq.Answers != nil && got.Answers == nil {
-				t.Fatalf("Answers = nil, want %v", tc.wantReq.Answers)
-			}
-			if len(got.Answers) != len(tc.wantReq.Answers) {
-				t.Fatalf("len(Answers) = %d, want %d", len(got.Answers), len(tc.wantReq.Answers))
-			}
-
-			for i, want := range tc.wantReq.Answers {
-				ga := got.Answers[i]
-				if ga.QuestionId != want.QuestionId {
-					t.Errorf("Answers[%d].QuestionId = %q, want %q", i, ga.QuestionId, want.QuestionId)
-				}
-				if ga.CustomText != want.CustomText {
-					t.Errorf("Answers[%d].CustomText = %q, want %q", i, ga.CustomText, want.CustomText)
-				}
-				if len(ga.OptionIds) != len(want.OptionIds) {
-					t.Errorf("Answers[%d].OptionIds len = %d, want %d", i, len(ga.OptionIds), len(want.OptionIds))
-					continue
-				}
-				for j, id := range want.OptionIds {
-					if ga.OptionIds[j] != id {
-						t.Errorf("Answers[%d].OptionIds[%d] = %q, want %q", i, j, ga.OptionIds[j], id)
-					}
-				}
-			}
+			assertMessageAnswersRequest(t, got, tc.wantReq)
 		})
+	}
+}
+
+// assertMessageAnswersRequest verifies that got matches want field by field.
+func assertMessageAnswersRequest(t *testing.T, got, want *mobilev1.MessageAnswersRequest) {
+	t.Helper()
+
+	if got.WorkspaceId != want.WorkspaceId {
+		t.Errorf("WorkspaceId = %q, want %q", got.WorkspaceId, want.WorkspaceId)
+	}
+	if got.MessageId != want.MessageId {
+		t.Errorf("MessageId = %q, want %q", got.MessageId, want.MessageId)
+	}
+	if got.LocalId != want.LocalId {
+		t.Errorf("LocalId = %q, want %q", got.LocalId, want.LocalId)
+	}
+
+	assertAnswers(t, got.Answers, want.Answers)
+}
+
+// assertAnswers verifies the Answers slice length and each element.
+func assertAnswers(t *testing.T, got, want []*mobilev1.QuestionAnswerPayload) {
+	t.Helper()
+
+	if want == nil && got != nil {
+		t.Errorf("Answers = %v, want nil", got)
+		return
+	}
+	if want != nil && got == nil {
+		t.Fatalf("Answers = nil, want %v", want)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(Answers) = %d, want %d", len(got), len(want))
+	}
+
+	for i, w := range want {
+		assertAnswer(t, i, got[i], w)
+	}
+}
+
+// assertAnswer verifies a single QuestionAnswerPayload at index i.
+func assertAnswer(t *testing.T, i int, got, want *mobilev1.QuestionAnswerPayload) {
+	t.Helper()
+
+	if got.QuestionId != want.QuestionId {
+		t.Errorf("Answers[%d].QuestionId = %q, want %q", i, got.QuestionId, want.QuestionId)
+	}
+	if got.CustomText != want.CustomText {
+		t.Errorf("Answers[%d].CustomText = %q, want %q", i, got.CustomText, want.CustomText)
+	}
+	if len(got.OptionIds) != len(want.OptionIds) {
+		t.Errorf("Answers[%d].OptionIds len = %d, want %d", i, len(got.OptionIds), len(want.OptionIds))
+		return
+	}
+	for j, id := range want.OptionIds {
+		if got.OptionIds[j] != id {
+			t.Errorf("Answers[%d].OptionIds[%d] = %q, want %q", i, j, got.OptionIds[j], id)
+		}
 	}
 }

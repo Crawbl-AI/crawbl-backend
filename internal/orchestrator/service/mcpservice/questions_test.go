@@ -147,6 +147,68 @@ func agentWithSlug(slug, id string) *fakeAgentStore {
 	return &fakeAgentStore{agents: []*orchestrator.Agent{{ID: id, Slug: slug}}}
 }
 
+// assertBroadcast checks that EmitMessageNew was called exactly once for the given workspace.
+func assertBroadcast(t *testing.T, spy *spyBroadcaster, wantWorkspaceID string) {
+	t.Helper()
+	if spy.newCalls != 1 {
+		t.Fatalf("EmitMessageNew called %d times, want 1", spy.newCalls)
+	}
+	if spy.lastWorkspID != wantWorkspaceID {
+		t.Fatalf("EmitMessageNew workspace = %q, want %q", spy.lastWorkspID, wantWorkspaceID)
+	}
+}
+
+// assertSavedMessage checks that exactly one message was saved and validates its top-level fields.
+func assertSavedMessage(t *testing.T, msgs *fakeMessageStore) *orchestrator.Message {
+	t.Helper()
+	if len(msgs.saved) != 1 {
+		t.Fatalf("expected 1 saved message, got %d", len(msgs.saved))
+	}
+	msg := msgs.saved[0]
+	if msg.Content.Type != orchestrator.MessageContentTypeQuestions {
+		t.Fatalf("content type = %q, want %q", msg.Content.Type, orchestrator.MessageContentTypeQuestions)
+	}
+	if msg.Role != orchestrator.MessageRoleAgent {
+		t.Fatalf("role = %q, want %q", msg.Role, orchestrator.MessageRoleAgent)
+	}
+	if msg.Status != orchestrator.MessageStatusDelivered {
+		t.Fatalf("status = %q, want %q", msg.Status, orchestrator.MessageStatusDelivered)
+	}
+	if msg.AgentID == nil || *msg.AgentID == "" {
+		t.Fatal("expected AgentID to be set")
+	}
+	return msg
+}
+
+// assertTurnShape checks the turn count and the first turn's index and question count.
+func assertTurnShape(t *testing.T, msg *orchestrator.Message) orchestrator.QuestionTurn {
+	t.Helper()
+	if len(msg.Content.Turns) != 1 {
+		t.Fatalf("turns count = %d, want 1", len(msg.Content.Turns))
+	}
+	turn := msg.Content.Turns[0]
+	if turn.Index != 1 {
+		t.Fatalf("turn.Index = %d, want 1", turn.Index)
+	}
+	if len(turn.Questions) != 2 {
+		t.Fatalf("questions count = %d, want 2", len(turn.Questions))
+	}
+	return turn
+}
+
+// assertOptionIDs checks that each option's ID matches the expected list.
+func assertOptionIDs(t *testing.T, label string, q orchestrator.QuestionItem, wantIDs []string) {
+	t.Helper()
+	if len(q.Options) != len(wantIDs) {
+		t.Fatalf("%s option count = %d, want %d", label, len(q.Options), len(wantIDs))
+	}
+	for i, o := range q.Options {
+		if o.ID != wantIDs[i] {
+			t.Fatalf("%s option[%d].ID = %q, want %q", label, i, o.ID, wantIDs[i])
+		}
+	}
+}
+
 func TestAskQuestions_HappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -171,48 +233,14 @@ func TestAskQuestions_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AskQuestions returned unexpected error: %v", err)
 	}
-
 	if result.MessageId == "" {
 		t.Fatal("expected non-empty MessageId")
 	}
 
-	if spy.newCalls != 1 {
-		t.Fatalf("EmitMessageNew called %d times, want 1", spy.newCalls)
-	}
+	assertBroadcast(t, spy, "ws-1")
 
-	if spy.lastWorkspID != "ws-1" {
-		t.Fatalf("EmitMessageNew workspace = %q, want %q", spy.lastWorkspID, "ws-1")
-	}
-
-	if len(msgs.saved) != 1 {
-		t.Fatalf("expected 1 saved message, got %d", len(msgs.saved))
-	}
-
-	msg := msgs.saved[0]
-
-	if msg.Content.Type != orchestrator.MessageContentTypeQuestions {
-		t.Fatalf("content type = %q, want %q", msg.Content.Type, orchestrator.MessageContentTypeQuestions)
-	}
-	if msg.Role != orchestrator.MessageRoleAgent {
-		t.Fatalf("role = %q, want %q", msg.Role, orchestrator.MessageRoleAgent)
-	}
-	if msg.Status != orchestrator.MessageStatusDelivered {
-		t.Fatalf("status = %q, want %q", msg.Status, orchestrator.MessageStatusDelivered)
-	}
-	if msg.AgentID == nil || *msg.AgentID == "" {
-		t.Fatal("expected AgentID to be set")
-	}
-
-	if len(msg.Content.Turns) != 1 {
-		t.Fatalf("turns count = %d, want 1", len(msg.Content.Turns))
-	}
-	turn := msg.Content.Turns[0]
-	if turn.Index != 1 {
-		t.Fatalf("turn.Index = %d, want 1", turn.Index)
-	}
-	if len(turn.Questions) != 2 {
-		t.Fatalf("questions count = %d, want 2", len(turn.Questions))
-	}
+	msg := assertSavedMessage(t, msgs)
+	turn := assertTurnShape(t, msg)
 
 	q1 := turn.Questions[0]
 	if q1.ID != "t1q1" {
@@ -224,15 +252,7 @@ func TestAskQuestions_HappyPath(t *testing.T) {
 	if !q1.AllowCustom {
 		t.Fatal("q1.AllowCustom should be true")
 	}
-	if len(q1.Options) != 3 {
-		t.Fatalf("q1 option count = %d, want 3", len(q1.Options))
-	}
-	wantOptionIDs := []string{"A", "B", "C"}
-	for i, o := range q1.Options {
-		if o.ID != wantOptionIDs[i] {
-			t.Fatalf("q1 option[%d].ID = %q, want %q", i, o.ID, wantOptionIDs[i])
-		}
-	}
+	assertOptionIDs(t, "q1", q1, []string{"A", "B", "C"})
 
 	q2 := turn.Questions[1]
 	if q2.ID != "t1q2" {
