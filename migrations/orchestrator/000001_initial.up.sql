@@ -1,7 +1,3 @@
--- =============================================================================
--- Crawbl Orchestrator Schema (consolidated)
--- =============================================================================
-
 -- Users and preferences
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
@@ -195,11 +191,9 @@ CREATE INDEX IF NOT EXISTS idx_integration_connections_user_workspace
 CREATE INDEX IF NOT EXISTS idx_integration_connections_provider
     ON integration_connections(provider, created_at DESC);
 
--- =============================================================================
 -- Multi-Agent System Tables
--- =============================================================================
 
--- Agent delegation audit log (Phase 1).
+-- Agent delegation audit log.
 -- Tracks every delegation event observed in streaming responses.
 CREATE TABLE IF NOT EXISTS agent_delegations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -220,7 +214,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_delegations_workspace ON agent_delegations(
 CREATE INDEX IF NOT EXISTS idx_agent_delegations_conversation ON agent_delegations(conversation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_delegations_trigger_message ON agent_delegations(trigger_message_id);
 
--- Inter-agent messages routed through the orchestrator (Phase 2).
+-- Inter-agent messages routed through the orchestrator.
 CREATE TABLE IF NOT EXISTS agent_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -246,7 +240,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_messages_from_agent ON agent_messages(from_
 CREATE INDEX IF NOT EXISTS idx_agent_messages_to_agent ON agent_messages(to_agent_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_messages_root_message ON agent_messages(root_message_id);
 
--- Shared artifacts created and modified by agents (Phase 3).
+-- Shared artifacts created and modified by agents.
 CREATE TABLE IF NOT EXISTS artifacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -292,7 +286,7 @@ CREATE TABLE IF NOT EXISTS artifact_reviews (
 
 CREATE INDEX IF NOT EXISTS idx_artifact_reviews_artifact ON artifact_reviews(artifact_id, version);
 
--- Workflow definitions (Phase 4).
+-- Workflow definitions.
 CREATE TABLE IF NOT EXISTS workflow_definitions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -347,7 +341,7 @@ CREATE TABLE IF NOT EXISTS workflow_step_executions (
 
 CREATE INDEX IF NOT EXISTS idx_workflow_step_executions_execution ON workflow_step_executions(execution_id, step_index);
 
--- Scheduled agent triggers (Phase 6).
+-- Scheduled agent triggers.
 CREATE TABLE IF NOT EXISTS agent_triggers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -398,3 +392,221 @@ CREATE TABLE IF NOT EXISTS memory_triggers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_memory_triggers_workspace ON memory_triggers(workspace_id) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS models (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tool_categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS integration_categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS integration_providers (
+    provider TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    icon_url TEXT NOT NULL DEFAULT '',
+    category_id TEXT NOT NULL DEFAULT '',
+    is_enabled BOOLEAN NOT NULL DEFAULT false,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- MemPalace memory system: vector store, knowledge graph, identities.
+-- Requires pgvector extension for semantic search.
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Core vector store — each drawer is a chunk of verbatim content with embedding.
+CREATE TABLE IF NOT EXISTS memory_drawers (
+    id            TEXT        PRIMARY KEY,
+    workspace_id  UUID        NOT NULL,
+    wing          TEXT        NOT NULL,
+    room          TEXT        NOT NULL,
+    hall          TEXT        NOT NULL DEFAULT '',
+    content       TEXT        NOT NULL,
+    embedding     vector(1536),
+    importance    REAL        NOT NULL DEFAULT 3.0,
+    memory_type   TEXT        NOT NULL DEFAULT '',
+    source_file   TEXT        NOT NULL DEFAULT '',
+    added_by      TEXT        NOT NULL DEFAULT 'system',
+    filed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    state            TEXT NOT NULL DEFAULT 'raw',
+    summary          TEXT NOT NULL DEFAULT '',
+    added_by_agent   TEXT NOT NULL DEFAULT '',
+    last_accessed_at TIMESTAMPTZ,
+    access_count     INT  NOT NULL DEFAULT 0,
+    superseded_by    TEXT,
+    cluster_id       TEXT,
+    retry_count      INT  NOT NULL DEFAULT 0,
+    pipeline_tier TEXT NOT NULL DEFAULT 'llm',
+    entity_count  INTEGER NOT NULL DEFAULT 0,
+    triple_count  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_drawers_workspace      ON memory_drawers (workspace_id);
+CREATE INDEX IF NOT EXISTS idx_drawers_workspace_wing ON memory_drawers (workspace_id, wing);
+CREATE INDEX IF NOT EXISTS idx_drawers_workspace_room ON memory_drawers (workspace_id, wing, room);
+-- NOTE: HNSW vector index removed — Bitnami PG image uses SIMD instructions
+-- (AVX2) that Digital Ocean CPUs don't support, causing SIGILL crashes on INSERT.
+-- At <10K drawers per workspace, sequential scan is fast enough.
+
+-- Partial index for cold worker polling efficiency (covers 'raw' and 'classifying'
+-- states for cold worker polling efficiency.
+CREATE INDEX IF NOT EXISTS idx_drawers_state ON memory_drawers (state)
+    WHERE state IN ('raw', 'classifying');
+
+CREATE INDEX IF NOT EXISTS idx_drawers_superseded ON memory_drawers (superseded_by)
+    WHERE superseded_by IS NOT NULL;
+
+-- Enrichment sweep index.
+CREATE INDEX IF NOT EXISTS idx_drawers_enrich
+    ON memory_drawers (workspace_id, created_at)
+    WHERE state = 'processed'
+      AND pipeline_tier <> 'llm'
+      AND entity_count = 0
+      AND importance >= 3.0;
+
+-- Knowledge graph: entity nodes.
+CREATE TABLE IF NOT EXISTS memory_entities (
+    id            TEXT        NOT NULL,
+    workspace_id  UUID        NOT NULL,
+    name          TEXT        NOT NULL,
+    type          TEXT        NOT NULL DEFAULT 'unknown',
+    properties    JSONB       NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    embedding     public.vector(1536),
+    PRIMARY KEY (workspace_id, id)
+);
+
+-- Knowledge graph: temporal relationship triples.
+CREATE TABLE IF NOT EXISTS memory_triples (
+    id              TEXT        NOT NULL,
+    workspace_id    UUID        NOT NULL,
+    subject         TEXT        NOT NULL,
+    predicate       TEXT        NOT NULL,
+    object          TEXT        NOT NULL,
+    valid_from      TEXT,
+    valid_to        TEXT,
+    confidence      REAL        NOT NULL DEFAULT 1.0,
+    source_closet   TEXT        NOT NULL DEFAULT '',
+    source_file     TEXT        NOT NULL DEFAULT '',
+    extracted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (workspace_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_triples_subject   ON memory_triples (workspace_id, subject);
+CREATE INDEX IF NOT EXISTS idx_triples_object    ON memory_triples (workspace_id, object);
+CREATE INDEX IF NOT EXISTS idx_triples_predicate ON memory_triples (workspace_id, predicate);
+CREATE INDEX IF NOT EXISTS idx_triples_validity  ON memory_triples (workspace_id, valid_from, valid_to);
+
+-- Per-workspace L0 identity text.
+CREATE TABLE IF NOT EXISTS memory_identities (
+    workspace_id  UUID        PRIMARY KEY,
+    content       TEXT        NOT NULL DEFAULT '',
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Model Pricing (populated by K8s CronJob from AWS Pricing API + LiteLLM)
+CREATE TABLE IF NOT EXISTS model_pricing (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    region TEXT NOT NULL DEFAULT 'global',
+    input_cost_per_token NUMERIC(18,12) NOT NULL,
+    output_cost_per_token NUMERIC(18,12) NOT NULL,
+    cached_cost_per_token NUMERIC(18,12) NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'manual',
+    effective_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_pricing_lookup
+    ON model_pricing(provider, model, region, effective_at DESC);
+
+-- Usage Plans (reference table, seeded from usage_plans.json on startup)
+CREATE TABLE IF NOT EXISTS usage_plans (
+    plan_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    monthly_token_limit BIGINT NOT NULL DEFAULT 500000,
+    daily_request_limit INT,
+    max_tokens_per_request INT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Usage Quotas (per-user assignment, references usage_plans for limits)
+CREATE TABLE IF NOT EXISTS usage_quotas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    plan_id TEXT NOT NULL DEFAULT 'free' REFERENCES usage_plans(plan_id),
+    effective_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_quotas_user_active
+    ON usage_quotas(user_id, plan_id)
+    WHERE expires_at IS NULL;
+
+-- Usage Counters (running totals, one row per user per month)
+CREATE TABLE IF NOT EXISTS usage_counters (
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    period TEXT NOT NULL,
+    tokens_used BIGINT NOT NULL DEFAULT 0,
+    prompt_tokens_used BIGINT NOT NULL DEFAULT 0,
+    completion_tokens_used BIGINT NOT NULL DEFAULT 0,
+    cost_usd NUMERIC(12,6) NOT NULL DEFAULT 0,
+    request_count INT NOT NULL DEFAULT 0,
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, period)
+);
+
+-- Agent Usage Counters (lifetime totals per agent)
+CREATE TABLE IF NOT EXISTS agent_usage_counters (
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    tokens_used BIGINT NOT NULL DEFAULT 0,
+    prompt_tokens_used BIGINT NOT NULL DEFAULT 0,
+    completion_tokens_used BIGINT NOT NULL DEFAULT 0,
+    cost_usd NUMERIC(12,6) NOT NULL DEFAULT 0,
+    request_count INT NOT NULL DEFAULT 0,
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_usage_counters_workspace
+    ON agent_usage_counters(workspace_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- memory_type_centroids stores one 1536-dim prototype vector per memory type.
+-- Used by the autoingest worker for centroid-based classification.
+CREATE TABLE IF NOT EXISTS memory_type_centroids (
+    memory_type  TEXT         NOT NULL PRIMARY KEY,
+    centroid     vector(1536) NOT NULL,
+    sample_count INTEGER      NOT NULL,
+    computed_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    source_hash  TEXT         NOT NULL
+);
+
+-- Index on users.nickname for CheckNicknameExists lookups during onboarding.
+CREATE INDEX IF NOT EXISTS idx_users_nickname ON users(nickname);

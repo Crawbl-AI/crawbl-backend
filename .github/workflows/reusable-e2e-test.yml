@@ -11,9 +11,11 @@
 #         image-tag: v0.2.0
 #         base-url: https://api-dev.crawbl.com
 #         cluster-name: crawbl-dev
+#         cluster-type: doks   # or k3s
 #       secrets:
 #         digitalocean-token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 #         e2e-token: ${{ secrets.CRAWBL_E2E_TOKEN }}
+#         kubeconfig: ${{ secrets.CRAWBL_DEV_KUBECONFIG }}   # required when cluster-type=k3s
 name: Reusable E2E Test
 
 on:
@@ -29,9 +31,14 @@ on:
         default: 'https://api-dev.crawbl.com'
         type: string
       cluster-name:
-        description: 'Kubernetes cluster name'
+        description: 'Kubernetes cluster name (used when cluster-type=doks)'
         required: false
         default: 'crawbl-dev'
+        type: string
+      cluster-type:
+        description: 'Cluster provider: doks or k3s'
+        required: false
+        default: 'doks'
         type: string
       test-uid-suffix:
         description: 'Suffix for test user ID (for uniqueness)'
@@ -45,9 +52,11 @@ on:
         type: string
     secrets:
       digitalocean-token:
-        required: true
+        required: false
       e2e-token:
         required: true
+      kubeconfig:
+        required: false
 
 jobs:
   e2e-test:
@@ -65,14 +74,23 @@ jobs:
         run: chmod +x crawbl
 
       - name: Install doctl and configure kubectl
+        if: inputs.cluster-type == 'doks'
         uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.digitalocean-token }}
 
-      - name: Save kubeconfig
+      - name: Save kubeconfig (doks)
+        if: inputs.cluster-type == 'doks'
         env:
           CLUSTER_NAME: ${{ inputs.cluster-name }}
         run: doctl kubernetes cluster kubeconfig save "${CLUSTER_NAME}"
+
+      - name: Write kubeconfig (k3s)
+        if: inputs.cluster-type == 'k3s'
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.kubeconfig }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
 
       - name: Wait for ArgoCD sync
         env:
