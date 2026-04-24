@@ -25,6 +25,7 @@
 package queue
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -36,9 +37,11 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/jobs"
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 )
 
@@ -473,4 +476,11 @@ func stampEventMetadata(id, eventTime string) (string, string) {
 		eventTime = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	return id, eventTime
+}
+
+// stalePendingFailer is the message subset used by the stale-pending cleanup
+// worker: a single UPDATE call that flips orphaned placeholders to
+// failed status so the mobile UI never hangs.
+type stalePendingFailer interface {
+	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
 }

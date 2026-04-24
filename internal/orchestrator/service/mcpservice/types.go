@@ -12,9 +12,11 @@ import (
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
+	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/workflowrepo"
+	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
@@ -134,4 +136,38 @@ type WorkspaceInfoResult struct {
 	Name      string
 	CreatedAt time.Time
 	Agents    []*orchestrator.Agent
+}
+
+// workspaceGetter is the workspace subset mcpservice uses: ownership
+// checks before returning workspace-scoped data to MCP tool callers.
+type workspaceGetter interface {
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
+}
+
+// conversationStore is the conversation subset mcpservice uses: listing
+// and single-conversation lookups for the search-messages tool.
+type conversationStore interface {
+	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Conversation, *merrors.Error)
+	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID, conversationID string) (*orchestrator.Conversation, *merrors.Error)
+}
+
+// agentStore is the agent subset mcpservice uses: global lookup for
+// sender-name enrichment plus per-workspace listing for agent rosters.
+type agentStore interface {
+	GetByIDGlobal(ctx context.Context, sess orchestratorrepo.SessionRunner, agentID string) (*orchestrator.Agent, *merrors.Error)
+	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error)
+}
+
+// agentHistoryCreator is the agent_history subset mcpservice uses to
+// append history entries from MCP agent-creation tools.
+type agentHistoryCreator interface {
+	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentHistoryRow) *merrors.Error
+}
+
+// messageStore is the message subset mcpservice uses: recent-message
+// listing for the conversation-context tool and message persistence for
+// agent-authored structured content (e.g. questions cards).
+type messageStore interface {
+	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
+	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error
 }
