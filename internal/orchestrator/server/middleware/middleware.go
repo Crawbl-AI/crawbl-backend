@@ -105,10 +105,8 @@ func AuthMiddleware(cfg *MiddlewareConfig, logger *slog.Logger) func(http.Handle
 			}
 
 			// E2E bypass: only active when token is configured and env is dev/local.
-			if cfg.E2EToken != "" && (env == EnvironmentLocal || env == "dev") {
-				if handled := injectE2EPrincipal(next, w, r, cfg.E2EToken, logger); handled {
-					return
-				}
+			if cfg.E2EToken != "" && (env == EnvironmentLocal || env == "dev") && injectE2EPrincipal(next, w, r, cfg.E2EToken, logger) {
+				return
 			}
 
 			// Production: read gateway-verified claims from Envoy-forwarded headers.

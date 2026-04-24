@@ -48,11 +48,10 @@ type Server struct {
 	health   *HealthServer
 	runner   *runner.Runner
 
-	// lifecycleCtx bounds the listener bring-up to the Server's own
-	// lifetime. Cancelled on Shutdown so an in-progress net.Listen call
-	// (e.g. on a slow DNS resolution) unblocks cleanly instead of
-	// hanging on context.Background.
-	lifecycleCtx    context.Context
+	// lifecycleCancel cancels the context passed to net.Listen in Start,
+	// bounding the listener bring-up to the Server's own lifetime.
+	// Cancelled on Shutdown so an in-progress net.Listen call (e.g. on a
+	// slow DNS resolution) unblocks cleanly instead of hanging forever.
 	lifecycleCancel context.CancelFunc
 }
 
@@ -117,23 +116,22 @@ func New(cfg config.Config, deps Deps) (*Server, error) {
 	// beyond what is already registered.
 	reflection.Register(grpcSrv)
 
-	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	return &Server{
-		cfg:             cfg,
-		logger:          logger,
-		grpcSrv:         grpcSrv,
-		health:          healthSrv,
-		runner:          deps.Runner,
-		lifecycleCtx:    lifecycleCtx,
-		lifecycleCancel: lifecycleCancel,
+		cfg:     cfg,
+		logger:  logger,
+		grpcSrv: grpcSrv,
+		health:  healthSrv,
+		runner:  deps.Runner,
 	}, nil
 }
 
 // Start binds the listener and begins serving. Blocks until the
 // server exits. main.go calls Start() in its own goroutine.
 func (s *Server) Start() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.lifecycleCancel = cancel
 	lc := &net.ListenConfig{}
-	l, err := lc.Listen(s.lifecycleCtx, "tcp", s.cfg.GRPCListen)
+	l, err := lc.Listen(ctx, "tcp", s.cfg.GRPCListen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", s.cfg.GRPCListen, err)
 	}

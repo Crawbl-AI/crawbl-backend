@@ -10,14 +10,14 @@ import (
 )
 
 // createSubAgentStream creates a new placeholder and stream entry for a sub-agent.
-func (ss *streamSession) createSubAgentStream(sub *orchestrator.Agent) *subAgentStream {
+func (ss *streamSession) createSubAgentStream(ctx context.Context, sub *orchestrator.Agent) *subAgentStream {
 	placeholder := ss.svc.newPlaceholder(ss.convID, sub)
-	if mErr := ss.svc.savePlaceholder(ss.ctx, ss.sess, placeholder); mErr != nil {
+	if mErr := ss.svc.savePlaceholder(ctx, ss.sess, placeholder); mErr != nil {
 		slog.Warn("sub-agent placeholder failed, routing to primary", "sub", sub.Slug, "error", mErr.Error())
 		return ss.streams[ss.primary.ID]
 	}
 
-	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, sub.ID, string(orchestrator.AgentStatusThinking), ss.convID)
+	ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, sub.ID, string(orchestrator.AgentStatusThinking), ss.convID)
 
 	// Emit delegation running. ADK may not surface transfer_to_agent as a
 	// ToolCallEvent, so this is the reliable place to emit delegation --
@@ -28,7 +28,7 @@ func (ss *streamSession) createSubAgentStream(sub *orchestrator.Agent) *subAgent
 		delegationCreatedAt = primarySt.placeholder.CreatedAt.UTC().Format(time.RFC3339Nano)
 		delegationMsgID = primarySt.placeholder.ID
 	}
-	ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, &realtime.AgentDelegationPayload{
+	ss.svc.broadcaster.EmitAgentDelegation(ctx, ss.wsID, &realtime.AgentDelegationPayload{
 		From:           delegationAgent(ss.primary),
 		To:             delegationAgent(sub),
 		ConversationId: ss.convID, Status: realtime.AgentDelegationStatusRunning,
@@ -37,7 +37,7 @@ func (ss *streamSession) createSubAgentStream(sub *orchestrator.Agent) *subAgent
 	})
 	// Manager handed off -- clear thinking status so mobile stops showing
 	// "Manager is thinking" while the sub-agent works.
-	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, ss.primary.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, ss.primary.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 
 	st := &subAgentStream{agent: sub, placeholder: placeholder, firstChunk: true}
 	ss.streams[sub.ID] = st

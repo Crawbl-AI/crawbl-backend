@@ -3,13 +3,10 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/identityrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
@@ -17,7 +14,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/agenthistoryrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/mcpserver"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
@@ -56,19 +52,7 @@ func runMCP(ctx context.Context) error {
 	var identityRepo mcpIdentityRepoRaw = identityrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
-	var memoryStack layers.Stack
-	var embedder embed.Embedder
-	if baseURL := os.Getenv("CRAWBL_EMBED_BASE_URL"); baseURL != "" {
-		embedder = embed.NewProvider(embed.ProviderConfig{
-			BaseURL: baseURL,
-			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
-			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
-		})
-		memoryStack = layers.NewStack(drawerRepo, identityRepo, embedder)
-		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
-	} else {
-		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set")
-	}
+	memoryStack, embedder := buildMemoryStack(logger, drawerRepo, identityRepo)
 
 	runtimeClient, err := buildRuntimeClient(logger)
 	if err != nil {
@@ -80,8 +64,7 @@ func runMCP(ctx context.Context) error {
 
 	// The MCP handler needs a broadcaster for push notifications; the MCP
 	// process does not run Socket.IO, so we use the NopBroadcaster.
-	mcpHandler := buildMCPHandler(mcpHandlerDeps{
-		Ctx:              ctx,
+	mcpHandler := buildMCPHandler(ctx, mcpHandlerDeps{
 		Logger:           logger,
 		DB:               db,
 		WorkspaceRepo:    workspaceRepo,

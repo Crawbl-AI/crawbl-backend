@@ -73,7 +73,7 @@ type Deps struct {
 	KG           kgStore
 	MemoryStack  layers.Stack
 	PalaceGraph  palaceGraphStore
-	IdentityRepo identityStore
+	IdentityRepo identitySetter
 	Classifier   extract.Classifier
 	Embedder     embed.Embedder
 

@@ -20,9 +20,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// messageStore is the message subset used by the stale-pending cleanup
+// stalePendingFailer is the message subset used by the stale-pending cleanup
 // worker: a single UPDATE call that flips orphaned placeholders to
 // failed status so the mobile UI never hangs.
-type messageStore interface {
+type stalePendingFailer interface {
 	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
 }

@@ -12,7 +12,7 @@ import (
 
 type stack struct {
 	drawerRepo   drawerStore
-	identityRepo identityStore
+	identityRepo identityGetter
 	embedder     embed.Embedder
 }
 
@@ -22,7 +22,7 @@ type stack struct {
 // Both repo arguments are typed against the consumer-side interfaces in
 // ports.go; the concrete postgres repos in memory/repo/... satisfy them
 // implicitly.
-func NewStack(drawerRepo drawerStore, identityRepo identityStore, embedder embed.Embedder) Stack {
+func NewStack(drawerRepo drawerStore, identityRepo identityGetter, embedder embed.Embedder) Stack {
 	return &stack{
 		drawerRepo:   drawerRepo,
 		identityRepo: identityRepo,

@@ -5,10 +5,11 @@ package mcpserver
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httprun"
 )
 
 const (
@@ -63,25 +64,5 @@ func New(cfg *Config, mcpHandler http.Handler, logger *slog.Logger) *Server {
 // Run starts the server and blocks until ctx is cancelled, then
 // performs a graceful shutdown within the given timeout.
 func (s *Server) Run(ctx context.Context, shutdownTimeout time.Duration) error {
-	errCh := make(chan error, 1)
-	go func() {
-		s.logger.Info("starting MCP server", slog.String("addr", s.httpServer.Addr))
-		errCh <- s.httpServer.ListenAndServe()
-	}()
-
-	select {
-	case err := <-errCh:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return err
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		s.logger.Info("shutting down MCP server")
-		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
-			return err
-		}
-		return <-errCh
-	}
+	return httprun.ListenAndServeGraceful(ctx, s.httpServer, shutdownTimeout, "MCP", s.logger)
 }

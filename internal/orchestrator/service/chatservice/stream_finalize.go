@@ -1,6 +1,7 @@
 package chatservice
 
 import (
+	"context"
 	"log/slog"
 	"sort"
 	"strings"
@@ -16,12 +17,12 @@ import (
 
 // finalize persists all stream messages. Delegation (primary) is finalized
 // first to guarantee correct timestamp ordering.
-func (ss *streamSession) finalize() []*orchestrator.Message {
+func (ss *streamSession) finalize(ctx context.Context) []*orchestrator.Message {
 	var replies []*orchestrator.Message
 
 	// Primary agent first when delegation occurred.
 	if primarySt := ss.streams[ss.primary.ID]; primarySt != nil && len(ss.streams) > 1 {
-		if reply := ss.finalizePrimaryDelegation(primarySt); reply != nil {
+		if reply := ss.finalizePrimaryDelegation(ctx, primarySt); reply != nil {
 			replies = append(replies, reply)
 		}
 	}
@@ -31,19 +32,19 @@ func (ss *streamSession) finalize() []*orchestrator.Message {
 		if st.agent.ID == ss.primary.ID && len(ss.streams) > 1 {
 			continue
 		}
-		if reply := ss.finalizeStream(st); reply != nil {
+		if reply := ss.finalizeStream(ctx, st); reply != nil {
 			replies = append(replies, reply)
 		}
 	}
 
-	ss.emitSubAgentDelegationDone()
+	ss.emitSubAgentDelegationDone(ctx)
 	return replies
 }
 
 // finalizePrimaryDelegation finalizes the primary agent's delegation message,
 // updates the summary, and emits the agent-online status event.
 // Returns the persisted reply, or nil if nothing was emitted.
-func (ss *streamSession) finalizePrimaryDelegation(primarySt *subAgentStream) *orchestrator.Message {
+func (ss *streamSession) finalizePrimaryDelegation(ctx context.Context, primarySt *subAgentStream) *orchestrator.Message {
 	text := strings.TrimSpace(primarySt.accumulated.String())
 	delegatee := ss.firstSubAgent()
 
@@ -55,9 +56,9 @@ func (ss *streamSession) finalizePrimaryDelegation(primarySt *subAgentStream) *o
 		Status:      realtime.AgentDelegationStatusCompleted,
 		TaskPreview: truncateText(text, taskPreviewMaxRunes),
 	}
-	reply := ss.finalizeMessage(primarySt.placeholder, text, orchestrator.MessageStatusDelegated)
+	reply := ss.finalizeMessage(ctx, primarySt.placeholder, text, orchestrator.MessageStatusDelegated)
 	ss.svc.updateDelegationSummary(ss.placeholder.ID, text)
-	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, ss.primary.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, ss.primary.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 	return reply
 }
 
@@ -79,12 +80,12 @@ func (ss *streamSession) firstSubAgent() *orchestrator.Agent {
 }
 
 // emitSubAgentDelegationDone emits delegation-completion events for all sub-agents.
-func (ss *streamSession) emitSubAgentDelegationDone() {
+func (ss *streamSession) emitSubAgentDelegationDone(ctx context.Context) {
 	for _, st := range ss.streams {
 		if st.agent.ID == ss.primary.ID {
 			continue
 		}
-		ss.svc.broadcaster.EmitAgentDelegation(ss.ctx, ss.wsID, &realtime.AgentDelegationPayload{
+		ss.svc.broadcaster.EmitAgentDelegation(ctx, ss.wsID, &realtime.AgentDelegationPayload{
 			From:           delegationAgent(ss.primary),
 			To:             delegationAgent(st.agent),
 			ConversationId: ss.convID,
@@ -96,20 +97,20 @@ func (ss *streamSession) emitSubAgentDelegationDone() {
 
 // finalizeStream handles finalization for a single non-primary agent stream.
 // Returns the persisted reply message, or nil if the placeholder was deleted (empty/silent).
-func (ss *streamSession) finalizeStream(st *subAgentStream) *orchestrator.Message {
+func (ss *streamSession) finalizeStream(ctx context.Context, st *subAgentStream) *orchestrator.Message {
 	text := strings.TrimSpace(st.accumulated.String())
 	cleanDone := st.done || ss.globalDone
 
 	// Empty — delete placeholder and emit silent done.
 	if text == "" {
-		if mErr := ss.svc.messageRepo.DeleteByID(ss.ctx, ss.sess, st.placeholder.ID); mErr != nil {
+		if mErr := ss.svc.messageRepo.DeleteByID(ctx, ss.sess, st.placeholder.ID); mErr != nil {
 			slog.Warn("delete empty placeholder", "id", st.placeholder.ID, "error", mErr.Error())
 		}
-		ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, &realtime.MessageDonePayload{
+		ss.svc.broadcaster.EmitMessageDone(ctx, ss.wsID, &realtime.MessageDonePayload{
 			MessageId: st.placeholder.ID, ConversationId: ss.convID,
 			AgentId: st.agent.ID, Status: string(orchestrator.MessageStatusSilent),
 		})
-		ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+		ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 		return nil
 	}
 
@@ -123,18 +124,18 @@ func (ss *streamSession) finalizeStream(st *subAgentStream) *orchestrator.Messag
 		status = orchestrator.MessageStatusIncomplete
 	}
 
-	reply := ss.finalizeMessage(st.placeholder, text, status)
-	ss.svc.broadcaster.EmitMessageDone(ss.ctx, ss.wsID, &realtime.MessageDonePayload{
+	reply := ss.finalizeMessage(ctx, st.placeholder, text, status)
+	ss.svc.broadcaster.EmitMessageDone(ctx, ss.wsID, &realtime.MessageDonePayload{
 		MessageId: st.placeholder.ID, ConversationId: ss.convID,
 		AgentId: st.agent.ID, Status: string(status),
 	})
-	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, st.agent.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 	return reply
 }
 
 // finalizeMessage updates the placeholder message with final text and status,
 // persists it, and broadcasts message.new.
-func (ss *streamSession) finalizeMessage(placeholder *orchestrator.Message, text string, status orchestrator.MessageStatus) *orchestrator.Message {
+func (ss *streamSession) finalizeMessage(ctx context.Context, placeholder *orchestrator.Message, text string, status orchestrator.MessageStatus) *orchestrator.Message {
 	now := time.Now().UTC()
 	placeholder.Content.Text = text
 	placeholder.Status = status
@@ -145,10 +146,10 @@ func (ss *streamSession) finalizeMessage(placeholder *orchestrator.Message, text
 	convCopy.LastMessage = placeholder
 
 	if _, mErr := database.WithTransaction(ss.sess, "finalize stream message", func(tx *dbr.Tx) (*orchestrator.Message, *merrors.Error) {
-		if mErr := ss.svc.messageRepo.Save(ss.ctx, tx, placeholder); mErr != nil {
+		if mErr := ss.svc.messageRepo.Save(ctx, tx, placeholder); mErr != nil {
 			return nil, mErr
 		}
-		if mErr := ss.svc.conversationRepo.Save(ss.ctx, tx, &convCopy); mErr != nil {
+		if mErr := ss.svc.conversationRepo.Save(ctx, tx, &convCopy); mErr != nil {
 			return nil, mErr
 		}
 		return placeholder, nil
@@ -161,6 +162,6 @@ func (ss *streamSession) finalizeMessage(placeholder *orchestrator.Message, text
 		placeholder.Agent = ss.lookups.byID[*placeholder.AgentID]
 	}
 
-	ss.svc.broadcaster.EmitMessageNew(ss.ctx, ss.wsID, placeholder)
+	ss.svc.broadcaster.EmitMessageNew(ctx, ss.wsID, placeholder)
 	return placeholder
 }

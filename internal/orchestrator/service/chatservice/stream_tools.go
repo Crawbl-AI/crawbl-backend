@@ -1,6 +1,7 @@
 package chatservice
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ import (
 
 // handleToolCall processes a StreamEventToolCall: persists a tool_status message,
 // emits tool status, and records delegation for transfer_to_agent.
-func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
+func (ss *streamSession) handleToolCall(ctx context.Context, chunk userswarmclient.StreamChunk) {
 	toolAgentID := resolveToolAgentID(ss.primary, ss.lookups, chunk.AgentID)
 	parsed := parseToolCallArgs(chunk.Tool, chunk.Args)
 	// Per the agent.tool contract the wire carries a human-readable
@@ -36,13 +37,13 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 	var toolCreatedAt string
 	if chunk.Tool != agentruntimetools.ToolTransferToAgent {
 		toolMsg := ss.newToolStatusMessage(toolAgentID, chunk.Tool, orchestrator.ToolStateRunning, parsed, wireArgs)
-		if mErr := ss.svc.savePlaceholder(ss.ctx, ss.sess, toolMsg); mErr == nil {
+		if ss.svc.savePlaceholder(ctx, ss.sess, toolMsg) == nil {
 			toolMsgID = toolMsg.ID
 			toolCreatedAt = toolMsg.CreatedAt.UTC().Format(time.RFC3339Nano)
 			if toolMsg.AgentID != nil {
 				toolMsg.Agent = ss.lookups.byID[*toolMsg.AgentID]
 			}
-			ss.svc.broadcaster.EmitMessageNew(ss.ctx, ss.wsID, toolMsg)
+			ss.svc.broadcaster.EmitMessageNew(ctx, ss.wsID, toolMsg)
 		}
 	}
 
@@ -50,7 +51,7 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 		ss.pending[chunk.CallID] = pendingToolCall{tool: chunk.Tool, agentSlug: chunk.AgentID, args: parsed, messageID: toolMsgID}
 	}
 
-	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, &realtime.AgentToolPayload{
+	ss.svc.broadcaster.EmitAgentTool(ctx, ss.wsID, &realtime.AgentToolPayload{
 		AgentId: toolAgentID, ConversationId: ss.convID,
 		Tool: chunk.Tool, Status: realtime.AgentToolStatusRunning,
 		CallId: chunk.CallID, Query: parsed.Query, Args: toStructPB(wireArgs),
@@ -59,7 +60,7 @@ func (ss *streamSession) handleToolCall(chunk userswarmclient.StreamChunk) {
 }
 
 // handleToolResult processes a StreamEventToolResult: emits completion and delegation status.
-func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
+func (ss *streamSession) handleToolResult(ctx context.Context, chunk userswarmclient.StreamChunk) {
 	var matched pendingToolCall
 	if chunk.CallID != "" {
 		if info, ok := ss.pending[chunk.CallID]; ok {
@@ -77,7 +78,7 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 	// an English sentence BE-side because it would dodge mobile l10n.
 	doneArgs := buildWireArgs(matched.tool, matched.args.Parsed)
 
-	ss.svc.broadcaster.EmitAgentTool(ss.ctx, ss.wsID, &realtime.AgentToolPayload{
+	ss.svc.broadcaster.EmitAgentTool(ctx, ss.wsID, &realtime.AgentToolPayload{
 		AgentId: toolAgentID, ConversationId: ss.convID,
 		Tool: matched.tool, Status: realtime.AgentToolStatusDone,
 		CallId: chunk.CallID, Query: matched.args.Query, Args: toStructPB(doneArgs),
@@ -85,13 +86,13 @@ func (ss *streamSession) handleToolResult(chunk userswarmclient.StreamChunk) {
 
 	// Update persisted tool_status message to completed.
 	if matched.messageID != "" {
-		if mErr := ss.svc.messageRepo.UpdateToolState(ss.ctx, ss.sess, matched.messageID, string(orchestrator.ToolStateCompleted)); mErr != nil {
+		if mErr := ss.svc.messageRepo.UpdateToolState(ctx, ss.sess, matched.messageID, string(orchestrator.ToolStateCompleted)); mErr != nil {
 			slog.Warn("failed to update tool state to completed", "message_id", matched.messageID, "error", mErr)
 		}
 	}
 
 	if matched.tool == agentruntimetools.ToolTransferToAgent {
-		ss.handleTransferToAgent(matched)
+		ss.handleTransferToAgent(ctx, matched)
 	}
 }
 
@@ -112,13 +113,13 @@ func (ss *streamSession) resolveToolResultAgentID(matched pendingToolCall, chunk
 }
 
 // handleTransferToAgent fires the delegation goroutine when a transfer_to_agent tool completes.
-func (ss *streamSession) handleTransferToAgent(matched pendingToolCall) {
+func (ss *streamSession) handleTransferToAgent(ctx context.Context, matched pendingToolCall) {
 	slug, _ := matched.args.Parsed[agentruntimetools.ToolTransferToAgentArgField].(string)
 	del := ss.lookups.bySlug[slug]
 	if del == nil {
 		return
 	}
-	ss.svc.broadcaster.EmitAgentStatus(ss.ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
+	ss.svc.broadcaster.EmitAgentStatus(ctx, ss.wsID, del.ID, string(orchestrator.AgentStatusOnline), ss.convID)
 	triggerMsgID := ss.placeholder.ID
 	delegateAgentID := del.ID
 	userID := ss.userID

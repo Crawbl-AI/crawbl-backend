@@ -155,8 +155,7 @@ func runServer(ctx context.Context) error {
 	pricingCache := pricing.New(db, modelpricingrepo.New(), logger)
 	pricingCache.Start(ctx)
 
-	riverClient, err := buildAndStartRiver(riverOpts{
-		ctx:          ctx,
+	riverClient, err := buildAndStartRiver(ctx, riverOpts{
 		logger:       logger,
 		db:           db,
 		mem:          memRepos,
@@ -241,8 +240,7 @@ func runServer(ctx context.Context) error {
 		})
 	}
 
-	mcpHandler := buildMCPHandler(mcpHandlerDeps{
-		Ctx:              ctx,
+	mcpHandler := buildMCPHandler(ctx, mcpHandlerDeps{
 		Logger:           logger,
 		DB:               db,
 		WorkspaceRepo:    repos.Workspace,
@@ -344,7 +342,6 @@ func buildNATS(ctx context.Context, logger *slog.Logger) (*crawblnats.Client, fu
 
 // riverOpts groups the dependencies needed to build and start River.
 type riverOpts struct {
-	ctx          context.Context
 	logger       *slog.Logger
 	db           *dbr.Connection
 	mem          memoryRepoBundle
@@ -356,8 +353,7 @@ type riverOpts struct {
 
 // buildAndStartRiver creates the River config, constructs the client, runs
 // schema migrations, and starts the background workers.
-func buildAndStartRiver(opts riverOpts) (*pkgriver.Client, error) {
-	ctx := opts.ctx
+func buildAndStartRiver(ctx context.Context, opts riverOpts) (*pkgriver.Client, error) {
 	logger := opts.logger
 	db := opts.db
 	mem := opts.mem
@@ -633,7 +629,6 @@ func newLLMClassifierOrNil() extract.LLMClassifier {
 // Separating them from positional parameters keeps the constructor readable and
 // satisfies the CLAUDE.md max-5-params rule.
 type mcpHandlerDeps struct {
-	Ctx              context.Context
 	Logger           *slog.Logger
 	DB               *dbr.Connection
 	WorkspaceRepo    coreWorkspaceRepo
@@ -653,8 +648,7 @@ type mcpHandlerDeps struct {
 	MemoryStack      layers.Stack
 }
 
-func buildMCPHandler(deps mcpHandlerDeps) http.Handler {
-	ctx := deps.Ctx
+func buildMCPHandler(ctx context.Context, deps mcpHandlerDeps) http.Handler {
 	logger := deps.Logger
 	db := deps.DB
 	workspaceRepo := deps.WorkspaceRepo

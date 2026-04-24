@@ -18,10 +18,10 @@ import (
 // exact method subset agentservice uses — no coupling to producer
 // packages beyond their concrete structs.
 type Repos struct {
-	Workspace     workspaceStore
+	Workspace     workspaceGetter
 	Agent         agentStore
-	Tools         toolsStore
-	AgentSettings agentSettingsStore
+	Tools         namedToolsGetter
+	AgentSettings agentSettingsGetter
 	AgentPrompts  agentPromptsStore
 	AgentHistory  agentHistoryStore
 	Usage         usagerepo.Repo
@@ -33,10 +33,10 @@ type Repos struct {
 // consumer-side interfaces (e.g. handler.agentPort) per the project's
 // "interfaces at consumer" convention.
 type Service struct {
-	workspaceRepo     workspaceStore
+	workspaceRepo     workspaceGetter
 	agentRepo         agentStore
-	toolsRepo         toolsStore
-	agentSettingsRepo agentSettingsStore
+	toolsRepo         namedToolsGetter
+	agentSettingsRepo agentSettingsGetter
 	agentPromptsRepo  agentPromptsStore
 	agentHistoryRepo  agentHistoryStore
 	runtimeClient     userswarmclient.Client

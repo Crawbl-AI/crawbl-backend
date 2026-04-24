@@ -6,10 +6,11 @@ package healthserver
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httprun"
 )
 
 const (
@@ -53,25 +54,5 @@ func New(cfg *Config, logger *slog.Logger) *Server {
 
 // Run starts the health server and blocks until ctx is cancelled.
 func (s *Server) Run(ctx context.Context, shutdownTimeout time.Duration) error {
-	errCh := make(chan error, 1)
-	go func() {
-		s.logger.Info("starting health server", slog.String("addr", s.httpServer.Addr))
-		errCh <- s.httpServer.ListenAndServe()
-	}()
-
-	select {
-	case err := <-errCh:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return err
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		s.logger.Info("shutting down health server")
-		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
-			return err
-		}
-		return <-errCh
-	}
+	return httprun.ListenAndServeGraceful(ctx, s.httpServer, shutdownTimeout, "health", s.logger)
 }
