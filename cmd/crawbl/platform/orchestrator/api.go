@@ -13,7 +13,6 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/centroidrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/identityrepo"
@@ -34,7 +33,6 @@ import (
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
 	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
@@ -75,19 +73,7 @@ func runAPI(ctx context.Context) error {
 	var centroidRepo mcpCentroidRepoRaw = centroidrepo.NewPostgres()
 	classifier := extract.NewClassifier()
 
-	var memoryStack layers.Stack
-	var embedder embed.Embedder
-	if baseURL := os.Getenv("CRAWBL_EMBED_BASE_URL"); baseURL != "" {
-		embedder = embed.NewProvider(embed.ProviderConfig{
-			BaseURL: baseURL,
-			APIKey:  os.Getenv("CRAWBL_EMBED_API_KEY"),
-			Model:   os.Getenv("CRAWBL_EMBED_MODEL"),
-		})
-		memoryStack = layers.NewStack(drawerRepo, identityRepo, embedder)
-		logger.Info("memory stack enabled", slog.String("base_url", baseURL))
-	} else {
-		logger.Warn("memory stack disabled: CRAWBL_EMBED_BASE_URL not set")
-	}
+	memoryStack, embedder := buildMemoryStack(logger, drawerRepo, identityRepo)
 
 	// NATS client for memory fan-out events (needed by auto-ingest pool).
 	natsCfg := crawblnats.DefaultConfig()

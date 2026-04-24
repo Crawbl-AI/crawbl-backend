@@ -37,7 +37,7 @@ func (ss *streamSession) handleToolCall(ctx context.Context, chunk userswarmclie
 	var toolCreatedAt string
 	if chunk.Tool != agentruntimetools.ToolTransferToAgent {
 		toolMsg := ss.newToolStatusMessage(toolAgentID, chunk.Tool, orchestrator.ToolStateRunning, parsed, wireArgs)
-		if mErr := ss.svc.savePlaceholder(ctx, ss.sess, toolMsg); mErr == nil {
+		if ss.svc.savePlaceholder(ctx, ss.sess, toolMsg) == nil {
 			toolMsgID = toolMsg.ID
 			toolCreatedAt = toolMsg.CreatedAt.UTC().Format(time.RFC3339Nano)
 			if toolMsg.AgentID != nil {
