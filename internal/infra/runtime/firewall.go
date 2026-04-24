@@ -25,6 +25,7 @@ func createFirewall(ctx *pulumi.Context, name string, cfg RuntimeConfig) (*hclou
 	outbound := hcloud.FirewallRuleArray{
 		buildOutboundRule("allow-https-out", "443", "tcp"),
 		buildOutboundRule("allow-http-out", "80", "tcp"),
+		buildOutboundRule("allow-ssh-out", "22", "tcp"),  // ArgoCD needs SSH to pull from GitHub
 		buildOutboundRule("allow-dns-tcp-out", "53", "tcp"),
 		buildOutboundRule("allow-dns-udp-out", "53", "udp"),
 	}

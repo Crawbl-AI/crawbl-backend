@@ -107,7 +107,7 @@ config:
       image: ubuntu-24.04
       location: fsn1
       sshAllowedCIDRs:
-        - "62.228.221.212/32"
+        - "auto"
       sshKeyNames:
         - "bejanhtc@gmail.com"
     k3s:
