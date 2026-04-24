@@ -23,7 +23,6 @@ type messageHandler struct {
 	authService      authResolver
 	workspaceService workspaceAuthorizer
 	logger           *slog.Logger
-	shutdownCtx      context.Context
 }
 
 // handleMessageSend processes a message.send event from the Socket.IO client.
@@ -33,7 +32,7 @@ type messageHandler struct {
 // On success: emits message.send.ack to the sender socket.
 // On error: emits message.send.error to the sender socket.
 // Agent replies arrive asynchronously via message.new events (broadcast by ChatService).
-func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
+func (h *messageHandler) handleMessageSend(shutdownCtx context.Context, s *socket.Socket, args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -73,12 +72,12 @@ func (h *messageHandler) handleMessageSend(s *socket.Socket, args ...any) {
 	)
 
 	// Dispatch in a goroutine so the Socket.IO event loop is not blocked.
-	go h.dispatch(s, principal, payload)
+	go h.dispatch(shutdownCtx, s, principal, payload)
 }
 
 // dispatch runs the message send flow asynchronously.
-func (h *messageHandler) dispatch(s *socket.Socket, principal *orchestrator.Principal, payload messageSendPayload) {
-	ctx, cancel := context.WithCancel(h.shutdownCtx)
+func (h *messageHandler) dispatch(shutdownCtx context.Context, s *socket.Socket, principal *orchestrator.Principal, payload messageSendPayload) {
+	ctx, cancel := context.WithCancel(shutdownCtx)
 	defer cancel()
 
 	// Store the cancel func in the per-socket session so the single disconnect

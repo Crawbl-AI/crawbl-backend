@@ -27,9 +27,9 @@ func ListenAndServeGraceful(ctx context.Context, srv *http.Server, shutdownTimeo
 		}
 		return err
 	case <-ctx.Done():
-		// ctx is already cancelled here, so create a fresh background context
-		// for the shutdown timeout. This ensures shutdown has its own deadline.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		// ctx is already cancelled, so derive a detached context that preserves
+		// values but is no longer tied to the cancelled parent.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 		defer cancel()
 		logger.Info("shutting down " + serverName + " server")
 		if err := srv.Shutdown(shutdownCtx); err != nil {

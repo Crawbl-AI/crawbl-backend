@@ -14,5 +14,5 @@ import (
 // (e.g. handler.integrationPort) per the project's convention.
 type Service struct {
 	logger   *slog.Logger
-	connRepo integrationConnStore
+	connRepo activeProviderLister
 }

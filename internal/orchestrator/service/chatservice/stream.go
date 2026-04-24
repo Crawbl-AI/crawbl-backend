@@ -88,7 +88,6 @@ func newStreamSession(ctx context.Context, o newStreamSessionOpts) *streamSessio
 
 // callAgentStreamingOpts groups the inputs for callAgentStreaming.
 type callAgentStreamingOpts struct {
-	ctx          context.Context
 	sendOpts     *orchestratorservice.SendMessageOpts
 	pm           *persistedMsg
 	conversation *orchestrator.Conversation
@@ -102,27 +101,27 @@ type callAgentStreamingOpts struct {
 // Creates a placeholder, reads chunks from the runtime, emits Socket.IO
 // events, and persists the final message(s). Multi-agent: distinct agent_id
 // values in chunks get separate placeholder messages.
-func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.Message, *merrors.Error) {
+func (s *Service) callAgentStreaming(ctx context.Context, o callAgentStreamingOpts) ([]*orchestrator.Message, *merrors.Error) {
 	if o.agent == nil {
 		return nil, merrors.ErrAgentNotFound
 	}
 
 	wsID := o.sendOpts.WorkspaceID
 	convID := o.conversation.ID
-	sess := database.SessionFromContext(o.ctx)
+	sess := database.SessionFromContext(ctx)
 
 	// 1. Emit thinking + create placeholder.
 	log := slog.With("agent", o.agent.Slug, "conv", convID)
-	s.broadcaster.EmitAgentStatus(o.ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusThinking), convID)
+	s.broadcaster.EmitAgentStatus(ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusThinking), convID)
 
 	placeholder := s.newPlaceholder(o.conversation.ID, o.agent)
-	if mErr := s.savePlaceholder(o.ctx, sess, placeholder); mErr != nil {
-		s.broadcaster.EmitAgentStatus(o.ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusError))
+	if mErr := s.savePlaceholder(ctx, sess, placeholder); mErr != nil {
+		s.broadcaster.EmitAgentStatus(ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusError))
 		return nil, mErr
 	}
 
 	// 2. Open gRPC stream.
-	streamCh, mErr := s.runtimeClient.SendTextStream(o.ctx, &userswarmclient.SendTextOpts{
+	streamCh, mErr := s.runtimeClient.SendTextStream(ctx, &userswarmclient.SendTextOpts{
 		Runtime:   o.runtimeState,
 		Message:   runtimeMessage(normalizeRuntimeMessage(o.sendOpts.Content.Text, o.sendOpts.Mentions), o.extraContext),
 		SessionID: convID,
@@ -130,15 +129,15 @@ func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.
 	})
 	if mErr != nil {
 		log.Warn("stream open failed, removing placeholder", "error", mErr.Error())
-		if delErr := s.messageRepo.DeleteByID(o.ctx, sess, placeholder.ID); delErr != nil {
+		if delErr := s.messageRepo.DeleteByID(ctx, sess, placeholder.ID); delErr != nil {
 			log.Warn("failed to delete placeholder", "error", delErr.Error())
 		}
-		s.broadcaster.EmitAgentStatus(o.ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusError), convID)
+		s.broadcaster.EmitAgentStatus(ctx, wsID, o.agent.ID, string(orchestrator.AgentStatusError), convID)
 		return nil, mErr
 	}
 
 	// 3. Create session and process stream.
-	ss := newStreamSession(o.ctx, newStreamSessionOpts{
+	ss := newStreamSession(ctx, newStreamSessionOpts{
 		svc:         s,
 		sendOpts:    o.sendOpts,
 		pm:          o.pm,
@@ -147,16 +146,16 @@ func (s *Service) callAgentStreaming(o callAgentStreamingOpts) ([]*orchestrator.
 		lookups:     o.lookups,
 		placeholder: placeholder,
 	})
-	ss.emitDelivered(o.ctx)
-	ss.processStream(o.ctx, streamCh)
+	ss.emitDelivered(ctx)
+	ss.processStream(ctx, streamCh)
 
 	// 4. Finalize.
-	replies := ss.finalize(o.ctx)
+	replies := ss.finalize(ctx)
 
 	// Auto-ingest conversation into MemPalace memory (non-blocking).
 	if len(replies) > 0 {
 		agentID := o.agent.ID
-		s.autoIngestConversation(o.ctx, wsID, agentID, o.sendOpts.Content.Text, replies)
+		s.autoIngestConversation(ctx, wsID, agentID, o.sendOpts.Content.Text, replies)
 	}
 
 	if len(replies) == 0 {

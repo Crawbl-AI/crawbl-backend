@@ -137,7 +137,7 @@ func runAPI(ctx context.Context) error {
 	workspaceService := workspaceservice.MustNew(workspaceRepo, runtimeClient, logger)
 	authService := authservice.MustNew(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(logger, redisClient, db, workspaceRepo, authService)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(ctx, logger, redisClient, db, workspaceRepo, authService)
 	defer cleanupRT()
 
 	toolsRepo := toolsrepo.New()
@@ -191,8 +191,7 @@ func runAPI(ctx context.Context) error {
 			ChatService:      chatService,
 			AuthService:      authService,
 			WorkspaceService: workspaceService,
-			ShutdownCtx:      ctx,
-		})
+		}, ctx)
 	}
 
 	srv := server.NewServer(&server.Config{

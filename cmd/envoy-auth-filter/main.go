@@ -82,7 +82,7 @@ func (p *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPlugi
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		// Try unwrapping a JSON-encoded string
 		var raw string
-		if err2 := json.Unmarshal(data, &raw); err2 == nil {
+		if json.Unmarshal(data, &raw) == nil {
 			if err3 := json.Unmarshal([]byte(raw), &cfg); err3 != nil {
 				proxywasm.LogCriticalf("auth-filter: failed to parse plugin configuration: %v (unwrap: %v)", err, err3)
 				return types.OnPluginStartStatusFailed

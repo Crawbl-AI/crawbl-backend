@@ -11,9 +11,9 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// workspaceStore is the workspace subset mcpservice uses: ownership
+// workspaceGetter is the workspace subset mcpservice uses: ownership
 // checks before returning workspace-scoped data to MCP tool callers.
-type workspaceStore interface {
+type workspaceGetter interface {
 	GetByID(ctx context.Context, sess orchestratorrepo.SessionRunner, userID, workspaceID string) (*orchestrator.Workspace, *merrors.Error)
 }
 
@@ -31,9 +31,9 @@ type agentStore interface {
 	ListByWorkspaceID(ctx context.Context, sess orchestratorrepo.SessionRunner, workspaceID string) ([]*orchestrator.Agent, *merrors.Error)
 }
 
-// agentHistoryStore is the agent_history subset mcpservice uses to
+// agentHistoryCreator is the agent_history subset mcpservice uses to
 // append history entries from MCP agent-creation tools.
-type agentHistoryStore interface {
+type agentHistoryCreator interface {
 	Create(ctx context.Context, sess orchestratorrepo.SessionRunner, row *orchestratorrepo.AgentHistoryRow) *merrors.Error
 }
 

@@ -1,7 +1,6 @@
 package mcpservice
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -109,12 +108,8 @@ func (s *service) TriggerWorkflow(ctx contextT, sess sessionT, userID, workspace
 		return nil, fmt.Errorf("runtime not ready: %s", rErr.Error())
 	}
 
-	if s.infra.WorkflowExec != nil {
-		parentCtx := s.infra.ShutdownCtx
-		if parentCtx == nil {
-			parentCtx = context.Background()
-		}
-		go s.infra.WorkflowExec.ExecuteWorkflow(parentCtx, execID, workspaceID, runtime)
+	if s.spawnWorkflow != nil {
+		s.spawnWorkflow(execID, workspaceID, runtime)
 	}
 
 	return &TriggerWorkflowResult{

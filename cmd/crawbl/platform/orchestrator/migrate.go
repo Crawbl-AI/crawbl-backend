@@ -9,7 +9,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres" // registers the postgres driver for golang-migrate
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/spf13/cobra"
 

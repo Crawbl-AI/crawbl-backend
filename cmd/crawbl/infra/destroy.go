@@ -19,6 +19,9 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
+// doctlForceFlag is the doctl flag that skips confirmation prompts on destructive operations.
+const doctlForceFlag = "--force"
+
 // newDestroyCommand creates the infra destroy subcommand.
 func newDestroyCommand() *cobra.Command {
 	var (
@@ -74,27 +77,7 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 	}
 
 	// Best-effort in-cluster cleanup: prevent orphaned DO LBs and Volumes.
-	if isClusterReachable(ctx) {
-		out.Step(style.Delete, "Suspending ArgoCD to prevent resource reconciliation...")
-		if err := suspendArgoCD(ctx); err != nil {
-			out.Warning("Failed to suspend ArgoCD: %v", err)
-		}
-
-		out.Step(style.Delete, "Cleaning up LoadBalancer Services...")
-		if err := deleteLoadBalancerServices(ctx); err != nil {
-			out.Warning("Failed to clean up LoadBalancers: %v", err)
-			out.Warning("Check for orphaned load balancers in the DO console")
-		}
-
-		out.Step(style.Delete, "Cleaning up PersistentVolumeClaims...")
-		if err := deletePersistentVolumeClaims(ctx); err != nil {
-			out.Warning("Failed to clean up PVCs: %v", err)
-			out.Warning("Check for orphaned volumes in the DO console")
-		}
-	} else {
-		out.Warning("Cluster is unreachable — skipping in-cluster cleanup")
-		out.Warning("Check the DO console for orphaned load balancers and volumes")
-	}
+	runInClusterCleanup(ctx)
 
 	// Always strip K8s resources from Pulumi state before destroy.
 	// Pulumi's K8s provider uses its own stored kubeconfig which may be stale,
@@ -112,25 +95,60 @@ func runDestroy(ctx context.Context, env, region string, autoApprove bool) error
 	// Post-destroy cleanup of cloud resources that live outside Pulumi state.
 	// Skipped for prod — those resources are managed separately.
 	if env != "prod" {
-		out.Step(style.Delete, "Cleaning up orphaned DigitalOcean volumes...")
-		if err := deleteOrphanedDOVolumes(ctx, region); err != nil {
-			out.Warning("Failed to clean up volumes: %v", err)
-		}
-
-		out.Step(style.Delete, "Cleaning up orphaned volume snapshots...")
-		if err := deleteOrphanedDOSnapshots(ctx); err != nil {
-			out.Warning("Failed to clean up snapshots: %v", err)
-		}
-
-		out.Step(style.Delete, "Cleaning up Spaces object storage...")
-		if err := deleteOrphanedDOSpaces(ctx, region); err != nil {
-			out.Warning("Failed to clean up Spaces: %v", err)
-		}
+		runPostDestroyCloudCleanup(ctx, region)
 	}
 
 	out.Ln()
 	out.Success("Destroy complete")
 	return nil
+}
+
+// runInClusterCleanup performs best-effort cleanup of in-cluster resources
+// (ArgoCD, LoadBalancers, PVCs) before Pulumi destroy. Failures are logged
+// as warnings rather than returned so that destroy proceeds regardless.
+func runInClusterCleanup(ctx context.Context) {
+	if !isClusterReachable(ctx) {
+		out.Warning("Cluster is unreachable — skipping in-cluster cleanup")
+		out.Warning("Check the DO console for orphaned load balancers and volumes")
+		return
+	}
+
+	out.Step(style.Delete, "Suspending ArgoCD to prevent resource reconciliation...")
+	if err := suspendArgoCD(ctx); err != nil {
+		out.Warning("Failed to suspend ArgoCD: %v", err)
+	}
+
+	out.Step(style.Delete, "Cleaning up LoadBalancer Services...")
+	if err := deleteLoadBalancerServices(ctx); err != nil {
+		out.Warning("Failed to clean up LoadBalancers: %v", err)
+		out.Warning("Check for orphaned load balancers in the DO console")
+	}
+
+	out.Step(style.Delete, "Cleaning up PersistentVolumeClaims...")
+	if err := deletePersistentVolumeClaims(ctx); err != nil {
+		out.Warning("Failed to clean up PVCs: %v", err)
+		out.Warning("Check for orphaned volumes in the DO console")
+	}
+}
+
+// runPostDestroyCloudCleanup removes orphaned DigitalOcean cloud resources
+// (block volumes, snapshots, Spaces buckets) that live outside Pulumi state.
+// Failures are logged as warnings so that all cleanup steps run.
+func runPostDestroyCloudCleanup(ctx context.Context, region string) {
+	out.Step(style.Delete, "Cleaning up orphaned DigitalOcean volumes...")
+	if err := deleteOrphanedDOVolumes(ctx, region); err != nil {
+		out.Warning("Failed to clean up volumes: %v", err)
+	}
+
+	out.Step(style.Delete, "Cleaning up orphaned volume snapshots...")
+	if err := deleteOrphanedDOSnapshots(ctx); err != nil {
+		out.Warning("Failed to clean up snapshots: %v", err)
+	}
+
+	out.Step(style.Delete, "Cleaning up Spaces object storage...")
+	if err := deleteOrphanedDOSpaces(ctx, region); err != nil {
+		out.Warning("Failed to clean up Spaces: %v", err)
+	}
 }
 
 // isClusterReachable returns true if the K8s API server responds to a lightweight request.
@@ -320,7 +338,7 @@ func deleteOrphanedDOVolumes(ctx context.Context, region string) error {
 		}
 		id, name := fields[0], fields[1]
 		out.Infof("Deleting volume %s (%s)...", name, id)
-		if delErr := exec.CommandContext(ctx, doctlPath, "compute", "volume", "delete", id, "--force").Run(); delErr != nil {
+		if delErr := exec.CommandContext(ctx, doctlPath, "compute", "volume", "delete", id, doctlForceFlag).Run(); delErr != nil {
 			out.Warning("Failed to delete volume %s: %v", name, delErr)
 		}
 	}
@@ -353,7 +371,7 @@ func deleteOrphanedDOSnapshots(ctx context.Context) error {
 		}
 		id, name := fields[0], fields[1]
 		out.Infof("Deleting snapshot %s (%s)...", name, id)
-		if delErr := exec.CommandContext(ctx, doctlPath, "compute", "snapshot", "delete", id, "--force").Run(); delErr != nil {
+		if delErr := exec.CommandContext(ctx, doctlPath, "compute", "snapshot", "delete", id, doctlForceFlag).Run(); delErr != nil {
 			out.Warning("Failed to delete snapshot %s: %v", name, delErr)
 		}
 	}
@@ -404,7 +422,7 @@ func deleteOrphanedDOSpaces(ctx context.Context, region string) error {
 		bucket := fields[2]
 		out.Infof("Deleting Space %s...", bucket)
 		delCmd := exec.CommandContext(ctx, awsPath, "s3", "rb",
-			fmt.Sprintf("s3://%s", bucket), "--force", "--endpoint-url", endpoint)
+			fmt.Sprintf("s3://%s", bucket), doctlForceFlag, "--endpoint-url", endpoint)
 		delCmd.Env = spacesEnv
 		if delErr := delCmd.Run(); delErr != nil {
 			out.Warning("Failed to delete Space %s: %v", bucket, delErr)

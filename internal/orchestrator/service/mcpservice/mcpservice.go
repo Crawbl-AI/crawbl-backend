@@ -7,6 +7,7 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
+	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 )
 
@@ -24,12 +25,18 @@ type service struct {
 	repos       Repos
 	infra       Infra
 	memoryStack layers.Stack
+	// spawnWorkflow launches a workflow execution in a background goroutine
+	// tied to the server-lifetime context. It captures shutdownCtx via closure
+	// so the service struct does not store a context.Context field.
+	spawnWorkflow func(executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
 }
 
 // New creates a new MCP service, returning an error if any required dependency
 // is nil. memoryStack may be nil; when nil, context building falls back to
-// recent messages only.
-func New(repos Repos, infra Infra, memoryStack layers.Stack) (Service, error) {
+// recent messages only. shutdownCtx is the server-lifetime context used by
+// background goroutines (e.g. workflow execution); if nil, context.Background()
+// is used as a fallback.
+func New(repos Repos, infra Infra, memoryStack layers.Stack, shutdownCtx context.Context) (Service, error) {
 	if repos.MCP == nil {
 		return nil, errors.New("mcpservice: MCP repo is required")
 	}
@@ -57,13 +64,28 @@ func New(repos Repos, infra Infra, memoryStack layers.Stack) (Service, error) {
 	if infra.Logger == nil {
 		return nil, errors.New("mcpservice: Logger is required")
 	}
-	return &service{repos: repos, infra: infra, memoryStack: memoryStack}, nil
+
+	if shutdownCtx == nil {
+		shutdownCtx = context.Background()
+	}
+
+	// Build a closure that captures shutdownCtx so workflow goroutines are
+	// tied to server lifetime without storing context.Context in a struct.
+	var spawn func(executionID, workspaceID string, runtime *orchestrator.RuntimeStatus)
+	if infra.WorkflowExec != nil {
+		exec := infra.WorkflowExec
+		spawn = func(executionID, workspaceID string, runtime *orchestrator.RuntimeStatus) {
+			go exec.ExecuteWorkflow(shutdownCtx, executionID, workspaceID, runtime)
+		}
+	}
+
+	return &service{repos: repos, infra: infra, memoryStack: memoryStack, spawnWorkflow: spawn}, nil
 }
 
 // MustNew wraps New and panics on dependency-validation errors. Intended for
 // use from main/init paths where misconfiguration is unrecoverable.
-func MustNew(repos Repos, infra Infra, memoryStack layers.Stack) Service {
-	svc, err := New(repos, infra, memoryStack)
+func MustNew(repos Repos, infra Infra, memoryStack layers.Stack, shutdownCtx context.Context) Service {
+	svc, err := New(repos, infra, memoryStack, shutdownCtx)
 	if err != nil {
 		panic(err)
 	}
