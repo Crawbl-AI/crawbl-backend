@@ -8,13 +8,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-const (
-	// argoCDHelmTimeout bounds how long Pulumi waits for the ArgoCD Helm
-	// chart install to complete before reporting a timeout. 600 seconds
-	// matches the longest observed crawbl-dev cold-start in CI.
-	argoCDHelmTimeout = 600
-)
-
 // createArgoCDNamespace creates the argocd namespace (needed before ArgoCD Helm release).
 func createArgoCDNamespace(ctx *pulumi.Context, name string, cfg Config, opts ...pulumi.ResourceOption) (*corev1.Namespace, error) {
 	return corev1.NewNamespace(ctx, name+"-ns-argocd", &corev1.NamespaceArgs{

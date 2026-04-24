@@ -2,31 +2,10 @@ package client
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 )
-
-// runtimeCacheTTL is how long a cached RuntimeStatus is considered fresh.
-// 15 seconds balances API call reduction (~95%) with status freshness.
-const runtimeCacheTTL = 15 * time.Second
-
-// sweepInterval is how often the background goroutine prunes expired entries.
-const sweepInterval = 60 * time.Second
-
-// runtimeCache is a simple TTL-based cache mapping workspace IDs to their
-// last-known RuntimeStatus. It is safe for concurrent use. A background
-// sweep goroutine prunes expired entries to prevent unbounded growth.
-type runtimeCache struct {
-	mu      sync.RWMutex
-	entries map[string]runtimeCacheEntry
-}
-
-type runtimeCacheEntry struct {
-	status    *orchestrator.RuntimeStatus
-	expiresAt time.Time
-}
 
 func newRuntimeCache(ctx context.Context) *runtimeCache {
 	c := &runtimeCache{

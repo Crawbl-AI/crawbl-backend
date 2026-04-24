@@ -11,6 +11,11 @@
 // architecture rules in internal/pkg/AGENTS.md.
 package middleware
 
+// maxRequestBodySize is the upper bound applied to every incoming request body.
+// 1 MiB covers all current JSON endpoints (CreateAgentMemory, ConversationCreate, etc.)
+// without allowing arbitrarily large payloads to exhaust server memory.
+const maxRequestBodySize int64 = 1 << 20 // 1 MiB
+
 // Header constants used by the authentication middleware. Envoy
 // SecurityPolicy verifies the Firebase JWT and forwards the verified
 // claims as X-Firebase-* headers; the middleware reads these trusted

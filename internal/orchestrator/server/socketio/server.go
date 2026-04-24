@@ -178,17 +178,6 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 	})
 }
 
-// workspaceSubscribeHandlerOpts groups the inputs for registerWorkspaceSubscribeHandler.
-type workspaceSubscribeHandlerOpts struct {
-	socket        *socket.Socket
-	sd            *socketData
-	logger        *slog.Logger
-	subject       string
-	db            *dbr.Connection
-	workspaceRepo workspaceOwnerChecker
-	authService   authResolver
-}
-
 // registerWorkspaceSubscribeHandler wires the workspace.subscribe event on a socket.
 // It verifies ownership then joins the authorised workspace rooms.
 func registerWorkspaceSubscribeHandler(shutdownCtx context.Context, o workspaceSubscribeHandlerOpts) {
@@ -267,17 +256,6 @@ func registerDisconnectHandler(s *socket.Socket, sd *socketData, logger *slog.Lo
 			"reason", reason,
 		)
 	})
-}
-
-// resolveAuthorisedWorkspacesOpts groups the inputs for resolveAuthorisedWorkspaces.
-type resolveAuthorisedWorkspacesOpts struct {
-	logger        *slog.Logger
-	socket        *socket.Socket
-	userSubject   string
-	ids           []string
-	db            *dbr.Connection
-	workspaceRepo workspaceOwnerChecker
-	authService   authResolver
 }
 
 // resolveAuthorisedWorkspaces filters the requested workspace IDs to only those

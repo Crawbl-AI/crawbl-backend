@@ -10,6 +10,11 @@ const (
 	ArgoCDHelmChart = "argo-cd"
 	// ArgoCDHelmRepo is the Helm repository URL for the ArgoCD chart.
 	ArgoCDHelmRepo = "https://argoproj.github.io/argo-helm"
+
+	// argoCDHelmTimeout bounds how long Pulumi waits for the ArgoCD Helm
+	// chart install to complete before reporting a timeout. 600 seconds
+	// matches the longest observed crawbl-dev cold-start in CI.
+	argoCDHelmTimeout = 600
 )
 
 // Config holds platform configuration.

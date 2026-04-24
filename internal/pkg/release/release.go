@@ -1,4 +1,3 @@
-// Package release provides helpers for tagging and creating GitHub releases.
 package release
 
 import (
@@ -10,14 +9,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
-
-// Config holds the parameters for TagAndRelease.
-type Config struct {
-	RepoPath string // local repo path for git operations
-	RepoSlug string // GitHub owner/repo e.g. "Crawbl-AI/crawbl-backend"
-	Tag      string
-	PrevTag  string // previous tag for changelog link (empty = first release)
-}
 
 // TagAndRelease creates a git tag, pushes it, and creates a GitHub
 // release with auto-generated release notes (--generate-notes).

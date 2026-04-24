@@ -10,12 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
 
-type stack struct {
-	drawerRepo   drawerStore
-	identityRepo identityGetter
-	embedder     embed.Embedder
-}
-
 // NewStack creates a new memory stack. The hybrid retrieval path uses the
 // drawer repo's SearchHybrid method — there is no longer a separate KG
 // graph handle passed in, since the CTE in drawerrepo owns the KG join.

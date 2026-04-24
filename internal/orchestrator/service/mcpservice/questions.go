@@ -11,26 +11,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// Option-ID generation uses sequential uppercase ASCII letters (A..Z). The
-// cap on options per question is therefore fixed at the size of that range.
-const (
-	optionIDBase          = 'A'
-	maxOptionsPerQuestion = 'Z' - optionIDBase + 1 // 26 — one letter per option
-	minOptionsPerQuestion = 2
-)
-
-// Input caps for the ask_questions MCP tool. Kept as named constants so the
-// limits are discoverable and easy to tune without touching validation logic.
-const (
-	maxTurnsPerMessage  = 10
-	maxQuestionsPerTurn = 20
-	maxPromptLen        = 2048
-	maxOptionLabelLen   = 256
-	maxTurnLabelLen     = 128
-)
-
-const errCodeInvalidInput = "invalid_input"
-
 // AskQuestions creates an interactive questions message for the given conversation,
 // persists it with role=agent and content.type="questions", and broadcasts it.
 func (s *service) AskQuestions(ctx contextT, sess sessionT, userID, workspaceID string, params *AskQuestionsParams) (*AskQuestionsResult, error) {

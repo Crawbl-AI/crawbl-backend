@@ -189,7 +189,7 @@ func (s *Stack) Destroy(ctx context.Context) error {
 	// Secrets, CRDs) but NOT Helm releases — the Helm provider has its own
 	// unreachable check. RemoveUnreachableK8sState handles the Helm case by
 	// stripping those resources from state before destroy runs.
-	os.Setenv("PULUMI_K8S_DELETE_UNREACHABLE", "true")
+	_ = os.Setenv("PULUMI_K8S_DELETE_UNREACHABLE", "true")
 	_, err := s.stack.Destroy(ctx)
 	return err
 }

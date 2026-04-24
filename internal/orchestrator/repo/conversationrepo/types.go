@@ -2,6 +2,8 @@
 // It handles all database operations related to conversation entities within workspaces.
 package conversationrepo
 
+const whereWorkspaceAndID = "workspace_id = ? AND id = ?"
+
 // conversationRepo is the PostgreSQL implementation of the ConversationRepo interface.
 // It handles conversation data persistence and retrieval operations.
 type conversationRepo struct{}

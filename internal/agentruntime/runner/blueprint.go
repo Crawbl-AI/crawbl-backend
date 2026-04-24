@@ -16,47 +16,6 @@ import (
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
 
-// WorkspaceBlueprint describes the agent graph a runtime should build
-// for a given workspace. It is the wire shape the orchestrator's
-// GET /v1/internal/agents?workspace_id=<id> endpoint returns, decoded
-// directly into this struct.
-//
-// The type is deliberately flat — one entry per agent — so the wire
-// shape stays stable and matches the orchestrator handler at
-// internal/orchestrator/server/handler/internal_runtime.go.
-type WorkspaceBlueprint struct {
-	// WorkspaceID is the Crawbl workspace this blueprint describes.
-	WorkspaceID string `json:"workspace_id"`
-	// Agents is the full list of agents the runtime should construct
-	// for this workspace. Sourced from the orchestrator's agents +
-	// agent_prompts + agent_settings rows.
-	Agents []AgentBlueprint `json:"agents"`
-}
-
-// AgentBlueprint describes a single agent's configuration. Field
-// names mirror the orchestrator's agents / agent_settings /
-// agent_prompts columns so the HTTP handler can marshal rows directly
-// without translation.
-type AgentBlueprint struct {
-	// Slug is the stable routing identifier used by the orchestrator
-	// to target a specific agent via ConverseRequest.AgentID.
-	Slug string `json:"slug"`
-	// Role is either "manager" or "sub-agent".
-	Role string `json:"role"`
-	// SystemPrompt is the agent's instruction text — what
-	// llmagent.Config.Instruction carries.
-	SystemPrompt string `json:"system_prompt"`
-	// Description is the one-line capability summary surfaced in mobile
-	// and used by Manager's routing LLM to pick the right sub-agent.
-	Description string `json:"description"`
-	// AllowedTools is the subset of tool names (from the runtime tool
-	// catalog) this agent is allowed to invoke. Empty means "all".
-	AllowedTools []string `json:"allowed_tools"`
-	// Model optionally overrides the workspace-level default LLM for
-	// this agent. Empty means use the workspace default.
-	Model string `json:"model"`
-}
-
 // agentBySlug returns the matching AgentBlueprint and true if the slug
 // exists in the blueprint, or a zero value and false otherwise.
 func (b *WorkspaceBlueprint) agentBySlug(slug string) (AgentBlueprint, bool) {

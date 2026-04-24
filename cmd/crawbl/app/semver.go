@@ -7,15 +7,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/versioning"
 )
 
-// tagPair holds a resolved tag and its predecessor (for changelog links).
-type tagPair struct {
-	Tag string
-	// PrevTag is the previous tag used to bound the changelog range. It may be
-	// empty when the caller supplied an explicit --tag value; release.TagAndRelease
-	// must tolerate an empty PrevTag (it will omit the "compare" link in that case).
-	PrevTag string
-}
-
 // calculateSemverForRepo calculates semver for a specific repo path.
 func calculateSemverForRepo(repoPath string) (tagPair, error) {
 	result, err := versioning.CalculateForRepo(repoPath)

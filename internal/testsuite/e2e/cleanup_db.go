@@ -88,21 +88,6 @@ func (tc *testContext) hardDeleteUserBySubject(subject string) bool {
 	return n > 0
 }
 
-// e2eSubjectPattern is the LIKE pattern every test user's subject
-// matches. It is set once in Run() from the suite's fixed
-// `e2e-<alias>-<unix-ns>` subject format.
-const e2eSubjectPattern = "e2e-%"
-
-// memoryWorkspaceTables is the set of memory_* tables that store a
-// workspace_id without an ON DELETE CASCADE foreign key, so they
-// must be wiped explicitly before the user delete runs.
-var memoryWorkspaceTables = []string{
-	"memory_drawers",
-	"memory_entities",
-	"memory_identities",
-	"memory_triples",
-}
-
 // wipeE2EResidue hard-deletes every row belonging to any current or
 // soft-deleted e2e test user. Safe to call multiple times per run.
 func wipeE2EResidue(deps *suiteDeps) {

@@ -4,28 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"time"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 )
-
-// graphCacheTTL bounds how long a per-workspace room-node aggregation stays
-// fresh in Redis before the next buildNodes call hits Postgres again.
-const graphCacheTTL = 5 * time.Minute
-
-// graphCacheKeyPrefix namespaces the palace-graph cache entries so they
-// cannot collide with realtime-presence or rate-limit keys in the same
-// Redis database.
-const graphCacheKeyPrefix = "memory:palace:graph:"
-
-// graphCache wraps a shared redisclient.Client with the (de)serialisation
-// and error-logging bookkeeping the palace graph repo needs. When the
-// injected redis client is nil the cache becomes a pass-through: get always
-// misses and set is a no-op so Postgres still answers every query.
-type graphCache struct {
-	redis  redisclient.Client
-	logger *slog.Logger
-}
 
 // newGraphCache wires a graphCache around the shared redis client. A nil
 // client is valid (cache disabled); a nil logger falls back to slog.Default.

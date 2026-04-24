@@ -22,17 +22,10 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	crawblhmac "github.com/Crawbl-AI/crawbl-backend/internal/pkg/hmac"
 )
-
-// conversationContextKey is the unexported context-value key used to carry
-// the active conversation ID from the runtime's per-turn handler down
-// through the ADK tool invocation into the MCP HTTP transport. A typed
-// key avoids collisions with any other ctx values the ADK may install.
-type conversationContextKey struct{}
 
 // WithConversationID returns a child context that carries the given
 // conversation ID. The agent runtime's per-turn entry point wraps the
@@ -54,23 +47,6 @@ func WithConversationID(ctx context.Context, conversationID string) context.Cont
 func conversationIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(conversationContextKey{}).(string)
 	return v
-}
-
-// ErrMissingHMACConfig signals that a transport was constructed without
-// the minimum required fields (signing key + user + workspace). Returning
-// a typed error lets the caller fail fast during runtime bootstrap
-// instead of getting opaque 401s from the orchestrator at first call time.
-var ErrMissingHMACConfig = errors.New("mcp: HMAC transport requires signing key, user ID, and workspace ID")
-
-// hmacRoundTripper wraps an underlying http.RoundTripper and stamps every
-// outbound request with an "Authorization: Bearer <token>" header. The
-// token is a fresh HMAC-signed (userID, workspaceID) pair per request,
-// matching the scheme expected by internal/orchestrator/mcp/server.go:66.
-type hmacRoundTripper struct {
-	base        http.RoundTripper
-	signingKey  string
-	userID      string
-	workspaceID string
 }
 
 // newHMACTransport builds a signed-request RoundTripper ready to feed into

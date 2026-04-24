@@ -74,23 +74,3 @@ func Toolset(cfg config.Config) (adktool.Toolset, Closer, error) {
 	// to an explicit Close if ADK exposes one.
 	return ts, nopCloser{}, nil
 }
-
-// Closer is the shutdown hook returned alongside a Toolset. Phase 1
-// implementation is a no-op because ADK mcptoolset does not expose an
-// explicit session-close API — the session is torn down when the
-// transport goes out of scope. This interface exists so US-AR-008's
-// agent wiring and main.go's Shutdown can treat the MCP bridge like
-// any other owned resource without caring about the underlying impl.
-type Closer interface {
-	Close() error
-}
-
-// nopCloser is the Phase 1 no-op Closer returned by Toolset. This is
-// NOT interchangeable with io.NopCloser — io.NopCloser wraps an
-// io.Reader and returns an io.ReadCloser; our Closer interface is a
-// local one whose Close returns an error and takes no reader, so we
-// need a dedicated zero-value type here.
-type nopCloser struct{}
-
-// Close is a no-op.
-func (nopCloser) Close() error { return nil }

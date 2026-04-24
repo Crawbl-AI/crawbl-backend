@@ -134,6 +134,7 @@ func TestMessageContentToProto_Questions_RoundTrip(t *testing.T) {
 	}
 
 	t.Run("turn0", func(t *testing.T) {
+		t.Parallel()
 		turn0 := resp.Turns[0]
 		assertTurn(t, "Turns[0]", turn0, 1, "Turn one")
 
@@ -158,10 +159,12 @@ func TestMessageContentToProto_Questions_RoundTrip(t *testing.T) {
 	})
 
 	t.Run("turn1", func(t *testing.T) {
+		t.Parallel()
 		assertTurn(t, "Turns[1]", resp.Turns[1], 2, "Turn two")
 	})
 
 	t.Run("answers", func(t *testing.T) {
+		t.Parallel()
 		if len(resp.Answers) != 3 {
 			t.Fatalf("len(Answers) = %d, want 3", len(resp.Answers))
 		}

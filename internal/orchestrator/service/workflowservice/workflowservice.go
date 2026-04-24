@@ -1,6 +1,3 @@
-// Package workflowservice provides the workflow execution engine for the Crawbl
-// multi-agent system. It manages workflow definitions, creates execution records,
-// and runs steps sequentially by calling agent runtimes.
 package workflowservice
 
 import (
@@ -12,14 +9,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
-
-// service implements the workflow execution engine.
-type service struct {
-	db            *dbr.Connection
-	workflowRepo  workflowrepo.Repo
-	runtimeClient userswarmclient.Client
-	broadcaster   realtime.Broadcaster
-}
 
 // New creates a new workflow service with the provided dependencies, returning
 // an error if any required dependency is nil. A nil broadcaster is replaced

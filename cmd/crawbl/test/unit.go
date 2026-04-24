@@ -16,8 +16,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
-const gotestfmtModule = "github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@v2.5.0"
-
 func newUnitCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "unit",

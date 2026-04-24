@@ -3,16 +3,6 @@ package river
 import (
 	"context"
 	"log/slog"
-	"time"
-)
-
-const (
-	// defaultSoftStopTimeout is the budget for in-flight jobs to drain
-	// naturally before we escalate to cancellation.
-	defaultSoftStopTimeout = 20 * time.Second
-	// defaultHardStopTimeout is the budget for StopAndCancel to force
-	// cancellation of stuck jobs before the process exits.
-	defaultHardStopTimeout = 10 * time.Second
 )
 
 // Shutdown performs the River-recommended three-phase graceful shutdown:

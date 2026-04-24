@@ -1,22 +1,3 @@
-// Package telemetry wires OpenTelemetry metrics export into every Crawbl
-// binary that wants to be observable from VictoriaMetrics.
-//
-// Design choices:
-//
-//   - Metrics only. Structured logs already flow into VictoriaLogs via Fluent
-//     Bit scraping container stdout (see crawbl-backend/CLAUDE.md), so emitting
-//     OTel logs would double-ship. Traces are deferred until the cluster grows
-//     a tracing backend (Jaeger/Tempo); adding them is a ~20 line change when
-//     that happens.
-//   - HTTP OTLP protocol. VictoriaMetrics accepts OTLP directly at
-//     /opentelemetry/v1/metrics — no Collector sidecar needed. The gRPC
-//     variant is avoided because VM's gRPC OTLP support is less mature.
-//   - Global meter provider. Callers fetch meters via otel.Meter("crawbl/<component>")
-//     after Init runs, so instrumentation code does not need to thread a
-//     provider handle through every function signature.
-//   - Disabled by default when the endpoint is empty. Local dev runs without
-//     VictoriaMetrics fall through to a no-op provider so main.go stays a
-//     single code path.
 package telemetry
 
 import (
@@ -32,35 +13,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
-
-// defaultExportIntervalSeconds is the default metrics export interval in seconds.
-const defaultExportIntervalSeconds = 30
-
-// Config carries the runtime knobs Init consumes. Populate it from the
-// caller's own config package — this package never reads environment
-// variables directly so tests can drive it deterministically.
-type Config struct {
-	// Enabled is the master switch. When false, Init returns a no-op
-	// shutdown function and does not touch the global meter provider.
-	Enabled bool
-	// Endpoint is the OTLP HTTP metrics endpoint URL. Example:
-	// "http://victoria-metrics.monitoring.svc.cluster.local:8428/opentelemetry/v1/metrics".
-	// Empty disables export even when Enabled=true.
-	Endpoint string
-	// ServiceName is the service.name resource attribute. Example:
-	// "orchestrator" or "crawbl-agent-runtime".
-	ServiceName string
-	// ServiceVersion is the service.version resource attribute. Pass the
-	// binary's linker-injected version string.
-	ServiceVersion string
-	// Environment is deployment.environment (dev, staging, prod).
-	Environment string
-	// Namespace is service.namespace. Defaults to "crawbl" when empty.
-	Namespace string
-	// ExportInterval controls how often the periodic reader pushes
-	// accumulated metrics to VictoriaMetrics. Defaults to 30s.
-	ExportInterval time.Duration
-}
 
 // Init configures the global OpenTelemetry meter provider to export
 // metrics to the configured OTLP HTTP endpoint. It returns a shutdown

@@ -23,11 +23,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/migrations/orchestrator/seed"
 )
 
-const (
-	defaultServiceName = "orchestrator"
-	seedErrFmt         = "seed %s %q: %w"
-)
-
 func newMigrateCommand() *cobra.Command {
 	var serviceName string
 
@@ -389,17 +384,6 @@ func insertModelPricingIfAbsent(ctx context.Context, tx *dbr.Tx, p seed.ModelPri
 		return fmt.Errorf("seed model pricing %q: %w", p.Model, err)
 	}
 	return nil
-}
-
-// idKeyedSeed describes a single upsert against a reference table whose
-// primary key is a string column named "id" and which carries a sort_order
-// position plus a set of other mutable columns.
-type idKeyedSeed struct {
-	Table   string
-	Label   string
-	ID      string
-	SortIdx int
-	Fields  map[string]any
 }
 
 // upsertSortedByID upserts one row into an id-keyed reference table. If a

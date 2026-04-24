@@ -111,7 +111,7 @@ func run(cfg config.Config, logger *slog.Logger) error {
 
 // initTelemetry wires OpenTelemetry metrics export and returns a shutdown
 // function to be deferred by the caller.
-func initTelemetry(cfg config.Config, logger *slog.Logger, ver string) func() {
+func initTelemetry(_ config.Config, logger *slog.Logger, ver string) func() {
 	telCtx, telCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	telemetryShutdown, tErr := telemetry.Init(telCtx, telemetry.ConfigFromEnv("crawbl-agent-runtime", ver), logger)
 	telCancel()

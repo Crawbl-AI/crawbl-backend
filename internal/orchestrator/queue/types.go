@@ -40,10 +40,19 @@ import (
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/modelpricingrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/crawblnats"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/pricing"
+	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
+
+// stalePendingFailer is the message subset used by the stale-pending cleanup
+// worker: a single UPDATE call that flips orphaned placeholders to
+// failed status so the mobile UI never hangs.
+type stalePendingFailer interface {
+	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
+}
 
 // Deps bundles every collaborator the River-backed workers need. It is
 // the single dependency struct the orchestrator wires once at boot and
@@ -426,6 +435,23 @@ type MessageCleanup struct {
 	deps Deps
 }
 
+// MemoryPublisher publishes raw memory drawer events to NATS.
+// Construction is nil-safe: a nil NATS client makes Publish a no-op,
+// which lets the orchestrator boot in environments without NATS
+// (local dev, CI).
+type MemoryPublisher struct {
+	nats   *crawblnats.Client
+	logger *slog.Logger
+}
+
+// UsagePublisher enqueues UsageEvent jobs onto the River queue for
+// asynchronous insertion into ClickHouse by UsageWriter. Construction
+// is nil-safe: a nil River client makes Publish a no-op.
+type UsagePublisher struct {
+	river  *pkgriver.Client
+	logger *slog.Logger
+}
+
 // MemoryEvent is the payload published on NATS each time a new raw
 // drawer is inserted by the auto-ingest hot path. Consumers use it to
 // kick off downstream distillation, analytics, or audit pipelines.
@@ -476,11 +502,4 @@ func stampEventMetadata(id, eventTime string) (string, string) {
 		eventTime = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	return id, eventTime
-}
-
-// stalePendingFailer is the message subset used by the stale-pending cleanup
-// worker: a single UPDATE call that flips orphaned placeholders to
-// failed status so the mobile UI never hangs.
-type stalePendingFailer interface {
-	FailStalePending(ctx context.Context, sess orchestratorrepo.SessionRunner, cutoff time.Time) (int, *merrors.Error)
 }

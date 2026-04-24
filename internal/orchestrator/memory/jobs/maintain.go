@@ -6,26 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/gocraft/dbr/v2"
-
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
-
-const decaySkipRecentDays = 7
-
-// MaintainDeps holds dependencies for the memory maintenance job. The
-// DrawerRepo field uses the narrow consumer-side contract in ports.go.
-type MaintainDeps struct {
-	DB         *dbr.Connection
-	DrawerRepo DrawerStore
-}
-
-// MaintainResult holds the outcome of a maintenance run.
-type MaintainResult struct {
-	Workspaces int
-	Decayed    int
-	Pruned     int
-}
 
 // RunMaintain performs importance decay and pruning on all active workspaces.
 func RunMaintain(ctx context.Context, deps MaintainDeps) (*MaintainResult, error) {

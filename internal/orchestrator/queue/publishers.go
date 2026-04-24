@@ -8,15 +8,6 @@ import (
 	pkgriver "github.com/Crawbl-AI/crawbl-backend/internal/pkg/river"
 )
 
-// MemoryPublisher publishes raw memory drawer events to NATS.
-// Construction is nil-safe: a nil NATS client makes Publish a no-op,
-// which lets the orchestrator boot in environments without NATS
-// (local dev, CI).
-type MemoryPublisher struct {
-	nats   *crawblnats.Client
-	logger *slog.Logger
-}
-
 // NewMemoryPublisher wires the NATS client and logger. Either may be
 // nil: callers get a working (no-op) publisher back either way.
 func NewMemoryPublisher(natsClient *crawblnats.Client, logger *slog.Logger) *MemoryPublisher {
@@ -43,14 +34,6 @@ func (p *MemoryPublisher) Publish(ctx context.Context, workspaceID string, event
 			"error", err.Error(),
 		)
 	}
-}
-
-// UsagePublisher enqueues UsageEvent jobs onto the River queue for
-// asynchronous insertion into ClickHouse by UsageWriter. Construction
-// is nil-safe: a nil River client makes Publish a no-op.
-type UsagePublisher struct {
-	river  *pkgriver.Client
-	logger *slog.Logger
 }
 
 // NewUsagePublisher wires the River client and logger. Either may be

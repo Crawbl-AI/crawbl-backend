@@ -12,6 +12,9 @@ type redis struct {
 	rc goredis.UniversalClient
 }
 
+// Ensure redis implements Client at compile time.
+var _ Client = (*redis)(nil)
+
 // Default Redis connection configuration values.
 const (
 	// DefaultAddr is the default Redis server address.

@@ -17,19 +17,6 @@ import (
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
-// persistedMsg carries the mutable state produced by persistUserMessage.
-// It lives on streamSession rather than on SendMessageOpts so that opts
-// remains read-only after construction.
-// NOTE: onPersisted is a deprecated escape hatch — see persistUserMessage
-// for the planned refactor to return userMsg directly.
-type persistedMsg struct {
-	userMessageID string
-	localID       string
-	deliveredOnce *sync.Once
-	readOnce      *sync.Once
-	onPersisted   func(*orchestrator.Message)
-}
-
 // SendMessage sends a user message and returns the agent replies.
 // Dispatches to sendDirectMessage (per-agent conversations) or
 // sendSwarmMessage (swarm group chat with parallel agent calls).

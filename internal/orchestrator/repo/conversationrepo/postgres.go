@@ -11,8 +11,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-const whereWorkspaceAndID = "workspace_id = ? AND id = ?"
-
 // New creates a new ConversationRepo instance backed by PostgreSQL.
 // The returned repository uses the database session runner pattern for transaction support.
 func New() *conversationRepo {

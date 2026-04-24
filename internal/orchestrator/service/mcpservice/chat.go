@@ -12,9 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-// agentContextMaxTextLen caps the text length per message when building conversation context.
-const agentContextMaxTextLen = 500
-
 func (s *service) ListConversations(ctx contextT, sess sessionT, userID, workspaceID string) ([]*orchestrator.Conversation, error) {
 	if err := s.verifyWorkspace(ctx, sess, userID, workspaceID); err != nil {
 		return nil, err
@@ -55,12 +52,6 @@ func (s *service) SearchMessages(ctx contextT, sess sessionT, userID, workspaceI
 		})
 	}
 	return briefs, nil
-}
-
-// repoNamer is a layers.AgentNamer that performs a live DB lookup via the
-// agent repo. Used by mcpservice where a pre-built agent map is not available.
-type repoNamer struct {
-	repo agentStore
 }
 
 // AgentName satisfies layers.AgentNamer with a live GetByIDGlobal call.

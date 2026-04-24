@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -79,9 +78,6 @@ func (tc *testContext) quotaWipeAllTestOwnedRows() {
 		fmt.Printf("quotaWipeAll: delete usage_counters: %v\n", err)
 	}
 }
-
-// strings package keeps its import via quotaClearForAlias below.
-var _ = strings.TrimSpace
 
 // quotaSetMonthlyLimit inserts a usage_plans row (if absent) and a usage_quotas
 // row linking the user to it, with the given monthly_token_limit.

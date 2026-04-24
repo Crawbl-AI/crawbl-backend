@@ -12,31 +12,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
-
-const (
-	activeWorkspaceHours = 24
-	rawDrawerBatchSize   = 50
-	importanceScale      = 5.0
-)
-
-// ProcessDeps holds dependencies for the memory processing job.
-// Repo fields are typed against consumer-side interfaces declared in
-// ports.go.
-type ProcessDeps struct {
-	DB            *dbr.Connection
-	DrawerRepo    DrawerStore
-	KGRepo        KGStore
-	LLMClassifier extract.LLMClassifier
-	Embedder      embed.Embedder
-}
-
-// ProcessResult holds the outcome of a processing run.
-type ProcessResult struct {
-	Processed int
-	Failed    int
-}
 
 // RunProcess fetches all raw drawers and processes them through the cold pipeline.
 func RunProcess(ctx context.Context, deps ProcessDeps) (*ProcessResult, error) {
@@ -138,18 +114,6 @@ func classifyBatch(ctx context.Context, classifier extract.LLMClassifier, drawer
 	batchCtx, cancel := context.WithTimeout(ctx, time.Duration(memory.ColdWorkerLLMTimeout)*time.Second)
 	defer cancel()
 	return classifier.ClassifyBatch(batchCtx, contents)
-}
-
-// processSingleDrawerOpts groups the per-drawer parameters for processSingleDrawer.
-// ctx and sess remain positional per the project session/opts/repo pattern.
-type processSingleDrawerOpts struct {
-	Deps            ProcessDeps
-	WorkspaceID     string
-	Drawer          *memory.Drawer
-	Classifications []*extract.LLMClassification
-	Idx             int
-	BatchErr        error
-	Result          *ProcessResult
 }
 
 // processSingleDrawer applies one drawer's classification, falling back to

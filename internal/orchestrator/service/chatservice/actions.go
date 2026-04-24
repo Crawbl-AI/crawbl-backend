@@ -15,13 +15,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-// Inbound answer payload caps. Keeping these at the service boundary means
-// oversized payloads are rejected before we mutate any persistence.
-const maxCustomTextLen = 4096
-
-// questionPrefix is the common prefix for per-question validation error messages.
-const questionPrefix = "question "
-
 // questionErrorf returns a bad-request merrors.Error whose message starts with
 // "question <id>: <formatted detail>". Centralising the prefix here eliminates
 // repeated literal duplication and makes the format consistent.

@@ -141,57 +141,12 @@ func runStaticcheck(ctx context.Context, rootDir, reportPath string) error {
 		return fmt.Errorf("convert staticcheck output: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(rootDir, reportPath), report, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(rootDir, reportPath), report, reportFileMode); err != nil {
 		return fmt.Errorf("write report: %w", err)
 	}
 
 	out.Success("staticcheck: report written to %s", reportPath)
 	return nil
-}
-
-// staticcheckDiag represents a single staticcheck JSON diagnostic.
-type staticcheckDiag struct {
-	Code     string `json:"code"`
-	Location struct {
-		File   string `json:"file"`
-		Line   int    `json:"line"`
-		Column int    `json:"column"`
-	} `json:"location"`
-	End struct {
-		File   string `json:"file"`
-		Line   int    `json:"line"`
-		Column int    `json:"column"`
-	} `json:"end"`
-	Message string `json:"message"`
-}
-
-// sonarGenericReport is the SonarQube generic issue import format.
-type sonarGenericReport struct {
-	Issues []sonarGenericIssue `json:"issues"`
-}
-
-// sonarGenericIssue is a single issue in the SonarQube generic format.
-type sonarGenericIssue struct {
-	EngineID        string              `json:"engineId"`
-	RuleID          string              `json:"ruleId"`
-	Severity        string              `json:"severity"`
-	Type            string              `json:"type"`
-	PrimaryLocation sonarGenericLocation `json:"primaryLocation"`
-}
-
-// sonarGenericLocation describes where an issue occurs.
-type sonarGenericLocation struct {
-	Message   string               `json:"message"`
-	FilePath  string               `json:"filePath"`
-	TextRange sonarGenericTextRange `json:"textRange"`
-}
-
-// sonarGenericTextRange describes the text range of an issue.
-type sonarGenericTextRange struct {
-	StartLine   int `json:"startLine"`
-	StartColumn int `json:"startColumn,omitempty"`
-	EndLine     int `json:"endLine,omitempty"`
-	EndColumn   int `json:"endColumn,omitempty"`
 }
 
 // convertStaticcheckToSonar converts staticcheck JSON-lines output to

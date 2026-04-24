@@ -19,17 +19,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// resolvedUser is the cached result of a single subject lookup.
-// Scenario steps use it instead of rolling their own JOIN query
-// against users + workspaces every time.
-type resolvedUser struct {
-	Alias       string
-	Subject     string
-	UserID      string
-	WorkspaceID string
-	TestUser    *testUser
-}
-
 // resolveUser returns the cached resolution for the given alias.
 // On cache miss, it runs one round-trip to Postgres to look up the
 // user's UUID and default workspace, caches the result, and returns
@@ -115,20 +104,6 @@ func (tc *testContext) pollFor(timeout time.Duration, fn func() error) error {
 // window.
 func (tc *testContext) pollDefault(fn func() error) error {
 	return tc.pollFor(asyncAssertTimeout, fn)
-}
-
-const (
-	defaultRuntimeReadyTimeout = 3 * time.Minute
-	defaultRuntimePollInterval = 2 * time.Second
-)
-
-// runtimeSnapshot holds a point-in-time view of the agent runtime
-// status fields returned by the GET /workspaces/:id endpoint.
-type runtimeSnapshot struct {
-	Status    string
-	Phase     string
-	Verified  bool
-	LastError string
 }
 
 func (s runtimeSnapshot) ready() bool {

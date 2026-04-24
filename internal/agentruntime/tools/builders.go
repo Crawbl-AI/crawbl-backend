@@ -32,7 +32,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	adktool "google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
@@ -40,50 +39,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/storage"
 	"github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools/local"
 )
-
-// webFetchArgs is the LLM-facing input schema for the web_fetch tool. Field tags
-// carry both the JSON wire name and the jsonschema description that functiontool
-// turns into the tool's argument documentation.
-//
-// Deliberately kept close to the local.WebFetchOptions shape so the builder stays
-// a one-line adapter; the only reason this type exists instead of reusing
-// local.WebFetchOptions directly is the jsonschema tag layer, which would otherwise
-// leak LLM-ergonomics concerns into the storage/memory packages.
-type webFetchArgs struct {
-	URL            string `json:"url" jsonschema:"HTTP(S) URL to fetch; required"`
-	MaxBytes       int64  `json:"max_bytes,omitempty" jsonschema:"optional cap on response body bytes (default 2 MiB)"`
-	TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"optional request timeout in seconds (default 10)"`
-}
-
-type webFetchResult struct {
-	URL  string `json:"url"`
-	Body string `json:"body"`
-}
-
-type webSearchArgs struct {
-	Query      string `json:"query" jsonschema:"free-text search query; required"`
-	MaxResults int    `json:"max_results,omitempty" jsonschema:"optional cap on returned results (default 5, max 15)"`
-}
-
-type webSearchResult struct {
-	Query   string                  `json:"query"`
-	Results []local.WebSearchResult `json:"results"`
-}
-
-type fileReadArgs struct {
-	Key string `json:"key" jsonschema:"object key under the workspace, e.g. uploads/trip.md; required"`
-}
-
-type fileWriteArgs struct {
-	Key         string `json:"key" jsonschema:"object key under the workspace, e.g. drafts/email.md; required"`
-	Content     string `json:"content" jsonschema:"file body; required"`
-	ContentType string `json:"content_type,omitempty" jsonschema:"optional MIME type (default text/plain)"`
-}
-
-// handlerFunc is the shape every local-tool adapter implements: take
-// a context + typed args, return typed result + error. Each builder
-// below is one of these wrapped through buildFunctionTool.
-type handlerFunc[A, R any] func(ctx context.Context, args A) (R, error)
 
 // buildFunctionTool constructs an ADK tool.Tool for the given tool
 // name by looking up its display metadata in the seed catalog and
@@ -108,11 +63,6 @@ func buildFunctionTool[A, R any](toolName string, handler handlerFunc[A, R]) (ad
 	}
 	return t, nil
 }
-
-var (
-	toolDescOnce sync.Once
-	toolDescMap  map[string]string
-)
 
 // lookupToolDescription returns the Description for the named tool
 // from the seed catalog. Cached on first call via sync.Once — the
@@ -186,25 +136,6 @@ func fileWriteHandler(spaces *storage.SpacesClient, workspaceID string) handlerF
 			ContentType: args.ContentType,
 		})
 	}
-}
-
-// CommonToolDeps carries the backend handles every local tool needs.
-// main.go builds this once per pod from config + constructed stores
-// and hands it to runner.BuildOptions.LocalTools via BuildCommonTools.
-type CommonToolDeps struct {
-	// WorkspaceID is the Crawbl workspace this pod serves. The
-	// file tools scope every read and write to this workspace via
-	// closure capture.
-	WorkspaceID string
-	// SearXNGEndpoint is the base URL of the internal meta-search
-	// instance. Captured at construction time by web_search_tool.
-	SearXNGEndpoint string
-	// Spaces is the DigitalOcean Spaces client that backs the
-	// file_read / file_write tools. May be nil when storage is not
-	// configured (local dev) — BuildCommonTools skips the file tools
-	// in that case rather than returning an error, so the rest of
-	// the tool set stays available.
-	Spaces *storage.SpacesClient
 }
 
 // BuildCommonTools returns the full local tool slice the agents

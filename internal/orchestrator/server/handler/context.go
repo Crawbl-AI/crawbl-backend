@@ -1,70 +1,19 @@
-// Package handler provides HTTP handler functions for the orchestrator API.
-// Each handler is a function that takes a *Context and returns an http.HandlerFunc,
-// enabling dependency injection without receiver methods.
 package handler
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/gocraft/dbr/v2"
 	"google.golang.org/protobuf/proto"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
-	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
-
-// Context holds shared dependencies for all handlers.
-//
-// Service fields use the consumer-side interfaces declared in ports.go
-// (AuthPort / WorkspacePort / ChatPort / AgentPort / IntegrationPort)
-// so handlers never import the producer-owned service contracts.
-type Context struct {
-	// DB is the database connection pool for all persistence operations.
-	DB *dbr.Connection
-
-	// Logger provides structured logging throughout the handler lifecycle.
-	Logger *slog.Logger
-
-	// AuthService handles user authentication, registration, and profile management.
-	AuthService AuthPort
-
-	// WorkspaceService manages workspace provisioning and runtime state.
-	WorkspaceService WorkspacePort
-
-	// ChatService handles conversations, messages, and agent interactions.
-	ChatService ChatPort
-
-	// AgentService handles agent details, settings, tools, and history retrieval.
-	AgentService AgentPort
-
-	// IntegrationService manages third-party OAuth connections.
-	IntegrationService IntegrationPort
-
-	// HTTPMiddleware contains authentication and request middleware configuration.
-	HTTPMiddleware *middleware.MiddlewareConfig
-
-	// Broadcaster emits real-time events to connected WebSocket clients.
-	Broadcaster realtime.Broadcaster
-
-	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
-	RuntimeClient userswarmclient.Client
-
-	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
-	MCPSigningKey string
-
-	// UsageRepo provides token usage and quota read operations for usage API endpoints.
-	UsageRepo usagerepo.Repo
-}
 
 // WriteError writes a structured error response with the correct HTTP status.
 func WriteError(w http.ResponseWriter, mErr *merrors.Error) {

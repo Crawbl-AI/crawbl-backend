@@ -88,3 +88,17 @@ const (
 	runtimeUID int64 = 65532
 	runtimeGID int64 = 65532
 )
+
+const (
+	// runtimeAppName is the app.kubernetes.io/name label applied to every
+	// child resource. Used by the selector on Service and Deployment.
+	runtimeAppName = "crawbl-agent-runtime"
+
+	// agentRuntimeFmt is the format string for agent-runtime resource names.
+	agentRuntimeFmt = "agent-runtime-%s"
+
+	// defaultAgentRuntimeImage is the fallback image used when the webhook
+	// cannot derive the agent-runtime image from the userswarm spec. Points
+	// at the dev tag so local clusters work without extra configuration.
+	defaultAgentRuntimeImage = "registry.digitalocean.com/crawbl/crawbl-agent-runtime:dev"
+)

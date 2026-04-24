@@ -135,13 +135,6 @@ func (tc *testContext) usageCaptureBaselineForAgent(slug string) error {
 // it for general messages. If a different agent replied the scenario will
 // pass as long as any captured baseline was exceeded — the polling covers all
 // agents whose baselines were captured in this scenario.
-// baselineEntry pairs an alias + agent slug with a captured token baseline.
-type baselineEntry struct {
-	alias    string
-	slug     string
-	baseline int64
-}
-
 func (tc *testContext) usageAssertIncreasedFromBaseline(seconds int) error {
 	return tc.withDB(func(_ *dbr.Session) error {
 		var entries []baselineEntry

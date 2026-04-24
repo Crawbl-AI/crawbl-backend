@@ -81,17 +81,6 @@ func runPlan(ctx context.Context, env, region string, jsonOut bool) error {
 	return nil
 }
 
-// planOutput is the JSON structure for --json output. CI parses this
-// instead of scraping human-readable text.
-type planOutput struct {
-	Creates   int    `json:"creates"`
-	Updates   int    `json:"updates"`
-	Deletes   int    `json:"deletes"`
-	Unchanged int    `json:"unchanged"`
-	HasDrift  bool   `json:"hasDrift"`
-	Error     string `json:"error,omitempty"`
-}
-
 // printPreviewJSON always outputs JSON, even on errors. This lets CI
 // parse the result without the command exit code hiding the data.
 func printPreviewJSON(result *infra.PreviewResult, previewErr error) error {

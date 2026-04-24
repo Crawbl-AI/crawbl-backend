@@ -9,8 +9,6 @@ import (
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
 
-const whereID = "id = ?"
-
 // New creates a new workflow Repo instance backed by PostgreSQL.
 func New() *workflowRepo {
 	return &workflowRepo{}
@@ -79,19 +77,6 @@ func (r *workflowRepo) ListDefinitions(ctx context.Context, sess orchestratorrep
 	}
 
 	return rows, nil
-}
-
-// workflowInsertPair is one column/value pair in an ordered insert. Using
-// a slice instead of a map preserves dbr.Pair ordering across helpers.
-type workflowInsertPair struct {
-	Col string
-	Val any
-}
-
-// workflowSet is one column/value pair in an ordered UPDATE ... SET list.
-type workflowSet struct {
-	Col string
-	Val any
 }
 
 // insertIdempotent is the shared idempotent insert behind

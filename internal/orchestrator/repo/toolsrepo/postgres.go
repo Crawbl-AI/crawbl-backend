@@ -5,17 +5,11 @@ package toolsrepo
 import (
 	"context"
 	"strings"
-	"sync"
 
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
-)
-
-var (
-	toolCategoryMap     map[string]orchestrator.AgentToolCategory
-	toolCategoryMapOnce sync.Once
 )
 
 // getToolCategoryMap returns a lazily-initialized lookup map from category ID

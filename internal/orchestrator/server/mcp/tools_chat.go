@@ -11,11 +11,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-type listConversationsInput struct {
-	IncludeArchived bool   `json:"include_archived,omitempty" jsonschema:"include archived conversations"`
-	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
 func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversationsInput, *mcpv1.ListConversationsOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, userID, workspaceID string, _ listConversationsInput) (*sdkmcp.CallToolResult, *mcpv1.ListConversationsOutput, error) {
 		conversations, err := deps.MCPService.ListConversations(ctx, sess, userID, workspaceID)
@@ -37,13 +32,6 @@ func newListConversationsHandler(deps *Deps) sdkmcp.ToolHandlerFor[listConversat
 
 		return nil, &mcpv1.ListConversationsOutput{Conversations: briefs}, nil
 	})
-}
-
-type searchMessagesInput struct {
-	ConversationID string `json:"conversation_id" jsonschema:"ID of the conversation to search in"`
-	Query          string `json:"query" jsonschema:"search keyword or phrase"`
-	Limit          int    `json:"limit" jsonschema:"maximum results to return (default 20, max 50)"`
-	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesInput, *mcpv1.SearchMessagesOutput] {
@@ -73,13 +61,6 @@ func newSearchMessagesHandler(deps *Deps) sdkmcp.ToolHandlerFor[searchMessagesIn
 
 		return nil, &mcpv1.SearchMessagesOutput{Messages: briefs, Count: int32(len(briefs))}, nil
 	})
-}
-
-type sendMessageInput struct {
-	AgentSlug      string `json:"agent_slug" jsonschema:"slug of the target agent (e.g. 'wally', 'eve')"`
-	Message        string `json:"message" jsonschema:"the message/task to send to the target agent"`
-	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID for context"`
-	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
 }
 
 func newSendMessageHandler(deps *Deps) sdkmcp.ToolHandlerFor[sendMessageInput, *mcpv1.SendMessageToolOutput] {

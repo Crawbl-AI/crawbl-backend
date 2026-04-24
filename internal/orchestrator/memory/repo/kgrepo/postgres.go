@@ -1,8 +1,3 @@
-// Package kgrepo provides the PostgreSQL implementation of the MemPalace
-// knowledge graph repository. Entities live in memory_entities and
-// temporal relationship triples in memory_triples; the repo owns the
-// SQL, id-derivation, and dedup logic the rest of the memory subsystem
-// relies on.
 package kgrepo
 
 import (
@@ -18,15 +13,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
-const (
-	countAll         = "COUNT(*)"
-	whereWorkspaceID = "workspace_id = ?"
-)
-
-// Postgres is the knowledge graph repository backed by PostgreSQL. It
-// implements repo.KGRepo; callers hold it through that interface.
-type Postgres struct{}
-
 // NewPostgres creates a new knowledge graph repository backed by PostgreSQL.
 func NewPostgres() *Postgres {
 	return &Postgres{}
@@ -41,8 +27,6 @@ func entityID(name string) string {
 	h := sha256.Sum256([]byte(normalized))
 	return fmt.Sprintf("e_%s_%x", sanitizeForID(normalized), h[:4])
 }
-
-const maxEntityIDPrefix = 32
 
 // sanitizeForID keeps the name readable but safe for use in IDs.
 func sanitizeForID(s string) string {
@@ -178,17 +162,6 @@ func (g *Postgres) Invalidate(ctx context.Context, sess database.SessionRunner, 
 	}
 	return nil
 }
-
-// tripleResultQuery is the shared SELECT + FROM + JOIN fragment.
-const tripleResultQuery = `
-SELECT
-    t.id, t.workspace_id, t.subject, t.predicate, t.object,
-    t.valid_from, t.valid_to, t.confidence, t.source_closet, t.source_file, t.extracted_at,
-    COALESCE(se.name, t.subject) AS subject_name,
-    COALESCE(oe.name, t.object)  AS object_name
-FROM memory_triples t
-LEFT JOIN memory_entities se ON se.workspace_id = t.workspace_id AND se.id = t.subject
-LEFT JOIN memory_entities oe ON oe.workspace_id = t.workspace_id AND oe.id = t.object`
 
 func (g *Postgres) QueryEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, asOf, direction string) ([]memory.TripleResult, error) {
 	id := entityID(name)
@@ -357,13 +330,6 @@ func (g *Postgres) Stats(ctx context.Context, sess database.SessionRunner, works
 		ExpiredFacts:      triples - current,
 		RelationshipTypes: predicates,
 	}, nil
-}
-
-// tripleRow is used internally for scanning JOIN results.
-type tripleRow struct {
-	memory.Triple
-	SubjectName string `db:"subject_name"`
-	ObjectName  string `db:"object_name"`
 }
 
 func (r *tripleRow) toResult(queryEntityID string) memory.TripleResult {

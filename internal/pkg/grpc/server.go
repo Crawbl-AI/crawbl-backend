@@ -49,21 +49,6 @@ func GracefulShutdown(srv *grpc.Server, timeout time.Duration, logger *slog.Logg
 // HMAC server-side auth interceptors
 // ---------------------------------------------------------------------------
 
-// DefaultAuthExemptMethods is the allow-list of gRPC methods that bypass
-// HMACServerAuth (health probes, reflection).
-var DefaultAuthExemptMethods = []string{
-	"/grpc.health.v1.Health/Check",
-	"/grpc.health.v1.Health/Watch",
-	"/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
-	"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
-}
-
-// HMACServerAuthOptions tunes HMACServerAuth behavior.
-type HMACServerAuthOptions struct {
-	// ExtraExemptMethods is added to DefaultAuthExemptMethods.
-	ExtraExemptMethods []string
-}
-
 // NewHMACServerAuth builds unary and stream gRPC interceptors that validate
 // the "authorization: Bearer <token>" metadata header against the shared
 // signingKey. On success the resolved Identity is threaded into the context.

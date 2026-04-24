@@ -10,19 +10,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"google.golang.org/protobuf/proto"
-)
-
-const (
-	// maxBodyDisplayLen is the maximum number of characters shown when
-	// truncating a response body in error messages.
-	maxBodyDisplayLen = 200
-
-	// asyncAssertTimeout is how long polling assertions wait for
-	// async agent-side effects (memory, audit, delegation, etc.).
-	asyncAssertTimeout = 30 * time.Second
 )
 
 // abbreviatedBody returns at most maxBodyDisplayLen characters of body
@@ -38,7 +27,7 @@ func abbreviatedBody(body []byte) string {
 
 // doProtoRequest marshals a proto message to JSON and sends it via HTTP,
 // recording tc.lastStatus and tc.lastBody exactly like doRequest.
-func (tc *testContext) doProtoRequest(method, path, alias string, msg proto.Message) (string, error) {
+func (tc *testContext) doProtoRequest(method, path, alias string, msg proto.Message) (string, error) { //nolint:unparam // string return kept for future assertions
 	path = tc.interpolatePath(path)
 	url := tc.cfg.BaseURL + path
 

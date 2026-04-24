@@ -14,11 +14,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httpserver"
 )
 
-// maxRequestBodySize is the upper bound applied to every incoming request body.
-// 1 MiB covers all current JSON endpoints (CreateAgentMemory, ConversationCreate, etc.)
-// without allowing arbitrarily large payloads to exhaust server memory.
-const maxRequestBodySize int64 = 1 << 20 // 1 MiB
-
 // MaxBodyBytes wraps r.Body with http.MaxBytesReader so handlers decoding
 // JSON cannot be crashed by unbounded payloads. A 1 MiB limit covers all
 // current endpoints (CreateAgentMemory, CreateConversation, etc.).

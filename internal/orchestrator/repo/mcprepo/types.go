@@ -9,6 +9,23 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
+const whereID = "id = ?"
+
+// postgres is the PostgreSQL implementation of the Repo interface.
+type postgres struct{}
+
+// agentMessageFinaliseOpts captures the variable bits between
+// UpdateAgentMessageCompleted and UpdateAgentMessageFailed.
+// FinalCol is either "response_text" or "error_message".
+type agentMessageFinaliseOpts struct {
+	ID         string
+	Status     string
+	FinalCol   string
+	FinalVal   string
+	OpLabel    string
+	DurationMs int64
+}
+
 // Repo defines the persistence operations specific to MCP tool handlers
 // that are not covered by existing domain repos.
 type Repo interface {

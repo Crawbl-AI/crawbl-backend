@@ -1,21 +1,155 @@
-// Package handler — types.go declares the narrow service contracts the
-// HTTP handlers depend on. Per project convention, interfaces live at
-// the consumer, not the producer: each method listed here corresponds
-// to a call site in a handler file. The concrete services exported
-// from internal/orchestrator/service/... satisfy these implicitly via
-// Go's structural typing.
-//
-// These interfaces are exported so the parent server package can reference
-// them directly, eliminating duplicate interface definitions.
+// Package handler provides HTTP handler functions for the orchestrator API.
+// Each handler is a function that takes a *Context and returns an http.HandlerFunc,
+// enabling dependency injection without receiver methods.
 package handler
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
+
+	"github.com/gocraft/dbr/v2"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
+	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
+
+// Const declarations
+
+const (
+	// errInvalidRequestBody is the error message returned when a request body cannot be decoded.
+	errInvalidRequestBody = "invalid request body"
+
+	// Agent memory field length limits — mirror the MCP path enforcement.
+	MaxAgentMemoryKeyLength      = 256
+	MaxAgentMemoryContentLength  = 16 * 1024 // 16 KiB
+	MaxAgentMemoryCategoryLength = 128
+
+	// maxProtoBodySize is the upper bound for request bodies decoded by
+	// DecodeProtoJSON. Requests larger than 1 MiB are silently truncated,
+	// which causes an unmarshal error — preventing OOM from oversized payloads.
+	maxProtoBodySize = 1 << 20 // 1 MiB
+)
+
+// Var declarations
+
+// protoMarshaler is the shared protojson marshal options for all proto
+// responses. UseProtoNames emits snake_case field names matching the
+// proto definitions and current JSON wire format.
+var protoMarshaler = protojson.MarshalOptions{
+	UseProtoNames:   true,
+	EmitUnpopulated: true,
+}
+
+// protoUnmarshaler is the shared protojson unmarshal options for all
+// proto request bodies. DiscardUnknown allows forward-compatible clients.
+var protoUnmarshaler = protojson.UnmarshalOptions{
+	DiscardUnknown: true,
+}
+
+// Type declarations
+
+// Context holds shared dependencies for all handlers.
+//
+// Service fields use the consumer-side interfaces declared in ports.go
+// (AuthPort / WorkspacePort / ChatPort / AgentPort / IntegrationPort)
+// so handlers never import the producer-owned service contracts.
+type Context struct {
+	// DB is the database connection pool for all persistence operations.
+	DB *dbr.Connection
+
+	// Logger provides structured logging throughout the handler lifecycle.
+	Logger *slog.Logger
+
+	// AuthService handles user authentication, registration, and profile management.
+	AuthService AuthPort
+
+	// WorkspaceService manages workspace provisioning and runtime state.
+	WorkspaceService WorkspacePort
+
+	// ChatService handles conversations, messages, and agent interactions.
+	ChatService ChatPort
+
+	// AgentService handles agent details, settings, tools, and history retrieval.
+	AgentService AgentPort
+
+	// IntegrationService manages third-party OAuth connections.
+	IntegrationService IntegrationPort
+
+	// HTTPMiddleware contains authentication and request middleware configuration.
+	HTTPMiddleware *middleware.MiddlewareConfig
+
+	// Broadcaster emits real-time events to connected WebSocket clients.
+	Broadcaster realtime.Broadcaster
+
+	// RuntimeClient manages agent runtime CRs for workspace provisioning and cleanup.
+	RuntimeClient userswarmclient.Client
+
+	// MCPSigningKey is the HMAC signing key for internal MCP/runtime bearer tokens.
+	MCPSigningKey string
+
+	// UsageRepo provides token usage and quota read operations for usage API endpoints.
+	UsageRepo usagerepo.Repo
+}
+
+// AuthedHandlerDeps bundles the per-request dependencies that every authed
+// handler needs: the handler context and the authenticated user. Handlers
+// receive this struct so they have everything required to talk to services
+// without re-plumbing boilerplate. The database session is carried on the
+// request context via the session middleware.
+type AuthedHandlerDeps struct {
+	// Ctx is the shared handler context (services, logger, broadcaster, ...).
+	Ctx *Context
+	// User is the authenticated, non-banned, non-deleted caller.
+	User *orchestrator.User
+}
+
+// AuthedJSONFunc is the business logic signature for handlers that read a
+// JSON request body. The decorator decodes the body into Req before calling.
+// The handler returns the response payload (wrapped in the success envelope
+// automatically) and an optional domain error.
+type AuthedJSONFunc[Req any, Resp any] func(
+	r *http.Request,
+	deps *AuthedHandlerDeps,
+	req *Req,
+) (Resp, *merrors.Error)
+
+// AuthedFunc is the business logic signature for handlers that do not read a
+// request body (GET, DELETE, or handlers that pull all inputs from URL/query
+// params). The decorator skips body decoding entirely.
+type AuthedFunc[Resp any] func(
+	r *http.Request,
+	deps *AuthedHandlerDeps,
+) (Resp, *merrors.Error)
+
+// internalWorkspaceBlueprint is the wire shape returned by
+// GET /v1/internal/agents. Field names MUST match
+// internal/agentruntime/runner/blueprint.go WorkspaceBlueprint so the
+// runtime decodes the response directly. Keeping the type private to
+// this package (no export) because the only valid consumer is the
+// runtime's blueprint client.
+type internalWorkspaceBlueprint struct {
+	WorkspaceID string                   `json:"workspace_id"`
+	Agents      []internalAgentBlueprint `json:"agents"`
+}
+
+// internalAgentBlueprint is the per-agent wire shape within internalWorkspaceBlueprint.
+type internalAgentBlueprint struct {
+	Slug         string   `json:"slug"`
+	Role         string   `json:"role"`
+	SystemPrompt string   `json:"system_prompt"`
+	Description  string   `json:"description"`
+	AllowedTools []string `json:"allowed_tools"`
+	Model        string   `json:"model"`
+}
+
+// Port interface declarations
 
 // AuthPort is the subset of the authentication service the HTTP
 // handlers actually call into.

@@ -137,17 +137,6 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	return result, nil
 }
 
-// processStaleSwarmOpts groups the inputs for processStaleSwarm.
-type processStaleSwarmOpts struct {
-	k8sClient        client.Client
-	sess             *dbr.Session
-	repo             *reaperrepo.Repo
-	logger           *slog.Logger
-	swarm            *crawblv1alpha1.UserSwarm
-	softDeletedUsers map[string]struct{}
-	dryRun           bool
-}
-
 // processStaleSwarm handles a single stale UserSwarm CR in phase 1 of the
 // reaper loop. It looks up the owning user, validates it is an e2e subject,
 // deletes the CR when appropriate, and soft-deletes the user row once.

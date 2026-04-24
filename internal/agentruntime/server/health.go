@@ -4,17 +4,6 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
-// HealthServer is a thin wrapper around google.golang.org/grpc/health so the
-// rest of the runtime never imports the grpc health package directly. Two
-// states are exposed: NotServing (default at startup, before the agent graph
-// is loaded) and Serving (after the runner is ready).
-//
-// The wrapper is deliberately minimal so US-AR-003 can ship with the server
-// skeleton; US-AR-009 uses it to flip state once the ADK runner is wired.
-type HealthServer struct {
-	inner *grpcHealthServer
-}
-
 // NewHealthServer returns a HealthServer in the NOT_SERVING state.
 func NewHealthServer() *HealthServer {
 	s := newGRPCHealthServer()

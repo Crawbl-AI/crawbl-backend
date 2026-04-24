@@ -12,7 +12,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
+	"sync/atomic"
 
+	"github.com/alitto/pond/v2"
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
@@ -113,6 +116,14 @@ const (
 	defaultQueueSize = 1024
 )
 
+// importanceScale turns the classifier's 0..1 confidence into the
+// memory_drawers.importance scale used by the ranking pipeline.
+const importanceScale = 5.0
+
+// sentenceBoundary splits text on sentence-ending punctuation followed by
+// whitespace. Compiled once at package init; this pattern is always valid.
+var sentenceBoundary = regexp.MustCompile(`([.!?])\s+`)
+
 // drawerStore is the drawer subset the auto-ingest worker uses:
 // idempotent add for the hot path plus a duplicate-check probe before
 // inserting.
@@ -125,4 +136,17 @@ type drawerStore interface {
 // classifier. Optional at runtime — the worker no-ops when nil.
 type nearestTyper interface {
 	NearestType(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32) (memType string, similarity float64, ok bool, err error)
+}
+
+// service is the concrete Service backed by a pond.Pool with a bounded
+// non-blocking queue. It owns no goroutines of its own beyond the pool
+// workers; all lifecycle concerns live in pond.
+type service struct {
+	pool           pond.Pool
+	deps           Deps
+	logger         *slog.Logger
+	dropped        atomic.Uint64
+	centroidErrors atomic.Uint64
+	noiseMinLength int
+	noisePattern   *regexp.Regexp
 }

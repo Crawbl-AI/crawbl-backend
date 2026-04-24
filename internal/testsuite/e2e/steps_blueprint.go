@@ -21,16 +21,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// blueprintState holds per-scenario original values for teardown.
-type blueprintState struct {
-	agentID       string
-	originalModel string
-	originalTools []string
-}
-
-// blueprintScenarioState is set once per scenario and cleared in AfterScenario.
-var _ = (*blueprintState)(nil) // compile-time nil-pointer check
-
 func registerBlueprintSteps(sc *godog.ScenarioContext, tc *testContext) {
 	// Track original settings for teardown.
 	var saved *blueprintState

@@ -1,11 +1,3 @@
-// Package grpc holds shared gRPC infrastructure used by crawbl-backend
-// components when they need to dial peer services (runtime pods, auth
-// filters, future federation endpoints) or serve gRPC endpoints.
-//
-// The package is deliberately narrow and generic: it owns a connection
-// pool, per-RPC HMAC credentials, standard keepalive parameters, and
-// server-side interceptors. It has zero knowledge of UserSwarm,
-// workspaces, memory, or any domain concept.
 package grpc
 
 import (
@@ -13,61 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
-	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 )
-
-// ErrPoolClosed is returned by Get when the pool has been closed. It is
-// a sentinel so callers can distinguish shutdown from transport errors
-// and short-circuit retries.
-var ErrPoolClosed = errors.New("grpc: pool is closed")
-
-// DialFunc is the target-specific dial step the caller provides when
-// constructing a Pool. It receives the target string chosen by the
-// caller and returns a ready-to-use *grpc.ClientConn. The pool does
-// not care which credentials, interceptors, or resolver the dial step
-// installs — it only caches the resulting connection.
-//
-// Typical implementations install:
-//   - transport credentials (TLS or insecure for cluster-internal)
-//   - grpc.WithPerRPCCredentials(HMACCredentials{...}) for auth
-//   - grpc.WithKeepaliveParams(DefaultClientKeepalive)
-type DialFunc func(ctx context.Context, target string) (*grpc.ClientConn, error)
-
-// Pool is a concurrency-safe, lazy cache of gRPC ClientConns keyed by
-// target string.
-//
-// Design choices:
-//
-//   - Lazy dial. The first Get(target) invokes the DialFunc; subsequent
-//     Get calls with the same target return the cached *grpc.ClientConn.
-//     grpc.NewClient is non-blocking in grpc-go v1.80+, so the actual
-//     network round-trip happens on the first RPC, not on Get.
-//
-//   - Single-flight dial. Concurrent first-access to a cold target is
-//     coalesced via golang.org/x/sync/singleflight so only one DialFunc
-//     call runs per target even under heavy orchestrator load. Without
-//     this, the sync.Map LoadOrStore pattern would race and throw away
-//     losing ClientConns.
-//
-//   - Drop on demand. Drop(target) evicts + closes a cached connection
-//     so the next Get redials. Used when the caller knows a pod has
-//     been recreated (workspace delete, pod reschedule, etc).
-//
-//   - Idempotent Close. Close flips an atomic closed flag and tears
-//     down every cached connection. After Close, Get returns
-//     ErrPoolClosed so late callers surface shutdown cleanly instead of
-//     holding dead connections.
-//
-// The zero value is not usable — always construct via NewPool.
-type Pool struct {
-	dial   DialFunc
-	conns  sync.Map // target(string) → *grpc.ClientConn
-	group  singleflight.Group
-	closed atomic.Bool
-}
 
 // NewPool returns a Pool ready to Get connections via the provided
 // DialFunc. The caller retains ownership of the DialFunc semantics

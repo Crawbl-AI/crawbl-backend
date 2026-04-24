@@ -2,6 +2,7 @@ package dev
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"github.com/spf13/cobra"
@@ -9,8 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/out"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
-
-const golangciLint = "golangci-lint"
 
 func newFmtCommand() *cobra.Command {
 	return &cobra.Command{
@@ -24,26 +23,41 @@ func newFmtCommand() *cobra.Command {
 	}
 }
 
+// lintBin returns the path to the lint binary. It prefers the custom
+// crawbl-lint binary (which includes the typesfile plugin) if it exists,
+// otherwise falls back to the standard golangci-lint.
+func lintBin() string {
+	if _, err := os.Stat(crawblLintBin); err == nil {
+		return crawblLintBin
+	}
+	return "golangci-lint"
+}
+
 func newLintCommand() *cobra.Command {
 	var fix bool
 
 	cmd := &cobra.Command{
 		Use:   "lint",
 		Short: "Run the Go linter",
-		Long:  "Run golangci-lint across the repository and optionally apply available fixes.",
+		Long:  "Run golangci-lint across the repository and optionally apply available fixes. Uses the custom crawbl-lint binary if available (build with `crawbl lint`).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			// Install golangci-lint if missing.
-			if _, err := exec.LookPath(golangciLint); err != nil {
-				out.Step(style.Deploy, "Installing golangci-lint...")
-				if err := shellCmd(ctx, "go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"); err != nil {
-					return fmt.Errorf("failed to install golangci-lint: %w", err)
+			bin := lintBin()
+
+			// Install golangci-lint if neither the custom nor standard binary is available.
+			if bin == "golangci-lint" {
+				if _, err := exec.LookPath(bin); err != nil {
+					out.Step(style.Deploy, "Installing golangci-lint...")
+					if err := shellCmd(ctx, "go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"); err != nil {
+						return fmt.Errorf("installing golangci-lint: %w", err)
+					}
 				}
 			}
+
 			if fix {
-				return shellCmd(ctx, golangciLint, "run", "./...", "--fix")
+				return shellCmd(ctx, bin, "run", "./...", "--fix")
 			}
-			return shellCmd(ctx, golangciLint, "run", "./...")
+			return shellCmd(ctx, bin, "run", "./...")
 		},
 	}
 
@@ -63,7 +77,7 @@ func newVerifyCommand() *cobra.Command {
 				return err
 			}
 			out.Step(style.Lint, "Running the linter...")
-			if err := shellCmd(ctx, golangciLint, "run", "./..."); err != nil {
+			if err := shellCmd(ctx, lintBin(), "run", "./..."); err != nil {
 				return err
 			}
 			out.Step(style.Test, "Running tests...")

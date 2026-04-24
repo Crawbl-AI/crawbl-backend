@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -13,29 +12,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // register pgx driver for dbr
 	"github.com/redis/go-redis/v9"
 )
-
-// dbMaxOpenConns is the connection pool ceiling for the suite-scoped
-// Postgres handle. 8 is enough for the parallel step goroutines that
-// fan out during a single godog scenario without exhausting the
-// cluster's pg_hba connection limit.
-const (
-	dbMaxOpenConns    = 8
-	dbMaxIdleConns    = 4
-	dbConnMaxLifetime = 10 * time.Minute
-	redisPingTimeout  = 3 * time.Second
-)
-
-// suiteDeps holds every expensive/stateful resource the e2e suite
-// needs. Opened exactly once at Run() entry, closed exactly once on
-// Run() exit. Previously these resources were opened per scenario
-// in newTestContext which produced intermittent "sql: database is
-// closed" errors when the driver's internal pool drained.
-type suiteDeps struct {
-	http   *http.Client
-	db     *dbr.Connection
-	redis  *redis.Client
-	spaces *s3.Client
-}
 
 func newSuiteDeps(cfg *Config) *suiteDeps {
 	deps := &suiteDeps{

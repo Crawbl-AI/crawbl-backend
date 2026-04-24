@@ -19,20 +19,6 @@ import (
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 )
 
-const (
-	// assistantReplyPollWindow bounds how long sendMessage waits for
-	// the assistant's first reply to surface in the conversation's
-	// messages list after the POST returns 201. 3 minutes covers the
-	// longest warm-runtime reply budget plus ADK tool-call latency;
-	// cold-start is already gated by the warmup step.
-	assistantReplyPollWindow = 3 * time.Minute
-
-	// assistantReplyPollInterval is how often sendMessage re-checks
-	// the conversation's messages list while waiting for a reply.
-	// 1 second balances responsiveness against needless load.
-	assistantReplyPollInterval = 1 * time.Second
-)
-
 // sendMessage POSTs a user message and then polls the conversation
 // messages endpoint until at least one assistant reply has arrived.
 // The backend's POST /messages handler returns 201 with the user

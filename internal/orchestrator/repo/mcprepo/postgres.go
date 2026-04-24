@@ -9,10 +9,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
-const whereID = "id = ?"
-
-type postgres struct{}
-
 // New returns a Postgres-backed MCP repository.
 func New() Repo { return &postgres{} }
 
@@ -85,18 +81,6 @@ func (p *postgres) CreateAgentMessage(ctx context.Context, sess *dbr.Session, ro
 		return fmt.Errorf("mcprepo: create agent message %s: %w", row.ID, err)
 	}
 	return nil
-}
-
-// agentMessageFinaliseOpts captures the variable bits between
-// UpdateAgentMessageCompleted and UpdateAgentMessageFailed.
-// FinalCol is either "response_text" or "error_message".
-type agentMessageFinaliseOpts struct {
-	ID         string
-	Status     string
-	FinalCol   string
-	FinalVal   string
-	OpLabel    string
-	DurationMs int64
 }
 
 // finaliseAgentMessage is the shared implementation for terminal-state

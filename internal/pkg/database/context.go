@@ -6,9 +6,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 )
 
-// sessionKey is the unexported context key for the per-request database session.
-type sessionKey struct{}
-
 // ContextWithSession returns a derived context carrying the given database session.
 // Used by the session middleware and by service code that needs to override the
 // request session (e.g. per-goroutine sessions in parallel fan-out).

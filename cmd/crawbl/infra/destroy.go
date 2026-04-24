@@ -19,9 +19,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/cli/style"
 )
 
-// doctlForceFlag is the doctl flag that skips confirmation prompts on destructive operations.
-const doctlForceFlag = "--force"
-
 // newDestroyCommand creates the infra destroy subcommand.
 func newDestroyCommand() *cobra.Command {
 	var (

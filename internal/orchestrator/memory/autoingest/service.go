@@ -4,26 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"regexp"
-	"sync/atomic"
 
 	"github.com/alitto/pond/v2"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/config"
 )
-
-// service is the concrete Service backed by a pond.Pool with a bounded
-// non-blocking queue. It owns no goroutines of its own beyond the pool
-// workers; all lifecycle concerns live in pond.
-type service struct {
-	pool           pond.Pool
-	deps           Deps
-	logger         *slog.Logger
-	dropped        atomic.Uint64
-	centroidErrors atomic.Uint64
-	noiseMinLength int
-	noisePattern   *regexp.Regexp
-}
 
 // NewService constructs a Service backed by a pond.Pool. The pool is
 // started eagerly; the caller must call Shutdown before the process exits.

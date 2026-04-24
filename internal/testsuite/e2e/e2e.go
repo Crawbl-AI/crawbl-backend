@@ -26,77 +26,9 @@ import (
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	backendruntime "github.com/Crawbl-AI/crawbl-backend/internal/pkg/runtime"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
-	"github.com/gocraft/dbr/v2"
-	"github.com/redis/go-redis/v9"
 )
-
-// Config holds the configuration for an e2e test run.
-//
-// The CI invocation only needs BaseURL (and optionally E2EToken for
-// the gateway bypass). Everything else is optional and sourced from
-// environment variables by the CLI wrapper — scenarios that need a
-// specific client (Postgres, Redis, DO Spaces) skip gracefully when
-// the corresponding config is absent. This keeps `crawbl test e2e
-// --base-url ...` working in CI without the workflow having to know
-// which infrastructure dependencies a particular scenario touches.
-type Config struct {
-	BaseURL             string
-	E2EToken            string
-	Verbose             bool
-	Timeout             time.Duration
-	RuntimeReadyTimeout time.Duration
-	RuntimePollInterval time.Duration
-	DatabaseDSN         string
-
-	// Redis config — enables "the assistant should remember the
-	// current conversation context" style assertions. When empty,
-	// all Redis-backed steps are silent no-ops.
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
-
-	// DO Spaces config — enables "the file should be saved in the
-	// workspace file store" style assertions. When empty, all
-	// Spaces-backed steps are silent no-ops.
-	SpacesEndpoint  string
-	SpacesRegion    string
-	SpacesBucket    string
-	SpacesAccessKey string
-	SpacesSecretKey string
-
-	// Category restricts the test run to a single subfolder under
-	// test-features/ (e.g. "chat", "tools", "auth"). When empty,
-	// all subfolders are included.
-	Category string
-
-	// Tags is a godog tag filter expression passed straight through to
-	// godog.Options.Tags. Use it to skip flaky scenarios during gating
-	// runs (e.g. "~@llm-flaky") or to include only specific tags
-	// ("@smoke"). When empty, every scenario runs regardless of tags.
-	//
-	// Syntax is the standard Cucumber tag expression grammar:
-	//   "@foo"              – only scenarios tagged @foo
-	//   "~@bar"             – exclude scenarios tagged @bar
-	//   "@foo && ~@bar"     – tagged @foo AND not @bar
-	//   "@foo || @baz"      – tagged @foo OR @baz
-	Tags string
-}
-
-// Results holds the aggregate outcome of a test run.
-type Results struct {
-	Exit int
-}
-
-// suiteUsers holds the fixed test users created once per suite run.
-type suiteUsers struct {
-	primary *testUser
-	frank   *testUser
-	grace   *testUser
-	zach    *testUser
-}
 
 // buildTags assembles the godog tag expression, always excluding @wip and
 // @llm-flaky unless the caller's expression already mentions them. It also
@@ -272,50 +204,6 @@ func findFeaturesDir() string {
 		}
 	}
 	return "test-features"
-}
-
-// testContext holds per-scenario state shared across step definitions.
-type testContext struct {
-	cfg    *Config
-	http   *http.Client
-	dbConn *dbr.Connection
-	// redisClient is set only when cfg.RedisAddr is non-empty.
-	// Steps that need Redis check for nil and no-op gracefully so
-	// local runs without a Redis port-forward stay green.
-	redisClient *redis.Client
-	// spacesClient is set only when the full Spaces config quartet
-	// is present. Steps that need Spaces check for nil the same
-	// way as Redis.
-	spacesClient *s3.Client
-	users        map[string]*testUser
-	saved        map[string]string
-	state        map[string]*userJourneyState
-	// resolved caches subject→user→workspace lookups keyed by alias.
-	// Populated lazily by resolveUser; invalidated by invalidateResolvedUser.
-	resolved map[string]*resolvedUser
-	// Current response state.
-	lastStatus int
-	lastBody   []byte
-}
-
-// testUser represents a test user.
-type testUser struct {
-	alias    string
-	subject  string
-	email    string
-	name     string
-	signedUp bool // track if this user has signed up in the current suite run
-}
-
-type userJourneyState struct {
-	workspaceID          string
-	workspaceName        string
-	currentConversation  string
-	swarmConversationID  string
-	agentIDsBySlug       map[string]string
-	agentNamesBySlug     map[string]string
-	conversationIDsByKey map[string]string
-	pushToken            string
 }
 
 func newTestContext(cfg *Config, users *suiteUsers, deps *suiteDeps) *testContext {

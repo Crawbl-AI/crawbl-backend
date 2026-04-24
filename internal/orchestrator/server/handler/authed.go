@@ -3,39 +3,8 @@ package handler
 import (
 	"net/http"
 
-	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
 )
-
-// AuthedHandlerDeps bundles the per-request dependencies that every authed
-// handler needs: the handler context and the authenticated user. Handlers
-// receive this struct so they have everything required to talk to services
-// without re-plumbing boilerplate. The database session is carried on the
-// request context via the session middleware.
-type AuthedHandlerDeps struct {
-	// Ctx is the shared handler context (services, logger, broadcaster, ...).
-	Ctx *Context
-	// User is the authenticated, non-banned, non-deleted caller.
-	User *orchestrator.User
-}
-
-// AuthedJSONFunc is the business logic signature for handlers that read a
-// JSON request body. The decorator decodes the body into Req before calling.
-// The handler returns the response payload (wrapped in the success envelope
-// automatically) and an optional domain error.
-type AuthedJSONFunc[Req any, Resp any] func(
-	r *http.Request,
-	deps *AuthedHandlerDeps,
-	req *Req,
-) (Resp, *merrors.Error)
-
-// AuthedFunc is the business logic signature for handlers that do not read a
-// request body (GET, DELETE, or handlers that pull all inputs from URL/query
-// params). The decorator skips body decoding entirely.
-type AuthedFunc[Resp any] func(
-	r *http.Request,
-	deps *AuthedHandlerDeps,
-) (Resp, *merrors.Error)
 
 // authedJSONHandler is the shared implementation behind AuthedHandler and
 // AuthedHandlerCreated. They differ only in the success status code.

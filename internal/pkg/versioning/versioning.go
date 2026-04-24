@@ -1,30 +1,13 @@
-// Package versioning calculates the next semantic version tag from conventional commits.
 package versioning
 
 import (
 	"context"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"golang.org/x/mod/semver"
-)
-
-const refsTagsPrefix = "refs/tags/"
-
-var (
-	breakingRe = regexp.MustCompile(`^[a-z]+(\(.+\))?!:`)
-	featRe     = regexp.MustCompile(`^feat(\(.+\))?:`)
-	// globalSemverTagRe matches plain `vX.Y.Z` tags in the global v*
-	// namespace, excluding prefixed namespaces (e.g. `auth-filter/v0.1.0`
-	// or `agent-runtime/v2.3.4`) that belong to per-component sequences.
-	globalSemverTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[\w.-]+)?(\+[\w.-]+)?$`)
-
-	gitPathOnce     sync.Once
-	resolvedGitPath string
 )
 
 // getGitPath returns the absolute path to the git executable, resolved lazily
@@ -50,13 +33,6 @@ func isGlobalSemverTag(tag string) bool {
 		return false
 	}
 	return globalSemverTagRe.MatchString(tag)
-}
-
-// Result holds the output of Calculate.
-type Result struct {
-	Tag     string
-	LastTag string
-	Bump    string
 }
 
 // gitCmd constructs a git command, optionally scoped to a repo path via -C.

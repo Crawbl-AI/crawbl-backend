@@ -12,35 +12,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 )
 
-// createWorkflowInput keeps a single Description field because the
-// workflow's own description doubles as the tool-status description
-// — both answer "what is this workflow / what am I doing right now"
-// with the same sentence. buildWireArgs in chatservice reads
-// args["description"] and this existing field maps to exactly that
-// JSON key.
-type createWorkflowInput struct {
-	Name        string `json:"name" jsonschema:"name for the workflow"`
-	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing the workflow — shown to the user while the tool runs"`
-	Steps       string `json:"steps" jsonschema:"JSON array of workflow steps, each with name, agent_slug, prompt_template, and optional timeout_secs, requires_approval, on_failure, output_key, max_retries"`
-}
-
-type triggerWorkflowInput struct {
-	WorkflowID     string `json:"workflow_id" jsonschema:"ID of the workflow definition to execute"`
-	ConversationID string `json:"conversation_id,omitempty" jsonschema:"optional conversation ID to associate with the execution"`
-	InitialContext string `json:"initial_context,omitempty" jsonschema:"optional JSON object with initial template variables for the workflow"`
-	Description    string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type checkWorkflowStatusInput struct {
-	ExecutionID string `json:"execution_id" jsonschema:"ID of the workflow execution to check"`
-	Description string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
-type listWorkflowsInput struct {
-	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"include inactive workflows in the list"`
-	Description     string `json:"description,omitempty" jsonschema:"one short sentence (max 80 chars) in the user's current chat language describing what you are doing; shown to the user while the tool runs"`
-}
-
 // newCreateWorkflowHandler returns the MCP tool handler for the create_workflow tool.
 func newCreateWorkflowHandler(deps *Deps) sdkmcp.ToolHandlerFor[createWorkflowInput, *mcpv1.CreateWorkflowToolOutput] {
 	return authedToolWithUser(deps, func(ctx context.Context, sess *dbr.Session, _, workspaceID string, input createWorkflowInput) (*sdkmcp.CallToolResult, *mcpv1.CreateWorkflowToolOutput, error) {

@@ -10,37 +10,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
-	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 )
-
-// RetrievalResult extends a drawer with ranking scores.
-type RetrievalResult struct {
-	memory.Drawer
-	Similarity float64
-	GraphScore float64
-	FinalScore float64
-}
-
-const (
-	// agentAffinityBoost is added when the requesting agent matches the drawer's creator.
-	agentAffinityBoost   = 0.1
-	defaultRecencyFactor = 0.5
-	hoursPerDay          = 24.0
-	// minQueryWordLen is the minimum length for a query token to be forwarded
-	// as a KG lookup term. Shorter words are noise (stopwords, articles).
-	minQueryWordLen = 4
-)
-
-// HybridRetrieveOpts groups the parameters for HybridRetrieve. ctx and sess
-// remain positional per the project session/opts/repo pattern.
-type HybridRetrieveOpts struct {
-	DrawerRepo  drawerStore
-	Embedder    embed.Embedder
-	WorkspaceID string
-	Query       string
-	AgentSlug   string
-	Limit       int
-}
 
 // HybridRetrieve issues a single hybrid search query (pgvector ANN unioned
 // with a KG entity-name lookup) and ranks the merged results by

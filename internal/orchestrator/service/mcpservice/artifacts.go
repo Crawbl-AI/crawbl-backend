@@ -16,8 +16,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
-const errArtifactNotFound = "artifact not found"
-
 func (s *service) CreateArtifact(ctx contextT, sess sessionT, userID, workspaceID string, params *CreateArtifactParams) (*CreateArtifactResult, error) {
 	if err := s.verifyWorkspace(ctx, sess, userID, workspaceID); err != nil {
 		return nil, err
@@ -323,23 +321,6 @@ func stringFromPtr(s *string) string {
 		return ""
 	}
 	return *s
-}
-
-// persistArtifactMessageOpts groups every field persistArtifactMessage
-// needs. Grouping keeps the function signature under the project's
-// 4-5 param limit (and SonarQube's go:S107 limit of 7) and makes the
-// call sites read as a labelled struct literal instead of a long
-// positional argument list where a string mix-up is silent.
-type persistArtifactMessageOpts struct {
-	WorkspaceID string
-	AgentID     string
-	ConvID      *string
-	ArtifactID  string
-	Title       string
-	ContentType string
-	Action      artifactrepo.ArtifactAction
-	Version     int
-	Status      string
 }
 
 // persistArtifactMessage writes an artifact-type chat message and

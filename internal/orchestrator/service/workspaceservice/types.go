@@ -30,6 +30,12 @@ type Service struct {
 	logger *slog.Logger
 }
 
+// workspaceRuntimeParallelism caps the number of concurrent EnsureRuntime
+// calls when listing workspaces. Each call hits the K8s API, so bounded
+// parallelism converts O(n * rtt) latency to O(n/cap * rtt) without
+// unbounded goroutine growth.
+const workspaceRuntimeParallelism = 5
+
 // workspaceStore is the workspace subset workspaceservice uses: list +
 // get for the read endpoints and save for EnsureDefaultWorkspace.
 type workspaceStore interface {

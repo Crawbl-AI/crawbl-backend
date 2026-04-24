@@ -5,46 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"sort"
 	"time"
 
-	"github.com/gocraft/dbr/v2"
-
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
-
-const (
-	// centroidSampleWindowDays is the lookback for LLM-labelled drawers
-	// when training a centroid. 90 days balances drift response against
-	// sample size in a busy workspace.
-	centroidSampleWindowDays = 90
-	// centroidTopN caps the sample cohort per memory type so one noisy
-	// type cannot dominate compute and one quiet type cannot be drowned.
-	centroidTopN = 500
-	// centroidMemoryTypeHint is the initial capacity hint for the
-	// per-type grouping map. Matches the count of declared memory
-	// types in memory/types.go (decision, preference, milestone,
-	// problem, emotional, fact, task) so the map never has to grow.
-	centroidMemoryTypeHint = 7
-)
-
-// CentroidRecomputeDeps holds dependencies for the centroid recompute job.
-// Repo fields reference consumer-side interfaces declared in ports.go so
-// the job layer never imports producer-owned interfaces.
-type CentroidRecomputeDeps struct {
-	DB           *dbr.Connection
-	DrawerRepo   DrawerStore
-	CentroidRepo CentroidStore
-	Logger       *slog.Logger
-}
-
-// CentroidRecomputeResult is the summary line for one centroid sweep.
-type CentroidRecomputeResult struct {
-	Updated   int
-	Unchanged int
-	Skipped   int
-}
 
 // RunCentroidRecompute pulls the last 90 days of LLM-labelled drawers
 // (capped at 500 per memory type) via the drawer repo, groups by type,

@@ -10,14 +10,6 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
-// importanceScale turns the classifier's 0..1 confidence into the
-// memory_drawers.importance scale used by the ranking pipeline.
-const importanceScale = 5.0
-
-// sentenceBoundary splits text on sentence-ending punctuation followed by
-// whitespace. Compiled once at package init; this pattern is always valid.
-var sentenceBoundary = regexp.MustCompile(`([.!?])\s+`)
-
 // buildDrawer assembles the memory.Drawer row we are about to insert.
 // Tier and state are injected by the caller based on heuristic
 // confidence; see service.pickTier.
