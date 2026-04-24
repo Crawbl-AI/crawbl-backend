@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
@@ -50,7 +50,14 @@ func (s *service) SendMessageToAgent(ctx contextT, sess sessionT, params *SendAg
 	}
 
 	// 3. Emit Socket.IO delegation event then call agent runtime.
-	s.emitDelegationStarted(ctx, params.WorkspaceId, fromAgent, targetAgent, params.ConversationId, msgID, message)
+	s.emitDelegationStarted(ctx, emitDelegationOpts{
+		WorkspaceID:    params.WorkspaceId,
+		From:           fromAgent,
+		To:             targetAgent,
+		ConversationID: params.ConversationId,
+		MsgID:          msgID,
+		Message:        message,
+	})
 
 	return s.callAgentRuntime(ctx, sess, callRuntimeOpts{
 		params:      params,
@@ -151,7 +158,14 @@ func (s *service) callAgentRuntime(ctx contextT, sess sessionT, opts callRuntime
 	if completeErr := s.repos.MCP.UpdateAgentMessageCompleted(ctx, sess, opts.msgID, storedText, duration); completeErr != nil {
 		s.infra.Logger.Warn("failed to mark agent message as completed", "error", completeErr.Error())
 	}
-	s.emitDelegationDone(ctx, params.WorkspaceId, opts.fromAgent, opts.targetAgent, params.ConversationId, opts.msgID, realtime.AgentDelegationStatusCompleted)
+	s.emitDelegationDone(ctx, emitDelegationOpts{
+		WorkspaceID:    params.WorkspaceId,
+		From:           opts.fromAgent,
+		To:             opts.targetAgent,
+		ConversationID: params.ConversationId,
+		MsgID:          opts.msgID,
+		Status:         realtime.AgentDelegationStatusCompleted,
+	})
 	s.infra.Logger.Info("send_message_to_agent: completed",
 		slog.String("from_slug", opts.callingSlug),
 		slog.String("to_slug", opts.slug),
@@ -219,35 +233,42 @@ func (s *service) failAgentMessage(o failAgentMessageOpts) {
 	if failErr := s.repos.MCP.UpdateAgentMessageFailed(o.ctx, o.sess, o.msgID, o.errText, o.durationMs); failErr != nil {
 		s.infra.Logger.Warn("failed to mark agent message as failed", "error", failErr.Error())
 	}
-	s.emitDelegationDone(o.ctx, o.workspaceID, o.from, o.to, o.conversationID, o.msgID, realtime.AgentDelegationStatusFailed)
-}
-
-func (s *service) emitDelegationStarted(ctx contextT, workspaceID string, from, to *orchestrator.Agent, conversationID, msgID, message string) {
-	if s.infra.Broadcaster == nil || to == nil {
-		return
-	}
-	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, &realtime.AgentDelegationPayload{
-		From:           mcpDelegationAgent(from),
-		To:             mcpDelegationAgent(to),
-		ConversationId: conversationID,
-		Status:         realtime.AgentDelegationStatusRunning,
-		MessagePreview: truncateStr(message, delegationPreviewMaxRunes),
-		MessageId:      msgID,
+	s.emitDelegationDone(o.ctx, emitDelegationOpts{
+		WorkspaceID:    o.workspaceID,
+		From:           o.from,
+		To:             o.to,
+		ConversationID: o.conversationID,
+		MsgID:          o.msgID,
+		Status:         realtime.AgentDelegationStatusFailed,
 	})
-	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusThinking), conversationID)
 }
 
-func (s *service) emitDelegationDone(ctx contextT, workspaceID string, from, to *orchestrator.Agent, conversationID, msgID, status string) {
-	if s.infra.Broadcaster == nil || to == nil {
+func (s *service) emitDelegationStarted(ctx contextT, opts emitDelegationOpts) {
+	if s.infra.Broadcaster == nil || opts.To == nil {
 		return
 	}
-	s.infra.Broadcaster.EmitAgentStatus(ctx, workspaceID, to.ID, string(orchestrator.AgentStatusOnline), conversationID)
-	s.infra.Broadcaster.EmitAgentDelegation(ctx, workspaceID, &realtime.AgentDelegationPayload{
-		From:           mcpDelegationAgent(from),
-		To:             mcpDelegationAgent(to),
-		ConversationId: conversationID,
-		Status:         status,
-		MessageId:      msgID,
+	s.infra.Broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, &realtime.AgentDelegationPayload{
+		From:           mcpDelegationAgent(opts.From),
+		To:             mcpDelegationAgent(opts.To),
+		ConversationId: opts.ConversationID,
+		Status:         realtime.AgentDelegationStatusRunning,
+		MessagePreview: truncateStr(opts.Message, delegationPreviewMaxRunes),
+		MessageId:      opts.MsgID,
+	})
+	s.infra.Broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, opts.To.ID, string(orchestrator.AgentStatusThinking), opts.ConversationID)
+}
+
+func (s *service) emitDelegationDone(ctx contextT, opts emitDelegationOpts) {
+	if s.infra.Broadcaster == nil || opts.To == nil {
+		return
+	}
+	s.infra.Broadcaster.EmitAgentStatus(ctx, opts.WorkspaceID, opts.To.ID, string(orchestrator.AgentStatusOnline), opts.ConversationID)
+	s.infra.Broadcaster.EmitAgentDelegation(ctx, opts.WorkspaceID, &realtime.AgentDelegationPayload{
+		From:           mcpDelegationAgent(opts.From),
+		To:             mcpDelegationAgent(opts.To),
+		ConversationId: opts.ConversationID,
+		Status:         opts.Status,
+		MessageId:      opts.MsgID,
 	})
 }
 

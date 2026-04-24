@@ -11,7 +11,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // MaxBodyBytes wraps r.Body with http.MaxBytesReader so handlers decoding

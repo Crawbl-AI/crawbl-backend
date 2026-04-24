@@ -130,7 +130,13 @@ func Run(ctx context.Context, cfg *Config) (*Result, error) {
 	//     normal reaper flow (e.g. a manual admin action).
 	//   - A previous reaper run soft-deleted the user but failed to delete the
 	//     corresponding swarm CR.
-	orphaned, errs := reapOrphanedSwarms(ctx, k8sClient, sess, repo, logger, cfg.DryRun)
+	orphaned, errs := reapOrphanedSwarms(ctx, reapOrphanedSwarmsOpts{
+		k8sClient: k8sClient,
+		sess:      sess,
+		repo:      repo,
+		logger:    logger,
+		dryRun:    cfg.DryRun,
+	})
 	result.SwarmsReaped += orphaned
 	result.Errors += errs
 
@@ -230,14 +236,14 @@ func processStaleSwarm(ctx context.Context, o processStaleSwarmOpts) (usersFound
 //
 // The dryRun flag mirrors the behaviour in Run(): when true, candidates are
 // logged and counted but not actually deleted.
-func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.Session, repo *reaperrepo.Repo, logger *slog.Logger, dryRun bool) (reaped, errors int) {
+func reapOrphanedSwarms(ctx context.Context, opts reapOrphanedSwarmsOpts) (reaped, errors int) {
 	// List all UserSwarm CRs cluster-wide. On a busy cluster this could return
 	// hundreds of items, but in practice the number of test swarms is small
 	// compared to the total. If the List call itself fails we return immediately
 	// because we cannot safely proceed without the full picture.
 	var swarmList crawblv1alpha1.UserSwarmList
-	if err := k8sClient.List(ctx, &swarmList); err != nil {
-		logger.Error("failed to list userswarms", "error", err)
+	if err := opts.k8sClient.List(ctx, &swarmList); err != nil {
+		opts.logger.Error("failed to list userswarms", "error", err)
 		return 0, 1
 	}
 
@@ -255,9 +261,9 @@ func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.
 		// Check whether the user is still active. The deleted_at IS NULL
 		// guard ensures we treat soft-deleted users the same as missing ones —
 		// both cases leave the swarm without a live owner.
-		count, err := repo.CountActiveByID(ctx, sess, userID)
+		count, err := opts.repo.CountActiveByID(ctx, opts.sess, userID)
 		if err != nil {
-			logger.Error("failed to check user existence", "user_id", userID, "swarm", swarm.Name, "error", err)
+			opts.logger.Error("failed to check user existence", "user_id", userID, "swarm", swarm.Name, "error", err)
 			errors++
 			continue
 		}
@@ -267,29 +273,29 @@ func reapOrphanedSwarms(ctx context.Context, k8sClient client.Client, sess *dbr.
 			continue
 		}
 
-		logger.Info("found orphaned userswarm",
+		opts.logger.Info("found orphaned userswarm",
 			"name", swarm.Name,
 			"user_id", userID,
 			"created", swarm.CreationTimestamp.Format(time.RFC3339),
-			"dry_run", dryRun,
+			"dry_run", opts.dryRun,
 		)
 
-		if dryRun {
+		if opts.dryRun {
 			reaped++
 			continue
 		}
 
-		if err := k8sClient.Delete(ctx, swarm); err != nil {
+		if err := opts.k8sClient.Delete(ctx, swarm); err != nil {
 			if client.IgnoreNotFound(err) == nil {
 				// Already gone; not an error.
 				continue
 			}
-			logger.Error("failed to delete orphaned userswarm", "name", swarm.Name, "error", err)
+			opts.logger.Error("failed to delete orphaned userswarm", "name", swarm.Name, "error", err)
 			errors++
 			continue
 		}
 
-		logger.Info("deleted orphaned userswarm", "name", swarm.Name)
+		opts.logger.Info("deleted orphaned userswarm", "name", swarm.Name)
 		reaped++
 	}
 

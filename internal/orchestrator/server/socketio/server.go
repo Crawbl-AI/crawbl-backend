@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gocraft/dbr/v2"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/zishang520/engine.io/v2/types"
@@ -65,7 +64,14 @@ func NewServer(cfg *Config, shutdownCtx context.Context) *socket.Server {
 	if shutdownCtx == nil {
 		shutdownCtx = context.Background()
 	}
-	registerConnectionHandler(nsp, cfg.Logger, cfg.DB, cfg.WorkspaceRepo, cfg.AuthService, shutdownCtx)
+	registerConnectionHandler(connectionHandlerCfg{
+		nsp:           nsp,
+		logger:        cfg.Logger,
+		db:            cfg.DB,
+		workspaceRepo: cfg.WorkspaceRepo,
+		authService:   cfg.AuthService,
+		shutdownCtx:   shutdownCtx,
+	})
 
 	return io
 }
@@ -141,8 +147,8 @@ func headerFromHandshake(h *socket.Handshake, key string) string {
 // workspace room. authService resolves the Firebase subject to an internal user.ID so
 // the workspace ownership query uses the correct PK column. When db or workspaceRepo is
 // nil the ownership check is skipped (development / test only).
-func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *dbr.Connection, workspaceRepo workspaceOwnerChecker, authService authResolver, shutdownCtx context.Context) {
-	_ = nsp.On("connection", func(args ...any) {
+func registerConnectionHandler(cfg connectionHandlerCfg) {
+	_ = cfg.nsp.On("connection", func(args ...any) {
 		s, ok := args[0].(*socket.Socket)
 		if !ok {
 			return
@@ -159,22 +165,22 @@ func registerConnectionHandler(nsp socket.Namespace, logger *slog.Logger, db *db
 
 		subject := principalSubjectFromSocket(s)
 
-		logger.Info("socketio: client connected",
+		cfg.logger.Info("socketio: client connected",
 			"socket_id", string(s.Id()),
 			"subject", subject,
 		)
 
-		registerWorkspaceSubscribeHandler(shutdownCtx, workspaceSubscribeHandlerOpts{
+		registerWorkspaceSubscribeHandler(cfg.shutdownCtx, workspaceSubscribeHandlerOpts{
 			socket:        s,
 			sd:            sd,
-			logger:        logger,
+			logger:        cfg.logger,
 			subject:       subject,
-			db:            db,
-			workspaceRepo: workspaceRepo,
-			authService:   authService,
+			db:            cfg.db,
+			workspaceRepo: cfg.workspaceRepo,
+			authService:   cfg.authService,
 		})
-		registerWorkspaceUnsubscribeHandler(s, logger, subject)
-		registerDisconnectHandler(s, sd, logger, subject)
+		registerWorkspaceUnsubscribeHandler(s, cfg.logger, subject)
+		registerDisconnectHandler(s, sd, cfg.logger, subject)
 	})
 }
 

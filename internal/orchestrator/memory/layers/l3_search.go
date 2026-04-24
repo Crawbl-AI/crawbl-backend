@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
@@ -21,7 +22,13 @@ func renderL3(ctx context.Context, sess database.SessionRunner, opts renderL3Opt
 		return fmt.Sprintf("Search error: %v", err), nil
 	}
 
-	results, err := opts.DrawerRepo.Search(ctx, sess, opts.WorkspaceID, queryEmbed, opts.Wing, opts.Room, limit)
+	results, err := opts.DrawerRepo.Search(ctx, sess, drawerrepo.SearchOpts{
+		WorkspaceID:    opts.WorkspaceID,
+		QueryEmbedding: queryEmbed,
+		Wing:           opts.Wing,
+		Room:           opts.Room,
+		Limit:          limit,
+	})
 	if err != nil {
 		return fmt.Sprintf("Search error: %v", err), nil
 	}

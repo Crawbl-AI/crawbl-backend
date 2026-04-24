@@ -36,39 +36,39 @@ func (c *PricingCache) Start(ctx context.Context) {
 
 // Compute returns the estimated USD cost for a single LLM call.
 // Returns 0 if the model is not found in the cache.
-func (c *PricingCache) Compute(provider, model, region string, promptTokens, completionTokens, cachedTokens int32) float64 {
+func (c *PricingCache) Compute(opts ComputeOpts) float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if provider != "" {
-		key := pricingCacheKey(provider, model, region)
+	if opts.Provider != "" {
+		key := pricingCacheKey(opts.Provider, opts.Model, opts.Region)
 		if entry, ok := c.entries[key]; ok {
-			return computePricingCost(entry, promptTokens, completionTokens, cachedTokens)
+			return computePricingCost(entry, opts.PromptTokens, opts.CompletionTokens, opts.CachedTokens)
 		}
-		if region != "global" {
-			key = pricingCacheKey(provider, model, "global")
+		if opts.Region != "global" {
+			key = pricingCacheKey(opts.Provider, opts.Model, "global")
 			if entry, ok := c.entries[key]; ok {
-				return computePricingCost(entry, promptTokens, completionTokens, cachedTokens)
+				return computePricingCost(entry, opts.PromptTokens, opts.CompletionTokens, opts.CachedTokens)
 			}
 		}
 		return 0
 	}
 
 	// Provider unknown — infer from model name prefix.
-	inferred := inferPricingProvider(model)
+	inferred := inferPricingProvider(opts.Model)
 	if inferred != "" {
-		key := pricingCacheKey(inferred, model, region)
+		key := pricingCacheKey(inferred, opts.Model, opts.Region)
 		if entry, ok := c.entries[key]; ok {
-			return computePricingCost(entry, promptTokens, completionTokens, cachedTokens)
+			return computePricingCost(entry, opts.PromptTokens, opts.CompletionTokens, opts.CachedTokens)
 		}
-		key = pricingCacheKey(inferred, model, "global")
+		key = pricingCacheKey(inferred, opts.Model, "global")
 		if entry, ok := c.entries[key]; ok {
-			return computePricingCost(entry, promptTokens, completionTokens, cachedTokens)
+			return computePricingCost(entry, opts.PromptTokens, opts.CompletionTokens, opts.CachedTokens)
 		}
 	}
 
-	if entry, ok := c.byModel[model]; ok {
-		return computePricingCost(entry, promptTokens, completionTokens, cachedTokens)
+	if entry, ok := c.byModel[opts.Model]; ok {
+		return computePricingCost(entry, opts.PromptTokens, opts.CompletionTokens, opts.CachedTokens)
 	}
 
 	return 0

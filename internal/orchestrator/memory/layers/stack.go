@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
@@ -31,7 +31,13 @@ func (s *stack) WakeUp(ctx context.Context, sess database.SessionRunner, workspa
 }
 
 func (s *stack) Recall(ctx context.Context, sess database.SessionRunner, workspaceID, wing, room string, limit int) (string, error) {
-	return renderL2(ctx, sess, s.drawerRepo, workspaceID, wing, room, limit)
+	return renderL2(ctx, sess, renderL2Opts{
+		DrawerRepo:  s.drawerRepo,
+		WorkspaceID: workspaceID,
+		Wing:        wing,
+		Room:        room,
+		Limit:       limit,
+	})
 }
 
 func (s *stack) Search(ctx context.Context, sess database.SessionRunner, workspaceID, query, wing, room string, limit int) (string, error) {

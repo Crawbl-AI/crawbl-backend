@@ -10,10 +10,11 @@ import (
 	"github.com/gocraft/dbr/v2"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/auditrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
@@ -142,7 +143,7 @@ type drawerStore interface {
 	Count(ctx context.Context, sess database.SessionRunner, workspaceID string) (int, error)
 	ListWings(ctx context.Context, sess database.SessionRunner, workspaceID string) ([]memory.WingCount, error)
 	ListRooms(ctx context.Context, sess database.SessionRunner, workspaceID, wing string) ([]memory.RoomCount, error)
-	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)
+	Search(ctx context.Context, sess database.SessionRunner, opts drawerrepo.SearchOpts) ([]memory.DrawerSearchResult, error)
 	CheckDuplicate(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32, threshold float64, limit int) ([]memory.DrawerSearchResult, error)
 	Add(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
 	AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error

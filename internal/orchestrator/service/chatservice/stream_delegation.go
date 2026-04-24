@@ -6,7 +6,7 @@ import (
 	"time"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // createSubAgentStream creates a new placeholder and stream entry for a sub-agent.

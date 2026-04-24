@@ -32,7 +32,13 @@ func BuildContextForConversation(ctx context.Context, sess database.SessionRunne
 	memoryText := wakeUpMemory(ctx, sess, params.Stack, params.WorkspaceID)
 
 	msgs, listErr := params.Messages.ListRecent(ctx, sess, params.ConversationID, params.Limit)
-	messagesText := formatMessages(ctx, sess, msgs, listErr, header, maxTextLen, params.Namer)
+	messagesText := formatMessages(ctx, sess, formatMessagesOpts{
+		Msgs:       msgs,
+		ListErr:    listErr,
+		Header:     header,
+		MaxTextLen: maxTextLen,
+		Namer:      params.Namer,
+	})
 
 	if memoryText == "" && messagesText == "" {
 		return ""
@@ -86,23 +92,25 @@ func capToRunes(s string, maxRunes int) string {
 	return string(runes[:maxRunes])
 }
 
+// formatMessagesOpts groups the parameters for formatMessages. ctx and sess
+// remain positional per the project session/opts/repo pattern.
+type formatMessagesOpts struct {
+	Msgs       []*orchestrator.Message
+	ListErr    *merrors.Error
+	Header     string
+	MaxTextLen int
+	Namer      AgentNamer
+}
+
 // formatMessages renders the recent message list as a formatted string block.
 // Returns "" when listErr is non-nil or the list is empty.
-func formatMessages(
-	ctx context.Context,
-	sess database.SessionRunner,
-	msgs []*orchestrator.Message,
-	listErr *merrors.Error,
-	header string,
-	maxTextLen int,
-	namer AgentNamer,
-) string {
-	if listErr != nil || len(msgs) == 0 {
+func formatMessages(ctx context.Context, sess database.SessionRunner, opts formatMessagesOpts) string {
+	if opts.ListErr != nil || len(opts.Msgs) == 0 {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString(header)
-	for _, msg := range msgs {
+	sb.WriteString(opts.Header)
+	for _, msg := range opts.Msgs {
 		if msg.Status == orchestrator.MessageStatusSilent {
 			continue
 		}
@@ -110,10 +118,10 @@ func formatMessages(
 		if text == "" {
 			continue
 		}
-		if len(text) > maxTextLen {
-			text = text[:maxTextLen] + "..."
+		if len(text) > opts.MaxTextLen {
+			text = text[:opts.MaxTextLen] + "..."
 		}
-		sender := resolveSender(ctx, sess, msg, namer)
+		sender := resolveSender(ctx, sess, msg, opts.Namer)
 		fmt.Fprintf(&sb, "**%s**: %s\n\n", sender, text)
 	}
 	return sb.String()

@@ -116,26 +116,26 @@ func New(opts BuildOptions) (*Runner, error) {
 // the user message since ADK's llmagent.Config.Instruction is set at
 // construction time. Orchestrator callers rarely override system
 // prompts today, but the mechanism stays open for product personas.
-func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, targetAgent, message string) iter.Seq2[*adksession.Event, error] {
+func (r *Runner) RunTurn(ctx context.Context, opts RunTurnOpts) iter.Seq2[*adksession.Event, error] {
 	if r == nil || r.rootRunner == nil {
 		return errIter(fmt.Errorf("runner: not initialized"))
 	}
-	if userID == "" || sessionID == "" || message == "" {
+	if opts.UserID == "" || opts.SessionID == "" || opts.Message == "" {
 		return errIter(fmt.Errorf("runner: userID, sessionID, and message are required"))
 	}
 
-	// Pick the runner that serves this turn. Empty targetAgent means
+	// Pick the runner that serves this turn. Empty TargetAgent means
 	// Manager root; a named sub-agent wins iff registered, otherwise
 	// we log once and fall back so unknown slugs never block traffic.
 	inner := r.rootRunner
-	if targetAgent != "" {
-		if ar, ok := r.byAgent[targetAgent]; ok {
+	if opts.TargetAgent != "" {
+		if ar, ok := r.byAgent[opts.TargetAgent]; ok {
 			inner = ar
 		} else {
 			r.logger.Warn("runner: unknown target agent, routing to root",
-				"requested", targetAgent,
+				"requested", opts.TargetAgent,
 				"known_agents", r.knownAgentNames(),
-				"session_id", sessionID,
+				"session_id", opts.SessionID,
 			)
 		}
 	}
@@ -143,9 +143,9 @@ func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, t
 	// Build the user message as a genai.Content value. ADK expects a
 	// single *genai.Content per turn — a "user" role content with the
 	// message text as a single part.
-	text := message
-	if systemPrompt != "" {
-		text = "[system]\n" + systemPrompt + "\n[/system]\n\n" + message
+	text := opts.Message
+	if opts.SystemPrompt != "" {
+		text = "[system]\n" + opts.SystemPrompt + "\n[/system]\n\n" + opts.Message
 	}
 	content := genai.NewContentFromText(text, genai.RoleUser)
 
@@ -160,8 +160,8 @@ func (r *Runner) RunTurn(ctx context.Context, userID, sessionID, systemPrompt, t
 	// orchestrator via the X-Conversation-Id header. The runtime
 	// treats sessionID as the conversation ID — there is one ADK
 	// session row per Crawbl conversation.
-	ctx = mcpbridge.WithConversationID(ctx, sessionID)
-	return inner.Run(ctx, userID, sessionID, content, runCfg)
+	ctx = mcpbridge.WithConversationID(ctx, opts.SessionID)
+	return inner.Run(ctx, opts.UserID, opts.SessionID, content, runCfg)
 }
 
 // Close releases the session service backing this runner. Safe to

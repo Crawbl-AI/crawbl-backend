@@ -134,7 +134,13 @@ func runAPI(ctx context.Context) error {
 	workspaceService := workspaceservice.MustNew(workspaceRepo, runtimeClient, logger)
 	authService := authservice.MustNew(userRepo, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(ctx, logger, redisClient, db, workspaceRepo, authService)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(ctx, buildRealtimeOpts{
+		logger:        logger,
+		rc:            redisClient,
+		db:            db,
+		workspaceRepo: workspaceRepo,
+		authService:   authService,
+	})
 	defer cleanupRT()
 
 	toolsRepo := toolsrepo.New()

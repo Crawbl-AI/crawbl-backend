@@ -13,9 +13,9 @@ import (
 
 	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/firebase"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/mcprepo"
@@ -32,7 +32,7 @@ type Service interface {
 
 	// Conversations & messages
 	ListConversations(ctx context.Context, sess *dbr.Session, userID, workspaceID string) ([]*orchestrator.Conversation, error)
-	SearchMessages(ctx context.Context, sess *dbr.Session, userID, workspaceID, conversationID, query string, limit int) ([]MessageBrief, error)
+	SearchMessages(ctx context.Context, sess *dbr.Session, opts SearchMessagesOpts) ([]MessageBrief, error)
 
 	// Push notifications
 	SendPush(ctx context.Context, sess *dbr.Session, userID, title, message string) (sent bool, info string, err error)
@@ -46,7 +46,7 @@ type Service interface {
 
 	// Artifacts
 	CreateArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *CreateArtifactParams) (*CreateArtifactResult, error)
-	ReadArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID, artifactID string, version int) (*ReadArtifactResult, error)
+	ReadArtifact(ctx context.Context, sess *dbr.Session, opts ReadArtifactOpts) (*ReadArtifactResult, error)
 	UpdateArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *UpdateArtifactParams) (*UpdateArtifactResult, error)
 	ReviewArtifact(ctx context.Context, sess *dbr.Session, userID, workspaceID string, params *ReviewArtifactParams) (*ReviewArtifactResult, error)
 
@@ -192,6 +192,39 @@ type agentHistoryCreator interface {
 type messageStore interface {
 	ListRecent(ctx context.Context, sess orchestratorrepo.SessionRunner, conversationID string, limit int) ([]*orchestrator.Message, *merrors.Error)
 	Save(ctx context.Context, sess orchestratorrepo.SessionRunner, message *orchestrator.Message) *merrors.Error
+}
+
+// SearchMessagesOpts groups the parameters for SearchMessages so the call site
+// reads as a labelled struct literal and the function signature stays under the
+// project's 4-5 param limit.
+type SearchMessagesOpts struct {
+	UserID         string
+	WorkspaceID    string
+	ConversationID string
+	Query          string
+	Limit          int
+}
+
+// ReadArtifactOpts groups the parameters for ReadArtifact.
+type ReadArtifactOpts struct {
+	UserID      string
+	WorkspaceID string
+	ArtifactID  string
+	Version     int
+}
+
+// emitDelegationOpts groups the parameters for emitDelegationStarted and
+// emitDelegationDone so their signatures stay under the 4-5 param limit.
+type emitDelegationOpts struct {
+	WorkspaceID    string
+	From           *orchestrator.Agent
+	To             *orchestrator.Agent
+	ConversationID string
+	MsgID          string
+	// Message is only used by emitDelegationStarted (the preview text).
+	Message string
+	// Status is only used by emitDelegationDone.
+	Status string
 }
 
 // maxAgentDepth is the maximum depth for agent-to-agent chains.

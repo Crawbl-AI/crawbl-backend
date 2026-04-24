@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // New creates a new ChatService with the provided dependencies.

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"

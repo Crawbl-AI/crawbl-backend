@@ -6,7 +6,7 @@ import (
 	agentruntimetools "github.com/Crawbl-AI/crawbl-backend/internal/agentruntime/tools"
 	mobilev1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mobile/v1"
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 )
 

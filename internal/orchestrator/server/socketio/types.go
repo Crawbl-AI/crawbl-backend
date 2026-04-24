@@ -13,7 +13,7 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	orchestratorservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
@@ -283,4 +283,15 @@ type resolveAuthorisedWorkspacesOpts struct {
 	db            *dbr.Connection
 	workspaceRepo workspaceOwnerChecker
 	authService   authResolver
+}
+
+// connectionHandlerCfg groups the parameters for registerConnectionHandler so
+// the signature stays under the project's 4-5 param limit.
+type connectionHandlerCfg struct {
+	nsp           socket.Namespace
+	logger        *slog.Logger
+	db            *dbr.Connection
+	workspaceRepo workspaceOwnerChecker
+	authService   authResolver
+	shutdownCtx   context.Context
 }

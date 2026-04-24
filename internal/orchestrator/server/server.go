@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 )
 
 // NewServer creates a new orchestrator Server instance with the provided configuration and options.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
@@ -34,7 +35,12 @@ func linkAndCount(
 	}
 
 	for _, entity := range classification.Entities {
-		if _, err := kgRepo.AddEntity(ctx, sess, workspaceID, entity.Name, entity.Type, "{}"); err != nil {
+		if _, err := kgRepo.AddEntity(ctx, sess, kgrepo.AddEntityOpts{
+			WorkspaceID: workspaceID,
+			Name:        entity.Name,
+			EntityType:  entity.Type,
+			Properties:  "{}",
+		}); err != nil {
 			slog.WarnContext(ctx, "memory-jobs: add entity failed",
 				slog.String("workspace_id", workspaceID),
 				slog.String("entity", entity.Name),

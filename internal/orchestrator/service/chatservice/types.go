@@ -14,7 +14,7 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/autoingest"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"
@@ -140,6 +140,17 @@ type pendingToolCall struct {
 // It never performs a DB lookup — the map is populated once per request from
 // the workspace roster, so AgentName is always O(1).
 type mapNamer map[string]*orchestrator.Agent
+
+// newMessageOpts groups the parameters for newMessage so the function signature
+// stays under the project's 4-5 param limit.
+type newMessageOpts struct {
+	ConvID      string
+	Role        orchestrator.MessageRole
+	Content     orchestrator.MessageContent
+	Status      orchestrator.MessageStatus
+	AgentID     *string
+	Attachments []orchestrator.Attachment
+}
 
 // AgentName satisfies layers.AgentNamer using the in-memory lookup map.
 func (m mapNamer) AgentName(_ context.Context, _ database.SessionRunner, agentID string) (string, bool) {

@@ -8,19 +8,22 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/layers"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/artifactrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/llmusagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
+	authservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/authservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 	merrors "github.com/Crawbl-AI/crawbl-backend/internal/pkg/errors"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/redisclient"
 	userswarmclient "github.com/Crawbl-AI/crawbl-backend/internal/userswarm/client"
 )
 
@@ -100,6 +103,16 @@ type mcpHandlerDeps struct {
 	MemoryStack      layers.Stack
 }
 
+// buildRealtimeOpts groups the dependencies for buildRealtime.
+// shutdownCtx is always passed separately as the first argument.
+type buildRealtimeOpts struct {
+	logger        *slog.Logger
+	rc            redisclient.Client
+	db            *dbr.Connection
+	workspaceRepo coreWorkspaceRepo
+	authService   *authservice.Service
+}
+
 // idKeyedSeed describes a single upsert against a reference table whose
 // primary key is a string column named "id" and which carries a sort_order
 // position plus a set of other mutable columns.
@@ -174,7 +187,7 @@ type mcpDrawerRepoRaw interface {
 	AddIdempotent(ctx context.Context, sess database.SessionRunner, d *memory.Drawer, embedding []float32) error
 	Delete(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
 	Count(ctx context.Context, sess database.SessionRunner, workspaceID string) (int, error)
-	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)
+	Search(ctx context.Context, sess database.SessionRunner, opts drawerrepo.SearchOpts) ([]memory.DrawerSearchResult, error)
 	SearchHybrid(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, queryTerms []string, limit int) ([]memory.HybridSearchResult, error)
 	CheckDuplicate(ctx context.Context, sess database.SessionRunner, workspaceID string, embedding []float32, threshold float64, limit int) ([]memory.DrawerSearchResult, error)
 	ListWings(ctx context.Context, sess database.SessionRunner, workspaceID string) ([]memory.WingCount, error)
@@ -192,8 +205,8 @@ type mcpDrawerRepoRaw interface {
 	TouchAccessBatch(ctx context.Context, sess database.SessionRunner, workspaceID string, drawerIDs []string) error
 	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
 	BoostImportance(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, delta, maxImportance float64) error
-	DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error)
-	PruneLowImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, threshold float64, minAccessCount, keepMin int) (int, error)
+	DecayImportance(ctx context.Context, sess database.SessionRunner, opts drawerrepo.DecayImportanceOpts) (int, error)
+	PruneLowImportance(ctx context.Context, sess database.SessionRunner, opts drawerrepo.PruneLowImportanceOpts) (int, error)
 	ActiveWorkspaces(ctx context.Context, sess database.SessionRunner, withinHours int) ([]string, error)
 	ListEnrichCandidates(ctx context.Context, sess database.SessionRunner, limit int) ([]memory.Drawer, error)
 	UpdateEnrichment(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, entityCount, tripleCount int) error
@@ -203,7 +216,7 @@ type mcpDrawerRepoRaw interface {
 // mcpKGRepoRaw is the KG subset the MCP handler wiring forwards to
 // both crawblmcp.Deps and the memory jobs pipeline.
 type mcpKGRepoRaw interface {
-	AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType, properties string) (string, error)
+	AddEntity(ctx context.Context, sess database.SessionRunner, opts kgrepo.AddEntityOpts) (string, error)
 	AddTriple(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) (string, error)
 	Invalidate(ctx context.Context, sess database.SessionRunner, workspaceID, subject, predicate, object, ended string) error
 	QueryEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, asOf, direction string) ([]memory.TripleResult, error)

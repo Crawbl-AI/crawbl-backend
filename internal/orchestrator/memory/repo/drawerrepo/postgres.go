@@ -118,15 +118,26 @@ func (r *Postgres) Delete(ctx context.Context, sess database.SessionRunner, work
 	return err
 }
 
-func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error) {
-	if len(queryEmbedding) == 0 {
+// SearchOpts groups the parameters for Search. ctx and sess remain positional
+// per the project session/opts/repo pattern.
+type SearchOpts struct {
+	WorkspaceID    string
+	QueryEmbedding []float32
+	Wing           string
+	Room           string
+	Limit          int
+}
+
+func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, opts SearchOpts) ([]memory.DrawerSearchResult, error) {
+	if len(opts.QueryEmbedding) == 0 {
 		return nil, fmt.Errorf("drawer: empty query embedding")
 	}
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
 	}
 
-	vec := pgvector.NewVector(queryEmbedding)
+	vec := pgvector.NewVector(opts.QueryEmbedding)
 
 	// NOTE: $1 (the embedding) appears twice — in the similarity expression and
 	// ORDER BY — so dbr's SelectBySql would raise "wrong placeholder count".
@@ -134,17 +145,17 @@ func (r *Postgres) Search(ctx context.Context, sess database.SessionRunner, work
 	// pgvector requires OPERATOR(public.<=>) and ::public.vector casts because
 	// search_path is set to the orchestrator schema, not public.
 	where := "workspace_id = $2 AND embedding IS NOT NULL AND (state IN ('raw', 'processed') OR state = '') AND superseded_by IS NULL"
-	args := []any{vec, workspaceID}
+	args := []any{vec, opts.WorkspaceID}
 	paramIdx := 3
 
-	if wing != "" {
+	if opts.Wing != "" {
 		where += fmt.Sprintf(" AND wing = $%d", paramIdx)
-		args = append(args, wing)
+		args = append(args, opts.Wing)
 		paramIdx++
 	}
-	if room != "" {
+	if opts.Room != "" {
 		where += fmt.Sprintf(" AND room = $%d", paramIdx)
-		args = append(args, room)
+		args = append(args, opts.Room)
 		paramIdx++
 	}
 
@@ -607,14 +618,24 @@ func (r *Postgres) IncrementRetryCount(ctx context.Context, sess database.Sessio
 	return err
 }
 
-func (r *Postgres) DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error) {
+// DecayImportanceOpts groups the parameters for DecayImportance. ctx and sess
+// remain positional per the project session/opts/repo pattern.
+type DecayImportanceOpts struct {
+	WorkspaceID            string
+	OlderThanDays          int
+	SkipAccessedWithinDays int
+	Factor                 float64
+	Floor                  float64
+}
+
+func (r *Postgres) DecayImportance(ctx context.Context, sess database.SessionRunner, opts DecayImportanceOpts) (int, error) {
 	res, err := sess.Update("memory_drawers").
-		Set("importance", dbr.Expr("GREATEST(importance * ?, ?)", factor, floor)).
-		Where(whereWorkspaceID, workspaceID).
+		Set("importance", dbr.Expr("GREATEST(importance * ?, ?)", opts.Factor, opts.Floor)).
+		Where(whereWorkspaceID, opts.WorkspaceID).
 		Where("state = ?", "processed").
-		Where("importance > ?", floor).
-		Where(dbr.Expr("created_at < NOW() - INTERVAL '1 day' * ?", olderThanDays)).
-		Where(dbr.Expr("(last_accessed_at IS NULL OR last_accessed_at < NOW() - INTERVAL '1 day' * ?)", skipAccessedWithinDays)).
+		Where("importance > ?", opts.Floor).
+		Where(dbr.Expr("created_at < NOW() - INTERVAL '1 day' * ?", opts.OlderThanDays)).
+		Where(dbr.Expr("(last_accessed_at IS NULL OR last_accessed_at < NOW() - INTERVAL '1 day' * ?)", opts.SkipAccessedWithinDays)).
 		ExecContext(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("drawer: decay importance: %w", err)
@@ -626,7 +647,16 @@ func (r *Postgres) DecayImportance(ctx context.Context, sess database.SessionRun
 	return int(n), nil
 }
 
-func (r *Postgres) PruneLowImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, threshold float64, minAccessCount, keepMin int) (int, error) {
+// PruneLowImportanceOpts groups the parameters for PruneLowImportance. ctx and
+// sess remain positional per the project session/opts/repo pattern.
+type PruneLowImportanceOpts struct {
+	WorkspaceID    string
+	Threshold      float64
+	MinAccessCount int
+	KeepMin        int
+}
+
+func (r *Postgres) PruneLowImportance(ctx context.Context, sess database.SessionRunner, opts PruneLowImportanceOpts) (int, error) {
 	// ORDER BY importance DESC with OFFSET keepMin skips the top-keepMin rows
 	// (the ones to keep) and targets the remainder — the lowest-importance drawers —
 	// for deletion. The previous ASC ordering was inverted and deleted the
@@ -639,7 +669,7 @@ func (r *Postgres) PruneLowImportance(ctx context.Context, sess database.Session
 			   ORDER BY importance DESC
 			   OFFSET ?
 			 )`,
-			workspaceID, threshold, minAccessCount, keepMin,
+			opts.WorkspaceID, opts.Threshold, opts.MinAccessCount, opts.KeepMin,
 		)).
 		ExecContext(ctx)
 	if err != nil {

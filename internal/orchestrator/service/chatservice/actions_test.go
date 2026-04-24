@@ -8,7 +8,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	orchestrator "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	orchestratorrepo "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/messagerepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/repo/usagerepo"

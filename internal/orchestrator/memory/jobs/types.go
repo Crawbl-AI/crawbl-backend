@@ -7,10 +7,11 @@ import (
 
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/kgrepo"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/config"
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
@@ -66,12 +67,12 @@ type DrawerStore interface {
 	UpdateClassification(ctx context.Context, sess database.SessionRunner, opts drawerrepo.UpdateClassificationOpts) error
 	UpdateEmbedding(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, embedding []float32) error
 	UpdateState(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, state string) error
-	Search(ctx context.Context, sess database.SessionRunner, workspaceID string, queryEmbedding []float32, wing, room string, limit int) ([]memory.DrawerSearchResult, error)
+	Search(ctx context.Context, sess database.SessionRunner, opts drawerrepo.SearchOpts) ([]memory.DrawerSearchResult, error)
 	SetSupersededBy(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, supersededBy string) error
 	SetClusterID(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID, clusterID string) error
 	IncrementRetryCount(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string) error
-	DecayImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, olderThanDays, skipAccessedWithinDays int, factor, floor float64) (int, error)
-	PruneLowImportance(ctx context.Context, sess database.SessionRunner, workspaceID string, threshold float64, minAccessCount, keepMin int) (int, error)
+	DecayImportance(ctx context.Context, sess database.SessionRunner, opts drawerrepo.DecayImportanceOpts) (int, error)
+	PruneLowImportance(ctx context.Context, sess database.SessionRunner, opts drawerrepo.PruneLowImportanceOpts) (int, error)
 	ListEnrichCandidates(ctx context.Context, sess database.SessionRunner, limit int) ([]memory.Drawer, error)
 	UpdateEnrichment(ctx context.Context, sess database.SessionRunner, workspaceID, drawerID string, entityCount, tripleCount int) error
 	ListCentroidTrainingSamples(ctx context.Context, sess database.SessionRunner, windowDays, topN int) ([]memory.CentroidTrainingSample, error)
@@ -79,7 +80,7 @@ type DrawerStore interface {
 
 // KGStore is the knowledge-graph subset memory jobs use.
 type KGStore interface {
-	AddEntity(ctx context.Context, sess database.SessionRunner, workspaceID, name, entityType, properties string) (string, error)
+	AddEntity(ctx context.Context, sess database.SessionRunner, opts kgrepo.AddEntityOpts) (string, error)
 	AddTriple(ctx context.Context, sess database.SessionRunner, workspaceID string, t *memory.Triple) (string, error)
 }
 

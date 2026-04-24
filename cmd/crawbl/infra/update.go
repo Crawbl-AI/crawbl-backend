@@ -47,7 +47,14 @@ kubectl, verify DOCR integration, and wait for ArgoCD to sync.`,
   crawbl infra update --save-kubeconfig            # Apply + save kubeconfig + wait for ArgoCD
   crawbl infra update --env prod --auto-approve    # Apply prod changes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpdate(cmd.Context(), env, region, autoApprove, saveKubeconfig, clusterName, syncTimeout)
+			return runUpdate(cmd.Context(), updateOpts{
+					env:            env,
+					region:         region,
+					autoApprove:    autoApprove,
+					saveKubeconfig: saveKubeconfig,
+					clusterName:    clusterName,
+					syncTimeout:    syncTimeout,
+				})
 		},
 	}
 
@@ -61,54 +68,65 @@ kubectl, verify DOCR integration, and wait for ArgoCD to sync.`,
 	return cmd
 }
 
-func runUpdate(ctx context.Context, env, region string, autoApprove, saveKubeconfig bool, clusterName string, syncTimeout time.Duration) error {
+// updateOpts groups the parameters for runUpdate.
+// ctx is always passed separately as the first argument.
+type updateOpts struct {
+	env            string
+	region         string
+	autoApprove    bool
+	saveKubeconfig bool
+	clusterName    string
+	syncTimeout    time.Duration
+}
+
+func runUpdate(ctx context.Context, opts updateOpts) error {
 	if err := validateEnvVars(); err != nil {
 		return err
 	}
 
-	if clusterName == "" {
-		clusterName = "crawbl-" + env
+	if opts.clusterName == "" {
+		opts.clusterName = "crawbl-" + opts.env
 	}
 
-	out.Step(style.Infra, "Applying infrastructure changes for environment %q in region %q", env, region)
+	out.Step(style.Infra, "Applying infrastructure changes for environment %q in region %q", opts.env, opts.region)
 
-	if !autoApprove {
+	if !opts.autoApprove {
 		if !confirmPrompt("Do you want to perform this action? (y/N): ") {
 			out.Warning("Update cancelled")
 			return nil
 		}
 	}
 
-	if err := pulumiUp(ctx, env, region); err != nil {
+	if err := pulumiUp(ctx, opts.env, opts.region); err != nil {
 		return err
 	}
 
-	if !saveKubeconfig {
+	if !opts.saveKubeconfig {
 		return nil
 	}
 
 	// Post-provision: save kubeconfig, verify DOCR, wait for ArgoCD.
 	out.Ln()
-	out.Step(style.Infra, "Saving kubeconfig for %s...", clusterName)
-	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "kubeconfig", "save", clusterName); err != nil {
+	out.Step(style.Infra, "Saving kubeconfig for %s...", opts.clusterName)
+	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "kubeconfig", "save", opts.clusterName); err != nil {
 		return fmt.Errorf("kubeconfig save failed: %w", err)
 	}
 	out.Step(style.Check, "Kubeconfig saved")
 
 	out.Step(style.Infra, "Ensuring DOCR registry integration...")
-	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "registry", "add", clusterName); err != nil {
+	if err := cliexec.Run(ctx, "doctl", "kubernetes", "cluster", "registry", "add", opts.clusterName); err != nil {
 		out.Warning("Registry add may already be integrated: %v", err)
 	}
 	out.Step(style.Check, "Registry integration verified")
 
 	out.Step(style.Infra, "Waiting for ArgoCD application-controller...")
-	if err := waitForController(ctx, syncTimeout); err != nil {
+	if err := waitForController(ctx, opts.syncTimeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
 	}
 	out.Step(style.Ready, "ArgoCD application-controller is ready")
 
 	out.Step(style.Infra, "Waiting for all applications to sync...")
-	if err := waitForAppsSync(syncTimeout); err != nil {
+	if err := waitForAppsSync(opts.syncTimeout); err != nil {
 		return fmt.Errorf("app sync wait failed: %w", err)
 	}
 	out.Step(style.Ready, "Applications are synced")

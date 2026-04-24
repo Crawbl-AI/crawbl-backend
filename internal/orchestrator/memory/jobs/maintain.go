@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 )
 
 // RunMaintain performs importance decay and pruning on all active workspaces.
@@ -26,23 +27,25 @@ func RunMaintain(ctx context.Context, deps MaintainDeps) (*MaintainResult, error
 	result := &MaintainResult{Workspaces: len(activeIDs)}
 
 	for _, wsID := range activeIDs {
-		decayed, err := deps.DrawerRepo.DecayImportance(ctx, sess, wsID,
-			memory.DecayAgeDays,
-			decaySkipRecentDays,
-			memory.DecayFactor,
-			memory.DecayFloor,
-		)
+		decayed, err := deps.DrawerRepo.DecayImportance(ctx, sess, drawerrepo.DecayImportanceOpts{
+			WorkspaceID:            wsID,
+			OlderThanDays:          memory.DecayAgeDays,
+			SkipAccessedWithinDays: decaySkipRecentDays,
+			Factor:                 memory.DecayFactor,
+			Floor:                  memory.DecayFloor,
+		})
 		if err != nil {
 			slog.Warn("memory-maintain: decay failed", "workspace_id", wsID, "error", err)
 			continue
 		}
 		result.Decayed += decayed
 
-		pruned, err := deps.DrawerRepo.PruneLowImportance(ctx, sess, wsID,
-			memory.PruneThreshold,
-			memory.PruneMinAccessCount,
-			memory.PruneKeepMin,
-		)
+		pruned, err := deps.DrawerRepo.PruneLowImportance(ctx, sess, drawerrepo.PruneLowImportanceOpts{
+			WorkspaceID:    wsID,
+			Threshold:      memory.PruneThreshold,
+			MinAccessCount: memory.PruneMinAccessCount,
+			KeepMin:        memory.PruneKeepMin,
+		})
 		if err != nil {
 			slog.Warn("memory-maintain: prune failed", "workspace_id", wsID, "error", err)
 			continue

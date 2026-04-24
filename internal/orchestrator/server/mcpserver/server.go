@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 const (

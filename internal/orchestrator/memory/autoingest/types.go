@@ -18,7 +18,7 @@ import (
 	"github.com/alitto/pond/v2"
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/extract"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/queue"

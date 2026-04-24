@@ -221,14 +221,13 @@ func (s *Service) persistUserMessage(
 	opts *orchestratorservice.SendMessageOpts,
 	conversation *orchestrator.Conversation,
 ) (*persistedMsg, *merrors.Error) {
-	userMsg := newMessage(
-		conversation.ID,
-		orchestrator.MessageRoleUser,
-		opts.Content,
-		orchestrator.MessageStatusSent,
-		nil,
-		append([]orchestrator.Attachment(nil), opts.Attachments...),
-	)
+	userMsg := newMessage(newMessageOpts{
+		ConvID:      conversation.ID,
+		Role:        orchestrator.MessageRoleUser,
+		Content:     opts.Content,
+		Status:      orchestrator.MessageStatusSent,
+		Attachments: append([]orchestrator.Attachment(nil), opts.Attachments...),
+	})
 	userMsg.LocalID = stringPtr(opts.LocalID)
 
 	sess := database.SessionFromContext(ctx)

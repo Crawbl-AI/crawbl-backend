@@ -12,6 +12,7 @@ import (
 
 	mcpv1 "github.com/Crawbl-AI/crawbl-backend/internal/generated/proto/mcp/v1"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
+	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory/repo/drawerrepo"
 )
 
 // --- Handlers ---
@@ -106,7 +107,13 @@ func newMemorySearchHandler(deps *Deps) sdkmcp.ToolHandlerFor[memorySearchInput,
 			return nil, nil, fmt.Errorf("embedding failed: %w", err)
 		}
 
-		results, err := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, input.Wing, input.Room, limit)
+		results, err := deps.DrawerRepo.Search(ctx, sess, drawerrepo.SearchOpts{
+				WorkspaceID:    workspaceID,
+				QueryEmbedding: embedding,
+				Wing:           input.Wing,
+				Room:           input.Room,
+				Limit:          limit,
+			})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -293,7 +300,12 @@ func newMemoryAddDrawerHandler(deps *Deps) sdkmcp.ToolHandlerFor[memoryAddDrawer
 		}
 
 		// Reinforce similar memories.
-		reinforceSimilar(ctx, sess, deps, workspaceID, drawerID, embedding)
+		reinforceSimilar(ctx, sess, reinforceSimilarOpts{
+			Deps:        deps,
+			WorkspaceID: workspaceID,
+			DrawerID:    drawerID,
+			Embedding:   embedding,
+		})
 
 		return nil, &mcpv1.MemoryAddDrawerOutput{
 			DrawerId:   drawerID,
@@ -324,16 +336,28 @@ func classifyAndScore(deps *Deps, content string) (memoryType string, importance
 	return memoryType, importance
 }
 
+// reinforceSimilarOpts groups the parameters for reinforceSimilar.
+type reinforceSimilarOpts struct {
+	Deps        *Deps
+	WorkspaceID string
+	DrawerID    string
+	Embedding   []float32
+}
+
 // reinforceSimilar boosts the importance of existing drawers that are
 // semantically similar to the newly-filed drawer. No-op when embedding is empty.
-func reinforceSimilar(ctx context.Context, sess *dbr.Session, deps *Deps, workspaceID, drawerID string, embedding []float32) {
-	if len(embedding) == 0 {
+func reinforceSimilar(ctx context.Context, sess *dbr.Session, opts reinforceSimilarOpts) {
+	if len(opts.Embedding) == 0 {
 		return
 	}
-	similar, _ := deps.DrawerRepo.Search(ctx, sess, workspaceID, embedding, "", "", 5)
+	similar, _ := opts.Deps.DrawerRepo.Search(ctx, sess, drawerrepo.SearchOpts{
+		WorkspaceID:    opts.WorkspaceID,
+		QueryEmbedding: opts.Embedding,
+		Limit:          5,
+	})
 	for i := range similar {
-		if similar[i].ID != drawerID && similar[i].Similarity > memory.ReinforcementThreshold {
-			_ = deps.DrawerRepo.BoostImportance(ctx, sess, workspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
+		if similar[i].ID != opts.DrawerID && similar[i].Similarity > memory.ReinforcementThreshold {
+			_ = opts.Deps.DrawerRepo.BoostImportance(ctx, sess, opts.WorkspaceID, similar[i].ID, memory.ReinforcementBoost, memory.MaxImportance)
 		}
 	}
 }

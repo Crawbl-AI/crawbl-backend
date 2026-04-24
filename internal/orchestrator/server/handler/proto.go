@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // WriteProtoSuccess writes a protobuf message wrapped in the standard

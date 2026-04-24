@@ -17,7 +17,7 @@ import (
 // Orchestrator-specific header constants (X-Firebase-*, X-E2E-*, X-Device-*,
 // X-Version, X-Timezone) and the authentication middleware itself live in
 // internal/orchestrator/server/middleware/, which may legally import the
-// orchestrator domain package. This package (internal/orchestrator/httputil) must
+// orchestrator domain package. This package (internal/pkg/httputil) must
 // stay orchestrator-agnostic — see internal/pkg/AGENTS.md.
 const (
 	// AuthorizationHeader is the standard Authorization header.

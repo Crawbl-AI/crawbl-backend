@@ -57,9 +57,9 @@ import (
 	integrationservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/integrationservice"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/mcpservice"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/embed"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/firebase"
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/realtime"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/embed"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/firebase"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/realtime"
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/server/middleware"
 	workflowservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workflowservice"
 	workspaceservice "github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/service/workspaceservice"
@@ -171,7 +171,13 @@ func runServer(ctx context.Context) error {
 	workspaceService := workspaceservice.MustNew(repos.Workspace, runtimeClient, logger)
 	authService := authservice.MustNew(repos.User, workspaceService, legalDocumentsFromEnv(), usagequotarepo.New())
 
-	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(ctx, logger, redisClient, db, repos.Workspace, authService)
+	broadcaster, socketIOHandler, ioServer, cleanupRT := buildRealtime(ctx, buildRealtimeOpts{
+		logger:        logger,
+		rc:            redisClient,
+		db:            db,
+		workspaceRepo: repos.Workspace,
+		authService:   authService,
+	})
 	defer cleanupRT()
 
 	toolsRepo := toolsrepo.New()
@@ -715,27 +721,27 @@ func buildSharedRedis(logger *slog.Logger) (redisclient.Client, func()) {
 // db, workspaceRepo, and authService are forwarded to the Socket.IO server so
 // it can verify workspace ownership before joining rooms on workspace.subscribe
 // events. authService resolves the Firebase subject to an internal user.ID.
-func buildRealtime(shutdownCtx context.Context, logger *slog.Logger, rc redisclient.Client, db *dbr.Connection, workspaceRepo coreWorkspaceRepo, authService *authservice.Service) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
-	if rc == nil {
-		logger.Info("realtime disabled: no redis client")
+func buildRealtime(shutdownCtx context.Context, opts buildRealtimeOpts) (realtime.Broadcaster, http.Handler, *socket.Server, func()) {
+	if opts.rc == nil {
+		opts.logger.Info("realtime disabled: no redis client")
 		return realtime.NopBroadcaster{}, nil, nil, noopCleanup
 	}
 
 	io := socketio.NewServer(&socketio.Config{
-		Logger:        logger,
-		RedisClient:   redisclient.Unwrap(rc),
-		DB:            db,
-		WorkspaceRepo: workspaceRepo,
-		AuthService:   authService,
+		Logger:        opts.logger,
+		RedisClient:   redisclient.Unwrap(opts.rc),
+		DB:            opts.db,
+		WorkspaceRepo: opts.workspaceRepo,
+		AuthService:   opts.authService,
 	}, shutdownCtx)
 
-	broadcaster := socketio.NewBroadcaster(io, logger)
+	broadcaster := socketio.NewBroadcaster(io, opts.logger)
 	handler := socketio.Handler(io)
 
 	cleanup := func() {
 		io.Close(nil)
 	}
 
-	logger.Info("realtime enabled: socket.io + redis")
+	opts.logger.Info("realtime enabled: socket.io + redis")
 	return broadcaster, handler, io, cleanup
 }

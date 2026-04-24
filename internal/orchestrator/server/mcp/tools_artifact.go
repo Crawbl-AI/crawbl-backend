@@ -58,7 +58,12 @@ func newReadArtifactHandler(deps *Deps) sdkmcp.ToolHandlerFor[readArtifactInput,
 			return nil, nil, fmt.Errorf("artifact_id is required")
 		}
 
-		result, err := deps.MCPService.ReadArtifact(ctx, sess, userID, workspaceID, input.ArtifactID, input.Version)
+		result, err := deps.MCPService.ReadArtifact(ctx, sess, mcpservice.ReadArtifactOpts{
+			UserID:      userID,
+			WorkspaceID: workspaceID,
+			ArtifactID:  input.ArtifactID,
+			Version:     input.Version,
+		})
 		if err != nil {
 			return nil, nil, err
 		}

@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/httputil"
+	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/httputil"
 )
 
 // FileUpload handles file uploads for chat attachments and avatars.

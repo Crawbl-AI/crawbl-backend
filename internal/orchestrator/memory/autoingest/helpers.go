@@ -10,23 +10,35 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/orchestrator/memory"
 )
 
+// buildDrawerOpts groups the parameters for buildDrawer. Work and
+// embedding are handled separately by the caller.
+type buildDrawerOpts struct {
+	Work       Work
+	Chunk      string
+	MemType    string
+	Room       string
+	Importance float64
+	Tier       string
+	State      string
+}
+
 // buildDrawer assembles the memory.Drawer row we are about to insert.
 // Tier and state are injected by the caller based on heuristic
 // confidence; see service.pickTier.
-func buildDrawer(work Work, chunk, memType, room string, importance float64, tier, state string) *memory.Drawer {
+func buildDrawer(opts buildDrawerOpts) *memory.Drawer {
 	now := time.Now().UTC()
 	return &memory.Drawer{
-		ID:           autoIngestDrawerID(room, chunk),
-		WorkspaceID:  work.WorkspaceID,
+		ID:           autoIngestDrawerID(opts.Room, opts.Chunk),
+		WorkspaceID:  opts.Work.WorkspaceID,
 		Wing:         memory.AutoIngestWing,
-		Room:         room,
-		Content:      chunk,
-		Importance:   importance,
-		MemoryType:   memType,
+		Room:         opts.Room,
+		Content:      opts.Chunk,
+		Importance:   opts.Importance,
+		MemoryType:   opts.MemType,
 		AddedBy:      memory.AutoIngestAddedBy,
-		AddedByAgent: work.AgentSlug,
-		State:        state,
-		PipelineTier: tier,
+		AddedByAgent: opts.Work.AgentSlug,
+		State:        opts.State,
+		PipelineTier: opts.Tier,
 		FiledAt:      now,
 		CreatedAt:    now,
 	}

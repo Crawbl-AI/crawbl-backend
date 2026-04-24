@@ -9,22 +9,33 @@ import (
 	"github.com/Crawbl-AI/crawbl-backend/internal/pkg/database"
 )
 
+// renderL2Opts groups the parameters for renderL2. ctx and sess remain
+// positional per the project session/opts/repo pattern.
+type renderL2Opts struct {
+	DrawerRepo  drawerStore
+	WorkspaceID string
+	Wing        string
+	Room        string
+	Limit       int
+}
+
 // renderL2 retrieves on-demand drawers filtered by wing/room.
-func renderL2(ctx context.Context, sess database.SessionRunner, drawerRepo drawerStore, workspaceID, wing, room string, limit int) (string, error) {
+func renderL2(ctx context.Context, sess database.SessionRunner, opts renderL2Opts) (string, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 10
 	}
-	drawers, err := drawerRepo.GetByWingRoom(ctx, sess, workspaceID, wing, room, limit)
+	drawers, err := opts.DrawerRepo.GetByWingRoom(ctx, sess, opts.WorkspaceID, opts.Wing, opts.Room, limit)
 	if err != nil || len(drawers) == 0 {
 		label := ""
-		if wing != "" {
-			label = "wing=" + wing
+		if opts.Wing != "" {
+			label = "wing=" + opts.Wing
 		}
-		if room != "" {
+		if opts.Room != "" {
 			if label != "" {
 				label += " "
 			}
-			label += "room=" + room
+			label += "room=" + opts.Room
 		}
 		return fmt.Sprintf("No drawers found for %s.", label), nil
 	}
