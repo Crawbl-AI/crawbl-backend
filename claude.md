@@ -159,9 +159,9 @@ To delete a dev user: remove the user row from the port-forwarded Postgres, then
 
 ## Observability
 
-The monitoring stack (VictoriaMetrics, VictoriaLogs, Fluent Bit) is deployed in **both dev and prod** via ArgoCD.
+The monitoring stack (VictoriaMetrics, VictoriaLogs, Fluent Bit) is **prod-only**.
 
-- **Dev (Hetzner k3s)**: VictoriaMetrics, VictoriaLogs, and Fluent Bit are deployed by the `root-k3s-dev/` app-of-apps. Use `kubectl logs` for quick tail access, or query VictoriaLogs directly. For ad-hoc resource checks, `kubectl top pods -n <namespace>` works without the full stack.
+- **Dev (Hetzner k3s)**: No monitoring stack. Use `kubectl logs` for log access and `kubectl top pods -n <namespace>` for resource checks.
 - **Prod**: VictoriaMetrics, VictoriaLogs, and Fluent Bit are managed by `root-prod/` and exposed via HTTPRoutes at `metrics.crawbl.com` and `logs.crawbl.com`.
 
 ## Go Best Practices
