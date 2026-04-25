@@ -214,6 +214,7 @@ func NewInfraCommand() *cobra.Command {
   crawbl infra plan                          # Preview infrastructure changes
   crawbl infra update                        # Apply infrastructure changes
   crawbl infra update --save-kubeconfig      # Apply + configure kubectl + wait for ArgoCD
+  crawbl infra kubeconfig                    # Fetch kubeconfig without applying changes
   crawbl infra destroy                       # Destroy all infrastructure`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
@@ -224,6 +225,7 @@ func NewInfraCommand() *cobra.Command {
 	cmd.AddCommand(newPlanCommand())
 	cmd.AddCommand(newUpdateCommand())
 	cmd.AddCommand(newDestroyCommand())
+	cmd.AddCommand(newKubeconfigCommand())
 
 	return cmd
 }
