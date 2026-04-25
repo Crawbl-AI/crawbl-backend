@@ -431,7 +431,7 @@ CREATE TABLE IF NOT EXISTS integration_providers (
 -- MemPalace memory system: vector store, knowledge graph, identities.
 -- Requires pgvector extension for semantic search.
 
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;
 
 -- Core vector store — each drawer is a chunk of verbatim content with embedding.
 CREATE TABLE IF NOT EXISTS memory_drawers (
