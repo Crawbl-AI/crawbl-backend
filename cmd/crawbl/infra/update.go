@@ -152,6 +152,9 @@ func postUpdateDev(ctx context.Context, opts updateOpts) error {
 		return fmt.Errorf("merge kubeconfig: %w", err)
 	}
 
+	// Point kubectl at the new k3s kubeconfig for the wait steps below.
+	_ = os.Setenv("KUBECONFIG", kubeconfigPath)
+
 	out.Step(style.Infra, "Waiting for ArgoCD application-controller...")
 	if err := waitForController(ctx, opts.syncTimeout); err != nil {
 		return fmt.Errorf("controller readiness failed: %w", err)
