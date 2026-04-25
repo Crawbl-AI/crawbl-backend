@@ -3,6 +3,8 @@
 # Lightweight CI gate: validates the already-deployed dev cluster.
 # Builds, deployments, and releases happen locally via `crawbl app deploy`.
 #
+# Dev cluster is Hetzner k3s — kubeconfig is stored as a base64-encoded secret.
+#
 # E2E tests temporarily disabled — re-enable when stable.
 name: Deploy to Dev
 
@@ -42,23 +44,22 @@ jobs:
             go build -mod=vendor -trimpath -ldflags="-s -w" -buildvcs=false \
             -o .artifacts/bin/crawbl ./cmd/crawbl
 
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Save kubeconfig
-        run: doctl kubernetes cluster kubeconfig save crawbl-dev
+      - name: Write kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.CRAWBL_DEV_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
 
       - name: Start port-forwards
         run: |
-          # Port-forward postgres + redis for DB and session assertions.
+          # Port-forward postgres, redis, and minio for assertions.
           # Orchestrator is accessed via the external gateway URL.
           kubectl port-forward svc/backend-postgresql 5432:5432 -n backend &
           kubectl port-forward svc/backend-redis-master 6379:6379 -n backend &
+          kubectl port-forward svc/minio 9000:9000 -n backend &
 
-          # Wait for both to become reachable.
-          for port in 5432 6379; do
+          # Wait for all three to become reachable.
+          for port in 5432 6379 9000; do
             for _ in $(seq 1 20); do
               if nc -z localhost $port 2>/dev/null; then
                 echo "Port $port ready"
@@ -73,19 +74,19 @@ jobs:
         run: |
           PG_PASS=$(kubectl get secret backend-postgresql-auth -n backend -o jsonpath='{.data.postgres-password}' | base64 -d)
           REDIS_PASS=$(kubectl get secret backend-redis-auth -n backend -o jsonpath='{.data.redis-password}' | base64 -d)
-          SPACES_AK=$(kubectl get secret runtime-openai-secrets -n userswarms -o jsonpath='{.data.CRAWBL_SPACES_ACCESS_KEY}' | base64 -d)
-          SPACES_SK=$(kubectl get secret runtime-openai-secrets -n userswarms -o jsonpath='{.data.CRAWBL_SPACES_SECRET_KEY}' | base64 -d)
+          MINIO_AK=$(kubectl get secret minio -n backend -o jsonpath='{.data.root-user}' | base64 -d)
+          MINIO_SK=$(kubectl get secret minio -n backend -o jsonpath='{.data.root-password}' | base64 -d)
 
           # Mask secrets in logs.
           echo "::add-mask::$PG_PASS"
           echo "::add-mask::$REDIS_PASS"
-          echo "::add-mask::$SPACES_AK"
-          echo "::add-mask::$SPACES_SK"
+          echo "::add-mask::$MINIO_AK"
+          echo "::add-mask::$MINIO_SK"
 
           echo "pg_pass=$PG_PASS" >> "$GITHUB_OUTPUT"
           echo "redis_pass=$REDIS_PASS" >> "$GITHUB_OUTPUT"
-          echo "spaces_ak=$SPACES_AK" >> "$GITHUB_OUTPUT"
-          echo "spaces_sk=$SPACES_SK" >> "$GITHUB_OUTPUT"
+          echo "minio_ak=$MINIO_AK" >> "$GITHUB_OUTPUT"
+          echo "minio_sk=$MINIO_SK" >> "$GITHUB_OUTPUT"
 
       - name: Run E2E tests
         env:
@@ -93,11 +94,11 @@ jobs:
           CRAWBL_E2E_DATABASE_DSN: "postgres://postgres:${{ steps.secrets.outputs.pg_pass }}@localhost:5432/crawbl?sslmode=disable&search_path=orchestrator"
           CRAWBL_E2E_REDIS_ADDR: "localhost:6379"
           CRAWBL_E2E_REDIS_PASSWORD: ${{ steps.secrets.outputs.redis_pass }}
-          CRAWBL_E2E_SPACES_ENDPOINT: "https://fra1.digitaloceanspaces.com"
-          CRAWBL_E2E_SPACES_REGION: "fra1"
+          CRAWBL_E2E_SPACES_ENDPOINT: "http://localhost:9000"
+          CRAWBL_E2E_SPACES_REGION: "us-east-1"
           CRAWBL_E2E_SPACES_BUCKET: "crawbl-workspaces-dev"
-          CRAWBL_E2E_SPACES_ACCESS_KEY: ${{ steps.secrets.outputs.spaces_ak }}
-          CRAWBL_E2E_SPACES_SECRET_KEY: ${{ steps.secrets.outputs.spaces_sk }}
+          CRAWBL_E2E_SPACES_ACCESS_KEY: ${{ steps.secrets.outputs.minio_ak }}
+          CRAWBL_E2E_SPACES_SECRET_KEY: ${{ steps.secrets.outputs.minio_sk }}
         run: |
           ./.artifacts/bin/crawbl test e2e \
             --base-url https://api-dev.crawbl.com \

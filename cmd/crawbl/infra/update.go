@@ -137,12 +137,20 @@ func postUpdateDev(ctx context.Context, opts updateOpts) error {
 		return fmt.Errorf("fetch kubeconfig via SSH: %w", err)
 	}
 
+	// k3s uses "default" for cluster/context/user names — rename to avoid
+	// collisions when merging into the user's default kubeconfig.
+	kubeconfig = renameK3sKubeconfig(kubeconfig, "crawbl-dev")
+
 	kubeconfigPath := os.ExpandEnv("$HOME/.kube/config-crawbl-dev")
 	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0600); err != nil { // #nosec G306 -- kubeconfig requires 0600
 		return fmt.Errorf("write kubeconfig to %s: %w", kubeconfigPath, err)
 	}
 	out.Step(style.Check, "Kubeconfig saved to %s", kubeconfigPath)
-	out.Infof("Set KUBECONFIG=%s to use this cluster", kubeconfigPath)
+
+	// Merge into ~/.kube/config and set crawbl-dev as the active context.
+	if err := mergeKubeconfigDev(ctx, kubeconfigPath); err != nil {
+		return fmt.Errorf("merge kubeconfig: %w", err)
+	}
 
 	// Point kubectl at the new k3s kubeconfig for the wait steps below.
 	_ = os.Setenv("KUBECONFIG", kubeconfigPath)
@@ -271,6 +279,61 @@ func fetchKubeconfigSSH(serverIP string) (string, error) {
 		return "", fmt.Errorf("ssh to %s: %w", serverIP, err)
 	}
 	return string(output), nil
+}
+
+// renameK3sKubeconfig replaces the k3s default names ("default" for cluster,
+// context, and user) with the given name so they don't collide during merge.
+func renameK3sKubeconfig(raw, name string) string {
+	// k3s kubeconfig uses "default" in these YAML patterns:
+	//   current-context: default
+	//   name: default            (cluster entry, indented with spaces)
+	//   - name: default          (user entry, YAML list item)
+	//   cluster: default         (inside context)
+	//   user: default            (inside context)
+	replacements := []struct{ old, new string }{
+		{"current-context: default", "current-context: " + name},
+		{"  name: default", "  name: " + name},
+		{"- name: default", "- name: " + name},
+		{"    cluster: default", "    cluster: " + name},
+		{"    user: default", "    user: " + name},
+	}
+	for _, r := range replacements {
+		raw = strings.ReplaceAll(raw, r.old, r.new)
+	}
+	return raw
+}
+
+// mergeKubeconfigDev merges a renamed dev kubeconfig into ~/.kube/config
+// and sets crawbl-dev as the active context.
+func mergeKubeconfigDev(ctx context.Context, devPath string) error {
+	const ctxName = "crawbl-dev"
+	defaultPath := os.ExpandEnv("$HOME/.kube/config")
+
+	if err := os.MkdirAll(os.ExpandEnv("$HOME/.kube"), 0700); err != nil {
+		return fmt.Errorf("create ~/.kube: %w", err)
+	}
+
+	// Merge: set KUBECONFIG to both files, flatten into one.
+	mergedKC := defaultPath + string(os.PathListSeparator) + devPath
+	mergeCmd := exec.CommandContext(ctx, "kubectl", "config", "view", "--flatten")
+	mergeCmd.Env = append(os.Environ(), "KUBECONFIG="+mergedKC)
+	merged, err := mergeCmd.Output()
+	if err != nil {
+		return fmt.Errorf("merge kubeconfigs: %w", err)
+	}
+	if err := os.WriteFile(defaultPath, merged, 0600); err != nil { // #nosec G306
+		return fmt.Errorf("write merged kubeconfig: %w", err)
+	}
+	out.Step(style.Check, "Merged into %s", defaultPath)
+
+	// Set crawbl-dev as the active context.
+	_ = os.Setenv("KUBECONFIG", defaultPath)
+	if err := cliexec.Run(ctx, "kubectl", "config", "use-context", ctxName); err != nil {
+		return fmt.Errorf("set current context: %w", err)
+	}
+	out.Step(style.Check, "Context %q set as default", ctxName)
+
+	return nil
 }
 
 // waitForController waits for the ArgoCD application-controller StatefulSet to be ready.

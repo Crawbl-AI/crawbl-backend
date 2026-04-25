@@ -28,6 +28,7 @@ func createFirewall(ctx *pulumi.Context, name string, cfg RuntimeConfig) (*hclou
 		buildOutboundRule("allow-ssh-out", "22", "tcp"),  // ArgoCD needs SSH to pull from GitHub
 		buildOutboundRule("allow-dns-tcp-out", "53", "tcp"),
 		buildOutboundRule("allow-dns-udp-out", "53", "udp"),
+		buildOutboundRule("allow-quic-out", "7844", "udp"), // Cloudflare Tunnel QUIC
 	}
 
 	rules := append(inbound, outbound...)

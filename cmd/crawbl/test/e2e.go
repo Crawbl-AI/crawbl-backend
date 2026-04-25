@@ -30,9 +30,10 @@ func envInt(key string, fallback int) int {
 }
 
 // startPortForwards launches kubectl port-forward subprocesses for the
-// orchestrator, postgres, and redis services in the backend namespace.
-// Returns a cleanup function that kills all subprocesses.
-func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(), err error) {
+// orchestrator, postgres, and redis services in the given namespace.
+// When minioPortForward is true, a MinIO port-forward (9000:9000) is also
+// started. Returns a cleanup function that kills all subprocesses.
+func startPortForwards(namespace string, minioPortForward bool) (orchestratorPort, pgPort, redisPort int, cleanup func(), err error) {
 	forwards := []struct {
 		svc        string
 		localPort  int
@@ -42,6 +43,14 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 		{"svc/orchestrator", 7171, 7171, "orchestrator"},
 		{"svc/backend-postgresql", 5432, 5432, "postgres"},
 		{"svc/backend-redis-master", 6379, 6379, "redis"},
+	}
+	if minioPortForward {
+		forwards = append(forwards, struct {
+			svc        string
+			localPort  int
+			remotePort int
+			label      string
+		}{"svc/minio", 9000, 9000, "minio"})
 	}
 
 	kubectlPath, err := exec.LookPath("kubectl")
@@ -62,7 +71,7 @@ func startPortForwards() (orchestratorPort, pgPort, redisPort int, cleanup func(
 	for _, f := range forwards {
 		cmd := exec.CommandContext(context.Background(), kubectlPath, "port-forward", f.svc, // #nosec G204 -- CLI tool, input from developer
 			fmt.Sprintf("%d:%d", f.localPort, f.remotePort),
-			"-n", "backend")
+			"-n", namespace)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
 		if startErr := cmd.Start(); startErr != nil {
@@ -109,9 +118,9 @@ func waitForPort(ctx context.Context, port int) error {
 // applyPortForwards sets up kubectl port-forwards and adjusts the provided
 // baseURL and databaseDSN pointers based on the active ports. Returns a
 // cleanup function that kills all port-forward processes.
-func applyPortForwards(baseURL, databaseDSN *string) (func(), error) {
+func applyPortForwards(baseURL, databaseDSN *string, namespace string, minioPortForward bool) (func(), error) {
 	log.Println("setting up port-forwards...")
-	orchPort, pgPort, redisPort, cleanup, err := startPortForwards()
+	orchPort, pgPort, redisPort, cleanup, err := startPortForwards(namespace, minioPortForward)
 	if err != nil {
 		return func() { /* no port-forwards to clean up on setup failure */ }, fmt.Errorf("port-forward setup failed: %w", err)
 	}
@@ -124,6 +133,14 @@ func applyPortForwards(baseURL, databaseDSN *string) (func(), error) {
 	if *databaseDSN == "" {
 		if pgPass := os.Getenv("CRAWBL_E2E_PG_PASSWORD"); pgPass != "" {
 			*databaseDSN = fmt.Sprintf("postgres://postgres:%s@localhost:%d/crawbl?sslmode=disable&search_path=orchestrator", pgPass, pgPort)
+		}
+	}
+	if minioPortForward {
+		if os.Getenv("CRAWBL_E2E_SPACES_ENDPOINT") == "" {
+			_ = os.Setenv("CRAWBL_E2E_SPACES_ENDPOINT", "http://localhost:9000")
+		}
+		if os.Getenv("CRAWBL_E2E_SPACES_REGION") == "" {
+			_ = os.Setenv("CRAWBL_E2E_SPACES_REGION", "us-east-1")
 		}
 	}
 	return cleanup, nil
@@ -141,6 +158,8 @@ func newE2ECommand() *cobra.Command {
 		category            string
 		tags                string
 		portForwardFlag     bool
+		namespace           string
+		minioPortForward    bool
 	)
 
 	cmd := &cobra.Command{
@@ -169,7 +188,7 @@ runs only test-features/chat/).`,
   crawbl test e2e --base-url https://api-dev.crawbl.com --e2e-token $CRAWBL_E2E_TOKEN`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if portForwardFlag {
-				cleanup, err := applyPortForwards(&baseURL, &databaseDSN)
+				cleanup, err := applyPortForwards(&baseURL, &databaseDSN, namespace, minioPortForward)
 				if err != nil {
 					return err
 				}
@@ -186,6 +205,7 @@ runs only test-features/chat/).`,
 				DatabaseDSN:         databaseDSN,
 				Category:            category,
 				Tags:                tags,
+				Namespace:           namespace,
 
 				RedisAddr:       os.Getenv("CRAWBL_E2E_REDIS_ADDR"),
 				RedisPassword:   os.Getenv("CRAWBL_E2E_REDIS_PASSWORD"),
@@ -217,6 +237,8 @@ runs only test-features/chat/).`,
 	cmd.Flags().StringVar(&category, "category", "", "Run only tests from a specific subfolder (e.g. chat, tools, auth, mcp)")
 	cmd.Flags().StringVar(&tags, "tags", "", "Godog tag filter expression (e.g. \"~@llm-flaky\" to skip flaky scenarios, \"@smoke\" to run only smoke tests)")
 	cmd.Flags().BoolVar(&portForwardFlag, "port-forward", false, "Auto-start kubectl port-forwards for orchestrator, postgres, and redis")
+	cmd.Flags().StringVar(&namespace, "namespace", "backend", "Kubernetes namespace where backend services are deployed")
+	cmd.Flags().BoolVar(&minioPortForward, "minio-port-forward", false, "Also port-forward MinIO (svc/minio 9000:9000) for k3s dev clusters that use MinIO instead of DO Spaces")
 
 	// Hidden aliases for common shortcuts.
 	cmd.Flags().StringVarP(&category, "cat", "c", "", "Alias for --category")

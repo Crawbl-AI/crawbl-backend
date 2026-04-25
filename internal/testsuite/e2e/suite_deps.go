@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -45,11 +46,16 @@ func newSuiteDeps(cfg *Config) *suiteDeps {
 		if region == "" {
 			region = "us-east-1"
 		}
+		// S3-compatible storage (DigitalOcean Spaces or MinIO) requires
+		// path-style addressing when the endpoint is MinIO or localhost,
+		// because virtual-hosted-style buckets don't resolve without DNS
+		// wildcard support.
+		usePathStyle := strings.Contains(cfg.SpacesEndpoint, "minio") || strings.Contains(cfg.SpacesEndpoint, "localhost")
 		deps.spaces = s3.New(s3.Options{
 			Region:       region,
 			Credentials:  credentials.NewStaticCredentialsProvider(cfg.SpacesAccessKey, cfg.SpacesSecretKey, ""),
 			BaseEndpoint: aws.String(cfg.SpacesEndpoint),
-			UsePathStyle: false,
+			UsePathStyle: usePathStyle,
 		})
 	}
 	return deps

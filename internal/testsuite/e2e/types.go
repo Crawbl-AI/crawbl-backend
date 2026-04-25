@@ -130,6 +130,11 @@ type Config struct {
 	// all subfolders are included.
 	Category string
 
+	// Namespace is the Kubernetes namespace where backend services are
+	// deployed. Defaults to "backend". Override for non-standard setups
+	// (e.g. k3s dev clusters with a different namespace layout).
+	Namespace string
+
 	// Tags is a godog tag filter expression passed straight through to
 	// godog.Options.Tags. Use it to skip flaky scenarios during gating
 	// runs (e.g. "~@llm-flaky") or to include only specific tags

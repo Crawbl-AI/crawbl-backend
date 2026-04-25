@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
@@ -26,6 +27,10 @@ func bootstrapArgoCD(ctx *pulumi.Context, name string, cfg RuntimeConfig, k8sPro
 	argocdNs, err := createArgoCDNamespace(ctx, name, k8sProvider, opts)
 	if err != nil {
 		return fmt.Errorf("create argocd namespace: %w", err)
+	}
+
+	if _, err := createAWSCredentialsSecret(ctx, name, k8sProvider, []pulumi.Resource{argocdNs}, opts); err != nil {
+		return fmt.Errorf("create aws credentials secret: %w", err)
 	}
 
 	if !cfg.Platform.InstallArgoCD {
@@ -100,6 +105,35 @@ func createRepoSecret(ctx *pulumi.Context, name string, cfg platform.Config, k8s
 			"type":          pulumi.String("git"),
 			"url":           pulumi.String(cfg.ArgoCDAppsRepoURL),
 			"sshPrivateKey": pulumi.String(cfg.ArgoCDRepoSSHPrivateKey),
+		}).(pulumi.StringMapInput),
+	}, append(opts,
+		pulumi.Provider(k8sProvider),
+		pulumi.DependsOn(deps),
+		pulumi.RetainOnDelete(true),
+	)...)
+}
+
+// createAWSCredentialsSecret creates the aws-credentials Kubernetes Secret in the argocd
+// namespace. ESO's ClusterSecretStore references this secret to authenticate with AWS
+// Secrets Manager. If AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY are not set, creation
+// is skipped and a warning is logged rather than failing the bootstrap.
+func createAWSCredentialsSecret(ctx *pulumi.Context, name string, k8sProvider *kubernetes.Provider, deps []pulumi.Resource, opts []pulumi.ResourceOption) (*corev1.Secret, error) {
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if accessKey == "" || secretKey == "" {
+		ctx.Log.Warn("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not set; skipping aws-credentials secret creation", nil)
+		return nil, nil
+	}
+
+	return corev1.NewSecret(ctx, name+"-argocd-aws-credentials", &corev1.SecretArgs{
+		Metadata: &metav1.ObjectMetaArgs{
+			Name:      pulumi.String("aws-credentials"),
+			Namespace: pulumi.String(platform.ArgoCDNamespace),
+		},
+		Type: pulumi.String("Opaque"),
+		StringData: pulumi.ToSecret(pulumi.StringMap{
+			"access-key": pulumi.String(accessKey),
+			"secret-key": pulumi.String(secretKey),
 		}).(pulumi.StringMapInput),
 	}, append(opts,
 		pulumi.Provider(k8sProvider),
