@@ -30,7 +30,7 @@ require (
 	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.64.0
 	github.com/pulumi/pulumi-hcloud/sdk v1.32.2
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.29.0
-	github.com/pulumi/pulumi/sdk/v3 v3.231.0
+	github.com/pulumi/pulumi/sdk/v3 v3.232.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/riverqueue/river v0.34.0
 	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.34.0
@@ -132,7 +132,7 @@ require (
 	github.com/go-faster/errors v0.7.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.8.0 // indirect
-	github.com/go-git/go-git/v5 v5.17.2 // indirect
+	github.com/go-git/go-git/v5 v5.18.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -147,7 +147,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/golang/glog v1.2.5 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
