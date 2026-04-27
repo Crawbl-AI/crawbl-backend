@@ -945,7 +945,7 @@ github.com/pulumi/pulumi-digitalocean/sdk/v4/go/digitalocean/internal
 ## explicit; go 1.25.8
 github.com/pulumi/pulumi-hcloud/sdk/go/hcloud
 github.com/pulumi/pulumi-hcloud/sdk/go/hcloud/internal
-# github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.29.0
+# github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.30.0
 ## explicit; go 1.25.6
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/admissionregistration/v1
@@ -1006,6 +1006,7 @@ github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/resource/v1beta1
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/resource/v1beta2
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/scheduling/v1
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/scheduling/v1alpha1
+github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/scheduling/v1alpha2
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/scheduling/v1beta1
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/settings/v1alpha1
 github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/storage/v1
