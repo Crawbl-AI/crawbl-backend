@@ -19,7 +19,7 @@ require (
 	github.com/golangci/plugin-module-register v0.1.2
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/lib/pq v1.12.3
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/nats-io/nats.go v1.51.0
@@ -32,7 +32,7 @@ require (
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.29.0
 	github.com/pulumi/pulumi/sdk/v3 v3.231.0
 	github.com/redis/go-redis/v9 v9.18.0
-	github.com/riverqueue/river v0.34.0
+	github.com/riverqueue/river v0.35.1
 	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.34.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
@@ -211,9 +211,9 @@ require (
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.53.0 // indirect
 	github.com/riverqueue/apiframe v0.0.0-20251229202423-2b52ce1c482e // indirect
-	github.com/riverqueue/river/riverdriver v0.34.0 // indirect
-	github.com/riverqueue/river/rivershared v0.34.0 // indirect
-	github.com/riverqueue/river/rivertype v0.34.0 // indirect
+	github.com/riverqueue/river/riverdriver v0.35.1 // indirect
+	github.com/riverqueue/river/rivershared v0.35.1 // indirect
+	github.com/riverqueue/river/rivertype v0.35.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.0.0 // indirect

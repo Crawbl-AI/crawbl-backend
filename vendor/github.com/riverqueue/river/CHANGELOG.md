@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-04-26
+
+### Fixed
+
+- Fix accidentally inverted conditional on notifier error log check. [PR #1231](https://github.com/riverqueue/river/pull/1231).
+
+## [0.35.0] - 2026-04-18
+
+### Changed
+
+- Ignore errors like `tls: failed to send closeNotify alert (but connection was closed anyway)` when closing listeners. [PR #1216](https://github.com/riverqueue/river/pull/1216).
+
+### Fixed
+
+- Fixed leader election to track explicit database-issued leadership terms, reducing handoff flakiness and same-client reacquisition edge cases while making reelection and resign target the current leadership lease instead of a stale one. [PR #1213](https://github.com/riverqueue/river/pull/1213).
+
 ## [0.34.0] - 2026-04-08
 
 ### Added
