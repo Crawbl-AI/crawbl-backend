@@ -941,7 +941,7 @@ github.com/pulumi/pulumi-command/sdk/go/command/remote
 ## explicit; go 1.25.8
 github.com/pulumi/pulumi-digitalocean/sdk/v4/go/digitalocean
 github.com/pulumi/pulumi-digitalocean/sdk/v4/go/digitalocean/internal
-# github.com/pulumi/pulumi-hcloud/sdk v1.32.2
+# github.com/pulumi/pulumi-hcloud/sdk v1.33.0
 ## explicit; go 1.25.8
 github.com/pulumi/pulumi-hcloud/sdk/go/hcloud
 github.com/pulumi/pulumi-hcloud/sdk/go/hcloud/internal
