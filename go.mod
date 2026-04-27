@@ -48,7 +48,7 @@ require (
 	golang.org/x/mod v0.35.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/tools v0.44.0
-	google.golang.org/adk v1.1.0
+	google.golang.org/adk v1.2.0
 	google.golang.org/api v0.276.0
 	google.golang.org/genai v1.54.0
 	google.golang.org/grpc v1.80.0
