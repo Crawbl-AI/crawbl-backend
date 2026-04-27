@@ -29,7 +29,7 @@ require (
 	github.com/pulumi/pulumi-command/sdk v1.2.1
 	github.com/pulumi/pulumi-digitalocean/sdk/v4 v4.64.0
 	github.com/pulumi/pulumi-hcloud/sdk v1.32.2
-	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.29.0
+	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.30.0
 	github.com/pulumi/pulumi/sdk/v3 v3.231.0
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/riverqueue/river v0.34.0
